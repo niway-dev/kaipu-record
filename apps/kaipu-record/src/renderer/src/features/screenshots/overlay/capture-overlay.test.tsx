@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings, type RecordingSettings } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
+import { resetSettingsStoreForTests } from "@renderer/features/settings/settings-store";
 import {
   CAPTURE_MODES,
   type CaptureRect,
@@ -106,6 +107,10 @@ function fakeApi(
   // The toggles and the device menus each subscribe, as in the app.
   const recordingListeners = new Set<(settings: RecordingSettings) => void>();
   let ackListener: (() => void) | null = null;
+  // The overlay reads settings through the window's store, which asks `window.electronAPI`:
+  // the fake main answers there, and the test reaches the same function as `fake.getSettings`.
+  const getSettings = vi.fn(async () => settings);
+  window.electronAPI.getSettings = getSettings;
   const api = {
     captureOverlay: {
       answer: vi.fn(),
@@ -131,7 +136,6 @@ function fakeApi(
       hiddenAck: vi.fn(),
       requestState: vi.fn(),
     },
-    getSettings: vi.fn(async () => settings),
     updateSettings: vi.fn(async (patch: Partial<AppSettings>) => {
       settings = { ...settings, ...patch };
       return settings;
@@ -149,6 +153,7 @@ function fakeApi(
   } satisfies CaptureOverlayApi;
   return {
     api,
+    getSettings,
     pushRecording: (patch: Partial<RecordingSettings>) =>
       act(() => {
         recording = { ...recording, ...patch };
@@ -558,6 +563,8 @@ describe("FrameBox", () => {
     await screen.findByTestId("capture-frame");
     expect(screen.getByTestId("capture-widget")).toHaveAttribute("data-edge", "bottom");
     cleanup();
+    // The second overlay is another window: it has its own settings store.
+    resetSettingsStoreForTests();
 
     const low = fakeApi({ "42": { x: 400, y: 600, width: 400, height: 380 } });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={low.api} />);
@@ -1990,14 +1997,12 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
 
   it("sizes the camera placeholder from the bubble setting", async () => {
     const fake = fakeApi({}, FRAME_ON_42, { "42": area });
-    const settings = await fake.api.getSettings();
-    const api = {
-      ...fake.api,
-      getSettings: vi.fn(async () => ({
-        ...settings,
-        cameraBubble: { ...settings.cameraBubble, size: 160, shape: "rounded" as const },
-      })),
-    };
+    const settings = await fake.getSettings();
+    window.electronAPI.getSettings = vi.fn(async () => ({
+      ...settings,
+      cameraBubble: { ...settings.cameraBubble, size: 160, shape: "rounded" as const },
+    }));
+    const api = fake.api;
     render(
       <CaptureOverlay
         enabledModes={CAPTURE_MODES}
@@ -2264,6 +2269,8 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     expect(screen.getByTestId("start-recording")).toHaveTextContent("3 s countdown");
     expect(three.setCounting).not.toHaveBeenCalled();
     cleanup();
+    // The second overlay is another window: it has its own settings store.
+    resetSettingsStoreForTests();
     vi.useRealTimers();
 
     await renderCounting(0);
@@ -2386,14 +2393,32 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     expect(answer).toHaveBeenCalledOnce();
   });
 
+  it("asks main for the settings once for the remembered area, the countdown and the bubble", async () => {
+    const fake = fakeApi({}, SCREEN, { "42": area }, { recordingCountdownSeconds: 5 });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { intent: "record" })}
+        api={fake.api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("screen-card");
+    await flush();
+
+    // One window, one startup read: the window's settings store serves all three consumers.
+    expect(fake.getSettings).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("start-recording")).toHaveTextContent("5 s countdown");
+  });
+
   it("a Record pressed before the settings read finishes waits for it, then counts the saved 5 s", async () => {
     const fake = fakeApi({}, SCREEN, { "42": area }, { recordingCountdownSeconds: 5 });
-    const saved = await fake.api.getSettings();
+    const saved = await fake.getSettings();
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    fake.api.getSettings.mockImplementation(async () => {
+    fake.getSettings.mockImplementation(async () => {
       await gate;
       return saved;
     });
@@ -2427,12 +2452,12 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
 
   it("a held Record is dropped when the mode changes before the settings read finishes", async () => {
     const fake = fakeApi({}, SCREEN, { "42": area }, { recordingCountdownSeconds: 5 });
-    const saved = await fake.api.getSettings();
+    const saved = await fake.getSettings();
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    fake.api.getSettings.mockImplementation(async () => {
+    fake.getSettings.mockImplementation(async () => {
       await gate;
       return saved;
     });
@@ -2460,12 +2485,12 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
 
   it("a held Record is dropped when main's broadcast changes the mode before the read finishes", async () => {
     const fake = fakeApi({}, SCREEN, { "42": area }, { recordingCountdownSeconds: 5 });
-    const saved = await fake.api.getSettings();
+    const saved = await fake.getSettings();
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    fake.api.getSettings.mockImplementation(async () => {
+    fake.getSettings.mockImplementation(async () => {
       await gate;
       return saved;
     });
@@ -2496,7 +2521,7 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     const gate = new Promise<never>((_, reject) => {
       fail = reject;
     });
-    fake.api.getSettings.mockImplementation(() => gate);
+    fake.getSettings.mockImplementation(() => gate);
     render(
       <CaptureOverlay
         enabledModes={CAPTURE_MODES}
@@ -3168,8 +3193,8 @@ describe("CaptureOverlay — the device menus", () => {
       { deviceId: "facetime", label: "FaceTime HD" },
       { deviceId: "cam-link", label: "Cam Link" },
     ];
-    const { api } = await renderRecording();
-    const bubble = (await api.getSettings()).cameraBubble;
+    const { api, getSettings } = await renderRecording();
+    const bubble = (await getSettings()).cameraBubble;
 
     fireEvent.click(screen.getByRole("button", { name: "Choose Camera device" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Cam Link" }));

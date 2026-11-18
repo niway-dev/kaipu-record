@@ -9,7 +9,8 @@ import type { AppSettings } from "@shared/types";
  * for itself put a dozen listeners on the main window, past Node's default of ten, which warns
  * `MaxListenersExceededWarning`. So this module owns the window's ONLY `onSettingsChanged`
  * subscription and the ONLY startup `getSettings()`; every consumer reads from here and a
- * test fails if another file calls `onSettingsChanged` (`settings-store-usage.test.ts`).
+ * test fails if another file calls `onSettingsChanged` or the bridge's `getSettings`
+ * (`settings-store-usage.test.ts`).
  *
  * It starts on first use (a subscribe, a load or an update), not at import, and then keeps its
  * one listener for the window's lifetime however many consumers come and go: the consumers are

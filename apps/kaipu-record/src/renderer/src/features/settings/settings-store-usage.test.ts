@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 /**
  * The invariant of the renderer's settings store (ADR 0063), enforced rather than written down:
- * only `settings-store.ts` talks to `window.electronAPI.onSettingsChanged`.
+ * only `settings-store.ts` talks to `window.electronAPI.onSettingsChanged`, and only it calls the
+ * bridge's `getSettings` (so a window asks main for its settings once, however many overlays,
+ * panels and hooks read them).
  *
  * The preload opens one `ipcRenderer` listener per call. When every hook subscribed for itself
  * the main window reached twelve on the Record page and Node warned
@@ -38,6 +40,26 @@ describe("the settings store owns the window's settings:changed subscription", (
     expect(files.length).toBeGreaterThan(100);
     expect(files).toContain(STORE);
     expect(readFileSync(STORE, "utf8")).toContain("onSettingsChanged");
+  });
+
+  it("no other renderer file calls the bridge's getSettings", () => {
+    // The bridge method, however it is reached (`window.electronAPI.getSettings`, an injected
+    // `api.getSettings`, or a `Pick<..., "getSettings">` of the bridge). A media track's own
+    // `track.getSettings()` is another API and does not match.
+    const bridgeRead = /(?:electronAPI|\bapi)\??\.getSettings\b|["']getSettings["']/;
+    const offenders = sourceFiles(RENDERER_SRC)
+      .filter((file) => file !== STORE)
+      .filter((file) => bridgeRead.test(readFileSync(file, "utf8")))
+      .map((file) => path.relative(RENDERER_SRC, file));
+    expect(offenders).toEqual([]);
+  });
+
+  it("the bridge pattern matches the reads it is meant to catch", () => {
+    const bridgeRead = /(?:electronAPI|\bapi)\??\.getSettings\b|["']getSettings["']/;
+    expect(bridgeRead.test("window.electronAPI.getSettings()")).toBe(true);
+    expect(bridgeRead.test("api.getSettings?.()")).toBe(true);
+    expect(bridgeRead.test('Pick<KaipuElectronAPI, "getSettings">')).toBe(true);
+    expect(bridgeRead.test("track.getSettings().deviceId")).toBe(false);
   });
 
   it("no other renderer file references onSettingsChanged", () => {

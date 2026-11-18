@@ -50,7 +50,8 @@ have added a listener, with no test to notice.
 5. **Writes go through the store's `updateSettings`**, which returns main's answer and hands it to
    every consumer in the window at once, ahead of the broadcast.
 6. **A test enforces it.** No renderer source file other than the store may reference
-   `onSettingsChanged`; the test scans the source and fails otherwise.
+   `onSettingsChanged` or call the bridge's `getSettings`; the test scans the source and fails
+   otherwise.
 
 ## Alternatives rejected
 
@@ -74,9 +75,9 @@ have added a listener, with no test to notice.
   every read. Derived values go in `useMemo`.
 - Renderer tests drive the store through the faked `electronAPI`, so they still run the real
   path. The store resets after every test.
-- Reads that are not subscriptions (the capture overlay's remembered area, its countdown length
-  and its bubble size) still call `getSettings()` once per overlay window. They hold no listener
-  and are outside this decision.
+- The capture overlay's one-off reads (its remembered area, countdown length and bubble size) go
+  through `loadSettings()` too, so an overlay window also makes one `getSettings()` call. The
+  read that saves a remembered area uses the window's held copy, which broadcasts keep current.
 
 ## Non-goals
 

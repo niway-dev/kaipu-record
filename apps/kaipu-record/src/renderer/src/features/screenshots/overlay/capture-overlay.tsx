@@ -26,6 +26,7 @@ import type { InputToast, OverlayChrome } from "./overlay-chrome";
 import type { OverlayQuery } from "./overlay-query";
 import { ScreenCard } from "./screen-card";
 import { TOAST_MS } from "./capture-widget";
+import { loadSettings } from "@renderer/features/settings/settings-store";
 import { useOverlayToggles } from "./use-overlay-toggles";
 import { useWidgetDevices } from "./use-widget-devices";
 import { WindowPicker } from "./window-picker";
@@ -54,7 +55,6 @@ async function bestEffort(work: Promise<void>, ms: number): Promise<void> {
 export type CaptureOverlayApi = Pick<
   KaipuElectronAPI,
   | "captureOverlay"
-  | "getSettings"
   | "updateSettings"
   | "getRecordingSettings"
   | "updateRecordingSettings"
@@ -279,8 +279,7 @@ export function CaptureOverlay({
       heldRequest.current = null;
       if (held) requestRef.current?.(...held);
     };
-    api
-      .getSettings()
+    loadSettings()
       .then((settings) => settle(settings.recordingCountdownSeconds))
       .catch(() => settle(undefined));
     return () => {
@@ -552,8 +551,7 @@ function ActiveFrame({
 
   useEffect(() => {
     let live = true;
-    api
-      .getSettings()
+    loadSettings()
       .then((settings) => {
         if (live) setRemembered(settings[memory]?.[key] ?? null);
       })
@@ -588,7 +586,7 @@ function ActiveFrame({
         },
         async () => {
           // Re-read so another display's remembered rectangle is kept, not overwritten.
-          const current = await api.getSettings();
+          const current = await loadSettings();
           await api.updateSettings({ [into]: { ...current[into], [key]: stored } });
         },
       );

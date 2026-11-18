@@ -100,5 +100,5 @@ The warning printed twice, not once, because StrictMode replays effects in devel
 replay resets Node's "already warned" flag.
 
 After the change every window holds one listener and makes one startup read of its own. The
-capture overlay still makes a few one-off `getSettings()` reads (its remembered area, countdown
-length and bubble size); those are not subscriptions and are outside the decision.
+capture overlay's reads (its remembered area, countdown length and bubble size) go through
+`loadSettings()`, so an overlay window makes one read too.
