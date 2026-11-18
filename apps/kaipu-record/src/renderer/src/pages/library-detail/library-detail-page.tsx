@@ -309,7 +309,8 @@ export function LibraryDetailPage(): React.JSX.Element {
   // Frame captures get a tab of their own, shown only when there are some: the tab bar is
   // where the owner sees they exist (a section under a long tab was out of view).
   const hasCaptures = !isScreenshot && captures.length > 0;
-  // The Transcript tab follows the header Transcribe button's rule, plus the flag.
+  // The Transcript tab follows the header Transcribe button's rule, plus the flag and a duration
+  // (below): the button can still start a job where the tab has no timeline to show it on.
   const hasAudio = probe ? probe.hasAudio : undefined;
   // Without a stored duration the tab needs the probed one: it waits while the file is being read
   // and is not offered once the read failed (the editor refuses such an item too).
