@@ -434,6 +434,44 @@ describe("crop mode on an added image", () => {
   });
 });
 
+describe("pasting an image while the base is being cropped", () => {
+  const paste = () =>
+    fireEvent.paste(document.body, {
+      clipboardData: {
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => new File([pastedPng], "clip.png", { type: "image/png" }),
+          },
+        ],
+      },
+    });
+
+  it("ends the session and places the image past the cropped base, not past the whole asset", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    paste();
+    // The base is the 200 x 200 quarter; the 200 x 100 image sits at x = 232..432 (a 32 px gap,
+    // as for an untouched base), so the box is 432 x 200. From the whole asset it would be 632.
+    await waitFor(() => expect(label()).toHaveTextContent("432 × 200 px"));
+    expect(screen.queryByTestId("crop-window")).toBeNull();
+  });
+
+  it("commits the crop with the paste: one undo step for the crop, one for the image", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    paste();
+    await waitFor(() => expect(label()).toHaveTextContent("432 × 200 px"));
+    // The first undo takes the image back, the crop stays...
+    undoKey();
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    // ...the second takes the crop back: the paste did not swallow it into one step.
+    undoKey();
+    await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+  });
+});
+
 describe("crop mode with an Export frame set", () => {
   const chip = (): HTMLElement | null => screen.queryByRole("button", { name: "Cropped" });
 

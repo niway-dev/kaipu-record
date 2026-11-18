@@ -1088,14 +1088,31 @@ function ScreenshotEditorBody({
       showToast({ message: t("addImageError") });
       return;
     }
+    // A paste has no pointerdown to end a crop session, so end it here. The commit lands in
+    // state after this render, so the placement below measures from the window the session
+    // ended with, not from `geomBase` (which drops `baseCrop` while the base is being cropped).
+    const session = cropSessionRef.current;
+    finishCrop();
+    const moved = session !== null && !sameWindow(session.win, session.start);
+    let placedBase: BaseFields = geomBase;
+    let placedAnnotations = scene.annotations;
+    if (session && session.id === BASE_IMAGE_ID) {
+      const { baseCrop: _whole, ...rest } = geomBase;
+      const baseCrop = moved ? windowToCrop(session.full, session.win) : scene.baseCrop;
+      placedBase = baseCrop ? { ...rest, baseCrop } : rest;
+    } else if (session && moved) {
+      placedAnnotations = scene.annotations.map((a) =>
+        a.id === session.id ? ({ ...a, ...imageCropPatch(session, session.win) } as Annotation) : a,
+      );
+    }
     // The same scale the live extents use; before the first measurement the displayed width
     // is unknown and 1 only affects the size of text bounds.
     const scale = metrics && metrics.w > 0 ? naturalW / metrics.w : 1;
     // Past the VISIBLE base's right edge, top-aligned with it (the whole image for an untouched
     // base: x = naturalW + overhang, y = 0, as before).
-    const visible = visibleBaseBounds(geomBase, naturalW, naturalH);
+    const visible = visibleBaseBounds(placedBase, naturalW, naturalH);
     const { right } = contentExtents(
-      scene.annotations,
+      placedAnnotations,
       naturalW,
       naturalH,
       scale,
@@ -1537,8 +1554,14 @@ function ScreenshotEditorBody({
 
   // Leaving a shot that is in the vault: save what is pending, then go. A failed save
   // stays here (`persist` reported it with a retry) instead of dropping the edits.
+  // An open crop session is committed first; the save then runs from the effect pass that
+  // follows the commit's render, because `latest.current` is only refreshed at render.
   useEffect(() => {
     if (blocker.state !== "blocked" || !savedId) return;
+    if (cropSessionRef.current) {
+      finishCrop();
+      return;
+    }
     void autosaveEdits().then((saved) => (saved ? blocker.proceed() : blocker.reset()));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per blocked navigation
   }, [blocker.state, cropSession]);
@@ -1554,14 +1577,8 @@ function ScreenshotEditorBody({
       } catch (error) {
         reportError(t("saveError"), error, { context: { phase: "discard", id } });
       }
-      // An open crop session is committed first; the save then runs from the effect pass that
-      // follows the commit's render, because `latest.current` is only refreshed at render.
     });
 
-  if (cropSessionRef.current) {
-    finishCrop();
-    return;
-  }
   // First save just writes; a subsequent save (or a re-opened shot) asks whether to
   // overwrite the existing item or branch off a copy.
   const onSave = (): void => {

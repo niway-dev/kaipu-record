@@ -75,9 +75,15 @@ export function useEditorScene(
   const snapshot = useRef<Scene | null>(null);
 
   const commit = useCallback((next: Scene) => {
-    setPast((p) => [...p, sceneRef.current]);
+    // Read now: the updater below runs at the next render, after the ref has moved on.
+    const prev = sceneRef.current;
+    setPast((p) => [...p, prev]);
     setFuture([]);
     setScene(next);
+    // Two commits in one tick (a crop session ended by a paste, then the pasted image) must
+    // build on each other, not on the render before: the ref is the scene's source of truth
+    // between renders, and the next render only confirms it.
+    sceneRef.current = next;
   }, []);
 
   const beginInteract = useCallback(() => {
@@ -97,7 +103,8 @@ export function useEditorScene(
   // `endInteract` push a stale snapshot over the step just taken.
   const undo = useCallback(() => {
     if (snapshot.current !== null || past.length === 0) return false;
-    setFuture((f) => [sceneRef.current, ...f]);
+    const cur = sceneRef.current;
+    setFuture((f) => [cur, ...f]);
     setScene(past[past.length - 1]);
     setPast((p) => p.slice(0, -1));
     setSelectedId(null);
@@ -106,7 +113,8 @@ export function useEditorScene(
 
   const redo = useCallback(() => {
     if (snapshot.current !== null || future.length === 0) return false;
-    setPast((p) => [...p, sceneRef.current]);
+    const cur = sceneRef.current;
+    setPast((p) => [...p, cur]);
     setScene(future[0]);
     setFuture((f) => f.slice(1));
     setSelectedId(null);
