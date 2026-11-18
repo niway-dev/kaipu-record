@@ -1,0 +1,184 @@
+/* The Add split button of Add from Library (NIW2-829): the big part adds, the arrow part opens
+   the menu of destinations upward. Pink fill and glow as the old Add button had. */
+.root {
+  position: relative;
+  display: flex;
+  flex: none;
+  height: 46px;
+}
+
+.cta,
+.arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0;
+  background: var(--accent-primary);
+  border: 0;
+  color: #fff;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    filter var(--transition);
+}
+
+.cta:hover,
+.arrow:hover {
+  filter: brightness(1.15);
+}
+
+.cta:focus-visible,
+.arrow:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -3px;
+}
+
+.cta {
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  border-radius: 9px 0 0 9px;
+  box-shadow: var(--glow-accent);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.arrow {
+  flex: none;
+  width: 50px;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0 9px 9px 0;
+}
+
+/* Open: the arrow part goes a shade darker, the accent's hover tone. */
+.arrow[data-open="true"] {
+  background: var(--accent-primary-hover);
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 10;
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  padding: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  box-shadow: 0 26px 60px -16px rgba(0, 0, 0, 0.95);
+  animation: pop 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: none;
+  }
+}
+
+.menuTitle {
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 9px;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The separator between "Over the video" and the four sequence places. */
+.itemAfterSeparator {
+  position: relative;
+  margin-top: 8px;
+}
+
+.itemAfterSeparator::before {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--line);
+  content: "";
+}
+
+.item[data-checked="true"] {
+  background: var(--accent-primary-tint);
+}
+
+/* After the checked rule, so the item being pointed at shows even when it is the checked one. */
+.item[data-active="true"] {
+  background: var(--bg-card-hover);
+}
+
+.item[aria-disabled="true"] {
+  background: transparent;
+  cursor: default;
+  opacity: 0.45;
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: -2px;
+}
+
+.thumb {
+  flex: none;
+  width: 74px;
+  padding: 5px 6px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.itemText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.itemLabel {
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+.itemHint {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.check {
+  flex: none;
+  color: var(--accent-primary);
+}

@@ -26,6 +26,10 @@ export interface Profile {
   readonly slideSequence?: boolean;
   /** Add one screenshot taken from “Weekly sync” (`seed-vault.ts`), for the “From this recording” tag. */
   readonly frameCaptures?: boolean;
+  /** Make “Weekly sync” three 4 s clips (`seed-vault.ts`), so Add from Library shows clips around the new item. */
+  readonly splitWeeklySync?: boolean;
+  /** Add “Long sequence”, ten 1.2 s clips (`seed-vault.ts`), so Add from Library's strip shows groups. */
+  readonly manyClipsRecording?: boolean;
   /** Add the two webcam recordings the editor's camera panel states open (`seed-vault.ts`). */
   readonly cameraRecordings?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
@@ -117,11 +121,13 @@ export const PROFILES = {
   },
   "add-from-library": {
     description:
-      "The timeline-levels profile, plus “Weekly sync frame”, a screenshot taken from “Weekly sync” (the “From this recording” tag in Add from Library). A profile of its own, so the Captures panel of “Weekly sync” in the other states does not list it.",
+      "The timeline-levels profile, plus “Weekly sync frame”, a screenshot taken from “Weekly sync” (the “From this recording” tag in Add from Library). A profile of its own, so the Captures panel of “Weekly sync” in the other states does not list it. “Weekly sync” is 12 s of three 4 s clips here, so the placement strip shows clips before, after and around the new item; and “Long sequence”, ten 1.2 s clips, the oldest recording, so the strip folds the far clips into groups.",
     seed: "demo",
     flags: { "timeline-levels": true },
     floatingImages: true,
     frameCaptures: true,
+    splitWeeklySync: true,
+    manyClipsRecording: true,
   },
   "two-recordings": {
     description:

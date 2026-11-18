@@ -9,16 +9,20 @@ import {
   boundaryForDestination,
   defaultDestination,
   destinationAllowed,
+  FLOATING_IMAGE_SECONDS,
   joinableRecordings,
   libraryScreenshots,
+  placementPreview,
+  sameAsDestination,
   resolutionLabel,
+  SEQUENCE_IMAGE_SECONDS,
   type LibraryDestination,
   type LibraryItemKind,
 } from "../add-from-library";
 import type { LayoutEntry } from "../timeline";
-import { AddDestinationChooser } from "./add-destination-chooser";
+import { AddDestinationButton } from "./add-destination-button";
 import { AddFromLibraryPreview } from "./add-from-library-preview";
-import { formatScrubTime } from "./timeline-geometry";
+import { PlacementCard } from "./placement-strip";
 import styles from "./add-from-library-modal.module.css";
 
 /** A boundary of the sequence a recording can be added at (the join's `{ index, time }`). */
@@ -50,7 +54,7 @@ export interface AddFromLibraryModalProps {
   initialTab?: Tab;
   /** The asset id of the item to select when the modal opens, in `initialTab`'s list. */
   initialSelectedId?: string | null;
-  /** The destination last used for each kind in this editor session: what the chooser starts at. */
+  /** The destination last used for each kind in this editor session: what the Add button starts at. */
   rememberedDestinations?: Partial<Record<LibraryItemKind, LibraryDestination>>;
   /** Called after each add with the destination used, so the page can keep it for the next open. */
   onRememberDestination?(kind: LibraryItemKind, destination: LibraryDestination): void;
@@ -64,9 +68,10 @@ const TAB_PANEL_ID = "add-from-library-panel";
 /**
  * Add from Library (NIW2-790): the modal the transport's Add recording button opens. Recordings
  * are a list beside a quick-look preview; screenshots are a card grid, and a click selects one.
- * Either way ONE chooser lists every destination and one Add applies it (NIW2-829): over the
- * video, or the sequence before / after the clip under the playhead, at the start, at the end.
- * The modal stays open after an add, so several can follow.
+ * Either way ONE split button adds (NIW2-829): its big part adds at the chosen destination, its
+ * arrow opens the menu of them (over the video, or the sequence before / after the clip under
+ * the playhead, at the start, at the end), and a strip above it draws the result. The modal
+ * stays open after an add, so several can follow.
  * Nothing in it is draggable: the Clips row's drop target (`timeline-strip`) is kept for
  * dragging recordings to reorder, which is a separate change.
  */
@@ -96,10 +101,12 @@ export function AddFromLibraryModal({
     recordings: initialTab === "recordings" ? initialSelectedId : null,
     screenshots: initialTab === "screenshots" ? initialSelectedId : null,
   });
-  // The destination per kind: what the chooser shows. It starts at the last one used.
+  // The destination per kind: what the Add button does. It starts at the last one used.
   const [choices, setChoices] = useState<Partial<Record<LibraryItemKind, LibraryDestination>>>(
     rememberedDestinations ?? {},
   );
+  // The menu option being pointed at: the big strip draws it until the menu closes.
+  const [pointed, setPointed] = useState<LibraryDestination | null>(null);
   const query = queries[tab];
   const needle = query.trim();
 
@@ -152,15 +159,41 @@ export function AddFromLibraryModal({
     const item = tab === "recordings" ? selected : selectedShot;
     if (item) addTo(item, kind, destination);
   };
-  const chooser = (
-    <AddDestinationChooser
-      kind={kind}
-      value={destination}
-      playheadLabel={formatScrubTime(playhead)}
-      onChange={(next) => setChoices((prev) => ({ ...prev, [kind]: next }))}
-      onAdd={addSelected}
-    />
-  );
+  // The strip and the Add button for the selected item. How long the item is decides what the
+  // strip draws: a recording is its own length; a screenshot floats for the floating image's
+  // default and takes the sequence image's when it joins the sequence.
+  const placement = (item: LibraryVideo): React.JSX.Element => {
+    const newSecondsFor = (where: LibraryDestination): number =>
+      kind === "recording"
+        ? item.durationSeconds
+        : where === "over"
+          ? FLOATING_IMAGE_SECONDS
+          : SEQUENCE_IMAGE_SECONDS;
+    const shown = pointed ?? destination;
+    return (
+      <>
+        <PlacementCard
+          preview={placementPreview(layout, playhead, shown, newSecondsFor(shown))}
+          destination={shown}
+          sameAs={sameAsDestination(shown, layout, playhead)}
+          formatLength={(seconds) =>
+            kind === "recording"
+              ? formatDuration(seconds)
+              : t("addFromLibrarySeconds", { seconds: Math.round(seconds * 10) / 10 })
+          }
+        />
+        {/* Keyed by item and tab: another selection closes the menu. */}
+        <AddDestinationButton
+          key={`${tab}:${item.assetId}`}
+          kind={kind}
+          value={destination}
+          onChange={(next) => setChoices((prev) => ({ ...prev, [kind]: next }))}
+          onAdd={addSelected}
+          onPreview={setPointed}
+        />
+      </>
+    );
+  };
 
   const shown = tab === "recordings" ? recordings : screenshots;
   const all = tab === "recordings" ? allRecordings : allScreenshots;
@@ -217,6 +250,25 @@ export function AddFromLibraryModal({
             />
           </div>
           <span className={styles.spacer} />
+          <label className={styles.search}>
+            <Search size={14} aria-hidden className={styles.searchIcon} />
+            <input
+              type="search"
+              className={styles.searchInput}
+              value={query}
+              aria-label={
+                tab === "recordings"
+                  ? t("addFromLibrarySearch")
+                  : t("addFromLibrarySearchScreenshots")
+              }
+              placeholder={
+                tab === "recordings"
+                  ? t("addFromLibrarySearch")
+                  : t("addFromLibrarySearchScreenshots")
+              }
+              onChange={(event) => setQueries((prev) => ({ ...prev, [tab]: event.target.value }))}
+            />
+          </label>
           <button
             type="button"
             className={styles.close}
@@ -233,27 +285,6 @@ export function AddFromLibraryModal({
           id={TAB_PANEL_ID}
           aria-labelledby={`add-from-library-tab-${tab}`}
         >
-          <div className={styles.searchRow}>
-            <label className={styles.search}>
-              <Search size={14} aria-hidden className={styles.searchIcon} />
-              <input
-                type="search"
-                className={styles.searchInput}
-                value={query}
-                aria-label={
-                  tab === "recordings"
-                    ? t("addFromLibrarySearch")
-                    : t("addFromLibrarySearchScreenshots")
-                }
-                placeholder={
-                  tab === "recordings"
-                    ? t("addFromLibrarySearch")
-                    : t("addFromLibrarySearchScreenshots")
-                }
-                onChange={(event) => setQueries((prev) => ({ ...prev, [tab]: event.target.value }))}
-              />
-            </label>
-          </div>
           {!showBody ? (
             <div className={styles.note} role="status">
               {!loaded ? (
@@ -330,13 +361,15 @@ export function AddFromLibraryModal({
               </ul>
               <section className={styles.detail}>
                 <AddFromLibraryPreview video={selected} />
-                <h4 className={styles.detailTitle}>{selected.title}</h4>
-                <div className={styles.facts}>
-                  <span>{formatDuration(selected.durationSeconds)}</span>
-                  <span>{absoluteDate(selected.createdAt, locale)}</span>
-                  {resolutionLabel(selected) && <span>{resolutionLabel(selected)}</span>}
+                <div className={styles.titleLine}>
+                  <h4 className={styles.detailTitle}>{selected.title}</h4>
+                  <span className={styles.facts}>
+                    {[formatDuration(selected.durationSeconds), resolutionLabel(selected)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </div>
-                {chooser}
+                {placement(selected)}
               </section>
             </div>
           ) : (
@@ -400,8 +433,13 @@ export function AddFromLibraryModal({
                         )}
                       </div>
                     </div>
-                    <h4 className={styles.detailTitle}>{selectedShot.title}</h4>
-                    {chooser}
+                    <div className={styles.titleLine}>
+                      <h4 className={styles.detailTitle}>{selectedShot.title}</h4>
+                      <span className={styles.facts}>
+                        {absoluteDate(selectedShot.createdAt, locale)}
+                      </span>
+                    </div>
+                    {placement(selectedShot)}
                   </>
                 ) : (
                   <p className={styles.pickHint}>{t("addFromLibraryPickScreenshot")}</p>

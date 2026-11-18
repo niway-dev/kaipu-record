@@ -34,7 +34,8 @@ taken with a system screenshot ends up outside the library, with no tie back to 
    library after the same confirmation the Library asks for. With the `timeline-levels` flag
    on (off by default, NIW2-772), a third button, **Add from Library…** (originally **Add to timeline**, which inserted an image
    slide at the playhead's nearest boundary; superseded by NIW2-829), opens the Add from Library
-   modal on Screenshots with that capture selected, where one destination chooser places it.
+   modal on Screenshots with that capture selected, where the destination is chosen in the Add
+   button's menu, under a placement strip that shows where it lands.
    **Go to** is on the image:
    hovering it shows a subtle dark veil with a round Go to button centered on it, and
    clicking that button moves the playhead to the capture's moment. A frame of an image slide

@@ -496,11 +496,12 @@ async function navigate(page: Page, route: string): Promise<void> {
  * pause and going back to the start: pause, seek to 0:00, and wait until that frame has
  * been presented.
  */
-async function pauseVideosAtStart(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+async function pauseVideosAtStart(page: Page, within?: AreaId): Promise<void> {
+  const selector = within ? `[data-ui-area="${within}"] video` : "video";
+  await page.evaluate(async (selector) => {
     const within = (ms: number, promise: Promise<unknown>) =>
       Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
-    for (const video of document.querySelectorAll("video")) {
+    for (const video of document.querySelectorAll<HTMLVideoElement>(selector)) {
       video.pause();
       const seeked = new Promise((resolve) =>
         video.addEventListener("seeked", resolve, { once: true }),
@@ -514,14 +515,20 @@ async function pauseVideosAtStart(page: Page): Promise<void> {
       // The native controls animate (the scrubber thumb fades) when the state changes.
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
-  });
+  }, selector);
 }
 
 async function waitFor(ctx: Ctx, page: Page, target: WaitTarget, timeoutMs: number): Promise<void> {
   if ("video" in target) {
+    // With `within`, the video that counts is the one inside that area: a wait met by the
+    // editor's own video would pause nothing there.
+    const videos = target.within ? `[data-ui-area="${target.within}"] video` : "video";
     await page.waitForFunction(
-      () => {
-        if (![...document.querySelectorAll("video")].some((v) => v.readyState >= 2)) return false;
+      (videos) => {
+        if (
+          ![...document.querySelectorAll<HTMLVideoElement>(videos)].some((v) => v.readyState >= 2)
+        )
+          return false;
         // The editor decodes its thumbnails after the video is ready and publishes them all
         // at once: the timeline's, and the webcam lane's when the recording has a webcam.
         if (!document.querySelector('[data-testid="ruler"]')) return true;
@@ -531,10 +538,10 @@ async function waitFor(ctx: Ctx, page: Page, target: WaitTarget, timeoutMs: numb
           document.querySelector('[data-testid="webcam-lane"]');
         return !webcam || !!document.querySelector("[data-webcam-filmstrip] img");
       },
-      undefined,
+      videos,
       { timeout: timeoutMs, polling: 100 },
     );
-    if (target.video === "paused-at-start") await pauseVideosAtStart(page);
+    if (target.video === "paused-at-start") await pauseVideosAtStart(page, target.within);
   } else if ("window" in target) {
     await floatingPage(ctx.app, target.window, timeoutMs);
   } else if (target.part) {
@@ -1234,6 +1241,8 @@ async function runProfile(name: ProfileName, entries: CatalogEntry[]): Promise<v
           joinedRecordings: profile.joinedRecordings,
           slideSequence: profile.slideSequence,
           frameCaptures: profile.frameCaptures,
+          splitWeeklySync: profile.splitWeeklySync,
+          manyClipsRecording: profile.manyClipsRecording,
           cameraRecordings: profile.cameraRecordings,
           textScreenshot: profile.textScreenshot,
           colorsScreenshots: profile.colorsScreenshots,

@@ -61,6 +61,8 @@ export const ASSETS = {
   cameraSize: "c0a1a10c-0000-4000-8000-000000000011",
   /** Seeded with `cameraParts`: a recording that declares 20 minutes, with a 5 s camera part. */
   cameraLong: "c0a1a10c-0000-4000-8000-000000000012",
+  /** Seeded only where `manyClipsRecording` is on: a saved edit of ten consecutive 1.2 s clips. */
+  longSequence: "c0a1a10c-0000-4000-8000-000000000013",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -200,6 +202,8 @@ interface RecordingFixture {
   floating?: boolean;
   /** A saved edit of one clip followed by three slides (NIW2-817): `slideScene`. */
   slides?: boolean;
+  /** A saved edit of these clips, in source seconds, one after the other: `clipsScene`. */
+  clips?: readonly (readonly [number, number])[];
   /** A saved version 2 edit that joined another recording (ADR 0058): `joinedScene`. */
   joined?: JoinedKind;
   /** The media is `FIXTURE_FILES.joinedCut` (blue, a "B"), not a cut of the opened countdown. */
@@ -265,6 +269,25 @@ const RECORDINGS: readonly RecordingFixture[] = [
     exportPreset: "light",
   },
 ];
+
+/**
+ * Seeded only where `manyClipsRecording` is on: the same 12 s media as the other cuts, with a
+ * saved edit of ten 1.2 s clips (0–1.2, 1.2–2.4 … 10.8–12 source seconds). Add from Library
+ * condenses a sequence this long into groups. The oldest recording, so the Library lists the
+ * other states open keep their first rows.
+ */
+export const LONG_SEQUENCE_CLIPS: readonly (readonly [number, number])[] = Array.from(
+  { length: 10 },
+  (_, i) => [(i * 12) / 10, ((i + 1) * 12) / 10] as const,
+);
+const LONG_SEQUENCE_RECORDING: RecordingFixture = {
+  stem: "Long sequence",
+  assetId: ASSETS.longSequence,
+  title: "Long sequence",
+  cut: 12,
+  ago: 15 * DAY,
+  clips: LONG_SEQUENCE_CLIPS,
+};
 
 /** Seeded only where the cursor flag is on: it stands for a take recorded with it. */
 const CURSOR_RECORDING: RecordingFixture = {
@@ -501,6 +524,24 @@ export function slideScene(seconds: number): unknown {
     webcam: null,
   };
 }
+/** The saved scene of a recording cut into `clips` (source seconds, in order): no slides. */
+export function clipsScene(clips: readonly (readonly [number, number])[]): unknown {
+  return {
+    items: clips.map(([sourceStart, sourceEnd], index) => ({
+      id: `clip-${index + 1}`,
+      kind: "clip",
+      sourceStart,
+      sourceEnd,
+    })),
+    overlays: [],
+    zoomSegments: [],
+    redactions: [],
+    zoomSensitivity: 55,
+    audioMuted: false,
+    mutedRanges: [],
+    webcam: null,
+  };
+}
 /** Seeded only where `cameraRecordings` is on: the recordings the camera panel's states open. */
 const CAMERA_RECORDINGS: readonly RecordingFixture[] = [
   {
@@ -603,6 +644,20 @@ export interface SeedOptions {
   joinedRecordings?: boolean;
   /** Add the recording whose saved edit ends in three slides (`SLIDES_RECORDING`). */
   slideSequence?: boolean;
+  /**
+   * Make “Weekly sync” 12 s long with a saved edit of three 4 s clips (0–4, 4–8, 8–12 source
+   * seconds). Only the `add-from-library` profile turns it on: the modal's placement strip and
+   * menu thumbnails then show clips before, after and around the new item. No other profile's
+   * vault changes.
+   */
+  splitWeeklySync?: boolean;
+  /**
+   * Add “Long sequence”, a 12 s recording whose saved edit is ten 1.2 s clips
+   * (`LONG_SEQUENCE_CLIPS`): Add from Library's strip then folds the far clips into groups. Only
+   * the `add-from-library` profile turns it on; it is the oldest recording, so the first rows of
+   * that profile's Library list stay as they were.
+   */
+  manyClipsRecording?: boolean;
   /**
    * Add one screenshot taken from “Weekly sync” (`sourceVideoAssetId` in its sidecar). Only the
    * `add-from-library` profile turns it on: “Weekly sync”'s Captures panel lists it too, so the
@@ -877,6 +932,20 @@ async function seedRecording(
       exportedSavedAt: null,
     });
   }
+  if (item.clips) {
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 1,
+      scene: clipsScene(item.clips),
+    });
+    const source = await stat(media);
+    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
+      sourceSizeBytes: source.size,
+      sourceMtimeMs: source.mtimeMs,
+      assetIds: [],
+      savedAt: createdAt + HOUR,
+      exportedSavedAt: null,
+    });
+  }
   if (item.joined) {
     await writeJson(path.join(meta, `${item.stem}.edit.json`), {
       version: 2,
@@ -1041,9 +1110,22 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
     ...(options.floatingImages ? [FLOATING_RECORDING] : []),
     ...(options.joinedRecordings ? JOINED_RECORDINGS : []),
     ...(options.slideSequence ? [SLIDES_RECORDING] : []),
+    ...(options.manyClipsRecording ? [LONG_SEQUENCE_RECORDING] : []),
     ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
     ...(options.cameraRecordings ? CAMERA_RECORDINGS : []),
-    ...RECORDINGS,
+    ...RECORDINGS.map((it) =>
+      options.splitWeeklySync && it.assetId === ASSETS.weeklySync
+        ? {
+            ...it,
+            cut: 12 as const,
+            clips: [
+              [0, 4],
+              [4, 8],
+              [8, 12],
+            ] as const,
+          }
+        : it,
+    ),
   ];
   for (const item of recordings) await seedRecording(vaultDir, meta, fixtures, now, item);
 

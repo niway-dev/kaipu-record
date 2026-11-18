@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { toLayout } from "../timeline";
@@ -50,17 +51,36 @@ const cards = (): HTMLElement[] => screen.queryAllByTestId("add-from-library-scr
 const openScreenshots = (): void => {
   fireEvent.click(screen.getByRole("tab", { name: /Screenshots/ }));
 };
-// The chooser: radios are named by their label plus its hint, so match the label's start.
-const radio = (label: RegExp): HTMLInputElement =>
-  screen.getByRole("radio", { name: label }) as HTMLInputElement;
+// The destination menu: items are named by their label plus its hint, so match the label's start.
 const OVER = /^Over the video/;
-const BEFORE = /^Before the clip under the playhead/;
-const AFTER = /^After the clip under the playhead/;
+const BEFORE = /^Before this clip/;
+const AFTER = /^After this clip/;
 const START = /^At the start/;
 const END = /^At the end/;
-const add = (): void => {
-  fireEvent.click(screen.getByRole("button", { name: "Add" }));
+const arrow = (): HTMLElement => screen.getByRole("button", { name: "Choose where it goes" });
+const openMenu = (): void => {
+  if (arrow().getAttribute("aria-expanded") !== "true") fireEvent.click(arrow());
 };
+const item = (label: RegExp): HTMLElement => screen.getByRole("menuitemradio", { name: label });
+// Picks a destination through the menu, which closes itself.
+const choose = (label: RegExp): void => {
+  openMenu();
+  fireEvent.click(item(label));
+};
+// Looks at which destination is checked, then puts the menu away again.
+const expectChosen = (label: RegExp): void => {
+  openMenu();
+  expect(item(label)).toHaveAttribute("aria-checked", "true");
+  for (const other of screen.getAllByRole("menuitemradio")) {
+    if (other !== item(label)) expect(other).toHaveAttribute("aria-checked", "false");
+  }
+  fireEvent.keyDown(item(label), { key: "Escape" });
+};
+const ADD = /^Add (over the video|before this clip|after this clip|at the start|at the end)$/;
+const add = (): void => {
+  fireEvent.click(screen.getByRole("button", { name: ADD }));
+};
+const sentence = (): string => screen.getByTestId("placement-sentence").textContent ?? "";
 
 beforeEach(() => {
   // jsdom implements no media playback: the preview's calls are recorded instead.
@@ -255,20 +275,26 @@ describe("AddFromLibraryModal", () => {
         video({ assetId: "b", title: "Older", createdAt: 1 }),
       ];
 
-      it("the chooser lists every destination, with Over the video disabled and a hint why", () => {
+      it("the menu lists every destination, with Over the video disabled and a hint why", () => {
         renderModal({ videos: list });
-        expect(radio(OVER)).toBeDisabled();
+        openMenu();
+        expect(item(OVER)).toHaveAttribute("aria-disabled", "true");
         expect(screen.getByText("Floating videos come later.")).toBeInTheDocument();
-        for (const label of [BEFORE, AFTER, START, END]) expect(radio(label)).toBeEnabled();
-        expect(screen.getByText("In the sequence")).toBeInTheDocument();
-        expect(screen.getByText("Pushes everything after it later.")).toBeInTheDocument();
-        expect(screen.getAllByRole("radio")).toHaveLength(5);
+        for (const label of [BEFORE, AFTER, START, END]) {
+          expect(item(label)).not.toHaveAttribute("aria-disabled");
+        }
+        expect(screen.getByText("Pushes this clip and the rest later.")).toBeInTheDocument();
+        expect(screen.getByText("Pushes what comes after it later.")).toBeInTheDocument();
+        expect(screen.getByText("Pushes the whole video later.")).toBeInTheDocument();
+        expect(screen.getByText("Nothing moves.")).toBeInTheDocument();
+        expect(screen.getAllByRole("menuitemradio")).toHaveLength(5);
+        expect(screen.getByRole("menu", { name: "Where it goes" })).toBeInTheDocument();
       });
 
-      it("selects after the clip under the playhead by default, never the disabled option", () => {
+      it("selects after this clip by default, never the disabled option", () => {
         renderModal({ videos: list });
-        expect(radio(AFTER)).toBeChecked();
-        expect(radio(OVER)).not.toBeChecked();
+        expectChosen(AFTER);
+        expect(screen.getByRole("button", { name: "Add after this clip" })).toBeInTheDocument();
       });
 
       it("Add lands after the clip under the playhead by default", () => {
@@ -294,7 +320,7 @@ describe("AddFromLibraryModal", () => {
 
       it("Before the clip under the playhead lands where that clip starts", () => {
         const props = renderModal({ videos: list, playhead: 12 });
-        fireEvent.click(radio(BEFORE));
+        choose(BEFORE);
         add();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "a" }),
@@ -304,7 +330,7 @@ describe("AddFromLibraryModal", () => {
 
       it("At the start lands at index 0", () => {
         const props = renderModal({ videos: list, playhead: 25 });
-        fireEvent.click(radio(START));
+        choose(START);
         add();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "a" }),
@@ -314,7 +340,7 @@ describe("AddFromLibraryModal", () => {
 
       it("At the end lands at the layout length", () => {
         const props = renderModal({ videos: list, playhead: 1 });
-        fireEvent.click(radio(END));
+        choose(END);
         add();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "a" }),
@@ -324,7 +350,7 @@ describe("AddFromLibraryModal", () => {
 
       it("a double click on a row adds it at the chosen destination", () => {
         const props = renderModal({ videos: list, playhead: 3 });
-        fireEvent.click(radio(START));
+        choose(START);
         fireEvent.doubleClick(rows()[1]);
         expect(props.onAddRecording).toHaveBeenCalledOnce();
         expect(props.onAddRecording).toHaveBeenCalledWith(
@@ -343,7 +369,7 @@ describe("AddFromLibraryModal", () => {
       it("reports the destination used so the page can remember it", () => {
         const onRememberDestination = vi.fn();
         renderModal({ videos: list, onRememberDestination });
-        fireEvent.click(radio(END));
+        choose(END);
         expect(onRememberDestination).not.toHaveBeenCalled();
         add();
         expect(onRememberDestination).toHaveBeenCalledWith("recording", "end");
@@ -355,7 +381,7 @@ describe("AddFromLibraryModal", () => {
           playhead: 3,
           rememberedDestinations: { recording: "start" },
         });
-        expect(radio(START)).toBeChecked();
+        expectChosen(START);
         add();
         add();
         expect(props.onAddRecording).toHaveBeenCalledTimes(2);
@@ -367,8 +393,291 @@ describe("AddFromLibraryModal", () => {
 
       it("ignores a remembered Over the video for a recording", () => {
         renderModal({ videos: list, rememberedDestinations: { recording: "over" } });
-        expect(radio(AFTER)).toBeChecked();
-        expect(radio(OVER)).toBeDisabled();
+        expectChosen(AFTER);
+        openMenu();
+        expect(item(OVER)).toHaveAttribute("aria-disabled", "true");
+      });
+
+      it("Over the video is not choosable for a recording: a click leaves the choice and the menu as they are", () => {
+        const onRememberDestination = vi.fn();
+        const props = renderModal({ videos: list, onRememberDestination });
+        openMenu();
+        fireEvent.click(item(OVER));
+        expect(screen.getByRole("menu")).toBeInTheDocument();
+        expect(item(AFTER)).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("button", { name: "Add after this clip" })).toBeInTheDocument();
+        expect(props.onAddRecording).not.toHaveBeenCalled();
+        expect(onRememberDestination).not.toHaveBeenCalled();
+      });
+
+      it("the Add button says where it adds, following the chosen destination", () => {
+        renderModal({ videos: list });
+        const labels: Array<[RegExp, string]> = [
+          [BEFORE, "Add before this clip"],
+          [AFTER, "Add after this clip"],
+          [START, "Add at the start"],
+          [END, "Add at the end"],
+        ];
+        // Over is for screenshots, so a recording walks the four sequence places.
+        for (const [label, name] of labels) {
+          choose(label);
+          expect(screen.getByRole("button", { name })).toBeInTheDocument();
+        }
+      });
+
+      describe("the placement strip", () => {
+        it("says, with numbers from the real layout, which clips move and by how much", () => {
+          // A 16 s recording; 3 s is in the first clip, so after it the second clip moves 16 s.
+          renderModal({ videos: list, playhead: 3 });
+          expect(sentence()).toBe("Goes after the clip you are on. 1 clip moves 0:16 later.");
+          choose(BEFORE);
+          expect(sentence()).toBe(
+            "Goes before the clip you are on. 2 clips move 0:16 later. Same as At the start here: you are on the first clip.",
+          );
+          choose(START);
+          expect(sentence()).toBe(
+            "Becomes the first thing in the video. All 2 clips move 0:16 later.",
+          );
+          choose(END);
+          expect(sentence()).toBe("Goes last. No clip moves.");
+        });
+
+        it("after the clip the playhead is in, in the last clip, nothing moves and it says it is the same as the end", () => {
+          renderModal({ videos: list, playhead: 12 });
+          expect(sentence()).toBe(
+            "Goes after the clip you are on. No clip moves. Same as At the end here: you are on the last clip.",
+          );
+          expect(screen.getByTestId("placement-same-as")).toHaveTextContent(
+            "Same as At the end here: you are on the last clip.",
+          );
+        });
+
+        it("a one-clip sequence says After and At the end are the same, and Before and At the start too", () => {
+          const oneClip = toLayout([{ id: "a", kind: "clip", sourceStart: 0, sourceEnd: 20 }]);
+          renderModal({ videos: list, layout: oneClip, playhead: 5 });
+          expect(sentence()).toContain("Same as At the end here: you are on the last clip.");
+          choose(BEFORE);
+          expect(sentence()).toContain("Same as At the start here: you are on the first clip.");
+          choose(START);
+          expect(screen.queryByTestId("placement-same-as")).toBeNull();
+        });
+
+        it("no note when the playhead is on a clip that is neither the first nor the last", () => {
+          const three = toLayout([
+            { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+            { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+            { id: "c", kind: "clip", sourceStart: 20, sourceEnd: 30 },
+          ]);
+          renderModal({ videos: list, layout: three, playhead: 12 });
+          expect(screen.queryByTestId("placement-same-as")).toBeNull();
+          choose(BEFORE);
+          expect(screen.queryByTestId("placement-same-as")).toBeNull();
+        });
+
+        it("draws the real sequence: two clips plus the new one, the new one in the right place", () => {
+          renderModal({ videos: list, playhead: 3 });
+          const blocks = within(screen.getByTestId("placement-strip")).getAllByTestId(
+            "placement-block",
+          );
+          expect(blocks.map((el) => el.getAttribute("data-new"))).toEqual([null, "true", null]);
+          expect(blocks.map((el) => el.getAttribute("data-moved"))).toEqual([null, null, "true"]);
+          expect(screen.getByText("New · 0:16")).toBeInTheDocument();
+          // The drawing is not read out: only the sentence is.
+          expect(blocks[0].closest("[aria-hidden]")).not.toBeNull();
+          expect(screen.getByTestId("placement-sentence").closest("[aria-hidden]")).toBeNull();
+        });
+
+        it("marks where you are: the current clip and a You are here chip, once, in the large strip", () => {
+          renderModal({ videos: list, playhead: 3 });
+          const strip = within(screen.getByTestId("placement-strip"));
+          const blocks = strip.getAllByTestId("placement-block");
+          expect(blocks.map((el) => el.getAttribute("data-current"))).toEqual(["true", null, null]);
+          expect(strip.getAllByTestId("placement-you-are-here")).toHaveLength(1);
+          expect(strip.getByTestId("placement-you-are-here")).toHaveTextContent("You are here");
+        });
+
+        it("folds a long sequence into groups instead of one sliver per clip", () => {
+          const ten = toLayout(
+            Array.from({ length: 10 }, (_, i) => ({
+              id: `c${i}`,
+              kind: "clip" as const,
+              sourceStart: i * 10,
+              sourceEnd: i * 10 + 10,
+            })),
+          );
+          renderModal({ videos: list, layout: ten, playhead: 45 });
+          const strip = within(screen.getByTestId("placement-strip"));
+          expect(strip.getAllByTestId("placement-block")).toHaveLength(4);
+          const groups = strip.getAllByTestId("placement-group");
+          expect(groups.map((el) => el.getAttribute("data-count"))).toEqual(["3", "4"]);
+          expect(groups[0]).toHaveTextContent("3 clips");
+        });
+      });
+
+      describe("the destination menu", () => {
+        it("draws the same fixed schematic whatever the sequence is, without the chip", () => {
+          // The thumbnails' markup, and a check that none of them carries the chip.
+          const thumbs = (): string[] => {
+            openMenu();
+            const items = screen.getAllByRole("menuitemradio");
+            for (const el of items) {
+              expect(within(el).queryByTestId("placement-you-are-here")).toBeNull();
+            }
+            const html = items.map(
+              (el) => el.querySelector('[aria-hidden="true"]')?.innerHTML ?? "",
+            );
+            fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+            return html;
+          };
+          renderModal({ videos: list, playhead: 3 });
+          const first = thumbs();
+          expect(first).toHaveLength(5);
+          cleanup();
+          const many = toLayout(
+            Array.from({ length: 6 }, (_, i) => ({
+              id: `c${i}`,
+              kind: "clip" as const,
+              sourceStart: i * 4,
+              sourceEnd: i * 4 + 4,
+            })),
+          );
+          renderModal({ videos: list, layout: many, playhead: 17 });
+          expect(thumbs()).toEqual(first);
+        });
+
+        it("opens upward from the arrow part, which reports its state", () => {
+          renderModal({ videos: list });
+          expect(arrow()).toHaveAttribute("aria-haspopup", "menu");
+          expect(arrow()).toHaveAttribute("aria-expanded", "false");
+          expect(arrow()).toHaveAttribute("title", "Choose where it goes");
+          expect(screen.queryByRole("menu")).toBeNull();
+          fireEvent.click(arrow());
+          expect(arrow()).toHaveAttribute("aria-expanded", "true");
+          expect(arrow()).toHaveAttribute("aria-controls", screen.getByRole("menu").id);
+        });
+
+        it("choosing an option sets the destination and closes the menu, without adding", () => {
+          const onRememberDestination = vi.fn();
+          const props = renderModal({ videos: list, onRememberDestination });
+          choose(START);
+          expect(screen.queryByRole("menu")).toBeNull();
+          expect(screen.getByRole("button", { name: "Add at the start" })).toBeInTheDocument();
+          expect(props.onAddRecording).not.toHaveBeenCalled();
+          expect(onRememberDestination).not.toHaveBeenCalled();
+          expect(arrow()).toHaveFocus();
+        });
+
+        it("opening focuses the chosen item", () => {
+          renderModal({ videos: list });
+          fireEvent.click(arrow());
+          expect(item(AFTER)).toHaveFocus();
+        });
+
+        it("Escape closes the menu, returns focus to the arrow and leaves the modal open", () => {
+          const props = renderModal({ videos: list });
+          fireEvent.click(arrow());
+          fireEvent.keyDown(item(AFTER), { key: "Escape" });
+          expect(screen.queryByRole("menu")).toBeNull();
+          expect(arrow()).toHaveFocus();
+          expect(props.onClose).not.toHaveBeenCalled();
+          // With the menu closed, the next Escape reaches the modal.
+          fireEvent.keyDown(arrow(), { key: "Escape" });
+          expect(props.onClose).toHaveBeenCalledOnce();
+        });
+
+        it("arrows move through the options and skip the disabled one; Home and End jump", () => {
+          renderModal({ videos: list });
+          fireEvent.click(arrow());
+          fireEvent.keyDown(item(AFTER), { key: "ArrowDown" });
+          expect(item(START)).toHaveFocus();
+          fireEvent.keyDown(item(START), { key: "ArrowDown" });
+          expect(item(END)).toHaveFocus();
+          fireEvent.keyDown(item(END), { key: "ArrowDown" });
+          // Over is disabled for a recording, so the cycle wraps to Before.
+          expect(item(BEFORE)).toHaveFocus();
+          fireEvent.keyDown(item(BEFORE), { key: "ArrowUp" });
+          expect(item(END)).toHaveFocus();
+          fireEvent.keyDown(item(END), { key: "Home" });
+          expect(item(BEFORE)).toHaveFocus();
+          fireEvent.keyDown(item(BEFORE), { key: "End" });
+          expect(item(END)).toHaveFocus();
+        });
+
+        it("Enter on a focused option chooses it", async () => {
+          renderModal({ videos: list });
+          fireEvent.click(arrow());
+          fireEvent.keyDown(item(AFTER), { key: "ArrowUp" });
+          expect(item(BEFORE)).toHaveFocus();
+          await userEvent.keyboard("{Enter}");
+          expect(screen.getByRole("button", { name: "Add before this clip" })).toBeInTheDocument();
+        });
+
+        it("Tab closes it", () => {
+          renderModal({ videos: list });
+          fireEvent.click(arrow());
+          fireEvent.keyDown(item(AFTER), { key: "Tab" });
+          expect(screen.queryByRole("menu")).toBeNull();
+        });
+
+        it("a press outside closes it, and a press inside the menu does not", () => {
+          renderModal({ videos: list });
+          fireEvent.click(arrow());
+          fireEvent.pointerDown(item(AFTER));
+          expect(screen.getByRole("menu")).toBeInTheDocument();
+          fireEvent.pointerDown(screen.getByRole("heading", { name: "Newest" }));
+          expect(screen.queryByRole("menu")).toBeNull();
+        });
+
+        it("another selection or another tab closes it", () => {
+          renderModal({ videos: [...list, shot({ assetId: "s", title: "Frame" })] });
+          fireEvent.click(arrow());
+          fireEvent.click(rows()[1]);
+          expect(screen.queryByRole("menu")).toBeNull();
+          fireEvent.click(arrow());
+          openScreenshots();
+          expect(screen.queryByRole("menu")).toBeNull();
+        });
+
+        it("pointing at an option previews it in the strip, and closing goes back to the choice", () => {
+          renderModal({ videos: list, playhead: 3 });
+          expect(sentence()).toBe("Goes after the clip you are on. 1 clip moves 0:16 later.");
+          fireEvent.click(arrow());
+          fireEvent.mouseEnter(item(END));
+          expect(sentence()).toBe("Goes last. No clip moves.");
+          // The Add button still follows the choice, not the preview.
+          expect(screen.getByRole("button", { name: "Add after this clip" })).toBeInTheDocument();
+          fireEvent.mouseLeave(item(END));
+          expect(sentence()).toBe("Goes after the clip you are on. 1 clip moves 0:16 later.");
+          fireEvent.mouseEnter(item(START));
+          expect(sentence()).toBe(
+            "Becomes the first thing in the video. All 2 clips move 0:16 later.",
+          );
+          fireEvent.keyDown(item(AFTER), { key: "Escape" });
+          expect(sentence()).toBe("Goes after the clip you are on. 1 clip moves 0:16 later.");
+        });
+
+        it("the keyboard's option previews too", () => {
+          renderModal({ videos: list, playhead: 3 });
+          fireEvent.click(arrow());
+          fireEvent.keyDown(item(AFTER), { key: "End" });
+          expect(sentence()).toBe("Goes last. No clip moves.");
+        });
+
+        it("a key press wins over the pointer resting on another option", () => {
+          renderModal({ videos: list, playhead: 3 });
+          fireEvent.click(arrow());
+          fireEvent.mouseEnter(item(START));
+          fireEvent.keyDown(item(AFTER), { key: "End" });
+          expect(item(END)).toHaveFocus();
+          expect(sentence()).toBe("Goes last. No clip moves.");
+        });
+
+        it("a disabled option does not preview", () => {
+          renderModal({ videos: list, playhead: 3 });
+          fireEvent.click(arrow());
+          fireEvent.mouseEnter(item(OVER));
+          expect(sentence()).toBe("Goes after the clip you are on. 1 clip moves 0:16 later.");
+        });
       });
     });
 
@@ -474,16 +783,16 @@ describe("AddFromLibraryModal", () => {
       expect(within(cards()[2]).queryByText("From this recording")).toBeNull();
     });
 
-    it("a click only selects the card: nothing is added and the chooser appears for it", () => {
+    it("a click only selects the card: nothing is added and the Add button appears for it", () => {
       const props = renderModal({ videos: shots });
       openScreenshots();
-      expect(screen.queryByTestId("add-destination-chooser")).toBeNull();
+      expect(screen.queryByTestId("add-destination-button")).toBeNull();
       expect(screen.getByText("Select a screenshot to choose where it goes.")).toBeInTheDocument();
       fireEvent.click(cards()[1]);
       expect(cards()[1]).toHaveAttribute("aria-pressed", "true");
       expect(cards()[1]).toHaveAttribute("data-selected", "true");
       expect(cards()[0]).toHaveAttribute("aria-pressed", "false");
-      expect(screen.getByTestId("add-destination-chooser")).toBeInTheDocument();
+      expect(screen.getByTestId("add-destination-button")).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "Login" })).toBeInTheDocument();
       expect(props.onAddScreenshot).not.toHaveBeenCalled();
       expect(props.onAddScreenshotToSequence).not.toHaveBeenCalled();
@@ -505,13 +814,13 @@ describe("AddFromLibraryModal", () => {
       );
     });
 
-    it("keeps the chooser and Add beside the image when the screenshot has no thumbnail", () => {
+    it("keeps the placement and Add beside the image when the screenshot has no thumbnail", () => {
       renderModal({ videos: [shot({ assetId: "bare", title: "Bare", thumbnailUrl: null })] });
       openScreenshots();
       fireEvent.click(cards()[0]);
       expect(screen.queryByTestId("add-from-library-shot-preview")).toBeNull();
-      expect(screen.getByTestId("add-destination-chooser")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+      expect(screen.getByTestId("add-destination-button")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add over the video" })).toBeInTheDocument();
     });
 
     it("a card is a native button that takes focus and a click selects it", () => {
@@ -528,13 +837,31 @@ describe("AddFromLibraryModal", () => {
       renderModal({ videos: shots });
       openScreenshots();
       fireEvent.click(cards()[1]);
-      expect(radio(OVER)).toBeChecked();
+      expectChosen(OVER);
+      openMenu();
       expect(
-        screen.getAllByRole("radio").every((input) => !(input as HTMLInputElement).disabled),
+        screen
+          .getAllByRole("menuitemradio")
+          .every((option) => !option.hasAttribute("aria-disabled")),
       ).toBe(true);
       expect(
-        screen.getByText("Floats at the playhead, 0:12.0. The clips do not move."),
+        screen.getByText("Floats at the playhead. The clips do not move."),
       ).toBeInTheDocument();
+    });
+
+    it("says an image floats for the floating image's own length, and joins the sequence for 5 s", () => {
+      // The playhead (12 s) leaves 18 s of video, so the default 10 s fits.
+      renderModal({ videos: shots, playhead: 12 });
+      openScreenshots();
+      fireEvent.click(cards()[1]);
+      expect(sentence()).toBe("Floats over the video from the playhead for 10 s. No clip moves.");
+      expect(screen.getByText("New · 10 s")).toBeInTheDocument();
+      choose(AFTER);
+      expect(sentence()).toBe(
+        "Goes after the clip you are on. No clip moves. Same as At the end here: you are on the last clip.",
+      );
+      choose(START);
+      expect(sentence()).toBe("Becomes the first thing in the video. All 2 clips move 5 s later.");
     });
 
     it("Add with Over the video calls the floating callback once and leaves the modal open", () => {
@@ -563,7 +890,7 @@ describe("AddFromLibraryModal", () => {
         [END, { index: 2, time: 30 }],
       ];
       for (const [label, boundary] of expected) {
-        fireEvent.click(radio(label));
+        choose(label);
         add();
         expect(props.onAddScreenshotToSequence).toHaveBeenLastCalledWith(
           expect.objectContaining({ assetId: "s1" }),
@@ -582,15 +909,15 @@ describe("AddFromLibraryModal", () => {
       });
       openScreenshots();
       fireEvent.click(cards()[0]);
-      fireEvent.click(radio(END));
+      choose(END);
       add();
       expect(onRememberDestination).toHaveBeenCalledWith("screenshot", "end");
       // another screenshot starts at the same place
       fireEvent.click(cards()[1]);
-      expect(radio(END)).toBeChecked();
+      expectChosen(END);
       // the recording still defaults to after the clip
       fireEvent.click(screen.getByRole("tab", { name: /Recordings/ }));
-      expect(radio(AFTER)).toBeChecked();
+      expectChosen(AFTER);
     });
 
     it("starts at the remembered screenshot destination", () => {
@@ -600,7 +927,7 @@ describe("AddFromLibraryModal", () => {
         initialSelectedId: "s1",
         rememberedDestinations: { screenshot: "before-clip" },
       });
-      expect(radio(BEFORE)).toBeChecked();
+      expectChosen(BEFORE);
     });
 
     it("opens on the tab and selection the Captures panel asks for", () => {
@@ -614,7 +941,7 @@ describe("AddFromLibraryModal", () => {
         "true",
       );
       expect(cards()[1]).toHaveAttribute("aria-pressed", "true");
-      expect(radio(OVER)).toBeChecked();
+      expectChosen(OVER);
     });
 
     it("opens on Recordings with the first row selected when nothing is asked for", () => {
@@ -629,7 +956,7 @@ describe("AddFromLibraryModal", () => {
     it("selects nothing when the asked-for id is not a listed screenshot", () => {
       renderModal({ videos: shots, initialTab: "screenshots", initialSelectedId: "gone" });
       expect(cards().every((card) => card.getAttribute("aria-pressed") === "false")).toBe(true);
-      expect(screen.queryByTestId("add-destination-chooser")).toBeNull();
+      expect(screen.queryByTestId("add-destination-button")).toBeNull();
     });
 
     it("searches its own field, by title, apart from the recordings search", () => {

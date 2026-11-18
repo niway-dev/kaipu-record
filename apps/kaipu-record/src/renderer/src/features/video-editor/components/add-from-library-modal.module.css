@@ -9,7 +9,7 @@
      dialog's max-height on a short window. */
   flex: 0 1 auto;
   min-height: 0;
-  height: min(600px, calc(100vh - 64px));
+  height: min(772px, calc(100vh - 64px));
   background: var(--bg-modal);
   color: var(--text-primary);
 }
@@ -19,8 +19,8 @@
   flex: none;
   align-items: center;
   gap: 20px;
-  height: 48px;
-  padding: 0 12px 0 16px;
+  height: 56px;
+  padding: 0 12px 0 20px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -109,14 +109,12 @@
   min-height: 0;
 }
 
-.searchRow {
-  flex: none;
-  padding: 12px 16px 0;
-}
-
+/* The search sits in the header, before the close button. */
 .search {
   position: relative;
   display: block;
+  flex: none;
+  width: 260px;
 }
 
 .searchIcon {
@@ -183,13 +181,12 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
 }
 
 .list {
   flex: none;
-  width: 45%;
+  /* The design's 400 px, giving way first on a narrow window. */
+  width: min(400px, 40%);
   margin: 0;
   padding: 8px;
   overflow-y: auto;
@@ -297,25 +294,36 @@
   white-space: nowrap;
 }
 
-/* The preview takes whatever height is left and gives it up first on a short window, so the
-   chooser and the Add button below it stay on screen. Only when the window is shorter than the
-   fixed rows alone does the column scroll, so Add is never clipped out of reach. */
+/* The preview takes whatever height is left (the freed room of the old destination list) and
+   gives it up first on a short window, so the placement strip and the Add button below it stay
+   on screen. Only when the window is shorter than the fixed rows alone does the column
+   scroll, so Add is never clipped out of reach. */
 .detail {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
   min-height: 0;
-  padding: 12px 16px 16px;
+  padding: 16px 20px 18px;
   overflow-y: auto;
 }
 
-.detailTitle {
+/* The title and its facts on one line; only the title gives way to an ellipsis. */
+.titleLine {
+  display: flex;
   flex: none;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.detailTitle {
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: var(--font-size-lg);
+  font-size: 15px;
   font-weight: var(--font-weight-semibold);
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
@@ -323,13 +331,11 @@
 }
 
 .facts {
-  display: flex;
   flex: none;
-  flex-wrap: wrap;
-  gap: 4px 16px;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
+  font-size: 10.5px;
+  white-space: nowrap;
 }
 
 /* ---- The quick look ---- */
@@ -338,7 +344,7 @@
   flex: 1 1 0;
   flex-direction: column;
   gap: 8px;
-  min-height: 0;
+  min-height: 120px;
 }
 
 /* Sized by the height the column has left, not by its width: the picture inside is contained,
@@ -447,14 +453,16 @@
 .grid {
   min-width: 0;
   display: grid;
-  flex: 1;
-  /* Beside the chooser column the grid has room for two or three cards, by width. */
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  flex: none;
+  width: min(470px, 45%);
+  /* Three cards across at 470 px (the design's 8 px gaps and 12 px padding); two once the
+     window narrows the column below that. */
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   align-content: start;
-  gap: 14px 12px;
+  gap: 8px;
   min-height: 0;
   margin: 0;
-  padding: 14px 16px 8px;
+  padding: 12px;
   overflow-y: auto;
   list-style: none;
 }
@@ -542,17 +550,14 @@
   overflow: hidden;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.02em;
+  /* The design's 9.5 px: a three-across card fits "Nov 16, 2026 · 18:20" whole. */
+  font-size: 9.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The Screenshots tab's right column: the chooser for the selected card, narrower than the
-   recordings' detail because the grid needs the width. */
+/* The Screenshots tab's right column: the preview and Add for the selected card. */
 .shotSide {
-  flex: none;
-  width: 290px;
   border-left: 1px solid var(--line);
 }
 

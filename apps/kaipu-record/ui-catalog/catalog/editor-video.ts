@@ -4,6 +4,24 @@ import { nc } from "./not-capturable";
 
 const open = (assetId: string): Step => ({ navigate: `/editor/video/${assetId}` });
 const loaded: Step = { waitFor: { video: true } };
+/**
+ * The add-from-library profile opens “Weekly sync” as three 4 s clips: half of the 12 s ruler
+ * is 6 s, the middle of the second clip. A press on the ruler seeks there.
+ */
+const playheadInMiddleClip: Step = {
+  click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+  at: { x: 0.5, y: 0.5 },
+};
+/** The ruler at 92%: 11 s of the 12 s, inside the last of the three 4 s clips. */
+const playheadInLastClip: Step = {
+  click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+  at: { x: 0.92, y: 0.5 },
+};
+/** “Long sequence” is ten 1.2 s clips: 45% of its 12 s is 5.4 s, the middle of the fifth. */
+const playheadInFifthClip: Step = {
+  click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+  at: { x: 0.45, y: 0.5 },
+};
 const rail = (name: string): Step => ({
   click: { area: "editorVideo.toolRail", part: { role: "button", name, exact: true } },
 });
@@ -846,7 +864,7 @@ export const editorVideo = catalog(
     },
     "captures-opens-add-from-library": {
       profile: "timeline-levels",
-      how: "With the timeline-levels flag forced on, open “Weekly sync”, press Capture frame and then Add from Library… on the new capture's row: the Add from Library modal opens on its Screenshots tab with that new capture already selected, its image shown on the right above the destination chooser (Over the video selected) and the Add button.",
+      how: "With the timeline-levels flag forced on, open “Weekly sync”, press Capture frame and then Add from Library… on the new capture's row: the Add from Library modal opens on its Screenshots tab with that new capture already selected, its image shown on the right above the placement strip and the Add button, which reads “Add over the video”.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -858,14 +876,14 @@ export const editorVideo = catalog(
             part: { role: "button", name: "Add from Library…", exact: true },
           },
         },
-        // The radio group exists only while a screenshot is selected, so this waits for the
+        // The Add button exists only while a screenshot is selected, so this waits for the
         // modal, the Screenshots tab and the new capture's selection together. The new
         // capture's title ends in its time ("Weekly sync frame 0s"), which the seeded
         // “Weekly sync frame” card does not, so the title is not matched here.
         {
           waitFor: {
             area: "editorVideo.addFromLibrary",
-            part: { role: "radio", name: "Over the video" },
+            part: { role: "button", name: "Add over the video", exact: true },
           },
         },
         // The selected image decodes after the column is drawn.
@@ -878,16 +896,17 @@ export const editorVideo = catalog(
     },
     "add-from-library": {
       profile: "add-from-library",
-      how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the destination chooser (Over the video is greyed out with “Floating videos come later.”, After the clip under the playhead is selected) and the Add button; the transport button stays lit while the modal is open.",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” (three 4 s clips, with the playhead put in the middle one) and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the placement strip (a mini timeline of the real sequence: the three clips, the middle one lighter with a “You are here” chip on the playhead line, the new one in pink after it and the last clip moving later, and one sentence saying how many clips move) and the Add button, a split button that reads “Add after this clip”; the transport button stays lit while the modal is open.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
+        playheadInMiddleClip,
         addRecordingButton,
         // The list is drawn after the Library read lands; “Walkthrough 1” is among its rows.
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
         // The preview autoplays: hold every video at 0:00. The wait is met by any video with a
         // frame (the editor's too), so the preview may still show its poster, the same picture.
-        { waitFor: { video: "paused-at-start" } },
+        { waitFor: { video: "paused-at-start", within: "editorVideo.addFromLibrary" } },
         // The row thumbnails decode after the list is drawn.
         { waitMs: 400 },
       ],
@@ -898,12 +917,70 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.addFromLibrary" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
-    "add-from-library-screenshots": {
+    "add-from-library-last-clip": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording and open the Screenshots tab: a grid of the Library's screenshots (GIFs are not listed), newest first, “Weekly sync frame” tagged “From this recording”, none selected yet, with the right column asking to select a screenshot.",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” (three 4 s clips), put the playhead in the last clip and press Add recording: the Add from Library modal opens on its Recordings tab with the first recording selected and the Add button at “Add after this clip”. The placement strip marks the clip you are on (lighter, with a “You are here” chip on the playhead line), draws the new item after it with nothing moving, and the sentence under it adds “Same as At the end here: you are on the last clip.”, because After this clip and At the end land in the same place.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
+        playheadInLastClip,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        { waitFor: { video: "paused-at-start", within: "editorVideo.addFromLibrary" } },
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:sameAsEnd"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-many-clips": {
+      profile: "add-from-library",
+      how: "With the `timeline-levels` flag forced on, open “Long sequence” (ten 1.2 s clips), put the playhead in the fifth clip and press Add recording: the placement strip condenses the sequence instead of drawing ten slivers. It shows the fifth clip (lighter, with the “You are here” chip), its neighbour before, the new item in pink after it and the next clip, and folds the clips before and after into two dashed “3 clips” and “4 clips” groups, the last one with the moved arrow.",
+      steps: [
+        open(ASSETS.longSequence),
+        loaded,
+        playheadInFifthClip,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        { waitFor: { video: "paused-at-start", within: "editorVideo.addFromLibrary" } },
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:longSequence"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-destination-menu": {
+      profile: "add-from-library",
+      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording and open the arrow at the right end of the Add button: the “Where it goes” menu opens upward from the button with its five destinations, each with the same fixed thumbnail (three clips and the new item, placed before, after or around the second clip, or floating over the video for Over the video) and a hint. After this clip is checked with a pink tick, Over the video is greyed out with “Floating videos come later.”, and the arrow part of the button is a shade darker and points down.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        playheadInMiddleClip,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        { waitFor: { video: "paused-at-start", within: "editorVideo.addFromLibrary" } },
+        { waitMs: 400 },
+        {
+          click: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "button", name: "Choose where it goes", exact: true },
+          },
+        },
+        { waitFor: { area: "editorVideo.addFromLibrary", part: { role: "menu" } } },
+        // The menu pops in over 150 ms (animations are off in the catalog, so this is margin).
+        { waitMs: 200 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:destinationMenu"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-screenshots": {
+      profile: "add-from-library",
+      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording and open the Screenshots tab: a grid of the Library's screenshots (GIFs are not listed), newest first, “Weekly sync frame” tagged “From this recording”, none selected yet, with the right column asking to select a screenshot.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        playheadInMiddleClip,
         addRecordingButton,
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
         screenshotsTab,
@@ -917,10 +994,11 @@ export const editorVideo = catalog(
     },
     "add-from-library-screenshot-selected": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording, open the Screenshots tab and click “Weekly sync frame”: the card is outlined as selected and the right column shows its title above the destination chooser, with Over the video selected and every place in the sequence listed under “In the sequence”, and the Add button.",
+      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording, open the Screenshots tab and click “Weekly sync frame”: the card is outlined as selected and the right column shows its title above the placement strip, which draws it floating from the playhead (6 s) to the end of the 12 s video (a 6 s bar), and the Add button, which reads “Add over the video”.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
+        playheadInMiddleClip,
         addRecordingButton,
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
         screenshotsTab,
@@ -929,7 +1007,7 @@ export const editorVideo = catalog(
         {
           waitFor: {
             area: "editorVideo.addFromLibrary",
-            part: { role: "radio", name: "Over the video" },
+            part: { role: "button", name: "Add over the video", exact: true },
           },
         },
         // The card thumbnails decode after the grid is drawn.
@@ -941,10 +1019,11 @@ export const editorVideo = catalog(
     },
     "add-from-library-no-match": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording and type a title no recording has: the list gives way to “No recordings match” with a hint to try another title.",
+      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording and type a title no recording has: the list gives way to “No recordings match” with a hint to try another title.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
+        playheadInMiddleClip,
         addRecordingButton,
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
         {
@@ -967,10 +1046,11 @@ export const editorVideo = catalog(
     },
     "add-from-library-added": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording and click Add with “Walkthrough 1” selected and the default destination (After the clip under the playhead): the playhead is at 0:00, so the recording is inserted after the clip under it, and the sequence shows the clips labelled “Weekly sync” and “Walkthrough 1” (the modal is closed for the shot).",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and click “Add after this clip” with “Walkthrough 1” selected and the default destination (After this clip): “Weekly sync” opens as three 4 s clips with the playhead in the middle one, so the recording is inserted after the middle clip, and the sequence shows the clips labelled “Weekly sync” and “Walkthrough 1” (the modal is closed for the shot).",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
+        playheadInMiddleClip,
         addRecordingButton,
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
         // The first row (the newest, “Floating images”) is selected by default: pick this one.
@@ -978,7 +1058,7 @@ export const editorVideo = catalog(
         {
           click: {
             area: "editorVideo.addFromLibrary",
-            part: { role: "button", name: "Add", exact: true },
+            part: { role: "button", name: "Add after this clip", exact: true },
           },
         },
         // The modal stays open after an add, so close it with Escape to see the sequence.

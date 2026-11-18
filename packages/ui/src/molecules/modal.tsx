@@ -69,9 +69,10 @@ const styles = stylex.create({
     flexDirection: "column",
     overflow: "hidden",
   },
-  // The same sheet at 880px, for a two-pane picker (Add from Library, NIW2-790).
+  // The same sheet at 1180px, for a two-pane picker (Add from Library, NIW2-790): the list
+  // beside a preview large enough to judge the item before adding it.
   dialogXWide: {
-    maxWidth: "880px",
+    maxWidth: "1180px",
   },
   icon: {
     width: "44px",
@@ -172,7 +173,7 @@ export function ModalOverlay({
   labelledBy?: string;
   /**
    * "wide": a 620px sheet that lays out its own padding (e.g. the export sheet). "xwide": the
-   * same sheet at 880px, for a list beside a preview.
+   * same sheet at 1180px, for a list beside a preview.
    */
   size?: "default" | "wide" | "xwide";
   children: ReactNode;

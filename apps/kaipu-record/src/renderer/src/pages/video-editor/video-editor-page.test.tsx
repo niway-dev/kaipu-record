@@ -263,6 +263,16 @@ function seedCapture(bytes: Uint8Array, id = "cap-1"): ReturnType<typeof vi.fn> 
   return read;
 }
 
+const ADD_BUTTON =
+  /^Add (over the video|before this clip|after this clip|at the start|at the end)$/;
+
+/** Picks a destination through the Add button's menu (it closes itself and does not add). */
+function chooseDestination(root: Pick<typeof screen, "getByRole">, label: RegExp): void {
+  const arrow = root.getByRole("button", { name: "Choose where it goes" });
+  if (arrow.getAttribute("aria-expanded") !== "true") fireEvent.click(arrow);
+  fireEvent.click(root.getByRole("menuitemradio", { name: label }));
+}
+
 /**
  * Opens Captures (if closed), presses the first capture's Add from Library, and adds it to the
  * sequence at the start (a 5 s image slide). The button opens the modal on Screenshots with
@@ -276,8 +286,9 @@ async function addCaptureAsSlide(): Promise<void> {
   }
   fireEvent.click(await screen.findByRole("button", { name: "Add from Library…" }));
   const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
-  fireEvent.click(await within(dialog).findByRole("radio", { name: /^At the start/ }));
-  fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+  await within(dialog).findByRole("button", { name: "Choose where it goes" });
+  chooseDestination(within(dialog), /^At the start/);
+  fireEvent.click(within(dialog).getByRole("button", { name: ADD_BUTTON }));
 }
 
 /** Closes Add from Library, which stays open after an add. */
@@ -2945,12 +2956,13 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       const buttons = await screen.findAllByRole("button", { name: "Add from Library…" });
       expect(buttons).toHaveLength(2);
       fireEvent.click(buttons[1]);
-      // The button only opens the modal: nothing is added until the chooser's Add.
+      // The button only opens the modal: nothing is added until the Add button is pressed.
       const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
       expect(read).not.toHaveBeenCalled();
       expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before);
-      fireEvent.click(await within(dialog).findByRole("radio", { name: /^At the start/ }));
-      fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+      await within(dialog).findByRole("button", { name: "Choose where it goes" });
+      chooseDestination(within(dialog), /^At the start/);
+      fireEvent.click(within(dialog).getByRole("button", { name: ADD_BUTTON }));
       await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before + 1));
       expect(read).toHaveBeenCalledOnce();
       expect(read).toHaveBeenCalledWith("mine");
@@ -3173,16 +3185,16 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     for (const toast of getToasts()) dismissToast(toast.id);
   });
 
-  /** The modal's recording rows, by title: a row selects, the chooser and Add below apply. */
+  /** The modal's recording rows, by title: a row selects, the destination menu and Add below apply. */
   const row = (title: string): Promise<HTMLElement> => screen.findByRole("button", { name: title });
-  // Add applies the chooser's destination, which for a recording starts at after the clip.
+  // Add applies the menu's destination, which for a recording starts at after the clip.
   const addAfterCurrentClip = (): void => {
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: ADD_BUTTON }));
   };
-  /** Picks one of the chooser's places by the start of its label, then presses Add. */
+  /** Picks one of the menu's places by the start of its label, then presses Add. */
   const addAt = (label: RegExp): void => {
-    fireEvent.click(screen.getByRole("radio", { name: label }));
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    chooseDestination(screen, label);
+    fireEvent.click(screen.getByRole("button", { name: ADD_BUTTON }));
   };
   const modal = (): HTMLElement => screen.getByRole("alertdialog", { name: "Add from Library" });
 
@@ -3286,8 +3298,8 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     addAt(/^At the end/);
     await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
     fireEvent.click(await row("Signup flow"));
-    // The chooser keeps the destination of the last add for recordings.
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    // The Add button keeps the destination of the last add for recordings.
+    fireEvent.click(screen.getByRole("button", { name: ADD_BUTTON }));
     await waitFor(() => expect(screen.getByText(/\/ 0:50\.0$/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -3445,8 +3457,8 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
       expect(read).not.toHaveBeenCalled();
       // Over the video is what a screenshot starts at.
-      expect(screen.getByRole("radio", { name: /^Over the video/ })).toBeChecked();
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      expect(screen.getByRole("button", { name: "Add over the video" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: ADD_BUTTON }));
 
       await waitFor(() => expect(read).toHaveBeenCalledWith("shot-1-id"));
       // It floats: the sequence is untouched, and the new image's panel is the inspector's.
@@ -3470,7 +3482,7 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
 
-      addAt(/^After the clip under the playhead/);
+      addAt(/^After this clip/);
 
       // 30 s clip + 5 s slide, and the slide is a block after the clip.
       await waitFor(() => expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument());
@@ -3493,8 +3505,8 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
 
       // Both clicks land before the first insert has rendered its commit.
-      addAt(/^After the clip under the playhead/);
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      addAt(/^After this clip/);
+      fireEvent.click(screen.getByRole("button", { name: ADD_BUTTON }));
 
       // 30 s clip + two 5 s slides: the second did not replace the first.
       await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
@@ -3511,8 +3523,8 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
 
-      addAt(/^After the clip under the playhead/);
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      addAt(/^After this clip/);
+      fireEvent.click(screen.getByRole("button", { name: ADD_BUTTON }));
 
       await waitFor(() => expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument());
       expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
@@ -3528,7 +3540,7 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
 
       fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      fireEvent.click(screen.getByRole("button", { name: ADD_BUTTON }));
 
       await waitFor(() =>
         expect(getToasts().map((toast) => toast.message)).toEqual([

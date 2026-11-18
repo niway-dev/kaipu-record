@@ -231,7 +231,7 @@ it. Before this the type decided silently (a recording always joined the sequenc
 always floated) and the Captures panel had a second Add to timeline button that did the same as the
 modal's screenshot add. Everything is behind `timeline-levels`.
 
-The destinations, as a radio list with one selected:
+The destinations (first built as a radio list; now the Add button's menu, see the update below):
 
 - **Over the video**: floats at the playhead and the clips do not move. A screenshot becomes
   the floating image of stage 1 (10 s). A recording shows this option disabled, with a hint that
@@ -248,6 +248,11 @@ add and confirms with a toast. On the Screenshots tab a click selects a card; it
 The Captures panel keeps Go to and Delete. Its add button no longer adds: it opens Add from
 Library on the Screenshots tab with that capture already selected, and the chooser takes it from
 there. With the flag off nothing changes, because neither the modal nor that button exists.
+
+Update, 2026-11-16: the radio list above is no longer the UI. The destination now lives in the
+menu of the Add button, a split button whose big part adds at the chosen destination and says it
+("Add after this clip"), with a placement strip above it that draws the real sequence and says in
+one sentence which clips move. The destinations and their rules are unchanged.
 
 Slide insertion reads the scene after the image decodes, and pins the chosen boundary to the clip
 that follows it, so a join that lands in the meantime does not move the slide.
