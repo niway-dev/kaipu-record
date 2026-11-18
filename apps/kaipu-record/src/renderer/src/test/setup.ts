@@ -2,7 +2,6 @@ import { stubOnFlagOverridesChanged } from "./flag-overrides-stub";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup, configure } from "@testing-library/react";
-import type { TrackKey } from "@shared/editor-settings";
 
 // Testing Library's default `findBy*` timeout is 1000 ms, which is this suite's
 // own CPU budget rather than a property of the product: under `turbo run test`
@@ -45,8 +44,8 @@ vi.mock("@kaipu/i18n", async (importOriginal) => {
     useSetLocale: () => () => {},
   };
 });
-import { DEFAULT_QUALITY } from "@shared/recording-quality";
-import { defaultShortcutsFor } from "@shared/shortcut-defaults";
+import { STUB_SETTINGS } from "./stub-settings";
+import { resetSettingsStoreForTests } from "../features/settings/settings-store";
 
 // jsdom has no ResizeObserver; components that observe their size (the annotation
 // layer) need a no-op so they can render under test.
@@ -58,51 +57,14 @@ if (!("ResizeObserver" in globalThis)) {
   } as unknown as typeof ResizeObserver;
 }
 
-const STUB_SETTINGS = {
-  theme: "dark",
-  locale: "es",
-  launchAtLogin: false,
-  showInDock: true,
-  recordingQuality: DEFAULT_QUALITY,
-  showBarInRecording: false,
-  recordingCountdownSeconds: 3,
-  showBrandBadge: false,
-  screenshotCopy: "auto",
-  screenshotAfterCapture: "preview",
-  shortcuts: defaultShortcutsFor("darwin"),
-  deviceId: "",
-  uploadMode: "local-only",
-  exportQuality: "balanced",
-  showRecordingSavedCard: true,
-  screenshotFrame: {},
-  recordingArea: {},
-  recordingMode: "screen",
-  screenshotMode: "frame",
-  trayHintShown: false,
-  diagnosticsEnabled: true,
-  cameraBubble: {
-    shape: "circle",
-    cornerRadius: 0.18,
-    size: 240,
-    deviceId: null,
-    mirrored: true,
-    framing: { enabled: false, zoom: 1, x: 0, y: 0 },
-  },
-  audio: {
-    micLevel: 100,
-    noiseSuppression: true,
-    systemAudioVolume: 100,
-    duckSystemAudioWhileTalking: false,
-  },
-  microphone: null,
-  editor: { hiddenTracks: [] as TrackKey[] },
-} as const;
-
 // Vitest does not expose `afterEach` as a global (globals: false), so
 // React Testing Library's automatic cleanup never registers. Do it here
 // to unmount rendered trees between tests.
 afterEach(() => {
   cleanup();
+  // The window's settings store is module state: one test's value or listeners must not reach
+  // the next one.
+  resetSettingsStoreForTests();
 });
 
 // jsdom's `document.hasFocus()` is false until something is focused; a real window has focus.
