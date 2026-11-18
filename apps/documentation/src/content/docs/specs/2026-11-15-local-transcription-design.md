@@ -219,9 +219,10 @@ Criteria:
 - **Job in main:** renderer writes the PCM file to `.kaipu/tmp`; main segments, runs CLI batches,
   reports progress per segment, cancels, resumes after a crash without duplicate segments. One job
   at a time. Segments are fixed 30 s windows with 3 s overlap, four per CLI call. In each overlap
-  the cut is the midpoint (`midpoint-dedupe`): the earlier segment keeps the words that start
-  before it, the later one the words that start after it, so a word on the boundary appears
-  exactly once. M0 counted 93 adjacent duplicate words in 8,490 at 60 minutes. A plain cut loses
+  the cut sits at the quietest 100 ms inside the middle 60% of the overlap, and a word goes to the
+  side its own midpoint (start + end, halved) is on (`midpoint-dedupe`): the earlier segment keeps
+  the words whose midpoint is before the cut, the later one the rest, so a word on the boundary
+  appears exactly once. M0 counted 93 adjacent duplicate words in 8,490 at 60 minutes. A plain cut loses
   a word the two runs time on opposite sides of it and cannot tell a duplicate from a real
   repeat ("no no"), so M1 first pairs the two runs' words in each overlap (same text, starts
   within 250 ms, in order) and keeps one word per pair from the side its midpoint is on; unpaired
