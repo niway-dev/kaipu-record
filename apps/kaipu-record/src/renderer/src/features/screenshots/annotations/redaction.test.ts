@@ -216,6 +216,78 @@ describe("bakeCanvasRedactions", () => {
     expect(dec(out.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
   });
 
+  it("bakes a blur over the cropped-out part of an image, in asset-local coordinates", async () => {
+    fakeBrowser();
+    // The image shows the right half of a 500x300 asset: the visible rect is world
+    // 1250..1500 (w .25), so the whole asset spans world 1000..1500 (x = 1.0, w = .5).
+    // The blur sits at world 1000..1125, entirely in the half that is cropped out.
+    const cropped: Annotation = {
+      ...image,
+      x: 1.25,
+      w: 0.25,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    const out = await bakeCanvasRedactions(base, assets, [
+      cropped,
+      blur({ x: 1, y: 0.125, w: 0.125, h: 0.25 }),
+    ]);
+    // Local to the whole asset: x 0..0.25 of 500 = 125 px, y (.125-0)/.5 = .25 of 300 = 75.
+    expect(dec(out.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
+  });
+
+  it("bakes the hidden part of a blur that straddles the crop edge", async () => {
+    fakeBrowser();
+    const cropped: Annotation = {
+      ...image,
+      x: 1.25,
+      w: 0.25,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    // World 1125..1375: hidden 1125..1250 and visible 1250..1375. Asset spans 1000..1500.
+    const out = await bakeCanvasRedactions(base, assets, [
+      cropped,
+      blur({ x: 1.125, y: 0.125, w: 0.25, h: 0.25 }),
+    ]);
+    // Local: x (1.125-1)/.5 = .25 of 500 = 125, w .25/.5 = .5 of 500 = 250.
+    expect(dec(out.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 125, y: 75, w: 250, h: 150 }]);
+  });
+
+  it("privacy: one asset placed twice with different crops gets the blur of the hidden part once", async () => {
+    fakeBrowser();
+    // Placement A shows only the right half; placement B shows the whole asset elsewhere.
+    // The blur is over A's hidden half (world 1000..1125) and misses B (1750..2250), so the
+    // asset's bytes must be redacted through A's full rect: B alone would never touch them.
+    const a: Annotation = {
+      ...image,
+      id: "A",
+      x: 1.25,
+      w: 0.25,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    const b: Annotation = { ...image, id: "B", x: 1.75, w: 0.5 };
+    const out = await bakeCanvasRedactions(base, assets, [
+      a,
+      b,
+      blur({ x: 1, y: 0.125, w: 0.125, h: 0.25 }),
+    ]);
+    expect(dec(out.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
+  });
+
+  it("does not bake a blur that misses the whole asset even when the crop is narrow", async () => {
+    fakeBrowser();
+    const cropped: Annotation = {
+      ...image,
+      x: 1.25,
+      w: 0.25,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    const out = await bakeCanvasRedactions(base, assets, [
+      cropped,
+      blur({ x: 0.125, y: 0.5, w: 0.125, h: 0.25 }),
+    ]);
+    expect(out.assets).toBe(assets);
+  });
+
   it("changes the base and leaves the same asset objects when the blur misses the image", async () => {
     fakeBrowser();
     const out = await bakeCanvasRedactions(base, assets, [
