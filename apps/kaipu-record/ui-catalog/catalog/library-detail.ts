@@ -1,5 +1,5 @@
 import { ASSETS } from "../fixtures/seed-vault";
-import { catalog, type Step } from "../types";
+import { catalog, type Part, type Step } from "../types";
 import { nc } from "./not-capturable";
 
 const detail = (assetId: string) => ({ navigate: `/library/${assetId}` }) as const;
@@ -22,6 +22,13 @@ const transcribeClick: Step = {
   },
 };
 const dialog = "libraryDetail.transcribeModelDialog" as const;
+
+/** The Transcript tab's panel (NIW2-870). The tab is clicked AFTER the page opens: it is the page's. */
+const transcriptTab: Step = tab("Transcript");
+const inTranscript = (part: Part): Step => ({
+  waitFor: { area: "libraryDetail.transcriptPanel", part },
+});
+const transcriptButton = (name: string): Part => ({ role: "button", name, exact: true });
 
 /** An item's page (`#/library/:assetId`), opened on the seeded items by their fixed ids. */
 export const libraryDetail = catalog(
@@ -95,6 +102,78 @@ export const libraryDetail = catalog(
         { waitFor: { area: "libraryDetail.transcribe", part: { text: "Transcribed" } } },
       ],
       demonstrates: ["libraryDetail.transcribe:done"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+    },
+    "transcript-idle": {
+      profile: "transcription-ready",
+      how: "With the flag forced on and the speech model pinned as installed, open “Walkthrough 1”, which has no transcript, and click the Transcript tab: the panel offers Transcribe now.",
+      steps: [
+        detail(ASSETS.walkthrough),
+        transcribePresent,
+        transcriptTab,
+        inTranscript(transcriptButton("Transcribe now")),
+      ],
+      demonstrates: ["libraryDetail.transcriptPanel:idle"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+    },
+    "transcript-needs-model": {
+      profile: "transcription-missing",
+      how: "With the speech model pinned as not installed, open “Walkthrough 1” and click the Transcript tab: the panel explains the speech model and offers to download it.",
+      steps: [
+        detail(ASSETS.walkthrough),
+        transcribePresent,
+        transcriptTab,
+        inTranscript(transcriptButton("Download the speech model")),
+      ],
+      demonstrates: ["libraryDetail.transcriptPanel:needsModel"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+    },
+    "transcript-running": {
+      profile: "transcription-job-running",
+      how: "With a job pinned at 3 of 12 parts (no engine runs), open “Walkthrough 1”, click the Transcript tab and then Transcribe now: the panel shows the progress bar with Cancel, and the header says “Transcribing 3/12”. The state cancels the job afterwards.",
+      steps: [
+        detail(ASSETS.walkthrough),
+        transcribePresent,
+        transcriptTab,
+        inTranscript(transcriptButton("Transcribe now")),
+        {
+          click: {
+            area: "libraryDetail.transcriptPanel",
+            part: transcriptButton("Transcribe now"),
+          },
+        },
+        inTranscript({ role: "progressbar" }),
+        inTranscript({ text: "3 of 12 parts" }),
+      ],
+      demonstrates: ["libraryDetail.transcriptPanel:transcribing"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+      after: [
+        { click: { area: "libraryDetail.transcriptPanel", part: transcriptButton("Cancel") } },
+        inTranscript(transcriptButton("Transcribe now")),
+      ],
+    },
+    "transcript-done": {
+      profile: "transcription-transcripts",
+      how: "With a transcript beside “Walkthrough 1”, open it and click the Transcript tab: the words show in two paragraphs with their times, and the tab is selected in the row.",
+      steps: [detail(ASSETS.walkthrough), transcriptTab, inTranscript({ css: "[data-w]" })],
+      demonstrates: ["libraryDetail.transcriptPanel:done", "libraryDetail.tabs:transcript"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+    },
+    "transcript-stale": {
+      profile: "transcription-transcripts",
+      how: "With a transcript beside “Onboarding flow” that was written for an earlier version of the recording, open it and click the Transcript tab: a banner says the transcript is out of date over the old words.",
+      steps: [
+        detail(ASSETS.onboardingFlow),
+        transcriptTab,
+        inTranscript({ css: "[data-w]" }),
+        inTranscript({ text: "This transcript is out of date" }),
+      ],
+      demonstrates: ["libraryDetail.transcriptPanel:stale"],
       ready: { video: "paused-at-start" },
       gates: [transcribeOn],
     },
