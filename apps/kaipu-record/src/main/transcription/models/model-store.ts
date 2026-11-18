@@ -163,7 +163,9 @@ export class ModelStore {
 
   /**
    * Download and install a model. A second call for the id already downloading returns the
-   * same promise; a call for another id while one runs rejects with `busy`.
+   * same promise; a call for another id while one runs rejects with `busy`. A caller that joins
+   * a running download only gets its `onProgress` listener added (kept until the download ends):
+   * its `signal` is ignored, so cancel through `cancel(id)`.
    */
   download(id: string, onProgress: ProgressListener, signal?: AbortSignal): Promise<string> {
     let entry: ModelCatalogEntry;
