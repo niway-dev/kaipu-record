@@ -1,10 +1,43 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { backgroundCss, frameRadius, shadowCss, type BeautifyState } from "./backgrounds";
-import type { CropRect } from "../annotations/scene";
+import type { CropRect, NormalizedRect } from "../annotations/scene";
 import { hasExtents, type Extents } from "../annotations/canvas-geometry";
 import { viewTransform } from "../canvas/viewport";
 import styles from "./beautified-frame.module.css";
+
+/**
+ * A base that was cropped or resized (NIW2-853), as the live frame draws it. All of it in the
+ * px and units of the page's own measure of the shot.
+ */
+export interface BaseFrameView {
+  /** What shows of the base: its visible rect, base-normalized (the world's units). */
+  visible: NormalizedRect;
+  /** The window of the whole asset that shows, 0–1 of it. Undefined = all of it. */
+  crop?: CropRect;
+  /** The base's own corner radius in DISPLAY px. Undefined = follows `beautify.radius`. */
+  radius?: number;
+  /** The anchor image's layout size, display px (what the editor measures; it never moves). */
+  shot: { w: number; h: number };
+}
+
+/** `calc(100% + 30px)` / `calc(100% - 30px)`: a valid sum whichever way the offset points. */
+const calcOver = (px: number): string =>
+  px >= 0 ? `calc(100% + ${px}px)` : `calc(100% - ${-px}px)`;
+
+/**
+ * Margins that make the anchor's margin box the visible rect: the frame lays out around
+ * the box, so it wraps what shows. A rect past the anchor gives positive margins.
+ */
+function baseWrapMargins(b: BaseFrameView): React.CSSProperties {
+  const { visible: v, shot } = b;
+  return {
+    marginLeft: `${-v.x * shot.w}px`,
+    marginRight: `${-(1 - v.x - v.w) * shot.w}px`,
+    marginTop: `${-v.y * shot.h}px`,
+    marginBottom: `${-(1 - v.y - v.h) * shot.h}px`,
+  };
+}
 
 /** The screenshot framed by the current beautify settings, with an optional
  *  overlay (the annotation layer) positioned exactly over the image. */
@@ -18,6 +51,7 @@ export function BeautifiedFrame({
   zoom = 1,
   pan,
   extents,
+  base,
   crop,
   windowChip,
   onWindowDoubleClick,
@@ -57,6 +91,13 @@ export function BeautifiedFrame({
    * Undefined or all zero = today's frame.
    */
   extents?: Extents;
+  /**
+   * A cropped or resized base (canvas mode). The original image stays in the layout as an
+   * invisible anchor, so the fit and the measured size do not move; the visible part is drawn
+   * on top at its own rect and the frame wraps THAT, as the export does. Undefined = a base
+   * at its natural place and size, drawn as it always was.
+   */
+  base?: BaseFrameView;
   /** Applied crop window, normalized 0–1 of the whole frame. Undefined = full frame. */
   crop?: CropRect;
   /**
@@ -128,11 +169,18 @@ export function BeautifiedFrame({
     // `flexShrink: 0` matters: the frame is a flex item of the canvas, and with the default
     // shrink a capture that fills the width would be squeezed back to the container width,
     // so the shot would get smaller (and the export scale change) as the extents grow.
-    ...(ext
+    // A cropped or resized base moves the same way: the frame wraps the visible part, so its
+    // maximum also changes by what the anchor image has that the visible part does not (or
+    // the other way round), and the anchor keeps the size it would have had.
+    ...(ext || base
       ? {
           flexShrink: 0,
-          maxWidth: `calc(100% + ${ext.left + ext.right}px)`,
-          maxHeight: `calc(100% + ${ext.top + ext.bottom}px)`,
+          maxWidth: calcOver(
+            (ext ? ext.left + ext.right : 0) - (base ? base.shot.w * (1 - base.visible.w) : 0),
+          ),
+          maxHeight: calcOver(
+            (ext ? ext.top + ext.bottom : 0) - (base ? base.shot.h * (1 - base.visible.h) : 0),
+          ),
         }
       : {}),
   };
@@ -140,15 +188,46 @@ export function BeautifiedFrame({
   const inner = (
     <>
       {boxLayer}
-      <div className={styles.shotWrap}>
+      <div className={styles.shotWrap} style={base ? baseWrapMargins(base) : undefined}>
         <img
           ref={imgRef}
           src={src}
           alt={t("imageAlt")}
           className={styles.shot}
-          style={{ borderRadius: `${beautify.radius}px`, boxShadow: shadowCss(beautify.shadow) }}
+          style={
+            base
+              ? { opacity: 0 }
+              : { borderRadius: `${beautify.radius}px`, boxShadow: shadowCss(beautify.shadow) }
+          }
           onLoad={onImageLoad}
         />
+        {base && (
+          <div
+            data-testid="base-view"
+            className={styles.baseView}
+            style={{
+              left: `${base.visible.x * 100}%`,
+              top: `${base.visible.y * 100}%`,
+              width: `${base.visible.w * 100}%`,
+              height: `${base.visible.h * 100}%`,
+              borderRadius: `${base.radius ?? beautify.radius}px`,
+              boxShadow: shadowCss(beautify.shadow),
+            }}
+          >
+            <img
+              src={src}
+              alt=""
+              draggable={false}
+              className={styles.baseViewImage}
+              style={{
+                left: `${-((base.crop?.x ?? 0) / (base.crop?.w ?? 1)) * 100}%`,
+                top: `${-((base.crop?.y ?? 0) / (base.crop?.h ?? 1)) * 100}%`,
+                width: `${100 / (base.crop?.w ?? 1)}%`,
+                height: `${100 / (base.crop?.h ?? 1)}%`,
+              }}
+            />
+          </div>
+        )}
         {overlay}
       </div>
     </>

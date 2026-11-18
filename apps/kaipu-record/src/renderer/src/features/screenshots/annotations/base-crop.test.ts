@@ -5,6 +5,7 @@ import {
   canvasLayout,
   contentExtents,
   visibleBaseBounds,
+  visibleBaseRectPx,
 } from "./canvas-geometry";
 import { contentBoxFrame } from "../canvas/content-box";
 import type { Annotation, Scene } from "./scene";
@@ -121,6 +122,21 @@ describe("visibleBaseBounds", () => {
     expect(b.x1).toBe(0);
     expect(b.x2).toBe(334); // 0.4 + 333.3 = 333.7 -> 334
     expect(b.y2).toBe(200); // 199.98 -> 200
+  });
+});
+
+describe("visibleBaseRectPx", () => {
+  it("is the visible base in the given px, not snapped: the live view's unit", () => {
+    // Illustrative: a 760x456 display of the base, right half, half size at (1, 0.25).
+    const b = visibleBaseRectPx(
+      { basePlacement: { x: 1, y: 0.25, scale: 0.5 }, baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } },
+      760,
+      456,
+    );
+    expect(b).toEqual({ x1: 760 + 190, y1: 114, x2: 760 + 380, y2: 114 + 228 });
+  });
+  it("is the whole display for a base that was never cropped or resized", () => {
+    expect(visibleBaseRectPx({}, 760, 456)).toEqual({ x1: 0, y1: 0, x2: 760, y2: 456 });
   });
 });
 
