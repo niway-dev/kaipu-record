@@ -376,3 +376,22 @@ describe("crop mode on an added image", () => {
     await waitFor(() => expect(label()).toHaveTextContent("632 × 400 px"));
   });
 });
+
+describe("crop mode with an Export frame set", () => {
+  const chip = (): HTMLElement | null => screen.queryByRole("button", { name: "Cropped" });
+
+  it("shows the whole asset, the window and Done unclipped, and restores the frame on leaving", async () => {
+    // Illustrative: the Export frame is the middle half of an uncropped 400 x 400 base.
+    await open({ exportFrame: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } });
+    // The frame windows the view: the "Cropped" chip proves BeautifiedFrame clips to it.
+    await waitFor(() => expect(chip()).not.toBeNull());
+    fireEvent.doubleClick(surface(), { clientX: 100, clientY: 100 });
+    await screen.findByTestId("crop-window");
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    // While the asset's crop is edited, the frame does not window (nothing clips the handles).
+    expect(chip()).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
+    expect(chip()).not.toBeNull();
+  });
+});

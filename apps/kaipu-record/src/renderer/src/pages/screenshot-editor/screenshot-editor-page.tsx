@@ -1978,7 +1978,15 @@ function ScreenshotEditorBody({
               src={image.displayUrl}
               beautify={scene.beautify.state}
               base={baseFrame}
-              crop={tools.tool === "crop" ? undefined : canvasMode ? exportFrameCrop : scene.crop}
+              // The Export frame tool and a crop session both edit the asset, not the frame: the
+              // whole canvas shows, or the viewport would clip the handles and Done.
+              crop={
+                tools.tool === "crop" || croppingId
+                  ? undefined
+                  : canvasMode
+                    ? exportFrameCrop
+                    : scene.crop
+              }
               windowChip={<CropChip onEnter={enterCrop} zoom={shownZoom} />}
               onWindowDoubleClick={() => {
                 if (tools.tool === "select" && !(inspectEnabled && inspect.active)) enterCrop();
