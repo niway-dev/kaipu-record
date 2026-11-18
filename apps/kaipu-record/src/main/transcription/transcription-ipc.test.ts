@@ -396,7 +396,8 @@ describe("a dev override", () => {
     });
   });
   afterAll(() => {
-    // The first registration's handlers are the ones the other tests use.
+    // Registering again replaces the override handlers (the mock's `handle` overwrites by
+    // channel) with the plain ones, so a test added after this block sees no override.
     registerTranscriptionIpc({
       resourcesPath: state.dir,
       modelsRoot: join(state.dir, "models"),
