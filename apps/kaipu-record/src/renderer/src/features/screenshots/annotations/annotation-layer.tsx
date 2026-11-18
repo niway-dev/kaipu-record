@@ -1158,7 +1158,7 @@ function CropScrim({ target, size }: { target: CropTarget; size: Size }): React.
 function CropWindow({ target, size }: { target: CropTarget; size: Size }): React.JSX.Element {
   const { win } = target;
   return (
-    <g>
+    <g {...uiArea("editorImage.imageCropMode")}>
       <rect
         data-testid="crop-window"
         className={`${styles.selOutline} ${styles.imageFrame}`}

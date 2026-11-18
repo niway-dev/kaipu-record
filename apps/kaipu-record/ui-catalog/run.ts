@@ -751,10 +751,16 @@ async function runStep(ctx: Ctx, step: Step): Promise<void> {
       const x = box.x + box.width * step.at.x;
       const y = box.y + box.height * step.at.y;
       await page.mouse.move(x, y);
-      if ("click" in step) await page.mouse.click(x, y);
+      if ("click" in step) {
+        if (step.double) await page.mouse.dblclick(x, y);
+        else await page.mouse.click(x, y);
+      }
       return;
     }
-    return "click" in step ? locator.click({ timeout: t }) : locator.hover({ timeout: t });
+    if ("click" in step) {
+      return step.double ? locator.dblclick({ timeout: t }) : locator.click({ timeout: t });
+    }
+    return locator.hover({ timeout: t });
   }
   if ("wheel" in step) {
     const turns = wheelTurns(step);

@@ -56,6 +56,12 @@ describe("the at point of a hover and a click", () => {
     );
   });
 
+  it("says a double-click is one", () => {
+    expect(
+      describeStep({ click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true }),
+    ).toBe("Double-click `editorImage.canvas` at (50%, 50%)");
+  });
+
   it("says nothing extra without a point", () => {
     expect(describeStep({ hover: { area: "editorImage.canvas" } })).toBe(
       "Hover `editorImage.canvas`",
