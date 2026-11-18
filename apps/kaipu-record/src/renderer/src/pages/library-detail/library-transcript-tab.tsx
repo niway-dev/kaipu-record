@@ -15,7 +15,7 @@ interface LibraryTranscriptTabProps {
   hasAudio: boolean | null;
   /** The detail page's player, or `null` while it is not on screen (it left, or could not play). */
   player: PlayerHandle | null;
-  /** The file's probed duration: the fallback when the vault stored none (`0`). */
+  /** The file's probed duration, `null` until read: it leads over the stored (floored) one. */
   probedDurationSeconds: number | null;
 }
 
