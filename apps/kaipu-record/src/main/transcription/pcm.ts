@@ -1,5 +1,5 @@
 /**
- * Raw PCM files: little-endian signed 16-bit, mono, 16 kHz, no header (`*.pcm16`). The renderer
+ * Raw PCM files: little-endian signed 16-bit, mono, 16 kHz, no header (`<jobId>.pcm`). The renderer
  * decodes a recording once and streams the samples here; every later step reads ranges of the file
  * instead of holding 60 minutes (115 MB) in memory. Little-endian hosts only (every platform
  * Electron ships for), so an `Int16Array` view over the file bytes is the file's own sample order.
