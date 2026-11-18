@@ -75,6 +75,14 @@ describe("the split “Weekly sync” seed", () => {
     ]);
   });
 
+  it("makes “Weekly sync” 12 s long, not just its edit", async () => {
+    const vault = await seed(true);
+    const sidecar = JSON.parse(
+      readFileSync(path.join(vault, ".kaipu", "Weekly sync.json"), "utf8"),
+    );
+    expect(sidecar.durationSeconds).toBe(12);
+  });
+
   it("leaves the default vault without a saved edit for it", async () => {
     const vault = await seed(false);
     expect(existsSync(editPath(vault))).toBe(false);

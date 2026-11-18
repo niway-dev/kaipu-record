@@ -39,8 +39,9 @@ const KEYS: Record<LibraryDestination, CtaKey> = {
  * The one place an Add from Library item is sent (NIW2-829): a split button. The big part adds
  * at the chosen destination and names it ("Add after this clip"); the arrow opens a menu of the
  * five destinations, each with a thumbnail of the same fixed schematic (three clips and a new
- * item), so the menu reads as a legend of the places, not as the user's own sequence. Choosing one only sets the
- * destination and closes the menu: it never adds. A WAI-ARIA menu of radio items.
+ * item), so the menu reads as a legend of the places, not as the user's own sequence. Choosing
+ * one only sets the destination and closes the menu: it never adds. A WAI-ARIA menu of radio
+ * items.
  */
 export function AddDestinationButton({
   kind,

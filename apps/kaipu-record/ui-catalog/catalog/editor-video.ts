@@ -963,7 +963,7 @@ export const editorVideo = catalog(
     },
     "add-from-library-screenshot-selected": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording, open the Screenshots tab and click “Weekly sync frame”: the card is outlined as selected and the right column shows its title above the placement strip, which draws it floating from the playhead (6 s) to the end of the video (6 s long), and the Add button, which reads “Add over the video”.",
+      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording, open the Screenshots tab and click “Weekly sync frame”: the card is outlined as selected and the right column shows its title above the placement strip, which draws it floating from the playhead (6 s) to the end of the 12 s video (a 6 s bar), and the Add button, which reads “Add over the video”.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,

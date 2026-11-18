@@ -336,6 +336,12 @@ export function placementPreview(
   };
 }
 
+/** The schematic's numbers, in seconds (see `schematicPlacement`). */
+const SCHEMATIC_CLIPS = [8, 12, 10] as const;
+const SCHEMATIC_NEW = 7;
+const SCHEMATIC_PLAYHEAD_CLIP = 1;
+const SCHEMATIC_PLAYHEAD_OFFSET = 4;
+
 /**
  * The fixed picture of each destination the menu's thumbnails draw (NIW2-829): the design's
  * schematic, not the user's sequence. Three clips of 8, 12 and 10 seconds, a new item of 7, and
@@ -343,11 +349,6 @@ export function placementPreview(
  * so the menu reads as a legend of the five places. "Over" floats the item from the playhead
  * and the sequence keeps its own length.
  */
-const SCHEMATIC_CLIPS = [8, 12, 10] as const;
-const SCHEMATIC_NEW = 7;
-const SCHEMATIC_PLAYHEAD_CLIP = 1;
-const SCHEMATIC_PLAYHEAD_OFFSET = 4;
-
 export function schematicPlacement(destination: LibraryDestination): PlacementPreview {
   const clipKeys = SCHEMATIC_CLIPS.map((_, i) => `c${i}`);
   const sequenceEnd = SCHEMATIC_CLIPS.reduce((sum, length) => sum + length, 0);
