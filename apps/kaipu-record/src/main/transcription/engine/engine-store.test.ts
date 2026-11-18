@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -292,6 +292,55 @@ describe("EngineStore", () => {
     expect(await rootEntries()).toEqual(["1.0.0"]);
   });
 
+  it("does not throw at construction when a stale directory cannot be deleted", async () => {
+    const rootDir = join(root, "speech-engine");
+    await mkdir(join(rootDir, "9.9.9.partial"), { recursive: true });
+    await chmod(rootDir, 0o555);
+    try {
+      expect(() => makeStore()).not.toThrow();
+    } finally {
+      await chmod(rootDir, 0o755);
+    }
+  });
+
+  /** An extractor that leaves its tree undeletable, so the cleanup after the install fails. */
+  const undeletableExtract = (then?: () => never) => async (_archive: string, dest: string) => {
+    await writeExtracted(dest);
+    await chmod(dest, 0o555);
+    then?.();
+  };
+  const restoreExtracted = async () => {
+    const partial = join(root, "speech-engine", "9.9.9.partial", "extracted");
+    await chmod(partial, 0o755).catch(() => {});
+  };
+
+  it("reports an installed engine as installed when the cleanup afterwards fails", async () => {
+    const { store } = makeStore({ extract: undeletableExtract() });
+    try {
+      await expect(store.install({})).resolves.toBe(finalDir());
+      expect(existsSync(join(finalDir(), "bin"))).toBe(true);
+    } finally {
+      await restoreExtracted();
+    }
+  });
+
+  it("keeps the cancelled error when the cleanup of a cancelled install fails", async () => {
+    const controller = new AbortController();
+    const { store } = makeStore({
+      extract: undeletableExtract(() => {
+        controller.abort();
+        throw new Error("tar killed");
+      }),
+    });
+    try {
+      await expect(store.install({ signal: controller.signal })).rejects.toMatchObject({
+        code: "cancelled",
+      });
+    } finally {
+      await restoreExtracted();
+    }
+  });
+
   it("shares one promise between concurrent installs", async () => {
     const release = deferred();
     hold = release.promise;
@@ -352,6 +401,19 @@ describe.skipIf(process.platform !== "darwin")("extractWithTar", () => {
     await extractWithTar(join(dir, "a.tar.bz2"), join(dir, "out"), new AbortController().signal);
 
     expect(statSync(join(dir, "out", "top", "bin", "tool")).mode & 0o111).toBe(0o111);
+  });
+
+  it("rejects without unpacking when the signal is already aborted", async () => {
+    await mkdir(join(dir, "src"));
+    await writeFile(join(dir, "src", "f"), "x");
+    execFileSync("/usr/bin/tar", ["-cjf", join(dir, "a.tar.bz2"), "-C", join(dir, "src"), "f"]);
+    await mkdir(join(dir, "out"));
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      extractWithTar(join(dir, "a.tar.bz2"), join(dir, "out"), controller.signal),
+    ).rejects.toThrow(/tar was stopped/);
+    expect(await readdir(join(dir, "out"))).toEqual([]);
   });
 
   it("fails on a file that is not an archive", async () => {

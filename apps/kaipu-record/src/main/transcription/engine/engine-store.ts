@@ -64,6 +64,11 @@ export function extractWithTar(
   signal: AbortSignal,
 ): Promise<void> {
   return new Promise((resolveExtract, reject) => {
+    // `abort` fires once: a signal already aborted would never reach the listener below.
+    if (signal.aborted) {
+      reject(new Error("tar was stopped"));
+      return;
+    }
     const child = spawn(TAR_PATH, ["-xjf", archivePath, "-C", destDir], {
       stdio: ["ignore", "ignore", "pipe"],
     });
@@ -152,8 +157,11 @@ export class EngineStore {
       return;
     }
     for (const name of names) {
-      if (name.endsWith(PARTIAL_SUFFIX)) {
+      if (!name.endsWith(PARTIAL_SUFFIX)) continue;
+      try {
         rmSync(join(this.rootDir, name), { recursive: true, force: true });
+      } catch {
+        // One undeletable leftover must not stop the app from starting; the next launch retries.
       }
     }
   }
@@ -217,10 +225,13 @@ export class EngineStore {
       // A leftover (incomplete) install would make the rename fail on a non-empty directory.
       await rm(this.installDir, { recursive: true, force: true });
       await rename(staged, this.installDir);
-      await rm(partial, { recursive: true, force: true });
+      // The engine is installed: a leftover the delete cannot remove is for `cleanStale`, and
+      // must not turn a finished install into a failed one.
+      await rm(partial, { recursive: true, force: true }).catch(() => {});
       return this.installDir;
     } catch (error) {
-      await rm(partial, { recursive: true, force: true });
+      // A failed cleanup must not replace the error that ended the install (a cancel stays one).
+      await rm(partial, { recursive: true, force: true }).catch(() => {});
       throw toDownloadError(error, signal);
     } finally {
       outer?.removeEventListener("abort", onAbort);

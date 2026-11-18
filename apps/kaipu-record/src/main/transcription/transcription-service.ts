@@ -390,6 +390,8 @@ export class TranscriptionService {
         ? this.download.promise
         : Promise.resolve({ status: "failed", code: "busy" });
     }
+    // Its install is being deleted: a download now could report `ready` for a model that is gone.
+    if (this.removing.has(id)) return Promise.resolve({ status: "failed", code: "busy" });
     this.engineFailures.delete(id);
     const run: ModelDownload = {
       id,

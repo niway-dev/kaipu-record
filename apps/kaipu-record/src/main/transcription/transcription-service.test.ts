@@ -779,6 +779,19 @@ describe("the engine downloads with the model", () => {
     expect(h.modelStore.remove).toHaveBeenCalledTimes(1);
   });
 
+  it("refuses a download of a model whose removal is still running", async () => {
+    const h = makeHarness();
+    let finishRemoval!: () => void;
+    h.modelStore.remove.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishRemoval = resolve)),
+    );
+    const removal = h.service.removeModel(MODEL_ID);
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "failed", code: "busy" });
+    finishRemoval();
+    await removal;
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+  });
+
   it("refuses a job while the engine is not installed", async () => {
     const h = makeHarness();
     h.engine.missing = true;
