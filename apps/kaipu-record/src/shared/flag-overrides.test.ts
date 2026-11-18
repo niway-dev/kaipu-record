@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { flagOverridesArg, parseFlagOverrides, readFlagOverridesArg } from "./flag-overrides";
+import {
+  applyFlagOverride,
+  flagOverridesArg,
+  parseFlagOverrides,
+  readFlagOverridesArg,
+} from "./flag-overrides";
 
 describe("parseFlagOverrides", () => {
   it("flips a known flag", () => {
@@ -53,5 +58,34 @@ describe("readFlagOverridesArg", () => {
 
   it("is empty when the argument is absent", () => {
     expect(readFlagOverridesArg(["electron", "--foo"])).toEqual({});
+  });
+});
+
+describe("applyFlagOverride", () => {
+  it("pins a known flag on top of the current overrides without mutating them", () => {
+    const current = { "image-canvas": true } as const;
+    const next = applyFlagOverride(current, "image-text", false, { isPackaged: false });
+    expect(next).toEqual({ "image-canvas": true, "image-text": false });
+    expect(current).toEqual({ "image-canvas": true });
+  });
+
+  it("clears one flag when the value is null, so it falls back to PostHog or the default", () => {
+    const next = applyFlagOverride(
+      { "image-canvas": true, "image-text": false },
+      "image-canvas",
+      null,
+      { isPackaged: false },
+    );
+    expect(next).toEqual({ "image-text": false });
+  });
+
+  it("never sets an override in a packaged build", () => {
+    expect(applyFlagOverride({}, "image-canvas", true, { isPackaged: true })).toEqual({});
+  });
+
+  it("ignores an unknown flag name and a non-boolean value", () => {
+    const current = { "image-canvas": true } as const;
+    expect(applyFlagOverride(current, "nope", true, { isPackaged: false })).toEqual(current);
+    expect(applyFlagOverride(current, "image-text", "yes", { isPackaged: false })).toEqual(current);
   });
 });

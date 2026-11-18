@@ -9,6 +9,7 @@ import {
   scrubPersonalPathsDeep,
   type FlagName,
 } from "@shared/analytics";
+import type { FlagOverrides } from "@shared/flag-overrides";
 
 /**
  * Two switches, on purpose (NIW2-849). `initialized`: the SDK is running, so remote feature
@@ -149,26 +150,90 @@ export function captureEvent(name: string, props?: Record<string, unknown>): voi
   posthog.capture(name, props);
 }
 
+/** The overrides main holds, once known (pushed after a toggle, or fetched on first use). */
+let liveOverrides: FlagOverrides | null = null;
+let overridesSubscribed = false;
+
 /**
- * Read a flag, returning `fallback` while unresolved or when the build has no PostHog key.
- * It does not depend on the usage-and-crash-reports preference. A `KAIPU_FLAG_OVERRIDES`
- * override (unpackaged builds only) wins over PostHog, initialized or not.
+ * The active overrides: what main holds once this window has heard from it, else the launch
+ * set the preload read (`KAIPU_FLAG_OVERRIDES`). Unpackaged builds only; always empty in a
+ * packaged one. In a dev build the first call also starts listening to main (see
+ * `subscribeToOverrideChanges`).
  */
-export function isFlagEnabled(name: FlagName, fallback: boolean): boolean {
-  const override = window.electronAPI?.flagOverrides?.[name];
-  if (override !== undefined) return override;
-  if (!initialized) return fallback;
-  const value = posthog.isFeatureEnabled(name);
-  return value === undefined ? fallback : value;
+export function currentFlagOverrides(): FlagOverrides {
+  subscribeToOverrideChanges();
+  return liveOverrides ?? window.electronAPI?.flagOverrides ?? {};
+}
+
+function setLiveOverrides(overrides: FlagOverrides): void {
+  liveOverrides = overrides;
+  for (const listener of flagListeners) listener();
 }
 
 /**
- * Subscribe to flag (re)loads. Returns an unsubscribe fn. A component usually mounts before
- * the settings arrive and PostHog starts, so listeners are kept here and wired to PostHog
- * once it does, instead of being dropped.
+ * Once per window: listen for toggles, and ask main for its current set. The launch arguments
+ * are frozen when the window is created, so a toggle made earlier, or a reload of this window,
+ * would otherwise leave it showing a stale set. A push that arrives first is newer than the
+ * snapshot's answer and wins.
+ */
+function subscribeToOverrideChanges(): void {
+  // Dev builds only: a packaged build has no live overrides (main refuses them and the page is
+  // not routed), so it should not listen or ask main for an answer that is always empty.
+  if (overridesSubscribed || !import.meta.env.DEV) return;
+  const api = window.electronAPI;
+  if (!api?.onFlagOverridesChanged) return;
+  overridesSubscribed = true;
+  let heardFromMain = false;
+  api.onFlagOverridesChanged((overrides) => {
+    heardFromMain = true;
+    setLiveOverrides(overrides);
+  });
+  api
+    .getFlagOverrides?.()
+    .then((overrides) => {
+      if (!heardFromMain) setLiveOverrides(overrides);
+    })
+    .catch(() => {
+      // No answer: the launch set stays in force.
+    });
+}
+
+/** Where a flag's effective value comes from, in the order `isFlagEnabled` reads them. */
+export type FlagSource = "override" | "posthog" | "default";
+
+/** The effective value of a flag and which layer decided it. */
+export function flagState(
+  name: FlagName,
+  fallback: boolean,
+): { value: boolean; source: FlagSource } {
+  const override = currentFlagOverrides()[name];
+  if (override !== undefined) return { value: override, source: "override" };
+  if (initialized) {
+    const value = posthog.isFeatureEnabled(name);
+    if (value !== undefined) return { value, source: "posthog" };
+  }
+  return { value: fallback, source: "default" };
+}
+
+/**
+ * Read a flag, returning `fallback` while unresolved or when the build has no PostHog key.
+ * It does not depend on the usage-and-crash-reports preference. An override (unpackaged
+ * builds only: `KAIPU_FLAG_OVERRIDES` at launch, or the Developer page while running) wins
+ * over PostHog, initialized or not.
+ */
+export function isFlagEnabled(name: FlagName, fallback: boolean): boolean {
+  return flagState(name, fallback).value;
+}
+
+/**
+ * Subscribe to flag changes: PostHog (re)loads, and, in a dev build, overrides changed from
+ * the Developer page. Returns an unsubscribe fn. A component usually mounts before the
+ * settings arrive and PostHog starts, so listeners are kept here and wired to PostHog once it
+ * does, instead of being dropped.
  */
 export function onFlagsChanged(callback: () => void): () => void {
   flagListeners.add(callback);
+  subscribeToOverrideChanges();
   return () => {
     flagListeners.delete(callback);
   };

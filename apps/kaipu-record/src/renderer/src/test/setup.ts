@@ -1,3 +1,4 @@
+import { stubOnFlagOverridesChanged } from "./flag-overrides-stub";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup, configure } from "@testing-library/react";
@@ -124,6 +125,10 @@ window.electronAPI = {
     cancel: async () => {},
   },
   flagOverrides: {},
+  // Main has not answered: the launch set stays in force unless a test pushes a change.
+  getFlagOverrides: () => new Promise(() => {}),
+  setFlagOverride: async () => ({}),
+  onFlagOverridesChanged: stubOnFlagOverridesChanged,
   platform: "darwin",
   getAppVersion: async () => "1.0.0",
   notifyReady: () => {},

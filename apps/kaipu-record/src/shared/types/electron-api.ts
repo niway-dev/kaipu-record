@@ -278,6 +278,21 @@ export interface KaipuElectronAPI {
   nativeCapture: NativeCaptureBridge;
   /** Feature flags pinned by `KAIPU_FLAG_OVERRIDES` (unpackaged builds only); empty otherwise. */
   readonly flagOverrides: Readonly<Partial<Record<FlagName, boolean>>>;
+  /**
+   * Developer page: pin one flag to `value`, or clear it with `null`. Main updates every open
+   * window (`onFlagOverridesChanged`); a packaged app refuses. Resolves with the overrides now
+   * active.
+   */
+  setFlagOverride(
+    name: FlagName,
+    value: boolean | null,
+  ): Promise<Readonly<Partial<Record<FlagName, boolean>>>>;
+  /** The overrides main holds now: a window created before a toggle, or reloaded, starts from stale launch arguments. */
+  getFlagOverrides(): Promise<Readonly<Partial<Record<FlagName, boolean>>>>;
+  /** The active overrides changed (here or in another window). Returns an unsubscribe. */
+  onFlagOverridesChanged(
+    listener: (overrides: Readonly<Partial<Record<FlagName, boolean>>>) => void,
+  ): () => void;
   /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
   readonly platform: string;
   /** The running app version (`app.getVersion()`), used by the version gate. */
