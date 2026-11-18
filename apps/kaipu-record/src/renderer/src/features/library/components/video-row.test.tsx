@@ -2,6 +2,7 @@ import { act, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { VideoRow } from "./video-row";
+import { stubTranscriptionStatus } from "./stub-transcription-status";
 
 function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
@@ -41,26 +42,6 @@ const transcribeFlag = vi.hoisted(() => ({ on: false }));
 vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
 
 const realElectronApi = window.electronAPI;
-function stubTranscriptionStatus(modelState: "ready" | "missing"): ReturnType<typeof vi.fn> {
-  const getTranscriptionStatus = vi.fn(async () => ({
-    availability: { status: "available" as const },
-    defaultModelId: "m",
-    models: [
-      {
-        id: "m",
-        label: "Parakeet",
-        languages: ["en"],
-        sizeBytes: 1,
-        location: "/m",
-        license: { name: "l", attribution: "a", url: "u" },
-        status: { state: modelState },
-      },
-    ],
-    job: null,
-  }));
-  window.electronAPI = { ...realElectronApi, getTranscriptionStatus };
-  return getTranscriptionStatus;
-}
 
 describe("VideoRow", () => {
   it("says an imported video was imported in its specs line (NIW2-579)", () => {

@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { VideoCard } from "./video-card";
 import type { LibraryVideo } from "../types";
+import { stubTranscriptionStatus } from "./stub-transcription-status";
 
 const video: LibraryVideo = {
   id: "x",
@@ -30,26 +31,6 @@ const transcribeFlag = vi.hoisted(() => ({ on: false }));
 vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
 
 const realElectronApi = window.electronAPI;
-function stubTranscriptionStatus(modelState: "ready" | "missing"): ReturnType<typeof vi.fn> {
-  const getTranscriptionStatus = vi.fn(async () => ({
-    availability: { status: "available" as const },
-    defaultModelId: "m",
-    models: [
-      {
-        id: "m",
-        label: "Parakeet",
-        languages: ["en"],
-        sizeBytes: 1,
-        location: "/m",
-        license: { name: "l", attribution: "a", url: "u" },
-        status: { state: modelState },
-      },
-    ],
-    job: null,
-  }));
-  window.electronAPI = { ...realElectronApi, getTranscriptionStatus };
-  return getTranscriptionStatus;
-}
 
 describe("VideoCard", () => {
   it("tags the poster with how the recording was captured, and nothing without it", () => {
