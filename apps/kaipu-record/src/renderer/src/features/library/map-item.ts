@@ -32,6 +32,7 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     editorSavedAt: item.local?.editorSavedAt ?? null,
     capture: item.capture ?? null,
     webcam: item.local?.webcam ?? null,
+    thumbnailNeedsWebcam: item.local?.thumbnailNeedsWebcam ?? false,
     metadataIssue: item.local?.metadataIssue,
   };
 }

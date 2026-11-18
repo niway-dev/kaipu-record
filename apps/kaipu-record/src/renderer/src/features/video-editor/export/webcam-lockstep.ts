@@ -12,7 +12,11 @@
  * WORKER-BUNDLE INVARIANT, like compose-frame.ts: pure and DOM-free. The iterator is
  * mediabunny's `CanvasSink.canvases()` in the worker and a synthetic one in the tests.
  */
-import { webcamHasFrameAt, webcamTimeFor } from "../webcam/webcam-sync";
+import {
+  WEBCAM_LEAD_IN_HOLD_SECONDS,
+  webcamHasFrameAt,
+  webcamTimeFor,
+} from "../webcam/webcam-sync";
 
 /**
  * Seconds of webcam decoded before a clip's first frame: the screen's first frame of a clip
@@ -25,7 +29,8 @@ const EPS = 1e-6;
 
 /**
  * The webcam-file window to decode for a clip over source [sourceStart, sourceEnd), or null
- * when the clip ends before the webcam's first frame or starts after its last.
+ * when the clip ends before the webcam's first frame (and the lead-in hold that shows it) or
+ * starts after its last. A clip that ends inside the hold still decodes the first frame.
  */
 export function webcamDecodeWindow(
   sourceStart: number,
@@ -35,8 +40,9 @@ export function webcamDecodeWindow(
 ): { start: number; end: number } | null {
   const start = webcamTimeFor(sourceStart, startOffsetMs);
   const end = webcamTimeFor(sourceEnd, startOffsetMs);
-  if (end <= 0 || !(duration > 0) || start >= duration) return null;
-  return { start: Math.max(0, start - WEBCAM_DECODE_LEAD), end };
+  if (end <= -WEBCAM_LEAD_IN_HOLD_SECONDS || !(duration > 0) || start >= duration) return null;
+  // `end` is held past the lead so a clip inside the hold still decodes the first frame.
+  return { start: Math.max(0, start - WEBCAM_DECODE_LEAD), end: Math.max(end, WEBCAM_DECODE_LEAD) };
 }
 
 /**
@@ -52,7 +58,7 @@ export function webcamLookupTime(frameTimestamp: number, sourceStart: number): n
 export interface WebcamCursor<T> {
   /**
    * The webcam frame on screen at screen SOURCE time `sourceTime`, or null before the
-   * webcam's first frame and after its last. Calls must not go back in time.
+   * webcam's first frame (past the lead-in hold, which shows the first frame) and after its last. Calls must not go back in time.
    */
   frameAt(sourceTime: number): Promise<T | null>;
   /** Stops the underlying decode (a segment that ended early). */
@@ -87,15 +93,17 @@ export function createWebcamCursor<T extends { timestamp: number }>(
     async frameAt(sourceTime) {
       const webcamTime = webcamTimeFor(sourceTime, startOffsetMs);
       if (!webcamHasFrameAt(webcamTime, duration)) return null;
+      // Inside the lead-in hold the first frame (webcam time 0) is due.
+      const due = Math.max(0, webcamTime);
       if (!primed) {
         primed = true;
         next = await pull();
       }
-      while (next && next.timestamp <= webcamTime + EPS) {
+      while (next && next.timestamp <= due + EPS) {
         current = next;
         next = await pull();
       }
-      return current && current.timestamp <= webcamTime + EPS ? current : null;
+      return current && current.timestamp <= due + EPS ? current : null;
     },
     async close() {
       done = true;

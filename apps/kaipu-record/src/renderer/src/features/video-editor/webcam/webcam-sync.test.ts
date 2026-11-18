@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   WEBCAM_DRIFT_SECONDS,
+  WEBCAM_LEAD_IN_HOLD_SECONDS,
   webcamHasFrameAt,
   webcamResyncTarget,
   webcamSeekLead,
@@ -22,8 +23,20 @@ describe("webcamTimeFor", () => {
 });
 
 describe("webcamHasFrameAt", () => {
-  it("is hidden before the webcam's first frame", () => {
-    expect(webcamHasFrameAt(-0.01, 30)).toBe(false);
+  it("holds the first frame over the webcam's startup lag (a take whose webcam started 75 ms late)", () => {
+    expect(webcamHasFrameAt(-0.075, 30)).toBe(true);
+    expect(webcamHasFrameAt(-0.01, 30)).toBe(true);
+    expect(webcamHasFrameAt(-WEBCAM_LEAD_IN_HOLD_SECONDS, 30)).toBe(true);
+  });
+
+  it("stays hidden for a lead-in longer than the hold: the camera really started late", () => {
+    expect(webcamHasFrameAt(-1.5, 30)).toBe(false);
+    expect(webcamHasFrameAt(-11.386, 30)).toBe(false);
+  });
+
+  it("still shows nothing in the hold until the metadata says how long the file is", () => {
+    expect(webcamHasFrameAt(-0.075, Number.NaN)).toBe(false);
+    expect(webcamHasFrameAt(-0.075, 0)).toBe(false);
   });
 
   it("is shown inside the file and hidden from its last frame on", () => {
@@ -57,6 +70,11 @@ describe("webcamHasFrameAt", () => {
 });
 
 describe("webcamResyncTarget", () => {
+  it("seeks to the first frame inside the lead-in hold", () => {
+    expect(webcamResyncTarget(5, -0.075, 30)).toBe(0);
+    expect(webcamResyncTarget(0, -0.075, 30)).toBeNull();
+  });
+
   it("leaves a webcam within the drift alone", () => {
     expect(webcamResyncTarget(10, 10 + WEBCAM_DRIFT_SECONDS - 0.001, 30)).toBeNull();
     expect(webcamResyncTarget(10.05, 10, 30)).toBeNull();

@@ -411,6 +411,8 @@ export const IPC_CHANNELS = {
   deleteTag: "tags:delete",
   setItemTags: "tags:setItemTags",
   backfillLocalRecordingMeta: "library:backfill-meta",
+  /** NIW2-845: replace a webcam recording's thumbnail with the bubble composited in. */
+  writeWebcamThumbnail: "library:write-webcam-thumbnail",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",
   /** NIW2-669: open a local recording in its default application. */

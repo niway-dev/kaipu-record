@@ -7,7 +7,7 @@
  * camera box): `webcamStateAt` picks the layout in force and the slide in progress (null
  * inside a hidden segment), `webcamStateRect` places it in the output frame with the camera
  * path's scale for "shrink during zoom" (the export reads the same pair, so the two agree at
- * one source time; no CSS transition moves the box), and `webcam-sync` decides visibility (the file's own first and last frame)
+ * one source time; no CSS transition moves the box), and `webcam-sync` decides visibility (the file's own first frame, held over its startup lag, and last frame)
  * and whether the element drifted past 80 ms and needs a seek. While the main video plays, a
  * seek aims ahead by the last seek's measured duration, so it lands where the screen will be.
  * Play/pause/rate mirror the main element, and the webcam also pauses while the main one
@@ -121,6 +121,8 @@ function useWebcamSync({
   const clipRef = useRef<HTMLDivElement | null>(null);
   const camRef = useRef<HTMLVideoElement | null>(null);
   const lastTime = useRef(0);
+  // The webcam file that has decoded a frame: the box shows from then on, through seeks.
+  const paintedSrc = useRef<string | null>(null);
   // Where the bubble is drawn right now: the editor's drag starts from it.
   const drawn = useRef<{ center: Point; box: { width: number; height: number } } | null>(null);
   // When the webcam's seek in flight started (performance.now()), and how long the last one
@@ -150,8 +152,20 @@ function useWebcamSync({
     const state = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
     const webcamTime = webcamTimeFor(file.localTime, file.startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
+    // No empty box: nothing shows until the file has decoded a frame (`loadeddata`). Latched
+    // per file, because Chromium drops readyState below HAVE_CURRENT_DATA while a seek is in
+    // flight, and the drift resync seeks during playback: the stale frame stays up meanwhile.
+    // A new src resets readyState to HAVE_NOTHING at once, so the next file waits its turn.
+    if (file.src !== null && cam.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA)
+      paintedSrc.current = file.src;
+    // Inside the lead-in hold the first frame stays still: playing it would only be resynced
+    // back to 0 every few frames, a stutter instead of a held frame.
+    const leadIn = webcamTime < 0;
     let rect =
-      state && file.src !== null && webcamHasFrameAt(webcamTime, cam.duration)
+      state &&
+      file.src !== null &&
+      paintedSrc.current === file.src &&
+      webcamHasFrameAt(webcamTime, cam.duration)
         ? webcamStateRect(state, frame, scale)
         : null;
     if (rect && held.current) {
@@ -194,15 +208,16 @@ function useWebcamSync({
       const seekTo = webcamResyncTarget(cam.currentTime, webcamTime, cam.duration);
       if (seekTo !== null) {
         // The lead is for a moving clock: a waiting main video is not paused but holds still.
-        const moving = !!main && !main.paused && !mainWaiting.current;
+        // A held first frame does not move either, so it gets no lead.
+        const moving = !!main && !main.paused && !mainWaiting.current && !leadIn;
         const lead = webcamSeekLead(moving, lastSeekSeconds.current, main?.playbackRate ?? 1);
         const end = Number.isFinite(cam.duration) && cam.duration > 0 ? cam.duration : Infinity;
         seekStartedAt.current = performance.now();
         cam.currentTime = Math.min(seekTo + lead, end);
       }
     }
-    if (main && !main.paused && cam.paused && !mainWaiting.current) safePlay(cam);
-    if (main?.paused && !cam.paused) safePause(cam);
+    if (main && !main.paused && cam.paused && !mainWaiting.current && !leadIn) safePlay(cam);
+    if ((main?.paused || leadIn) && !cam.paused) safePause(cam);
   };
 
   const trigger = useMemo(
@@ -319,6 +334,7 @@ function WebcamMedia({
         preload="auto"
         data-testid="webcam-video"
         onLoadedMetadata={sync.resync}
+        onLoadedData={sync.resync}
         onSeeked={sync.onSeeked}
       />
     </div>

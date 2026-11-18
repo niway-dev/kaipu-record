@@ -1103,7 +1103,9 @@ describe("LibraryDetailPage — the recorded face over the original (NIW2-565)",
   function loadWebcam(duration: number): HTMLVideoElement {
     const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
     Object.defineProperty(cam, "duration", { configurable: true, get: () => duration });
+    Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });
     fireEvent.loadedMetadata(cam);
+    fireEvent.loadedData(cam);
     return cam;
   }
 

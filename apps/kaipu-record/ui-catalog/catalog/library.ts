@@ -40,6 +40,26 @@ export const libraryCatalog = catalog(
       demonstrates: ["library.videoCard:screenshot"],
       crops: { "library.videoCard": { hasText: "Settings page" } },
     },
+    "card-webcam": {
+      profile: "default",
+      how: "Open the Library: “Release demo” has a webcam track, so its thumbnail is redrawn with the bubble once the app has composited it. The shot waits for that.",
+      steps: [
+        library,
+        // The composite is written in the background; `done` is stamped once the vault has it.
+        {
+          waitFor: {
+            area: "library.videoCard",
+            part: { css: '[data-webcam-thumbnail="done"] img[src*="?v="]' },
+          },
+          timeoutMs: 30_000,
+        },
+        // Below the fold at the catalog's window size: a crop is clipped to the window.
+        { scrollTo: { area: "library.videoCard", hasText: "Release demo" } },
+      ],
+      demonstrates: ["library.videoCard:webcam"],
+      embedsScreen: true,
+      crops: { "library.videoCard": { hasText: "Release demo" } },
+    },
     "card-gif": {
       profile: "default",
       steps: [library, { scrollTo: { area: "library.videoCard", hasText: "Loop preview" } }],

@@ -784,7 +784,9 @@ async function seedRecording(
     ...(item.webcam
       ? {
           webcam: {
-            startOffsetMs: 0,
+            // Real takes start the webcam 62-150 ms after the screen (measured 2026-11-16); 0 hid
+            // the NIW2-845 bug (no bubble at 0:00) from the catalog.
+            startOffsetMs: 120,
             offsetQuality: "exact",
             width: 640,
             height: 480,
