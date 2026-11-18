@@ -108,6 +108,11 @@ export interface LaunchOptions {
   settings?: Record<string, unknown>;
   /** Fills the throwaway vault before launch. Default: the suite's two fixtures. */
   seedVault?: (vaultDir: string) => Promise<void>;
+  /**
+   * Runs after the profile's `preferences.json` and `settings.json` are written and before
+   * launch, so a test can replace them or add files beside them (`workspace-settings.json`).
+   */
+  seedUserData?: (userDataDir: string, vaultDir: string) => Promise<void>;
   /** Extra environment for Electron, over the runner's own (`KAIPU_FLAG_OVERRIDES`, …). */
   env?: Record<string, string>;
   /** Extra Electron/Chromium switches, after the user-data dir. */
@@ -148,6 +153,7 @@ export async function launchApp(options: LaunchOptions = {}): Promise<{
     path.join(userDataDir, "settings.json"),
     JSON.stringify({ locale: "en", ...options.settings }),
   );
+  await options.seedUserData?.(userDataDir, vaultDir);
 
   // Electron's Chromium sandbox needs a SUID helper that headless CI runners lack, so the
   // app fails to launch there without --no-sandbox. Disable it only under CI, never locally.
