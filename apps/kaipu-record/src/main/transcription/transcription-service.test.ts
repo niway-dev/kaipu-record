@@ -837,6 +837,23 @@ describe("begin", () => {
     expect(await readdir(h.vault.tmpDir)).toEqual(["job-1.pcm"]);
   });
 
+  it("refuses a model with model-missing while its removal is pending", async () => {
+    const h = makeHarness();
+    await mkdir(join(root, ".kaipu"), { recursive: true });
+    await writeFile(h.state.mediaPath, "media");
+    const deletion = Promise.withResolvers<void>();
+    // The store keeps reporting the model as installed until the delete finishes.
+    h.modelStore.remove.mockImplementationOnce(() => deletion.promise);
+
+    const removing = h.service.removeModel(MODEL_ID);
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "model-missing" });
+
+    deletion.resolve();
+    await removing;
+    // The reservation is gone once the removal returned.
+    expect((await h.service.begin(REQUEST)).status).toBe("accepted");
+  });
+
   it("refuses a second job with busy, also while the first is still being opened", async () => {
     const h = makeHarness();
     const first = h.service.begin(REQUEST);

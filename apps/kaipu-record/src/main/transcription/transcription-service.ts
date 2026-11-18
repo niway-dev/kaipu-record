@@ -305,6 +305,8 @@ export class TranscriptionService {
   private job: Job | null = null;
   /** The model id of a `begin` that passed its checks and is still resolving the item. */
   private opening: string | null = null;
+  /** Models being removed: `begin` refuses them, the store still reports them installed. */
+  private readonly removing = new Set<string>();
   private readonly sweptDirs = new Set<string>();
 
   constructor(private readonly deps: TranscriptionServiceDeps) {
@@ -496,12 +498,18 @@ export class TranscriptionService {
     if (this.job?.request.modelId === id || this.opening === id) {
       throw new Error("The speech model is in use by a transcription job");
     }
-    const running = this.download;
-    if (running?.id === id) {
-      running.controller.abort();
-      await running.promise.catch(() => undefined);
+    // Reserved in the same tick as the check above, so a `begin` cannot slip in between.
+    this.removing.add(id);
+    try {
+      const running = this.download;
+      if (running?.id === id) {
+        running.controller.abort();
+        await running.promise.catch(() => undefined);
+      }
+      await this.deps.modelStore.remove(id);
+    } finally {
+      this.removing.delete(id);
     }
-    await this.deps.modelStore.remove(id);
   }
 
   async begin(request: TranscriptionJobRequest): Promise<TranscriptionBeginResult> {
@@ -509,7 +517,9 @@ export class TranscriptionService {
     if (!engine.available) return { status: "refused", reason: "unavailable" };
     const model = this.catalog.find((m) => m.id === request.modelId);
     const modelDir = model ? this.deps.modelStore.locate(model.id) : null;
-    if (!model || !modelDir) return { status: "refused", reason: "model-missing" };
+    if (!model || !modelDir || this.removing.has(model.id)) {
+      return { status: "refused", reason: "model-missing" };
+    }
     if (this.job || this.opening) return { status: "refused", reason: "busy" };
 
     this.opening = model.id;
