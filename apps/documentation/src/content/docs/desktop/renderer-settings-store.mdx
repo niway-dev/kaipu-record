@@ -53,12 +53,13 @@ Two tests keep it true:
   a `live` consumer, the case changes its key in a fake main process, broadcasts it, and asserts
   what the consumer returned or rendered. For a `once` one, it asserts the first read applied and
   that a later broadcast did not change it.
-- A consumer whose entry points at another test (`coveredIn`) is covered less directly. The scan
-  test checks that the test file exists and contains the names listed in `mentions`; it does not
-  run a broadcast through the consumer. For the pages that read through `useAppSettings`, the
-  hook's own test shows the hook follows a broadcast, and the scan test fails if such a file
-  stops using the hook or reads once with `getSettingsSnapshot` or `loadSettings`. A page
-  that keeps the hook but ignores a key is not caught.
+
+A consumer whose entry points at another test (`coveredIn`) is covered less directly. The scan
+test checks that the test file exists and contains the names listed in `mentions`; it does not run
+a broadcast through the consumer. For the pages that read through `useAppSettings`, the hook's own
+test shows the hook follows a broadcast, and the scan test fails if such a file stops using the
+hook or reads once with `getSettingsSnapshot` or `loadSettings`. A page that keeps the hook but
+ignores a key is not caught.
 
 `e2e/settings-listeners.e2e.ts` checks the same thing against the built app: no
 `MaxListenersExceededWarning` on Record or after ten laps through the app, a change made in the
@@ -91,7 +92,7 @@ the unsubscribe.
 ## What to watch
 
 These are the ways the settings can go wrong without the test of any single feature noticing. The
-map and the three tests in [Who reads the settings](#who-reads-the-settings) are the guard; the
+map and the tests in [Who reads the settings](#who-reads-the-settings) are the guard; the
 points below say what they do not cover.
 
 1. **Every main path that changes settings must broadcast.** A window learns of a change only from
