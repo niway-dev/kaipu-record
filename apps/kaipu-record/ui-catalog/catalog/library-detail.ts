@@ -147,6 +147,8 @@ export const libraryDetail = catalog(
         },
         inTranscript({ role: "progressbar" }),
         inTranscript({ text: "3 of 12 parts" }),
+        // The header and the tab read one job: both show it (spec failure 4).
+        { waitFor: { area: "libraryDetail.transcribe", part: { text: "Transcribing 3/12" } } },
       ],
       demonstrates: ["libraryDetail.transcriptPanel:transcribing"],
       ready: { video: "paused-at-start" },
