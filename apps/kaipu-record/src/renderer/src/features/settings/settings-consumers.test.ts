@@ -99,13 +99,14 @@ describe("the settings consumers map matches the renderer", () => {
 
   it("points every entry at a behaviour test that exists", () => {
     const broken = SETTINGS_CONSUMERS.flatMap((entry) => {
-      if (entry.behaviour === "here") return [];
-      const file = path.join(RENDERER_SRC, entry.behaviour.coveredIn);
-      if (!existsSync(file)) return [`${entry.file}: ${entry.behaviour.coveredIn} does not exist`];
+      const { behaviour } = entry;
+      if (behaviour === "here") return [];
+      const file = path.join(RENDERER_SRC, behaviour.coveredIn);
+      if (!existsSync(file)) return [`${entry.file}: ${behaviour.coveredIn} does not exist`];
       const source = readFileSync(file, "utf8");
-      return entry.behaviour.mentions
+      return behaviour.mentions
         .filter((name) => !source.includes(name))
-        .map((name) => `${entry.file}: ${entry.behaviour.coveredIn} does not mention ${name}`);
+        .map((name) => `${entry.file}: ${behaviour.coveredIn} does not mention ${name}`);
     });
     expect(broken).toEqual([]);
   });

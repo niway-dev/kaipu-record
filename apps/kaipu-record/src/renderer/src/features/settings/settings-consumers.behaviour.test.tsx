@@ -133,7 +133,7 @@ const CASES: Record<string, Case> = {
   // Read once: the overlay window lives for one capture, so it takes the bubble's look when it
   // opens and keeps it.
   "features/screenshots/overlay/use-overlay-toggles.ts": async () => {
-    main(withPatch({ cameraBubble: { ...BASE.cameraBubble, size: 333, shape: "square" } }));
+    main(withPatch({ cameraBubble: { ...BASE.cameraBubble, size: 333, shape: "rectangle" } }));
     const off = {
       isMicrophoneEnabled: false,
       isSystemAudioEnabled: false,
@@ -147,7 +147,7 @@ const CASES: Record<string, Case> = {
     const { result } = renderHook(() => useOverlayToggles(api));
 
     await waitFor(() => expect(result.current.cameraBubble.size).toBe(333));
-    expect(result.current.cameraBubble.shape).toBe("square");
+    expect(result.current.cameraBubble.shape).toBe("rectangle");
   },
 
   "pages/settings/countdown-settings.tsx": async () => {
