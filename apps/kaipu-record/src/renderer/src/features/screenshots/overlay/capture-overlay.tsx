@@ -585,7 +585,8 @@ function ActiveFrame({
           ...withRatio,
         },
         async () => {
-          // Re-read so another display's remembered rectangle is kept, not overwritten.
+          // The window's copy, which main's broadcast keeps current, carries the other displays'
+          // rectangles, so they are kept; a save from another display in the same few ms could be lost.
           const current = await loadSettings();
           await api.updateSettings({ [into]: { ...current[into], [key]: stored } });
         },
