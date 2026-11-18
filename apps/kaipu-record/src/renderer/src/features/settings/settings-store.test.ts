@@ -114,6 +114,23 @@ describe("settings store", () => {
     expect(heard).toHaveBeenLastCalledWith(withLocale("en"));
   });
 
+  it("an answer to updateSettings that a newer broadcast overtook does not roll the window back", async () => {
+    const ipc = installSettingsIpc(withLocale("es"));
+    let answer: (settings: AppSettings) => void = () => {};
+    window.electronAPI.updateSettings = vi.fn(
+      () => new Promise<AppSettings>((resolve) => (answer = resolve)),
+    );
+    await loadSettings();
+
+    const pending = updateSettings({ locale: "en" });
+    // Main sent the newer value to every window while this window's answer was still on its way.
+    ipc.broadcast({ ...withLocale("es"), showInDock: false });
+    answer(withLocale("en"));
+    await pending;
+
+    expect(getSettingsSnapshot()?.showInDock).toBe(false);
+  });
+
   it("watchSettings applies the held value at once, or the first read when there is none yet", async () => {
     const ipc = installSettingsIpc(withLocale("es"), { deferRead: true });
     const early = vi.fn();

@@ -120,12 +120,15 @@ export function watchSettings(listener: SettingsListener): () => void {
 
 /**
  * Saves a patch in main and hands main's answer (the new full settings) to every consumer in
- * this window at once, ahead of the broadcast that tells the other windows.
+ * this window at once, ahead of the broadcast that tells the other windows. When a broadcast
+ * landed while the answer was on its way, that broadcast is newer, so the answer is returned
+ * but not published (main also sends this window its own change as a broadcast).
  */
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   start();
+  const revisionAtRequest = revision;
   const saved = await window.electronAPI.updateSettings(patch);
-  publish(saved);
+  if (revision === revisionAtRequest) publish(saved);
   return saved;
 }
 
