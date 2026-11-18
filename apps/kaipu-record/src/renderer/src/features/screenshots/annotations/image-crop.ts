@@ -93,11 +93,15 @@ export function resizeCropWindow(
   let right = win.x + win.w;
   let top = win.y;
   let bottom = win.y + win.h;
+  // The asset bound wins over the minimum: a stored window already below the minimum, hugging
+  // the asset's edge, stays on the asset (the minimum yields) instead of leaving it.
   const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
-  if (WEST.has(handle)) left = clamp(p.x, full.x, right - minW);
-  if (EAST.has(handle)) right = clamp(p.x, left + minW, full.x + full.w);
-  if (NORTH.has(handle)) top = clamp(p.y, full.y, bottom - minH);
-  if (SOUTH.has(handle)) bottom = clamp(p.y, top + minH, full.y + full.h);
+  const fullRight = full.x + full.w;
+  const fullBottom = full.y + full.h;
+  if (WEST.has(handle)) left = clamp(p.x, full.x, Math.max(full.x, right - minW));
+  if (EAST.has(handle)) right = clamp(p.x, Math.min(fullRight, left + minW), fullRight);
+  if (NORTH.has(handle)) top = clamp(p.y, full.y, Math.max(full.y, bottom - minH));
+  if (SOUTH.has(handle)) bottom = clamp(p.y, Math.min(fullBottom, top + minH), fullBottom);
   return { x: left, y: top, w: right - left, h: bottom - top };
 }
 

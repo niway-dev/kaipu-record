@@ -101,6 +101,36 @@ describe("resizeCropWindow", () => {
     expect(r.w).toBeCloseTo(MIN_CROP_PX / SIZE.w);
     expect(r.x).toBe(0.25);
   });
+
+  it("a window already below the minimum never leaves the asset: the asset bound wins", () => {
+    // 10 px of the 200 px layer, under MIN_CROP_PX, hugging each edge in turn.
+    const tiny = 0.05;
+    const inside = (r: { x: number; y: number; w: number; h: number }): void => {
+      expect(r.x).toBeGreaterThanOrEqual(-1e-9);
+      expect(r.y).toBeGreaterThanOrEqual(-1e-9);
+      expect(r.x + r.w).toBeLessThanOrEqual(1 + 1e-9);
+      expect(r.y + r.h).toBeLessThanOrEqual(1 + 1e-9);
+      expect(windowToCrop(full, r)?.w ?? 1).toBeLessThanOrEqual(1 + 1e-9);
+    };
+    const farRight = { x: 1 - tiny, y: 1 - tiny, w: tiny, h: tiny };
+    const nearLeft = { x: 0, y: 0, w: tiny, h: tiny };
+    for (const handle of ["e", "ne", "se"] as const) {
+      inside(resizeCropWindow(farRight, full, handle, { x: 0.99, y: 0.99 }, SIZE));
+    }
+    for (const handle of ["s", "sw", "se"] as const) {
+      inside(resizeCropWindow(farRight, full, handle, { x: 0.99, y: 0.99 }, SIZE));
+    }
+    for (const handle of ["w", "nw", "sw"] as const) {
+      inside(resizeCropWindow(nearLeft, full, handle, { x: 0.01, y: 0.01 }, SIZE));
+    }
+    for (const handle of ["n", "nw", "ne"] as const) {
+      inside(resizeCropWindow(nearLeft, full, handle, { x: 0.01, y: 0.01 }, SIZE));
+    }
+    // The east edge dragged inward on the far-right sliver stays on the asset's edge.
+    expect(resizeCropWindow(farRight, full, "e", { x: 0.99, y: 0.5 }, SIZE).x).toBeCloseTo(
+      1 - tiny,
+    );
+  });
 });
 
 describe("windowToCrop", () => {
