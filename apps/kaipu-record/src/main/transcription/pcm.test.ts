@@ -162,7 +162,8 @@ describe("computeFrameLevelsDb", () => {
     const samples = new Int16Array(SAMPLE_RATE * 3 + 100); // a trailing partial frame
     let seed = 12345;
     for (let i = 0; i < samples.length; i++) {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      // Math.imul keeps the multiply in 32 bits; a plain `*` overflows 2^53 and the sequence repeats.
+      seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
       samples[i] = ((seed >> 8) % 20000) - 10000;
     }
     const path = await writePcm("noise.pcm16", samples);
