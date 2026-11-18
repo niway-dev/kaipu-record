@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
@@ -92,7 +92,7 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "setPointerCapture");
 });
 
-async function open(view: Partial<Scene>): Promise<void> {
+async function open(view: Partial<Scene>) {
   readCanvas.mockResolvedValue(stored(view));
   const router = createMemoryRouter(
     [
@@ -103,6 +103,7 @@ async function open(view: Partial<Scene>): Promise<void> {
   );
   render(<RouterProvider router={router} />);
   fireEvent.load(await screen.findByRole("img"));
+  return router;
 }
 const label = () => screen.getByTestId("export-box-label");
 const surface = () => screen.getByTestId("canvas-hit-surface");
@@ -312,6 +313,38 @@ describe("autosave of a base crop or resize", () => {
     await waitFor(() => expect(label()).toHaveTextContent("100 × 100 px"));
     release();
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 4000 });
+  });
+});
+
+describe("leaving the editor by a router navigation mid-crop", () => {
+  it("saves the crop window the session was showing, even when nothing else was edited", async () => {
+    // No pointer press anywhere: a keyboard shortcut (new capture, start recording) navigates.
+    const saved = { id: "shot-1", assetId: "a-shot-1", title: "Shot" };
+    const save = vi.fn(async () => saved);
+    window.electronAPI.saveScreenshot = save as never;
+    const router = await open({});
+    await cropBaseToTopLeftQuarter();
+    await act(async () => {
+      await router.navigate("/");
+    });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const scene = exportScene.mock.calls[0][1].scene as Scene;
+    expect(scene.baseCrop).toEqual({ x: 0, y: 0, w: 0.5, h: 0.5 });
+    // ...and the navigation went through once the save landed.
+    await waitFor(() => expect(screen.getByText("capture")).toBeInTheDocument());
+  });
+
+  it("leaves without a save when the window never moved", async () => {
+    const save = vi.fn();
+    window.electronAPI.saveScreenshot = save as never;
+    const router = await open({});
+    fireEvent.doubleClick(surface(), { clientX: 100, clientY: 100 });
+    await screen.findByTestId("crop-window");
+    await act(async () => {
+      await router.navigate("/");
+    });
+    await waitFor(() => expect(screen.getByText("capture")).toBeInTheDocument());
+    expect(save).not.toHaveBeenCalled();
   });
 });
 

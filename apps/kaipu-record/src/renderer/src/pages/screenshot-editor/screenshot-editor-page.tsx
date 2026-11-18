@@ -725,7 +725,11 @@ function ScreenshotEditorBody({
   // still be blocked after an edit; instead, flip `discarding`, let the blocker lift on
   // re-render, and navigate from the effect below.
   const [discarding, setDiscarding] = useState(false);
-  const blocker = useBlocker(dirty && !discarding);
+  // A crop window the user moved lives only in `cropSessionRef` until `finishCrop` commits it,
+  // and a keyboard navigation (⌘⇧1, ⌘⌃V) fires no pointerdown to end the session. So an open
+  // session whose window moved holds the navigation too, even on an otherwise clean shot.
+  const cropPending = cropSession !== null && !sameWindow(cropSession.win, cropSession.start);
+  const blocker = useBlocker((dirty || cropPending) && !discarding);
   useEffect(() => {
     if (discarding) navigate(ROUTES.record);
   }, [discarding, navigate]);
@@ -1537,7 +1541,7 @@ function ScreenshotEditorBody({
     if (blocker.state !== "blocked" || !savedId) return;
     void autosaveEdits().then((saved) => (saved ? blocker.proceed() : blocker.reset()));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per blocked navigation
-  }, [blocker.state]);
+  }, [blocker.state, cropSession]);
 
   // Deletes only the item the auto-save on open created, never a save the user made.
   const onDiscardSaved = (): Promise<void> =>
@@ -1550,8 +1554,14 @@ function ScreenshotEditorBody({
       } catch (error) {
         reportError(t("saveError"), error, { context: { phase: "discard", id } });
       }
+      // An open crop session is committed first; the save then runs from the effect pass that
+      // follows the commit's render, because `latest.current` is only refreshed at render.
     });
 
+  if (cropSessionRef.current) {
+    finishCrop();
+    return;
+  }
   // First save just writes; a subsequent save (or a re-opened shot) asks whether to
   // overwrite the existing item or branch off a copy.
   const onSave = (): void => {
