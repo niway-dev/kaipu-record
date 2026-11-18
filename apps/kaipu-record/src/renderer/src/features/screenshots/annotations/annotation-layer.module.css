@@ -45,11 +45,21 @@
   background: var(--ie-accent);
   border: none;
   border-radius: 5px;
-  color: var(--ie-on-accent, #fff);
+  color: #fff; /* text on --ie-accent, as the export frame card's .done */
   font-family: var(--font-family);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.cropDone:hover {
+  background: var(--accent-primary-hover);
+}
+
+.cropDone:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--ie-accent);
 }
 
 .handle {
