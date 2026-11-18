@@ -6,6 +6,10 @@ Measures how long and how much memory it takes to decode a long recording's audi
 `pcm-convert.ts` from the M1 branch (`src/renderer/src/features/transcription/audio/`), bundled
 for the browser by `build.ts`. Nothing in the app tree is modified.
 
+**Not runnable from this branch.** That code is not in this tree: the ADR's decode figures were
+measured against the M1 branch (NIW2-818 M1), and this script becomes runnable once M1 lands. Until
+then, `--audio-dir` must point at an M1 worktree.
+
 ## Files
 
 - `entry.ts`: browser side. Runs the decode, discards each chunk (counting bytes), and runs two
