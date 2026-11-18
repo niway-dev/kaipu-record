@@ -32,6 +32,7 @@ import {
 } from "@renderer/features/library/rename-outcome";
 import {
   BeautifiedFrame,
+  type BaseFrameView,
   BeautifyPanel,
   CropChip,
   CropOverlay,
@@ -76,15 +77,20 @@ import {
   exportPixelSize,
   extentsToDisplay,
   frameToWorld,
+  baseVisibleRect,
+  hasBaseView,
   intersectFrame,
   nextAnnotationId,
   parseCanvasDoc,
+  visibleBaseBounds,
+  visibleBaseRectPx,
   withoutRedactedText,
   reserveAnnotationIds,
   useAnnotationTools,
   useEditorScene,
   worldToFrame,
   type AnnotationTool,
+  type BaseFields,
   type CanvasAssets,
   type CanvasGeom,
   type Annotation,
@@ -632,7 +638,15 @@ function ScreenshotEditorBody({
     }
     sceneRevision.current += 1;
     setDirty(true);
-  }, [scene.beautify.state, scene.annotations, scene.crop, scene.exportFrame]);
+  }, [
+    scene.beautify.state,
+    scene.annotations,
+    scene.crop,
+    scene.exportFrame,
+    scene.baseCrop,
+    scene.baseRadius,
+    scene.basePlacement,
+  ]);
 
   // Hold in-app navigation (sidebar clicks, ⌘⌃V start-recording, ⌘⇧1 new
   // capture — all go through the router) while there are unsaved changes. A shot that
@@ -673,6 +687,19 @@ function ScreenshotEditorBody({
   // Canvas mode. The view (zoom + pan) is view-only: it never reaches the scene or the export.
   const viewport = useCanvasViewport(canvasRef, canvasMode, hasImage);
   const metrics = useShotMetrics(imgRef, canvasMode, imageReady);
+  // The base as the page's geometry sees it (per-image crop, unit 4): the extents, the export
+  // frame's math, the box label and the live preview all measure from its VISIBLE rect, so a
+  // cropped or resized base is laid out where it exports. Unchanged for a base nobody touched.
+  const geomBase = useMemo<BaseFields>(
+    () => ({
+      ...(scene.baseCrop ? { baseCrop: scene.baseCrop } : {}),
+      ...(scene.baseRadius !== undefined ? { baseRadius: scene.baseRadius } : {}),
+      ...(scene.basePlacement ? { basePlacement: scene.basePlacement } : {}),
+    }),
+    [scene.baseCrop, scene.baseRadius, scene.basePlacement],
+  );
+  const geomBaseRef = useRef(geomBase);
+  geomBaseRef.current = geomBase;
   // How far the content sticks out past each side of the shot, in display px, from the
   // live annotations (the same measure the export uses, at the same scale).
   // While a shape is drawn or moved the stored annotations do not hold it yet: the layer
@@ -689,7 +716,14 @@ function ScreenshotEditorBody({
       setLiveExtents(null);
       return;
     }
-    const next = contentExtents(shown, m.naturalW, m.naturalH, m.naturalW / m.w);
+    const next = contentExtents(
+      shown,
+      m.naturalW,
+      m.naturalH,
+      m.naturalW / m.w,
+      undefined,
+      visibleBaseBounds(geomBaseRef.current, m.naturalW, m.naturalH),
+    );
     setLiveExtents((prev) =>
       prev &&
       prev.left === next.left &&
@@ -710,9 +744,11 @@ function ScreenshotEditorBody({
         metrics.naturalW,
         metrics.naturalH,
         metrics.naturalW / metrics.w,
+        undefined,
+        visibleBaseBounds(geomBase, metrics.naturalW, metrics.naturalH),
       )
     );
-  }, [canvasMode, metrics, scene.annotations, liveExtents]);
+  }, [canvasMode, metrics, scene.annotations, liveExtents, geomBase]);
   const extents = useMemo(() => {
     if (!canvasMode || !metrics || metrics.w <= 0 || metrics.naturalW <= 0) return ZERO_EXTENTS;
     return extentsToDisplay(extentsNatural, metrics.naturalW / metrics.w);
@@ -724,8 +760,21 @@ function ScreenshotEditorBody({
   const { compensate, fit } = viewport;
   // A reopened document wider or taller than the canvas opens fitted, not clipped.
   const fitOnOpen = useCallback(() => fit({ onlyIfOverflowing: true }), [fit]);
+  // The frame's insets around the WORLD ORIGIN (the anchor image's corner), not the visible
+  // base's: a cropped or resized base moves the visible rect against the origin, and the
+  // origin is what must stay put on screen. Equal to the extents for an untouched base.
+  const originInsets = useMemo<Extents>(() => {
+    if (!canvasMode || !metrics || metrics.w <= 0 || metrics.h <= 0) return extents;
+    const b = visibleBaseRectPx(geomBase, metrics.w, metrics.h);
+    return {
+      left: extents.left - b.x1,
+      top: extents.top - b.y1,
+      right: extents.right + b.x2 - metrics.w,
+      bottom: extents.bottom + b.y2 - metrics.h,
+    };
+  }, [canvasMode, metrics, extents, geomBase]);
   useExtentsCompensation(
-    extents,
+    originInsets,
     canvasMode && metrics != null && metrics.w > 0 && metrics.naturalW > 0,
     compensate,
     fitOnOpen,
@@ -751,8 +800,26 @@ function ScreenshotEditorBody({
   // export frame (world units). Both sides use display px, so only the ratios matter.
   const canvasGeom: CanvasGeom | null =
     canvasMode && metrics && metrics.w > 0 && metrics.h > 0
-      ? { naturalW: metrics.w, naturalH: metrics.h, pad: scene.beautify.state.padding, extents }
+      ? {
+          naturalW: metrics.w,
+          naturalH: metrics.h,
+          pad: scene.beautify.state.padding,
+          extents,
+          base: visibleBaseRectPx(geomBase, metrics.w, metrics.h),
+        }
       : null;
+  // The base's view as the live frame draws it (undefined for a base at its natural place).
+  const baseFrame: BaseFrameView | undefined =
+    canvasMode && metrics && metrics.w > 0 && metrics.h > 0 && hasBaseView(geomBase)
+      ? {
+          visible: baseVisibleRect(geomBase),
+          ...(geomBase.baseCrop ? { crop: geomBase.baseCrop } : {}),
+          ...(geomBase.baseRadius !== undefined && metrics.naturalW > 0
+            ? { radius: (geomBase.baseRadius * metrics.w) / metrics.naturalW }
+            : {}),
+          shot: { w: metrics.w, h: metrics.h },
+        }
+      : undefined;
   // The exact pixel size Copy and Save produce (mock A1's label), from the export's own
   // computation, so the label cannot say a size the export does not have.
   const exportSize = useMemo(
@@ -764,6 +831,7 @@ function ScreenshotEditorBody({
               annotations: scene.annotations,
               crop: scene.crop,
               exportFrame: scene.exportFrame,
+              ...geomBase,
             },
             metrics.naturalW,
             metrics.naturalH,
@@ -779,6 +847,7 @@ function ScreenshotEditorBody({
       scene.crop,
       scene.exportFrame,
       extentsNatural,
+      geomBase,
     ],
   );
   const exportFrameCrop: CropRect | undefined =
@@ -812,6 +881,7 @@ function ScreenshotEditorBody({
             annotations: scene.annotations,
             crop: scene.crop,
             exportFrame: frameToWorld(c, canvasGeom),
+            ...geomBase,
           },
           metrics.naturalW,
           metrics.naturalH,
@@ -935,7 +1005,17 @@ function ScreenshotEditorBody({
     // The same scale the live extents use; before the first measurement the displayed width
     // is unknown and 1 only affects the size of text bounds.
     const scale = metrics && metrics.w > 0 ? naturalW / metrics.w : 1;
-    const { right } = contentExtents(scene.annotations, naturalW, naturalH, scale);
+    // Past the VISIBLE base's right edge, top-aligned with it (the whole image for an untouched
+    // base: x = naturalW + overhang, y = 0, as before).
+    const visible = visibleBaseBounds(geomBase, naturalW, naturalH);
+    const { right } = contentExtents(
+      scene.annotations,
+      naturalW,
+      naturalH,
+      scale,
+      undefined,
+      visible,
+    );
     const assetId = newImageAssetId();
     assetsRef.current = { ...assetsRef.current, [assetId]: png };
     const url = registerAsset(assetId, png);
@@ -944,8 +1024,8 @@ function ScreenshotEditorBody({
       id: nextAnnotationId().id,
       kind: "image",
       assetId,
-      x: (naturalW + right + ADDED_IMAGE_GAP_PX) / naturalW,
-      y: 0,
+      x: (visible.x2 + right + ADDED_IMAGE_GAP_PX) / naturalW,
+      y: visible.y1 / naturalH,
       w: pixelWidth / naturalW,
       h: pixelHeight / naturalH,
       pixelWidth,
@@ -1771,6 +1851,7 @@ function ScreenshotEditorBody({
             <BeautifiedFrame
               src={image.displayUrl}
               beautify={scene.beautify.state}
+              base={baseFrame}
               crop={tools.tool === "crop" ? undefined : canvasMode ? exportFrameCrop : scene.crop}
               windowChip={<CropChip onEnter={enterCrop} zoom={shownZoom} />}
               onWindowDoubleClick={() => {

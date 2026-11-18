@@ -1,5 +1,5 @@
 export { BeautifyPanel } from "./beautify-panel";
-export { BeautifiedFrame } from "./beautified-frame";
+export { BeautifiedFrame, type BaseFrameView } from "./beautified-frame";
 export { CropChip } from "./crop-chip";
 export { CropOverlay } from "./crop-overlay";
 export { type BeautifyController } from "./use-beautify";

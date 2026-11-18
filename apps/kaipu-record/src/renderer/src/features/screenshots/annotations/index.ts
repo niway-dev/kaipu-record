@@ -20,6 +20,18 @@ export {
 export type { Scene, Annotation, CropRect, ImageAnnotation, MeasureAnnotation } from "./scene";
 export { nextAnnotationId, fullRect, baseFullRect, baseVisibleRect } from "./scene";
 export type { BasePlacement, NormalizedRect } from "./scene";
+export {
+  BASE_IMAGE_ID,
+  cropTarget,
+  hasBaseView,
+  imageCropPatch,
+  resizeBasePlacement,
+  resizeCropWindow,
+  sameWindow,
+  baseAsImage,
+  type BaseFields,
+  type CropTarget,
+} from "./image-crop";
 export { measureLabel, measureLength } from "./measure";
 export {
   annotationBounds,
@@ -31,6 +43,8 @@ export {
   worldToFrame,
   intersectFrame,
   defaultTextMeasure,
+  visibleBaseBounds,
+  visibleBaseRectPx,
   ZERO_EXTENTS,
   type Bounds,
   type Extents,

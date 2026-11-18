@@ -209,4 +209,38 @@ describe("BeautifiedFrame — a cropped or resized base (NIW2-853)", () => {
     );
     expect(baseEl().style.borderRadius).toBe("3px");
   });
+
+  it("a windowed frame follows a base that changed after it was measured", () => {
+    // The frame was measured with the base showing a half (100 x 50) plus 20 px padding.
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get: () => 140,
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get: () => 90,
+    });
+    try {
+      const crop = { x: 0, y: 0, w: 0.5, h: 0.5 };
+      const { container, rerender } = render(
+        <BeautifiedFrame src="x" beautify={beautify()} base={base} crop={crop} />,
+      );
+      const root = (): HTMLElement => container.firstElementChild as HTMLElement;
+      expect(root().style.width).toBe("70px"); // half of 100 + 40
+      // The base is resized to the whole anchor: 200 x 100 visible, so the frame is 240 x 140.
+      rerender(
+        <BeautifiedFrame
+          src="x"
+          beautify={beautify()}
+          base={{ visible: { x: 0, y: 0, w: 1, h: 1 }, shot }}
+          crop={crop}
+        />,
+      );
+      expect(root().style.width).toBe("120px");
+      expect(root().style.height).toBe("70px");
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+      Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+    }
+  });
 });

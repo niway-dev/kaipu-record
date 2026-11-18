@@ -240,8 +240,14 @@ export function BeautifiedFrame({
     // grows/shrinks the frame live, exactly as the export composes it (fullW =
     // shot + 2·pad). Freezing the border-box let the shot resize inside a stale
     // frame, so the crop window then selected different content than the export.
-    const shotW = measured.w - 2 * measured.pad - measured.extW;
-    const shotH = measured.h - 2 * measured.pad - measured.extH;
+    // A cropped or resized base: its visible size is known from the anchor's (constant) size,
+    // so a base that changed since the measure still lays out right.
+    const shotW = base
+      ? base.shot.w * base.visible.w
+      : measured.w - 2 * measured.pad - measured.extW;
+    const shotH = base
+      ? base.shot.h * base.visible.h
+      : measured.h - 2 * measured.pad - measured.extH;
     const frameW = shotW + 2 * beautify.padding + (ext ? ext.left + ext.right : 0);
     const frameH = shotH + 2 * beautify.padding + (ext ? ext.top + ext.bottom : 0);
     const winW = crop.w * frameW;
