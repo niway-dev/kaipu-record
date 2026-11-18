@@ -3489,6 +3489,7 @@
     "failed_engine": "The speech engine downloaded but does not start on this Mac. Try again; if it keeps failing, this Mac may not support it yet.",
     "failed_unknown": "The model could not be downloaded. Try again.",
     "unavailable_unsupported-platform": "Local transcription is not available on this Mac or this platform yet.",
+    "unavailable_unreachable": "Local transcription is not responding. Close and reopen Kaipu Record, then try again.",
     "downloadInBackground": "Download in background",
     "transcribe": "Transcribe",
     "transcribeAgain": "Transcribe again",

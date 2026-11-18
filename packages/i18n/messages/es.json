@@ -3489,6 +3489,7 @@
     "failed_engine": "El motor de voz se descargó pero no arranca en este Mac. Vuelve a intentarlo; si sigue fallando, puede que este Mac todavía no sea compatible.",
     "failed_unknown": "No se pudo descargar el modelo. Inténtalo de nuevo.",
     "unavailable_unsupported-platform": "La transcripción local todavía no está disponible en este Mac ni en esta plataforma.",
+    "unavailable_unreachable": "La transcripción local no responde. Cierra y vuelve a abrir Kaipu Record e inténtalo de nuevo.",
     "downloadInBackground": "Descargar en segundo plano",
     "transcribe": "Transcribir",
     "transcribeAgain": "Transcribir de nuevo",

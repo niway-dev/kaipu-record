@@ -15,7 +15,9 @@
  */
 export type TranscriptionUnavailableReason =
   /** Not macOS arm64 (the first supported target). */
-  "unsupported-platform";
+  | "unsupported-platform"
+  /** Never sent by main: the renderer's own answer when the status request itself failed. */
+  | "unreachable";
 
 export type TranscriptionAvailability =
   | { status: "available" }

@@ -207,6 +207,7 @@ describe("ModelOffer", () => {
         "unsupported-platform",
         /Local transcription is not available on this Mac or this platform yet/,
       ],
+      ["unreachable", /Local transcription is not responding\. Close and reopen Kaipu Record/],
     ])("explains %s and offers no download", (reason, message) => {
       setup({ state: "missing" }, { availability: { status: "unavailable", reason } });
 
