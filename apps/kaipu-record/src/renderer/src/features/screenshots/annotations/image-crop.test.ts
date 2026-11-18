@@ -4,12 +4,14 @@ import {
   MAX_BASE_SIDE_PX,
   MIN_CROP_PX,
   baseAsImage,
+  cropHandleAt,
   cropTarget,
   imageCropPatch,
   resizeBasePlacement,
   resizeCropWindow,
   sameWindow,
   windowToCrop,
+  wholeImage,
 } from "./image-crop";
 import type { ImageAnnotation } from "./scene";
 
@@ -178,5 +180,47 @@ describe("resizeBasePlacement", () => {
   it("baseAsImage is the visible rect with the asset's pixel size", () => {
     const img = baseAsImage({ baseCrop: { x: 0, y: 0, w: 0.5, h: 1 } }, natural);
     expect(img).toMatchObject({ id: BASE_IMAGE_ID, x: 0, y: 0, w: 0.5, h: 1, pixelWidth: 400 });
+  });
+});
+
+describe("cropHandleAt", () => {
+  // A 100 x 50 px window at (50, 50) of a 200 x 200 px layer.
+  const win = { x: 0.25, y: 0.25, w: 0.5, h: 0.25 };
+  const at = (px: number, py: number) => cropHandleAt(win, { x: px / 200, y: py / 200 }, SIZE, 10);
+
+  it("finds a corner and an edge middle", () => {
+    expect(at(52, 48)).toBe("nw");
+    expect(at(148, 102)).toBe("se");
+    expect(at(100, 51)).toBe("n");
+    expect(at(149, 75)).toBe("e");
+  });
+
+  it("a press along an edge grabs that edge", () => {
+    expect(at(75, 99)).toBe("s");
+    expect(at(51, 60)).toBe("w");
+  });
+
+  it("a corner wins over the edge it sits on", () => {
+    expect(at(55, 50)).toBe("nw");
+  });
+
+  it("inside the window and far from every edge is not a handle", () => {
+    expect(at(100, 75)).toBeNull();
+    expect(at(10, 10)).toBeNull();
+  });
+});
+
+describe("wholeImage", () => {
+  it("is the cropped image's whole asset: its full rect and no crop", () => {
+    const whole = wholeImage(
+      added({ x: 1.25, y: 0.5, w: 0.25, h: 0.25, crop: { x: 0.5, y: 0, w: 0.5, h: 1 } }),
+    );
+    expect(whole).toMatchObject({ x: 1, y: 0.5, w: 0.5, h: 0.25 });
+    expect("crop" in whole).toBe(false);
+  });
+
+  it("leaves an uncropped image as it is", () => {
+    const a = added();
+    expect(wholeImage(a)).toBe(a);
   });
 });

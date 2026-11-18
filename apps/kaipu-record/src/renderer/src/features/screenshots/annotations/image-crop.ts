@@ -202,3 +202,59 @@ export function resizeBasePlacement(
   // Uniform by construction (the ratio is the window's own); `scale` follows the width.
   return { x: c ? x - c.x * fw : x, y: c ? y - c.y * fh : y, scale: fw };
 }
+
+/** The eight handles of a crop window: four corners and four edge middles. */
+export const CROP_HANDLES: readonly HandleId[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
+/** Where a handle sits on a window, in the same units as the window. */
+export function cropHandlePoint(win: NormalizedRect, handle: HandleId): Pt {
+  const fx = WEST.has(handle) ? 0 : EAST.has(handle) ? 1 : 0.5;
+  const fy = NORTH.has(handle) ? 0 : SOUTH.has(handle) ? 1 : 0.5;
+  return { x: win.x + fx * win.w, y: win.y + fy * win.h };
+}
+
+/**
+ * The window handle under `p` (normalized), or null. A corner or an edge middle within `tolPx`
+ * of the pointer first (corners win), then a press along an edge grabs that edge, so a thin
+ * window can still be grabbed anywhere on its outline.
+ */
+export function cropHandleAt(
+  win: NormalizedRect,
+  p: Pt,
+  size: Size,
+  tolPx: number,
+): HandleId | null {
+  const px = p.x * size.w;
+  const py = p.y * size.h;
+  const dist = (h: HandleId): number => {
+    const q = cropHandlePoint(win, h);
+    return Math.hypot(q.x * size.w - px, q.y * size.h - py);
+  };
+  // Corners first, then edge middles: a corner wins over the edge it sits on.
+  for (const h of ["nw", "ne", "se", "sw", "n", "e", "s", "w"] as const) {
+    if (dist(h) <= tolPx) return h;
+  }
+  const left = win.x * size.w;
+  const right = (win.x + win.w) * size.w;
+  const top = win.y * size.h;
+  const bottom = (win.y + win.h) * size.h;
+  const inX = px >= left - tolPx && px <= right + tolPx;
+  const inY = py >= top - tolPx && py <= bottom + tolPx;
+  // The nearest edge within tolerance.
+  const edges: [HandleId, number][] = [];
+  if (inX) edges.push(["n", Math.abs(py - top)], ["s", Math.abs(py - bottom)]);
+  if (inY) edges.push(["w", Math.abs(px - left)], ["e", Math.abs(px - right)]);
+  edges.sort((a, b) => a[1] - b[1]);
+  return edges.length > 0 && edges[0][1] <= tolPx ? edges[0][0] : null;
+}
+
+/**
+ * An added image shown as its WHOLE asset: its full rect and no crop. What crop mode draws and
+ * what the geometry measures while the crop is edited, so the window can be dragged out to the
+ * asset's edge. The same object for an image with no crop.
+ */
+export function wholeImage(a: ImageAnnotation): ImageAnnotation {
+  if (!a.crop) return a;
+  const { crop: _crop, ...rest } = a;
+  return { ...rest, ...fullRect(a) };
+}
