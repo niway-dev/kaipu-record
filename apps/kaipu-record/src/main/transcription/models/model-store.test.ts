@@ -362,6 +362,30 @@ describe("ModelStore", () => {
     expect(existsSync(join(root, "m1.partial"))).toBe(false);
   });
 
+  it("remove does not delete the partial directory of a download that started meanwhile", async () => {
+    const entry = makeEntry("m1", smallFiles());
+    const hold = deferred();
+    routes.get(`/m1/${entry.files[0].name}`)!.hold = hold.promise;
+    // An incomplete install with many files, so deleting it takes long enough for a download
+    // of the same model to start and write its first bytes before remove() reaches the partial.
+    const stale = join(root, "m1");
+    await mkdir(stale, { recursive: true });
+    await Promise.all(
+      Array.from({ length: 4000 }, (_, i) => writeFile(join(stale, `junk-${i}`), "x")),
+    );
+    const store = makeStore([entry]);
+
+    const removing = store.remove("m1");
+    const firstProgress = deferred();
+    const download = store.download("m1", () => firstProgress.resolve());
+    await firstProgress.promise;
+    await removing;
+    hold.resolve();
+
+    await expect(download).resolves.toBe(join(root, "m1"));
+    expect(store.status("m1")).toEqual({ state: "ready", dir: join(root, "m1") });
+  });
+
   it("fails with insufficient-disk-space before fetching anything", async () => {
     const entry = makeEntry("m1", smallFiles());
     let requests = 0;

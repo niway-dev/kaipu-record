@@ -232,7 +232,11 @@ export class ModelStore {
       await running.promise.catch(() => undefined);
     }
     await rm(this.destination(entry.id), { recursive: true, force: true });
-    await rm(this.partialDir(entry.id), { recursive: true, force: true });
+    // A download of this model may have started while the install was being deleted: the
+    // partial directory is then its live one, and `run` already cleared any older leftover.
+    if (this.active?.id !== entry.id) {
+      await rm(this.partialDir(entry.id), { recursive: true, force: true });
+    }
     this.failures.delete(entry.id);
   }
 
