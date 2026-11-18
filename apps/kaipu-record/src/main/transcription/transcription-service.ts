@@ -305,8 +305,10 @@ export class TranscriptionService {
   private job: Job | null = null;
   /** The model id of a `begin` that passed its checks and is still resolving the item. */
   private opening: string | null = null;
-  /** Models being removed: `begin` refuses them, the store still reports them installed. */
-  /** Removals in flight per model id; overlapping calls each hold one until their own delete ends. */
+  /**
+   * Removals in flight per model id: `begin` refuses a model while it has any, because the store
+   * still reports it installed. Overlapping calls each hold one until their own delete ends.
+   */
   private readonly removing = new Map<string, number>();
   private readonly sweptDirs = new Set<string>();
 
