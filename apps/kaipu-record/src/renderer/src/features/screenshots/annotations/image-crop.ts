@@ -1,3 +1,4 @@
+import { MAX_BASE_SCALE, MIN_BASE_SCALE, MIN_CROP } from "./canvas-doc";
 import { MAX_EXPORT_SIDE } from "./canvas-geometry";
 import { resizeAnnotation, type HandleId, type Pt, type Size } from "./handles";
 import {
@@ -36,6 +37,12 @@ export function hasBaseView(b: BaseFields): boolean {
 
 /** The smallest a crop window may be, on its shorter side, in layer (display) px. */
 export const MIN_CROP_PX = 24;
+
+/**
+ * The smallest crop window the document reader accepts, with a hair of margin for the float
+ * noise of the divide that turns a window into a `crop` (`MIN_CROP` itself would round under it).
+ */
+const MIN_CROP_FRACTION = MIN_CROP * (1 + 1e-6);
 
 /**
  * The longest visible side the base may be resized to, in source px. The reader refuses a base
@@ -78,7 +85,8 @@ const SOUTH = new Set<HandleId>(["sw", "s", "se"]);
 /**
  * The crop window after dragging `handle` to `p`: each edge the handle owns follows the
  * pointer, clamped to the asset (the window never leaves it) and to a minimum size
- * (`MIN_CROP_PX` of layer px, never past the asset's own size). The other edges stay put.
+ * (`MIN_CROP_PX` of layer px and the reader's minimum crop fraction, never past the asset's own
+ * size). The other edges stay put.
  */
 export function resizeCropWindow(
   win: NormalizedRect,
@@ -87,8 +95,10 @@ export function resizeCropWindow(
   p: Pt,
   size: Size,
 ): NormalizedRect {
-  const minW = Math.min(full.w, MIN_CROP_PX / (size.w || 1));
-  const minH = Math.min(full.h, MIN_CROP_PX / (size.h || 1));
+  // The larger of the display minimum and the reader's minimum crop fraction of the asset (on a
+  // scaled-up asset 24 display px can be under a thousandth of it, which the reader refuses).
+  const minW = Math.min(full.w, Math.max(MIN_CROP_PX / (size.w || 1), MIN_CROP_FRACTION * full.w));
+  const minH = Math.min(full.h, Math.max(MIN_CROP_PX / (size.h || 1), MIN_CROP_FRACTION * full.h));
   let left = win.x;
   let right = win.x + win.w;
   let top = win.y;
@@ -174,7 +184,8 @@ export function baseAsImage(base: BaseFields, natural: { w: number; h: number })
  * `resizeImage` (the opposite corner stays put, the crop window keeps its aspect), turned
  * from the visible rect it patches into the whole asset's rect. The crop is not touched: it
  * is unitless, so it follows the scale and widening it later brings the hidden pixels back.
- * Capped so the visible base never passes `MAX_BASE_SIDE_PX`. Null for an edge handle.
+ * Capped so the visible base never passes `MAX_BASE_SIDE_PX` and the asset's scale stays inside
+ * what the document reader accepts. Null for an edge handle.
  */
 export function resizeBasePlacement(
   base: BaseFields,
@@ -187,10 +198,17 @@ export function resizeBasePlacement(
   const patch = resizeAnnotation(img, handle, p, size, true) as Partial<ImageAnnotation>;
   if (patch.x === undefined || patch.y === undefined) return null;
   let { x, y, w, h } = patch as { x: number; y: number; w: number; h: number };
+  // Shrink (or grow) about the corner that stays put, so a cap does not slide the picture. Two
+  // caps: the visible side the export can hold, and the scale range the document reader accepts
+  // (a tiny crop window enlarged a lot can ask for a whole-asset scale past it).
+  const c0 = base.baseCrop;
+  const scale = c0 ? w / c0.w : w;
   const longest = Math.max(w * natural.w, h * natural.h);
-  if (longest > MAX_BASE_SIDE_PX) {
-    // Shrink about the corner that stays put, so the cap does not slide the picture.
-    const k = MAX_BASE_SIDE_PX / longest;
+  let k = 1;
+  if (longest > MAX_BASE_SIDE_PX) k = Math.min(k, MAX_BASE_SIDE_PX / longest);
+  if (scale * k > MAX_BASE_SCALE) k = MAX_BASE_SCALE / scale;
+  if (scale * k < MIN_BASE_SCALE) k = MIN_BASE_SCALE / scale;
+  if (k !== 1) {
     const east = handle === "ne" || handle === "se";
     const south = handle === "sw" || handle === "se";
     const nw = w * k;

@@ -13,7 +13,8 @@ import {
   windowToCrop,
   wholeImage,
 } from "./image-crop";
-import { baseVisibleRect, type ImageAnnotation } from "./scene";
+import { baseVisibleRect, type ImageAnnotation, type Scene } from "./scene";
+import { MAX_BASE_SCALE, MIN_CROP, buildCanvasDoc, parseCanvasDoc } from "./canvas-doc";
 
 // Per-image crop, unit 4: the math behind the crop mode. Illustrative numbers throughout.
 
@@ -296,5 +297,51 @@ describe("wholeImage", () => {
   it("leaves an uncropped image as it is", () => {
     const a = added();
     expect(wholeImage(a)).toBe(a);
+  });
+});
+
+// The writer and the reader of the saved document must agree: a crop or resize the editor lets
+// through has to reopen with its layers, never fall back to the flattened PNG.
+describe("what the editor writes, the document reader reopens", () => {
+  const beautify = { bg: "ocean", padding: 24, radius: 8, shadow: 30 } as Scene["beautify"];
+  const reopens = (
+    baseCrop: Scene["baseCrop"],
+    basePlacement: Scene["basePlacement"],
+    px: number,
+  ): boolean => {
+    const scene: Scene = { beautify, annotations: [], baseCrop, basePlacement };
+    const doc = buildCanvasDoc(scene, { pixelWidth: px, pixelHeight: px });
+    return parseCanvasDoc(JSON.stringify(doc)) !== null;
+  };
+
+  it("enlarging a tiny crop window never passes the reader's base scale ceiling", () => {
+    // Illustrative: a 200 x 200 base cropped to 24 x 24 px, then the corner dragged to 3000 px.
+    const natural = { w: 200, h: 200 };
+    const baseCrop = { x: 0.4, y: 0.4, w: 0.12, h: 0.12 };
+    const vis = baseVisibleRect({ baseCrop });
+    const p = resizeBasePlacement(
+      { baseCrop },
+      "se",
+      { x: vis.x + 15, y: vis.y + 15 },
+      { w: 200, h: 200 },
+      natural,
+    )!;
+    expect(p.scale).toBeLessThanOrEqual(MAX_BASE_SCALE);
+    expect(reopens(baseCrop, p, 200)).toBe(true);
+    // The cap shrinks about the corner that stays put (the nw corner of the window).
+    const after = baseVisibleRect({ baseCrop, basePlacement: p });
+    expect(after.x).toBeCloseTo(vis.x);
+    expect(after.y).toBeCloseTo(vis.y);
+  });
+
+  it("shrinking a crop window on a scaled asset never passes the reader's minimum crop", () => {
+    // Illustrative: a 1000 x 1000 base shown at 500 x 500, cropped to 5%, enlarged to scale 50.
+    const full = { x: 0, y: 0, w: 50, h: 50 };
+    const win = { x: 20, y: 20, w: 2.5, h: 2.5 };
+    const r = resizeCropWindow(win, full, "se", { x: 0, y: 0 }, { w: 500, h: 500 });
+    const crop = windowToCrop(full, r)!;
+    expect(crop.w).toBeGreaterThanOrEqual(MIN_CROP);
+    expect(crop.h).toBeGreaterThanOrEqual(MIN_CROP);
+    expect(reopens(crop, { x: 0, y: 0, scale: 50 }, 1000)).toBe(true);
   });
 });

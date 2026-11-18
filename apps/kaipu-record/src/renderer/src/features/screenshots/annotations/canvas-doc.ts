@@ -240,7 +240,7 @@ const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const str = (v: unknown): v is string => typeof v === "string";
 /** Smallest crop side, as a fraction of the asset. */
-const MIN_CROP = 1e-3;
+export const MIN_CROP = 1e-3;
 const nums = (o: Obj, keys: string[]): boolean => keys.every((k) => num(o[k]));
 
 /** `extras`: read `crop`/`radius` (v3 only); an older version never wrote them, so they are ignored there, valid or not. */
@@ -342,8 +342,8 @@ function parseFrame(v: unknown): BeautifyState | null {
  * corner may sit at most this many base widths away: anything else is a corrupt file. These
  * bounds alone still allow a 100x base to ask for a frame no canvas can hold, so the visible base
  * is also held to `MAX_EXPORT_SIDE` below, and the compositor refuses any frame past it. */
-const MIN_BASE_SCALE = 1e-3;
-const MAX_BASE_SCALE = 1e2;
+export const MIN_BASE_SCALE = 1e-3;
+export const MAX_BASE_SCALE = 1e2;
 const MAX_BASE_OFFSET = 1e4;
 
 /**
