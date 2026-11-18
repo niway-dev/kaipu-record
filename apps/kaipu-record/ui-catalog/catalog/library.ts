@@ -176,7 +176,7 @@ export const libraryCatalog = catalog(
     },
     "card-transcribe-done": {
       profile: "transcription-transcripts",
-      how: "With transcripts beside four recordings, “Walkthrough 1” and “Release demo” show the Transcribed badge.",
+      how: "With transcript files beside four recordings (the badge follows the file, so the unreadable “Team notes” and the stale “Onboarding flow” carry it too), “Walkthrough 1” and “Release demo” are the two the crop shows.",
       steps: [library, { waitFor: { area: card.area, part: { text: "Transcribed" } } }],
       demonstrates: ["library.videoCardTranscribe:done"],
       crops: { "library.videoCardTranscribe": { hasText: "Transcribed" } },
@@ -211,7 +211,7 @@ export const libraryCatalog = catalog(
     },
     "row-transcribe-done": {
       profile: "transcription-transcripts",
-      how: "With transcripts beside four recordings, switch to the list: “Walkthrough 1” and “Release demo” show the Transcribed badge.",
+      how: "With transcript files beside four recordings, switch to the list: all four rows show the Transcribed badge (it follows the file, so the unreadable “Team notes” and the stale “Onboarding flow” carry it too).",
       steps: [library, listView, { waitFor: { area: row.area, part: { text: "Transcribed" } } }],
       demonstrates: ["library.videoRowTranscribe:done"],
       crops: { "library.videoRowTranscribe": { hasText: "Transcribed" } },
