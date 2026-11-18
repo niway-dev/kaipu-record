@@ -107,7 +107,7 @@ export function RecordingPlayer({
   const notify = useRef((): void => {});
   notify.current = (): void => {
     const time = videoRef.current?.currentTime ?? 0;
-    for (const listener of [...listeners.current]) listener(time);
+    for (const listener of listeners.current) listener(time);
   };
   const stopLoop = useRef((): void => {
     if (loopFrame.current !== null) cancelAnimationFrame(loopFrame.current);
