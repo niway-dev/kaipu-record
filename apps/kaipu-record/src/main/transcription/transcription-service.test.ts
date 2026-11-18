@@ -674,30 +674,29 @@ describe("engine failure and resume", () => {
     expect(existsSync(join(h.vault.tmpDir, "rec.partial.json"))).toBe(false);
   });
 
-  it("ignores a partial made for another file content or other audio", async () => {
-    const h = makeHarness();
-    h.supervisor.batch = async (options, call) => {
-      if (call === 2) throw new SherpaError("exit", "killed");
-      return options.wavPaths.map(cannedResult);
-    };
-    await runToEnd(h, 250_000);
-
-    for (const change of ["media", "duration"] as const) {
-      h.events.length = 0;
-      h.calls.length = 0;
+  it.each(["mediaHash", "modelId", "engineVersion", "durationMs", "planFingerprint"] as const)(
+    "ignores a partial whose %s key does not match, with everything else equal",
+    async (field) => {
+      const h = makeHarness();
       h.supervisor.batch = async (options, call) => {
         if (call === 2) throw new SherpaError("exit", "killed");
         return options.wavPaths.map(cannedResult);
       };
-      // The partial the previous run left no longer matches what this run is made for.
-      if (change === "media") {
-        vi.mocked(h.deps.hashMedia).mockResolvedValue("hash-2");
-      }
-      await runToEnd(h, change === "duration" ? 260_000 : 250_000);
+      await runToEnd(h, 250_000);
+      // Change one key field in the saved partial; the next run is the same audio and item.
+      const path = join(h.vault.tmpDir, "rec.partial.json");
+      const partial = JSON.parse(await readFile(path, "utf8"));
+      partial.key[field] = typeof partial.key[field] === "number" ? 1 : "other";
+      await writeFile(path, JSON.stringify(partial));
+
+      h.events.length = 0;
+      h.calls.length = 0;
+      h.supervisor.batch = null;
+      expect((await runToEnd(h, 250_000)).phase).toBe("done");
       // A mismatching partial is not used: the run starts from segment 0 again.
       expect(h.calls[0]).toEqual(["s0", "s1", "s2", "s3"]);
-    }
-  });
+    },
+  );
 
   it("deletes a corrupt partial and transcribes everything", async () => {
     const h = makeHarness();
