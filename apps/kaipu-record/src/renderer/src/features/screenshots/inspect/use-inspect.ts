@@ -5,13 +5,15 @@ import type { ResolvedImage } from "@renderer/features/screenshots/image-source"
 import { formatCaptured, formatColor, type ColorFormat, type Rgba } from "./color";
 import { inspectKeyAction } from "./inspect-keys";
 import {
-  clientToImagePixel,
+  assetClientRect,
+  clientToBasePixel,
   decodeSrgbBuffer,
   isPointVisible,
   loupePixels,
   probeCaptured,
   readProbe,
   sampleAt,
+  type BaseView,
   type PixelBuffer,
   type ProbeTile,
 } from "./pixel-buffer";
@@ -128,7 +130,11 @@ interface Options {
   /** Canvas mode is on: Shift+1 is "fit the content" there, so the ruler key leaves it alone. */
   canvasMode?: boolean;
   image: ResolvedImage | null;
+  /** The invisible anchor: the asset at scale 1 at the layer's origin, NOT where a resized base shows. */
   imgRef: RefObject<HTMLImageElement | null>;
+  /** The base's crop and placement (per-image crop): pixels map through them, hidden ones read as none. */
+  baseCrop?: BaseView["baseCrop"];
+  basePlacement?: BaseView["basePlacement"];
   /** Called when Inspect turns on (the page selects the Select tool). */
   onEnter?: () => void;
   /** A click while a run is shown: the page adds it as a `measure` annotation. */
@@ -167,6 +173,8 @@ export function useInspect({
   canvasMode = false,
   image,
   imgRef,
+  baseCrop,
+  basePlacement,
   onEnter,
   onPin,
 }: Options): InspectController {
@@ -197,6 +205,8 @@ export function useInspect({
   const wheelRest = useRef(0);
   const onPinRef = useRef(onPin);
   onPinRef.current = onPin;
+  const viewRef = useRef<BaseView>({});
+  viewRef.current = { baseCrop, basePlacement };
 
   const activeRef = useRef(false);
   const alive = useRef(true);
@@ -343,9 +353,12 @@ export function useInspect({
       setEmpty(null);
       return;
     }
-    const rect = img.getBoundingClientRect();
+    const anchor = img.getBoundingClientRect();
+    const view = viewRef.current;
+    // The whole asset's rect (the ruler line is drawn on it); the anchor is the asset at scale 1.
+    const rect = assetClientRect(anchor, view);
     const px = isPointVisible(img, pointer.clientX, pointer.clientY)
-      ? clientToImagePixel(pointer.clientX, pointer.clientY, rect, buf)
+      ? clientToBasePixel(pointer.clientX, pointer.clientY, anchor, buf, view)
       : null;
     const color = px && sampleAt(buf, px.x, px.y);
     if (!px || !color) {
@@ -601,6 +614,11 @@ export function useInspect({
       window.removeEventListener("blur", onBlur);
     };
   }, [enabled, canvasMode, setActive, setRuler, setShift]);
+
+  // The base was cropped or resized under a resting pointer: no pointer event fires, so re-sample.
+  useEffect(() => {
+    if (activeRef.current && lastPointer.current) scheduleFlush();
+  }, [baseCrop, basePlacement, scheduleFlush]);
 
   // A different image invalidates everything decoded from the old one.
   const displayUrl = image?.displayUrl;

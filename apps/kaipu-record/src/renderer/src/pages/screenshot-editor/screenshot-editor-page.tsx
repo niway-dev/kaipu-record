@@ -441,6 +441,8 @@ function ScreenshotEditorBody({
     canvasMode,
     image,
     imgRef,
+    baseCrop: scene.baseCrop,
+    basePlacement: scene.basePlacement,
     // Inspect reads the image, it does not edit it: leave any drawing tool (a crop included).
     onEnter: () => {
       finishCrop();
