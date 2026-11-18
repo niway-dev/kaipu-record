@@ -145,16 +145,45 @@ describe("settings store", () => {
     expect(late).toHaveBeenCalledExactlyOnceWith(withLocale("es"));
   });
 
-  it("a consumer that unsubscribes inside its own notification does not skip the others", async () => {
+  it("a consumer that subscribes another inside a notification does not get it called for that same broadcast", async () => {
     const ipc = installSettingsIpc(withLocale("es"));
     await loadSettings();
-    const second = vi.fn();
-    const off = subscribeSettings(() => off());
-    subscribeSettings(second);
+    const added = vi.fn();
+    let subscribed = false;
+    subscribeSettings(() => {
+      // A Set visits entries added while it is iterated, so only a copy keeps `added` out.
+      if (!subscribed) {
+        subscribed = true;
+        subscribeSettings(added);
+      }
+    });
 
     ipc.broadcast(withLocale("en"));
+    expect(added).not.toHaveBeenCalled();
 
-    expect(second).toHaveBeenCalledTimes(1);
+    ipc.broadcast(withLocale("es"));
+    expect(added).toHaveBeenCalledExactlyOnceWith(withLocale("es"));
+  });
+
+  it("a failed first read is retried by the next consumer that subscribes", async () => {
+    const ipc = installSettingsIpc(withLocale("es"), { deferRead: true });
+    subscribeSettings(() => {});
+    ipc.rejectRead();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getSettingsSnapshot()).toBeNull();
+    expect(ipc.getSettings).toHaveBeenCalledTimes(1);
+
+    const heard = vi.fn();
+    subscribeSettings(heard);
+    expect(ipc.getSettings).toHaveBeenCalledTimes(2);
+    ipc.resolveRead(withLocale("en"));
+    await loadSettings();
+
+    expect(heard).toHaveBeenCalledExactlyOnceWith(withLocale("en"));
+    expect(getSettingsSnapshot()?.locale).toBe("en");
+    // Still the window's one listener, however many reads it took.
+    expect(ipc.onSettingsChanged).toHaveBeenCalledTimes(1);
   });
 
   it("reset forgets the value, the listeners and the window's listener", async () => {
@@ -189,6 +218,21 @@ describe("useSettings", () => {
     installSettingsIpc(withLocale("en"));
     await loadSettings();
     const { result } = renderHook(() => useSettings((s) => s.locale));
+    expect(result.current).toBe("en");
+  });
+
+  it("a hook that mounts after a failed first read triggers a new read and gets the value", async () => {
+    const ipc = installSettingsIpc(withLocale("es"), { deferRead: true });
+    subscribeSettings(() => {});
+    ipc.rejectRead();
+    await act(async () => {});
+
+    const { result } = renderHook(() => useSettings((s) => s.locale));
+    expect(ipc.getSettings).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      ipc.resolveRead(withLocale("en"));
+    });
+
     expect(result.current).toBe("en");
   });
 
