@@ -2262,7 +2262,20 @@ function ScreenshotEditorBody({
                     loaded={image != null}
                     status={recognized.status}
                   />
-                  {inspectEnabled && <LocateOverlay image={colors.overlay} label={locateLabel} />}
+                  {inspectEnabled && (
+                    <LocateOverlay
+                      image={colors.overlay}
+                      label={locateLabel}
+                      {...(baseFrame
+                        ? {
+                            base: {
+                              visible: baseFrame.visible,
+                              ...(baseFrame.crop ? { crop: baseFrame.crop } : {}),
+                            },
+                          }
+                        : {})}
+                    />
+                  )}
                 </>
               }
               frameOverlay={
