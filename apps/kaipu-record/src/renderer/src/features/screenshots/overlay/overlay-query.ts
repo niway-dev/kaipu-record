@@ -32,7 +32,10 @@ export interface OverlayQuery {
   frame: number | null;
   /** True for the built-in display (a laptop's panel), false for an external one. */
   internal: boolean;
-  /** Why the overlay opened: `record` only when main wrote it; anything else is a screenshot. */
+  /**
+   * Why the overlay opened. Main never writes it (the intent arrives as state, `spare` below);
+   * `record` is read when present, and anything else is a screenshot.
+   */
   intent: CaptureIntent;
   /**
    * The display's scale factor (`&scale=`, always written by main): the Frame
