@@ -81,8 +81,12 @@ import {
   frameToWorld,
   baseVisibleRect,
   hasBaseView,
+  followRadiusSource,
+  imageActionState,
   imageCropPatch,
   intersectFrame,
+  resetImageCrop,
+  setImageRadius,
   cropTarget,
   sameWindow,
   windowToCrop,
@@ -433,6 +437,21 @@ function ScreenshotEditorBody({
     },
     [setCropSession],
   );
+  // The image actions (NIW2-876), shared by the floating bar and the Tool tab. Both write
+  // through the scene, so each is one undo step, and neither runs inside a crop session.
+  const onResetCrop = useCallback((id: string): void => {
+    if (cropSessionRef.current) return;
+    const sc = sceneLatest.current;
+    resetImageCrop(
+      sc,
+      { baseCrop: sc.baseCrop, baseRadius: sc.baseRadius, basePlacement: sc.basePlacement },
+      id,
+    );
+  }, []);
+  const onImageRadius = useCallback((id: string, radius: number | undefined): void => {
+    if (cropSessionRef.current) return;
+    setImageRadius(sceneLatest.current, id, radius);
+  }, []);
   // The base mid-resize, from the layer: the frame and the page lay out from it while it drags.
   const [liveBase, setLiveBase] = useState<BaseFields | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -1799,14 +1818,35 @@ function ScreenshotEditorBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectActive]);
   // A selected annotation has options (colour, size, delete): show them where they live now.
-  // The base is selectable (its handles resize it) but has no tool options to show.
-  const selectedToolId = inspectActive || selectedId === BASE_IMAGE_ID ? null : selectedId;
+  // The base too: it has Crop, Corners and Reset (NIW2-876).
+  const selectedToolId = inspectActive ? null : selectedId;
   useEffect(() => {
     if (selectedToolId !== null) setTab("tool");
   }, [selectedToolId]);
   const beautifyPanel = (
     <BeautifyPanel beautify={scene.beautify} canvasMode={canvasMode} embedded />
   );
+  // The Tool tab's Crop / Corners / Reset: with the Select tool and an image selected, outside
+  // Inspect (it reads the image) and crop mode (which has its own Done).
+  const selectedImageState =
+    canvasMode &&
+    tools.tool === "select" &&
+    !croppingId &&
+    !(inspectEnabled && inspect.active) &&
+    metrics &&
+    metrics.naturalW > 0 &&
+    metrics.naturalH > 0
+      ? imageActionState(
+          scene.selectedId,
+          scene.annotations,
+          {
+            baseCrop: scene.baseCrop,
+            baseRadius: scene.baseRadius,
+            basePlacement: scene.basePlacement,
+          },
+          { w: metrics.naturalW, h: metrics.naturalH },
+        )
+      : null;
   const toolPanel = (
     <ToolPanel
       tools={tools}
@@ -1815,6 +1855,25 @@ function ScreenshotEditorBody({
       {...(textTool ? { textTool } : {})}
       inspect={inspectEnabled && inspect.active ? inspect : null}
       colors={colors}
+      {...(selectedImageState && metrics
+        ? {
+            imageActions: {
+              hasCrop: selectedImageState.hasCrop,
+              ...(selectedImageState.radius !== undefined
+                ? { radius: selectedImageState.radius }
+                : {}),
+              followRadius: followRadiusSource(
+                scene.beautify.state.radius,
+                metrics.naturalW,
+                metrics.w,
+              ),
+              maxRadius: selectedImageState.maxRadius,
+              onCrop: () => onEnterCrop(selectedImageState.id),
+              onResetCrop: () => onResetCrop(selectedImageState.id),
+              onRadius: (r: number | undefined) => onImageRadius(selectedImageState.id, r),
+            },
+          }
+        : {})}
       {...(canvasMode
         ? {
             exportFrame: {
@@ -2156,6 +2215,8 @@ function ScreenshotEditorBody({
                           cropping: cropSession,
                           onCropWindow,
                           onCropDone: finishCrop,
+                          onResetCrop,
+                          onImageRadius,
                           onLiveBase: setLiveBase,
                           // Inspect reads the image, it does not edit it: no crop mode there.
                           ...(inspectEnabled && inspect.active ? {} : { onEnterCrop }),

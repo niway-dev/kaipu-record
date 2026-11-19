@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
@@ -488,5 +488,77 @@ describe("crop mode with an Export frame set", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
     expect(chip()).not.toBeNull();
+  });
+});
+
+describe("the image action bar and the Tool tab (NIW2-876)", () => {
+  const toolPanel = () => document.querySelector('[data-ui-area="editorImage.toolPanel"]');
+  /** A click on the base's pixels (layer px): selects it. */
+  function selectBase(at: [number, number] = [100, 100]): void {
+    fireEvent.pointerDown(surface(), { clientX: at[0], clientY: at[1], button: 0 });
+    fireEvent.pointerUp(surface(), { clientX: at[0], clientY: at[1] });
+  }
+  const barButton = async (name: string) =>
+    within(await screen.findByTestId("image-action-bar")).getByRole("button", { name });
+  const undoButton = () => screen.getByRole("button", { name: /undo/i });
+
+  it("a selected base shows the bar, and Crop enters the same crop mode as a double-click", async () => {
+    await open({});
+    selectBase();
+    fireEvent.click(await barButton("Crop"));
+    expect(await screen.findByTestId("crop-window")).toBeInTheDocument();
+    expect(screen.queryByTestId("image-action-bar")).toBeNull();
+  });
+
+  it("Reset is disabled with no crop", async () => {
+    await open({});
+    selectBase();
+    expect(await barButton("Reset")).toBeDisabled();
+  });
+
+  it("Reset removes the base's crop in one undo step, and undo brings it back", async () => {
+    await open({ baseCrop: { x: 0, y: 0, w: 0.5, h: 0.5 } });
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    selectBase([50, 50]);
+    const reset = await barButton("Reset");
+    expect(reset).toBeEnabled();
+    fireEvent.click(reset);
+    await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+    expect(await barButton("Reset")).toBeDisabled();
+    undoKey();
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    // One step: the crop was never in the history, so a second undo has nothing left.
+    undoKey();
+    await waitFor(() => expect(undoButton()).toBeDisabled());
+  });
+
+  it("Corners writes the base's own radius in one undo step, and Follow slider clears it", async () => {
+    await open({});
+    selectBase();
+    fireEvent.click(await barButton("Corners"));
+    const field = screen.getByRole("spinbutton");
+    fireEvent.change(field, { target: { value: "24" } });
+    fireEvent.blur(field);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Follow slider" })).toBeEnabled(),
+    );
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("24");
+    expect(undoButton()).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Follow slider" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Follow slider" })).toBeDisabled(),
+    );
+  });
+
+  it("the Tool tab shows the same Crop, Corners and Reset for the selected base", async () => {
+    await open({});
+    expect(toolPanel()?.getAttribute("data-state")).not.toBe("imageOptions");
+    selectBase();
+    await waitFor(() => expect(toolPanel()?.getAttribute("data-state")).toBe("imageOptions"));
+    const panel = within(toolPanel() as HTMLElement);
+    fireEvent.click(panel.getByRole("button", { name: "Crop" }));
+    expect(await screen.findByTestId("crop-window")).toBeInTheDocument();
+    // In crop mode the panel no longer offers them.
+    await waitFor(() => expect(toolPanel()?.getAttribute("data-state")).not.toBe("imageOptions"));
   });
 });

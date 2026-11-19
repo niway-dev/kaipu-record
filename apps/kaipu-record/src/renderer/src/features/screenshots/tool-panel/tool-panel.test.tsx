@@ -234,4 +234,57 @@ describe("ToolPanel", () => {
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
   });
+  describe("a selected image's actions (NIW2-876)", () => {
+    const actions = () => ({
+      hasCrop: true,
+      followRadius: 8,
+      maxRadius: 100,
+      onCrop: vi.fn(),
+      onResetCrop: vi.fn(),
+      onRadius: vi.fn(),
+    });
+
+    it("show Crop, Corners and Reset, the same controls as the floating bar", () => {
+      const a = actions();
+      render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode imageActions={a} />);
+      expect(state()).toHaveAttribute("data-state", "imageOptions");
+      expect(screen.queryByTestId("tool-panel-empty")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Crop" }));
+      expect(a.onCrop).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+      expect(a.onResetCrop).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: "Corners" })).toBeInTheDocument();
+    });
+
+    it("sit beside Delete for an added image", () => {
+      const image: Annotation = {
+        id: "i1",
+        kind: "image",
+        assetId: "img-aaaaaaaaaaaa",
+        x: 0,
+        y: 0,
+        w: 0.2,
+        h: 0.2,
+        pixelWidth: 10,
+        pixelHeight: 10,
+      };
+      render(
+        <ToolPanel
+          tools={makeTools()}
+          scene={makeScene([image], "i1")}
+          canvasMode
+          imageActions={actions()}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "imageOptions");
+      expect(screen.getByRole("button", { name: "Crop" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    });
+
+    it("are not shown without them (Inspect, crop mode, another tool)", () => {
+      render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode />);
+      expect(state()).toHaveAttribute("data-state", "empty");
+      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+    });
+  });
 });
