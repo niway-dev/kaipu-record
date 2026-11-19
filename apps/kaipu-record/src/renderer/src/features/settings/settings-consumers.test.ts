@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { dirnameOf, relativeId } from "../../test/source-tree";
 import { SETTINGS_CONSUMERS } from "./settings-consumers";
 
 /**
@@ -12,7 +13,7 @@ import { SETTINGS_CONSUMERS } from "./settings-consumers";
  * notices a new consumer that nobody wrote down, and a stale hand-kept list is what this map
  * replaces. A type-only import (`import type`) reads nothing at runtime and is not a consumer.
  */
-const RENDERER_SRC = path.join(path.dirname(new URL(import.meta.url).pathname), "../..");
+const RENDERER_SRC = path.join(dirnameOf(import.meta.url), "../..");
 const TEST_SUPPORT = path.join(RENDERER_SRC, "test");
 const STORE = path.join(RENDERER_SRC, "features/settings/settings-store.ts");
 const MAP = path.join(RENDERER_SRC, "features/settings/settings-consumers.ts");
@@ -38,7 +39,7 @@ function importsSettingsStore(source: string): boolean {
   return STORE_IMPORT.test(source.replace(TYPE_ONLY_IMPORT, ""));
 }
 
-const relative = (file: string): string => path.relative(RENDERER_SRC, file);
+const relative = (file: string): string => relativeId(RENDERER_SRC, file);
 
 describe("the settings consumers map matches the renderer", () => {
   const consumers = sourceFiles(RENDERER_SRC)

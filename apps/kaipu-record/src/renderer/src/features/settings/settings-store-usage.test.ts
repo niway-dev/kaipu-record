@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { dirnameOf, relativeId } from "../../test/source-tree";
 
 /**
  * The invariant of the renderer's settings store (ADR 0063), enforced rather than written down:
@@ -17,7 +18,7 @@ import { describe, expect, it } from "vitest";
  * This is source inspection, normally a junk pattern. It is kept because no behavioural test
  * catches "someone added a thirteenth listener" before a user's console does.
  */
-const RENDERER_SRC = path.join(path.dirname(new URL(import.meta.url).pathname), "../..");
+const RENDERER_SRC = path.join(dirnameOf(import.meta.url), "../..");
 const STORE = path.join(RENDERER_SRC, "features/settings/settings-store.ts");
 const TEST_SUPPORT = path.join(RENDERER_SRC, "test");
 
@@ -50,7 +51,7 @@ describe("the settings store owns the window's settings:changed subscription", (
     const offenders = sourceFiles(RENDERER_SRC)
       .filter((file) => file !== STORE)
       .filter((file) => bridgeRead.test(readFileSync(file, "utf8")))
-      .map((file) => path.relative(RENDERER_SRC, file));
+      .map((file) => relativeId(RENDERER_SRC, file));
     expect(offenders).toEqual([]);
   });
 
@@ -66,7 +67,7 @@ describe("the settings store owns the window's settings:changed subscription", (
     const offenders = sourceFiles(RENDERER_SRC)
       .filter((file) => file !== STORE)
       .filter((file) => readFileSync(file, "utf8").includes("onSettingsChanged"))
-      .map((file) => path.relative(RENDERER_SRC, file));
+      .map((file) => relativeId(RENDERER_SRC, file));
     expect(offenders).toEqual([]);
   });
 });
