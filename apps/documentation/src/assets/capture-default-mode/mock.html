@@ -474,6 +474,77 @@
       </div>
     </section>
 
+    <!-- ============ E: promote a one-off choice to a default ============ -->
+    <section class="variant" id="e">
+      <div class="label">E · MAKE THIS MY DEFAULT — save the area after trying it</div>
+      <div class="stack">
+        <div class="desk">
+          <div class="sect">1 · Choose Screen for this recording</div>
+          <div class="bar" style="margin-top:16px">
+            <div class="groups">
+              <div class="grp">
+                <label>CAPTURE AS</label>
+                <div class="chips">
+                  <span class="chip">Screenshot <span class="kbd">P</span></span
+                  ><span class="chip on">Recording <span class="kbd">V</span></span>
+                </div>
+              </div>
+              <div class="grp">
+                <label>AREA</label>
+                <div class="chips">
+                  <span class="chip">Frame <span class="kbd">1</span></span
+                  ><span class="chip on">Screen <span class="kbd">2</span></span
+                  ><span class="chip off">Window</span>
+                </div>
+              </div>
+            </div>
+            <div class="row" style="padding:12px 0;border-bottom:1px solid var(--border)">
+              <span class="preview" style="margin-top:0">Recording default: <b>Frame</b></span>
+              <button type="button" class="btn" style="color:var(--text)">
+                Use Screen by default
+              </button>
+            </div>
+            <div class="bar2">
+              <span class="clip">Built-in display</span><span class="btn">Cancel</span
+              ><span class="btn cta">Record ↵</span>
+            </div>
+          </div>
+        </div>
+        <div class="desk">
+          <div class="sect">2 · Default saved; capture has not started</div>
+          <div class="bar" style="margin-top:16px">
+            <div class="groups">
+              <div class="grp">
+                <label>CAPTURE AS</label>
+                <div class="chips">
+                  <span class="chip">Screenshot <span class="kbd">P</span></span
+                  ><span class="chip on">Recording <span class="kbd">V</span></span>
+                </div>
+              </div>
+              <div class="grp">
+                <label>AREA</label>
+                <div class="chips">
+                  <span class="chip">Frame <span class="kbd">1</span></span
+                  ><span class="chip on">Screen <span class="kbd">2</span></span
+                  ><span class="chip off">Window</span>
+                </div>
+              </div>
+            </div>
+            <div class="row" style="padding:12px 0;border-bottom:1px solid var(--border)">
+              <span class="preview" style="margin-top:0">Recording default: <b>Screen</b></span>
+              <button type="button" class="btn" style="color:var(--text)">
+                Use last used instead
+              </button>
+            </div>
+            <div class="bar2">
+              <span class="clip">Built-in display</span><span class="btn">Cancel</span
+              ><span class="btn cta">Record ↵</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <script>
       const id=(location.hash||"#a").slice(1);
       document.getElementById(id).classList.add("on");
