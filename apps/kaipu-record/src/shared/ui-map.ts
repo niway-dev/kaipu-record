@@ -195,7 +195,13 @@ export const UI_MAP = {
         gatedBy: [{ flag: "transcription" }],
       },
       transcribeModelDialog: { states: ["open"], gatedBy: [{ flag: "transcription" }] },
-      tabs: { states: ["destinations", "versions", "details", "captures"] },
+      tabs: { states: ["destinations", "versions", "transcript", "details", "captures"] },
+      // The Transcript tab (NIW2-870): the editor's TranscriptPanel beside the detail video, behind
+      // the `transcription` flag; the states are the panel's own views, see `viewState`.
+      transcriptPanel: {
+        states: ["idle", "needsModel", "transcribing", "done", "stale"],
+        gatedBy: [{ flag: "transcription" }],
+      },
       // VersionsList: the original alone; with its edited project; with the copies made from
       // it; a copy viewed on its own page (the Viewing pill sits on that row); a copy being
       // made; a copy whose original was deleted.

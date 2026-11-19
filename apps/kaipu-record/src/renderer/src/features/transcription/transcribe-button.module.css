@@ -50,6 +50,11 @@
   outline-offset: 1px;
 }
 
+.badge[data-clickable]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 .button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -64,6 +69,15 @@
   border-color: var(--accent-green);
   color: var(--accent-green);
   cursor: default;
+}
+
+/* The badge as a button (detail page): it opens the Transcript tab. */
+.badge[data-clickable] {
+  cursor: pointer;
+}
+
+.badge[data-clickable]:hover {
+  background: color-mix(in srgb, var(--accent-green) 12%, var(--bg-modal));
 }
 
 .progress {

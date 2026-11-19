@@ -2,6 +2,7 @@ import React from "react";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { UiAreaProps } from "@renderer/lib/ui-area";
 import { mediaUrl } from "@renderer/lib/media-url";
+import { canTranscribeVideo } from "./can-transcribe-video";
 import { TranscribeButton, type TranscribeButtonVariant } from "./transcribe-button";
 
 export interface LibraryTranscribeButtonProps {
@@ -14,6 +15,8 @@ export interface LibraryTranscribeButtonProps {
    */
   hasAudio?: boolean;
   ui?: UiAreaProps;
+  /** Given, the "Transcribed" badge becomes a button that calls it (the detail page opens its tab). */
+  onOpenTranscript?: () => void;
 }
 
 /**
@@ -25,12 +28,14 @@ export function LibraryTranscribeButton({
   variant,
   hasAudio,
   ui,
+  onOpenTranscript,
 }: LibraryTranscribeButtonProps): React.JSX.Element | null {
-  if (video.kind !== "recording" || video.id === null || hasAudio === false) return null;
+  if (!canTranscribeVideo(video, hasAudio) || video.id === null) return null;
   return (
     <TranscribeButton
       variant={variant}
       ui={ui}
+      onOpenTranscript={onOpenTranscript}
       item={{
         id: video.id,
         assetId: video.assetId,

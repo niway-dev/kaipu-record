@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { VideoOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
@@ -23,6 +23,20 @@ export function pictureBox(frame: FrameSize): { width: string; height: string } 
   return { width: `${width * 100}%`, height: `${height * 100}%` };
 }
 
+/**
+ * What a host can do with the player without owning its `<video>`: move the clock, read it and
+ * follow it. Seconds are the recording's own time, the element's `currentTime`.
+ */
+export interface PlayerHandle {
+  seek(seconds: number): void;
+  readTime(): number;
+  /**
+   * Called with the current time at frame rate while the video plays, and once after every seek
+   * (a paused video moves too). The returned function stops it.
+   */
+  subscribeTime(listener: (seconds: number) => void): () => void;
+}
+
 interface RecordingPlayerProps {
   id: string;
   poster?: string | null;
@@ -39,6 +53,11 @@ interface RecordingPlayerProps {
    * metadata of this mount; a rename's position restore wins over it.
    */
   startAt?: number;
+  /**
+   * Receives the player's handle once it is mounted, and `null` when it unmounts. The handle
+   * is stable for the life of the player. Without this prop nothing runs besides the video.
+   */
+  onHandle?: (handle: PlayerHandle | null) => void;
 }
 
 /**
@@ -54,6 +73,7 @@ export function RecordingPlayer({
   webcam,
   durationSeconds,
   startAt,
+  onHandle,
 }: RecordingPlayerProps): React.JSX.Element {
   const t = useTranslations("library");
   const [playable, setPlayable] = useState(true);
@@ -78,6 +98,71 @@ export function RecordingPlayer({
     mountedId.current = id;
     restoring.current = true;
   }, [id]);
+
+  // The handle: listeners are called from a frame loop that exists only while the video plays
+  // AND someone is listening, so a panel that went away leaves nothing running.
+  const listeners = useRef(new Set<(seconds: number) => void>());
+  const playing = useRef(false);
+  const loopFrame = useRef<number | null>(null);
+  const notify = useRef((): void => {});
+  notify.current = (): void => {
+    const time = videoRef.current?.currentTime ?? 0;
+    for (const listener of listeners.current) listener(time);
+  };
+  const stopLoop = useRef((): void => {
+    if (loopFrame.current !== null) cancelAnimationFrame(loopFrame.current);
+    loopFrame.current = null;
+  });
+  const syncLoop = useRef((): void => {
+    if (!playing.current || listeners.current.size === 0) {
+      stopLoop.current();
+      return;
+    }
+    if (loopFrame.current !== null) return;
+    // The frame that is running has fired: clear it before the listeners run, because one of
+    // them may unsubscribe (the loop must stop) or subscribe (a new frame is already queued).
+    // Re-deciding afterwards schedules the next frame only when the loop should still run.
+    const step = (): void => {
+      loopFrame.current = null;
+      notify.current();
+      syncLoop.current();
+    };
+    loopFrame.current = requestAnimationFrame(step);
+  });
+  const handle = useMemo<PlayerHandle>(
+    () => ({
+      seek(seconds) {
+        const video = videoRef.current;
+        if (!video) return;
+        video.currentTime = Math.max(0, seconds);
+        notify.current();
+      },
+      readTime: () => videoRef.current?.currentTime ?? 0,
+      subscribeTime(listener) {
+        listeners.current.add(listener);
+        syncLoop.current();
+        return () => {
+          listeners.current.delete(listener);
+          syncLoop.current();
+        };
+      },
+    }),
+    [],
+  );
+  // A video that failed is gone from the page: its handle goes with it, so a caller never seeks
+  // or reads a clock that is not there.
+  useEffect(() => {
+    onHandle?.(playable ? handle : null);
+    return () => onHandle?.(null);
+  }, [handle, onHandle, playable]);
+  useEffect(() => {
+    const active = listeners.current;
+    const stop = stopLoop.current;
+    return () => {
+      stop();
+      active.clear();
+    };
+  }, []);
 
   const onLoadedMetadata = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
     const video = event.currentTarget;
@@ -110,17 +195,33 @@ export function RecordingPlayer({
             controls
             autoPlay
             data-testid="recording-video"
-            onError={() => setPlayable(false)}
+            onError={() => {
+              // The element unmounts and sends no pause: stop the loop here.
+              playing.current = false;
+              syncLoop.current();
+              setPlayable(false);
+            }}
             onLoadedMetadata={onLoadedMetadata}
             onTimeUpdate={(event) => {
               if (!restoring.current) position.current.time = event.currentTarget.currentTime;
             }}
             onPlay={() => {
               if (!restoring.current) position.current.paused = false;
+              playing.current = true;
+              syncLoop.current();
             }}
             onPause={() => {
               if (!restoring.current) position.current.paused = true;
+              playing.current = false;
+              syncLoop.current();
+              notify.current();
             }}
+            onEnded={() => {
+              playing.current = false;
+              syncLoop.current();
+              notify.current();
+            }}
+            onSeeked={() => notify.current()}
           />
           {webcam && scene && frame && (
             <div className={styles.picture} style={pictureBox(frame)}>

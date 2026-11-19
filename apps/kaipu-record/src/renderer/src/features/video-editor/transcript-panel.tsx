@@ -8,7 +8,7 @@ import { STARTABLE } from "@renderer/features/transcription/transcribe-control";
 import { useTranscribeControl } from "@renderer/features/transcription/use-transcribe-control";
 import { useTranscript } from "@renderer/features/transcription/use-transcript";
 import { useTranscriptionStatus } from "@renderer/features/transcription/use-transcription-status";
-import { uiArea } from "@renderer/lib/ui-area";
+import { uiArea, type UiAreaProps } from "@renderer/lib/ui-area";
 import { showToast } from "@renderer/ui/toast-store";
 import { buildTranscriptExport, type TranscriptExportFormat } from "./subtitles";
 import { TranscriptExportMenu } from "./transcript-export-menu";
@@ -53,7 +53,12 @@ export interface TranscriptPanelProps {
   subscribeTime(listener: (t: number) => void): () => void;
   /** The playhead right now (timeline seconds). */
   readTime(): number;
-  onClose(): void;
+  /** Absent: the panel is a tab of a page and has no close button (a tab is left by picking another). */
+  onClose?(): void;
+  /** A section of a page's own panel instead of the editor's `<aside>` column. */
+  embedded?: boolean;
+  /** The catalog area this panel is on its host screen. Defaults to the editor's. */
+  area?: UiAreaProps;
 }
 
 /**
@@ -78,6 +83,8 @@ export function TranscriptPanel({
   subscribeTime,
   readTime,
   onClose,
+  embedded = false,
+  area,
 }: TranscriptPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const transcript = useTranscript(itemId);
@@ -277,9 +284,10 @@ export function TranscriptPanel({
           : undefined;
 
   const showWords = view.kind === "words";
+  const Root = embedded ? "section" : "aside";
   return (
-    <aside
-      {...uiArea("editorVideo.transcriptPanel")}
+    <Root
+      {...(area ?? uiArea("editorVideo.transcriptPanel"))}
       className={styles.panel}
       aria-label={t("transcriptTitle")}
       data-testid="transcript-panel"
@@ -294,15 +302,17 @@ export function TranscriptPanel({
               onExport={(format) => void exportAs(format)}
             />
           )}
-          <button
-            type="button"
-            className={styles.close}
-            aria-label={t("transcriptClose")}
-            title={t("transcriptClose")}
-            onClick={onClose}
-          >
-            <X size={14} />
-          </button>
+          {onClose && (
+            <button
+              type="button"
+              className={styles.close}
+              aria-label={t("transcriptClose")}
+              title={t("transcriptClose")}
+              onClick={onClose}
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -521,7 +531,7 @@ export function TranscriptPanel({
           )}
         </>
       )}
-    </aside>
+    </Root>
   );
 }
 

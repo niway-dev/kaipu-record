@@ -23,7 +23,10 @@ import { useMissingRecordingRecovery } from "@renderer/features/library/hooks/us
 import { reportError } from "@renderer/features/analytics";
 import { showToast } from "@renderer/ui/toast-store";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
-import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
+import {
+  RecordingPlayer,
+  type PlayerHandle,
+} from "@renderer/features/library/components/recording-player";
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { GifViewer } from "@renderer/features/library/components/gif-viewer";
 import { ItemActionsMenu } from "@renderer/features/library/components/item-actions-menu";
@@ -61,10 +64,13 @@ import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import styles from "./library-detail-page.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 import { LibraryTranscribeButton } from "@renderer/features/transcription/library-transcribe-button";
+import { canTranscribeVideo } from "@renderer/features/transcription/can-transcribe-video";
+import { useFlag } from "@renderer/features/analytics/use-flag";
+import { LibraryTranscriptTab } from "./library-transcript-tab";
 
 type LibraryMessageKey = keyof Messages["library"];
 
-type PanelTab = "versions" | "details" | "destinations" | "captures";
+type PanelTab = "versions" | "transcript" | "details" | "destinations" | "captures";
 
 /** The editing-state line under the metadata. "project-available" has no line on purpose:
  *  the owner asked for it to go; the other states say something the user has to act on. */
@@ -240,8 +246,17 @@ export function LibraryDetailPage(): React.JSX.Element {
   // (an effect that cleared it would paint the old tab for one frame).
   const [picked, setPicked] = useState<{ assetId: string | undefined; tab: PanelTab } | null>(null);
   const pickedTab = picked && picked.assetId === assetId ? picked.tab : null;
-  const setPickedTab = (next: PanelTab): void => setPicked({ assetId, tab: next });
+  const setPickedTab = (next: PanelTab): void => {
+    setPicked({ assetId, tab: next });
+    // Five tabs overflow the narrow panel and the row scrolls: the one picked (also from the
+    // "Transcribed" badge) must not stay out of sight.
+    tabRefs.current[next]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  };
   const tabRefs = useRef<Partial<Record<PanelTab, HTMLButtonElement | null>>>({});
+  // The detail video's handle (the Transcript tab reads and moves its clock). The player is keyed
+  // by item, so it hands out null and then the new handle when the arrows change item.
+  const [player, setPlayer] = useState<PlayerHandle | null>(null);
+  const transcriptionOn = useFlag("transcription");
 
   const back = (): void => {
     navigate("/library");
@@ -294,8 +309,17 @@ export function LibraryDetailPage(): React.JSX.Element {
   // Frame captures get a tab of their own, shown only when there are some: the tab bar is
   // where the owner sees they exist (a section under a long tab was out of view).
   const hasCaptures = !isScreenshot && captures.length > 0;
+  // The Transcript tab follows the header Transcribe button's rule, plus the flag and a duration
+  // (below): the button can still start a job where the tab has no timeline to show it on.
+  const hasAudio = probe ? probe.hasAudio : undefined;
+  // Without a stored duration the tab needs the probed one: it waits while the file is being read
+  // and is not offered once the read failed (the editor refuses such an item too).
+  const durationKnownOrPending = video.durationSeconds > 0 || probeState.status !== "error";
+  const showTranscript =
+    transcriptionOn && canTranscribeVideo(video, hasAudio) && durationKnownOrPending;
   const tabs: PanelTab[] = [
     "versions",
+    ...(showTranscript ? (["transcript"] as const) : []),
     "details",
     ...(preparable ? (["destinations"] as const) : []),
     ...(hasCaptures ? (["captures"] as const) : []),
@@ -305,6 +329,7 @@ export function LibraryDetailPage(): React.JSX.Element {
   const tab: PanelTab = pickedTab && tabs.includes(pickedTab) ? pickedTab : defaultTab;
   const tabLabel: Record<PanelTab, string> = {
     versions: t("tabVersions"),
+    transcript: t("tabTranscript"),
     details: t("tabDetails"),
     destinations: t("destinationsTitle"),
     captures: t("tabCaptures", { count: captures.length }),
@@ -526,8 +551,9 @@ export function LibraryDetailPage(): React.JSX.Element {
             <LibraryTranscribeButton
               video={video}
               variant="detail"
-              hasAudio={probe ? probe.hasAudio : undefined}
+              hasAudio={hasAudio}
               ui={uiArea("libraryDetail.transcribe")}
+              onOpenTranscript={showTranscript ? () => setPickedTab("transcript") : undefined}
             />
             {localId && (
               <>
@@ -727,6 +753,7 @@ export function LibraryDetailPage(): React.JSX.Element {
                     webcam={video.webcam}
                     durationSeconds={video.durationSeconds}
                     startAt={navState?.startAt}
+                    onHandle={setPlayer}
                   />
                   {/* Under the video, not at the column's foot: the pair is centered together. */}
                   {fileName && (
@@ -781,8 +808,16 @@ export function LibraryDetailPage(): React.JSX.Element {
             role="tabpanel"
             id={`library-tabpanel-${tab}`}
             aria-labelledby={`library-tab-${tab}`}
+            data-flush={tab === "transcript" || undefined}
           >
-            {tab === "captures" ? (
+            {tab === "transcript" && video.id !== null ? (
+              <LibraryTranscriptTab
+                video={{ ...video, id: video.id }}
+                hasAudio={probe ? probe.hasAudio : null}
+                player={player}
+                probedDurationSeconds={probe ? probe.durationSec : null}
+              />
+            ) : tab === "captures" ? (
               <ul {...uiArea("libraryDetail.captures")} className={styles.capturesList}>
                 {captures.map((capture) => (
                   <CaptureItem

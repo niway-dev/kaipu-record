@@ -126,7 +126,7 @@ const inPanel = (part: Part): Step => ({ waitFor: { area: "editorVideo.transcrip
 const panelButton = (name: string): Part => ({ role: "button", name, exact: true });
 /** The panel's own Transcribe button, in the idle look. */
 const panelTranscribe: Step = {
-  click: { area: "editorVideo.transcriptPanel", part: panelButton("Transcribe") },
+  click: { area: "editorVideo.transcriptPanel", part: panelButton("Transcribe now") },
 };
 /** The Transcribe action in the top bar. */
 const topBarTranscribe: Step = {
@@ -765,7 +765,7 @@ export const editorVideo = catalog(
         audioWaveformDrawn,
         loaded,
         transcriptRail,
-        inPanel(panelButton("Transcribe")),
+        inPanel(panelButton("Transcribe now")),
         { waitFor: { area: "editorVideo.transcribe" } },
       ],
       demonstrates: ["editorVideo.transcriptPanel:idle", "editorVideo.transcribe:ready"],
@@ -823,7 +823,7 @@ export const editorVideo = catalog(
         audioWaveformDrawn,
         loaded,
         transcriptRail,
-        inPanel(panelButton("Transcribe")),
+        inPanel(panelButton("Transcribe now")),
         panelTranscribe,
         inPanel({ role: "progressbar" }),
         inPanel({ text: "3 of 12 parts" }),
@@ -834,7 +834,7 @@ export const editorVideo = catalog(
       gates: [transcribeOn],
       after: [
         { click: { area: "editorVideo.transcriptPanel", part: panelButton("Cancel") } },
-        inPanel(panelButton("Transcribe")),
+        inPanel(panelButton("Transcribe now")),
       ],
     },
     "transcript-busy": {
@@ -884,7 +884,7 @@ export const editorVideo = catalog(
         audioWaveformDrawn,
         loaded,
         transcriptRail,
-        inPanel(panelButton("Transcribe")),
+        inPanel(panelButton("Transcribe now")),
         panelTranscribe,
         inPanel({ text: "The transcription did not finish" }),
       ],
@@ -902,7 +902,7 @@ export const editorVideo = catalog(
         audioWaveformDrawn,
         loaded,
         transcriptRail,
-        inPanel(panelButton("Transcribe")),
+        inPanel(panelButton("Transcribe now")),
         panelTranscribe,
         inPanel({ text: "This video has no audio track" }),
       ],

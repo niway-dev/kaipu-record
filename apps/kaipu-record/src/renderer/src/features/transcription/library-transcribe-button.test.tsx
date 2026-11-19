@@ -67,6 +67,20 @@ describe("LibraryTranscribeButton", () => {
     expect(String(props.item.mediaUrl)).toContain("take-1");
   });
 
+  it("forwards onOpenTranscript to the button", () => {
+    const onOpenTranscript = vi.fn();
+    render(
+      <LibraryTranscribeButton
+        video={VIDEO}
+        variant="detail"
+        onOpenTranscript={onOpenTranscript}
+      />,
+    );
+    expect((seen.props[0] as { onOpenTranscript: unknown }).onOpenTranscript).toBe(
+      onOpenTranscript,
+    );
+  });
+
   it.each([
     ["a screenshot", { kind: "screenshot" as const }],
     ["a GIF export", { kind: "gif" as const }],
