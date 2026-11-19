@@ -241,9 +241,10 @@ const ROUND_TRIP_INSET_PX = 1e-3;
 /**
  * A whole-pixel rect of the base asset as the world geometry of an annotation (through the
  * placed base, see `assetRectToWorld`), so that the save, the preview and the text cache
- * (`redactionRectsInPixels`, which round OUT to whole pixels) land on exactly these pixels. A plain `x / w` does not: `(20/1000 + 31/1000) * 1000` is
- * `51.00000000000001`, which rounds out to 52 and reaches one pixel into a neighbour. Each
- * edge moves a thousandth of a pixel inward, so the outward rounding returns to it.
+ * (`redactionRectsInPixels`, which round OUT to whole pixels) land on exactly these pixels.
+ * A plain `x / w` does not: `(20/1000 + 31/1000) * 1000` is `51.00000000000001`, which rounds
+ * out to 52 and reaches one pixel into a neighbour. Each edge moves a thousandth of a pixel
+ * inward, so the outward rounding returns to it.
  */
 export function pixelRectToNorm(
   r: PixelRect,
