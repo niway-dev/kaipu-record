@@ -101,11 +101,13 @@ points below say what they do not cover.
    leaves every open window showing the old value until it is reopened. The startup path is the
    one that looks suspicious and is not: `setOverridesSource()` recomputes the effective settings
    without broadcasting, but it runs before any window exists, so nothing can be stale. In
-   `main/index.ts`, `await initWorkspaces()` calls it (the `setOverridesSource(...)` call at the
-   end of `initWorkspaces()` in `main/workspaces/index.ts`), then `registerSettings()` loads the
-   file, recomputes the effective settings (`recomputeEffective()`) and registers the
-   `settings:get` handler (`infrastructure/settings-store.ts`), and the first window is created
-   after that (the `createWindow()` call at the end of the `app.whenReady()` callback). A renderer
+   `main/index.ts`, `await initWorkspaces()` calls it (the `setOverridesSource(...)` call in
+   `initWorkspaces()` in `main/workspaces/index.ts`, just before its first `settings.refresh`),
+   then `registerSettings()` loads the file, recomputes the effective settings
+   (`recomputeEffective()`) and registers the `settings:get` handler
+   (`infrastructure/settings-store.ts`), and the first window is created after that (the
+   `createWindow()` call in the `app.whenReady()` callback, before the tray and the capture panel
+   are created). A renderer
    cannot read settings before the overrides source is in place. The e2e test "a workspace
    override is in force when the window opens" opens the Cloud page and checks its save-mode
    radio, which the window renders from its own store. Run on a build where the window's first read
