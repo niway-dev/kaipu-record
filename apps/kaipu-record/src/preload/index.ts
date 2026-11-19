@@ -404,6 +404,7 @@ const kaipuApi: KaipuElectronAPI = {
     setMode: (mode) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayMode, { mode }),
     setIntent: (intent) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayIntent, { intent }),
     setCounting: (active) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayCounting, { active }),
+    reportFrame: (report) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayFrame, report),
     openRecordSettings: () => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayOpenRecordSettings),
     onState: (callback) => {
       const listener = (_e: IpcRendererEvent, state: OverlayState): void => callback(state);

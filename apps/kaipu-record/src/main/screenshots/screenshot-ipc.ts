@@ -22,6 +22,7 @@ import {
   type CaptureWindowHooks,
   type RecordTarget,
 } from "./capture-handler";
+import { createFrameMemory } from "./frame-memory";
 import { CaptureOverlayWindows, type OverlayWarmup } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { type RecordingCaptureTarget, createScreenshotProvider } from "./screenshot-capture";
@@ -99,6 +100,8 @@ function overlayWindowsInstance(): CaptureOverlayWindows {
     // A selection made over a take must stay out of the video (NIW2-688).
     protectContent: () => duringTakeCapture(),
     openRecordSettings: () => showRecordSettings(),
+    // Each intent reopens its frame where it was left (NIW2-878).
+    frameMemory: createFrameMemory({ get: getAppSettings, update: updateAppSettings }),
   });
   if (overlayDisposed) overlayWindows.dispose();
   return overlayWindows;

@@ -302,6 +302,7 @@ window.electronAPI = {
     setMode: () => {},
     setIntent: () => {},
     setCounting: () => {},
+    reportFrame: () => {},
     openRecordSettings: () => {},
     onState: () => () => {},
     onReset: () => () => {},

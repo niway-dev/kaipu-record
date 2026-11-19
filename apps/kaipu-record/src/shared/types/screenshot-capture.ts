@@ -232,6 +232,17 @@ export type OverlayAnswer =
 export type TaggedOverlayAnswer = OverlayAnswer & { session?: number };
 
 /**
+ * Overlay → main: the Frame box settled on `rect` (display-relative DIP) on `displayId`; a
+ * recording box also names the ratio it is locked to. Tagged with the session like an answer.
+ */
+export interface FrameReport {
+  displayId: number;
+  rect: CaptureRect;
+  ratio?: RecordingRatio;
+  session?: number;
+}
+
+/**
  * Main → every overlay. `mode`: the mode every overlay renders right now. `hoverDisplayId`:
  * the display the pointer is over, so only that one highlights (Screen). `frameDisplayId`:
  * the one display that shows the Frame box; `null` in every other mode. `windows`: `null`

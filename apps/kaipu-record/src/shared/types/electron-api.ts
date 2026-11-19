@@ -14,6 +14,7 @@ import type {
   CaptureToastPayload,
   CaptureToastTimer,
   OpenSavedScreenshotRequest,
+  FrameReport,
   TaggedOverlayAnswer,
   OverlayState,
   QuietCaptureHandOff,
@@ -136,6 +137,12 @@ export interface CaptureOverlayBridge {
    * nothing until a state of a new session arrives. Returns an unsubscribe fn.
    */
   onReset(callback: () => void): () => void;
+  /**
+   * The Frame box settled on a rectangle (a drag ended, a ratio was chosen). Main keeps the
+   * latest in memory and saves it once if the pick closes without an answer (NIW2-878); the
+   * overlay never writes settings on a move.
+   */
+  reportFrame(report: FrameReport): void;
   /** Ask main for the current state again, once `onState` is listening (see `screenshotOverlayStateRequest`). */
   requestState(): void;
   /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */

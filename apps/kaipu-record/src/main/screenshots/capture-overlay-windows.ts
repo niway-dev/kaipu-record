@@ -8,12 +8,15 @@ import {
   ENABLED_CAPTURE_MODES,
   isCaptureAction,
   isCaptureMode,
+  isRecordAction,
   isRecordingRatio,
   type CaptureAction,
   type CaptureIntent,
   type CaptureMode,
+  type CaptureRect,
   type ListedWindow,
   type OverlayState,
+  type RecordingRatio,
 } from "@shared/types/screenshot-capture";
 import {
   NO_WINDOWS_LISTER,
@@ -149,6 +152,8 @@ export interface CaptureOverlayDeps {
    * is not hidden again by that path.
    */
   openRecordSettings: () => void;
+  /** The last-used display and rectangle, per intent. Defaults to remembering nothing. */
+  frameMemory: FrameMemory;
 }
 
 const electronDeps = (): CaptureOverlayDeps => ({
@@ -173,6 +178,7 @@ const electronDeps = (): CaptureOverlayDeps => ({
   protectContent: () => false,
   warmDelayMs: OVERLAY_WARM_DELAY_MS,
   warmRetryMs: OVERLAY_WARM_RETRY_MS,
+  frameMemory: NO_FRAME_MEMORY,
   openRecordSettings: () => {},
 });
 
@@ -188,6 +194,30 @@ type OverlayEntry = {
 /** Windows loaded hidden for a pick that has not opened yet; `key` is their joined queries. */
 type Spares = { key: string; entries: OverlayEntry[] };
 
+/**
+ * What a pick leaves behind for the next one (NIW2-878): where its frame was, and the last
+ * rectangle the user settled on. Written once, when the pick ends (see `FrameMemory`).
+ */
+export interface FrameMemoryUpdate {
+  /** Screenshot (`capture`) or recording (`record`): each keeps its own last selection. */
+  intent: "capture" | "record";
+  /** The display that held the frame (or the one a Screen answer chose); null when none did. */
+  displayId: number | null;
+  /** The rectangle the user last drew or resized, with the display it belongs to; null if untouched. */
+  area: { displayId: number; rect: CaptureRect; ratio?: RecordingRatio } | null;
+}
+
+/** Where the last-used display and rectangle live (the settings, in production). */
+export interface FrameMemory {
+  /** The display the frame was last used on for `intent`, or null when none was. */
+  lastDisplay(intent: CaptureIntent): number | null;
+  /** Remember `update`. Called once per pick that closes, never while a frame is dragged. */
+  save(update: FrameMemoryUpdate): void;
+}
+
+/** Remembers nothing: the frame opens under the pointer, as it did before NIW2-878. */
+const NO_FRAME_MEMORY: FrameMemory = { lastDisplay: () => null, save: () => {} };
+
 type PickSession = {
   /** Counts picks; the renderer remounts on a new id, so a reused window starts clean. */
   id: number;
@@ -201,6 +231,8 @@ type PickSession = {
   shown: number;
   /** Fires `destroyAll` when the overlays never all paint; cleared once they have. */
   watchdog: ReturnType<typeof setTimeout> | null;
+  /** The last rectangle the Frame box reported (drag end, ratio chip): saved if the pick closes. */
+  frameReport: FrameMemoryUpdate["area"];
 };
 
 type HiddenWait = { waiting: Set<number>; done: Promise<void>; finish: () => void };
@@ -409,12 +441,13 @@ export class CaptureOverlayWindows implements OverlayPort {
         settle: resolve,
         shown: 0,
         watchdog: null,
+        frameReport: null,
       };
       this.mode = ui;
       this.intent = intent;
       this.hoverDisplayId = null;
       this.windows = null;
-      const { frameDisplayId, underCursor } = this.initialFrame(ui, displays);
+      const { frameDisplayId, underCursor } = this.initialFrame(ui, displays, intent);
       this.frameDisplayId = frameDisplayId;
       // Keyboard focus (Esc, Enter, 1/2/3): the Frame's Enter only works in the window
       // that holds the frame, so there focus follows the frame, not the pointer.
@@ -471,19 +504,26 @@ export class CaptureOverlayWindows implements OverlayPort {
   }
 
   /**
-   * One frame at a time: it starts where the pointer is, else on the primary display (else
-   * the first picked one), and the user moves it by clicking another display.
+   * One frame at a time: it starts on the display the frame was last used on for this intent
+   * (screenshot and recording each remember theirs), else where the pointer is, else on the
+   * primary display (else the first picked one), and the user moves it by clicking another
+   * display.
    */
   private initialFrame(
     ui: OverlayUi,
     displays: Display[],
+    intent: CaptureIntent,
   ): { frameDisplayId: number | null; underCursor: number } {
     const cursor = this.deps.cursorPoint();
     const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
     if (ui !== "frame") return { frameDisplayId: null, underCursor };
     const primary = this.deps.primaryDisplayId();
+    const last = this.deps.frameMemory.lastDisplay(intent);
     const frame =
-      displays[underCursor] ?? displays.find((display) => display.id === primary) ?? displays[0];
+      displays.find((display) => display.id === last) ??
+      displays[underCursor] ??
+      displays.find((display) => display.id === primary) ??
+      displays[0];
     return { frameDisplayId: frame!.id, underCursor };
   }
 
@@ -858,7 +898,37 @@ export class CaptureOverlayWindows implements OverlayPort {
     const settle = this.session?.settle;
     if (!this.session || !settle) return;
     this.session.settle = null;
+    this.remember(this.session, answer);
     settle(answer);
+  }
+
+  /**
+   * The one write a pick makes to the frame memory (NIW2-878). Closing without an answer (Esc,
+   * a second press of the key) keeps the display the frame was on and the last rectangle the
+   * Frame box reported, for the intent the pick closed in. A Screen answer keeps the display it
+   * chose. A confirmed frame is written by the overlay with its answer, so nothing is saved
+   * here for it, and nothing is ever saved while a frame is dragged.
+   */
+  private remember(session: PickSession, answer: OverlayAnswer): void {
+    let update: FrameMemoryUpdate | null = null;
+    if (answer.kind === "cancelled") {
+      const intent = this.intent === "record" ? "record" : "capture";
+      if (this.frameDisplayId !== null || session.frameReport) {
+        update = { intent, displayId: this.frameDisplayId, area: session.frameReport };
+      }
+    } else if (answer.kind === "display") {
+      update = {
+        intent: isRecordAction(answer.action) ? "record" : "capture",
+        displayId: answer.displayId,
+        area: null,
+      };
+    }
+    if (!update) return;
+    try {
+      this.deps.frameMemory.save(update);
+    } catch (error) {
+      console.warn("[screenshot] could not remember the frame", error);
+    }
   }
 
   private ackFrom(senderId: number | null): void {
@@ -911,6 +981,22 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (from !== undefined && from !== this.session.id) return;
       const answer = parseAnswer(payload, this.session.displayIds, this.windows);
       if (answer) this.answer(answer);
+    });
+
+    // Frame mode: the box settled (a drag ended, a ratio was chosen). Kept in memory only; it
+    // is saved, once, if the pick closes.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayFrame, (event, payload) => {
+      if (!this.session?.settle || !this.ownsSender(event)) return;
+      const report = payload as
+        | { displayId?: unknown; rect?: unknown; ratio?: unknown; session?: unknown }
+        | undefined;
+      if (report?.session !== undefined && report.session !== this.session.id) return;
+      const displayId = report?.displayId;
+      if (!isFiniteNumber(displayId) || !this.session.displayIds.has(displayId)) return;
+      const rect = parseRect(report?.rect);
+      if (!rect) return;
+      const ratio = isRecordingRatio(report?.ratio) ? report.ratio : undefined;
+      this.session.frameReport = { displayId, rect, ...(ratio ? { ratio } : {}) };
     });
 
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayHover, (event, payload) => {

@@ -7,7 +7,8 @@ import {
 
 /**
  * Everything a capture overlay window needs to draw, read from its URL query (built by
- * `overlayQuery` in `main/screenshots/capture-overlay-windows.ts`):
+ * `overlaySpareQuery` in `main/screenshots/capture-overlay-windows.ts`; every window loads it,
+ * and the mode, intent and frame display arrive as `OverlayState`, see `spare` below):
  *
  *   ?window=capture-overlay&display=<id>&ui=<mode>&index=<1-based>&count=<n>
  *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…[&frame=<id>][&internal=1]

@@ -4,6 +4,7 @@ import {
   ENABLED_CAPTURE_MODES,
   isRecordAction,
   type CaptureAction,
+  type CaptureRect,
   type CaptureIntent,
   type CaptureMode,
   type OverlayAnswer,
@@ -478,6 +479,7 @@ export function CaptureOverlay({
         frameDisplayId={state.frameDisplayId}
         chrome={chrome}
         send={request}
+        session={state.session}
       />
     );
   return (
@@ -509,12 +511,14 @@ function FrameMode({
   frameDisplayId,
   chrome,
   send,
+  session,
 }: {
   query: OverlayQuery;
   api: CaptureOverlayApi;
   frameDisplayId: number | null;
   chrome: OverlayChrome;
   send: SendAnswer;
+  session: number | undefined;
 }): React.JSX.Element {
   const bridge = api.captureOverlay;
 
@@ -538,7 +542,7 @@ function FrameMode({
       </div>
     );
   }
-  return <ActiveFrame query={query} api={api} chrome={chrome} send={send} />;
+  return <ActiveFrame query={query} api={api} chrome={chrome} send={send} session={session} />;
 }
 
 function MoveFrameHint(): React.JSX.Element {
@@ -555,11 +559,13 @@ function ActiveFrame({
   api,
   chrome,
   send,
+  session,
 }: {
   query: OverlayQuery;
   api: CaptureOverlayApi;
   chrome: OverlayChrome;
   send: SendAnswer;
+  session: number | undefined;
 }): React.JSX.Element {
   const key = String(query.displayId);
   // A recording area and a screenshot frame are remembered apart (ADR 0030): the overlay
@@ -581,6 +587,19 @@ function ActiveFrame({
       live = false;
     };
   }, [api, key, memory]);
+
+  // Reported, never saved here: main keeps the latest and writes it once if the pick closes.
+  const settled = useCallback(
+    (rect: CaptureRect, ratio?: RecordingRatio) => {
+      api.captureOverlay.reportFrame({
+        displayId: query.displayId,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        ...(ratio ? { ratio } : {}),
+        ...(session === undefined ? {} : { session }),
+      });
+    },
+    [api, query.displayId, session],
+  );
 
   const confirm = useCallback(
     (rect: RememberedArea, action: CaptureAction, ratio?: RecordingRatio) => {
@@ -606,8 +625,16 @@ function ActiveFrame({
         async () => {
           // The window's copy, which main's broadcast keeps current, carries the other displays'
           // rectangles, so they are kept; a save from another display in the same few ms could be lost.
+          // The display it was confirmed on is the one this intent reopens on (NIW2-878); one
+          // patch, so confirming is still one settings write.
           const current = await loadSettings();
-          await api.updateSettings({ [into]: { ...current[into], [key]: stored } });
+          await api.updateSettings({
+            [into]: { ...current[into], [key]: stored },
+            lastFrameDisplay: {
+              ...current.lastFrameDisplay,
+              [isRecordAction(action) ? "record" : "capture"]: query.displayId,
+            },
+          });
         },
       );
     },
@@ -616,5 +643,13 @@ function ActiveFrame({
 
   // The dim sheet shows while the settings load (a few ms), so the window never flashes.
   if (remembered === undefined) return <div className={styles.sheet} />;
-  return <FrameBox query={query} remembered={remembered} chrome={chrome} onConfirm={confirm} />;
+  return (
+    <FrameBox
+      query={query}
+      remembered={remembered}
+      chrome={chrome}
+      onConfirm={confirm}
+      onSettled={settled}
+    />
+  );
 }
