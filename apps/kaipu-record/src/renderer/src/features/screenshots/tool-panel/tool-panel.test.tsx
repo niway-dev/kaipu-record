@@ -241,6 +241,7 @@ describe("ToolPanel", () => {
   });
   describe("a selected image's actions (NIW2-876)", () => {
     const actions = () => ({
+      imageId: "img-1",
       hasCrop: true,
       followRadius: 8,
       maxRadius: 100,

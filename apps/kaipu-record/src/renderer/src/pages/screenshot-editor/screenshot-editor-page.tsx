@@ -1880,6 +1880,7 @@ function ScreenshotEditorBody({
       {...(selectedImageState && metrics
         ? {
             imageActions: {
+              imageId: selectedImageState.id,
               hasCrop:
                 cropSession?.id === selectedImageState.id
                   ? cropCanReset

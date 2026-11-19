@@ -7,6 +7,8 @@ import styles from "./image-actions.module.css";
 export interface ImageActionsProps {
   /** `bar` floats over the image (dark pill); `panel` sits in the Tool tab. */
   variant: "bar" | "panel";
+  /** The selected image: the Corners panel and its typed draft belong to one image, never the next. */
+  imageId: string;
   /** There is a crop to remove: Reset is disabled without one. */
   hasCrop: boolean;
   /** Crop mode is open on this image: Crop is shown pressed (the Tool tab keeps the actions). */
@@ -34,7 +36,12 @@ export interface ImageActionsProps {
  * slider. A drag of the slider is one change, committed when it is released, so it is one
  * undo step rather than one per pixel.
  */
-export function ImageActions({
+export function ImageActions(props: ImageActionsProps): React.JSX.Element {
+  // Keyed by image so an open Corners panel and an uncommitted draft cannot cross to the next selection.
+  return <ImageActionsBody key={props.imageId} {...props} />;
+}
+
+function ImageActionsBody({
   variant,
   hasCrop,
   cropping = false,

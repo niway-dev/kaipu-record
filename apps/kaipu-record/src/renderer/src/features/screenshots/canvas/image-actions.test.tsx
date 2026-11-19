@@ -9,6 +9,7 @@ import { ImageActions } from "./image-actions";
 function mount(over: Partial<React.ComponentProps<typeof ImageActions>> = {}) {
   const props = {
     variant: "bar" as const,
+    imageId: "a",
     hasCrop: false,
     followRadius: 12,
     maxRadius: 200,
@@ -102,4 +103,35 @@ describe("Corners", () => {
     fireEvent.blur(screen.getByRole("spinbutton"));
     expect(p.onRadius).not.toHaveBeenCalled();
   });
+});
+
+describe("switching the selected image", () => {
+  it.each(["bar", "panel"] as const)(
+    "an uncommitted Corners value never reaches the next image (%s)",
+    (variant) => {
+      const base = {
+        variant,
+        hasCrop: false,
+        followRadius: 12,
+        maxRadius: 200,
+        onCrop: vi.fn(),
+        onResetCrop: vi.fn(),
+      };
+      const onA = vi.fn();
+      const onB = vi.fn();
+      const { rerender } = render(<ImageActions {...base} imageId="a" onRadius={onA} />);
+      fireEvent.click(screen.getByRole("button", { name: "Corners" }));
+      const field = screen.getByRole("spinbutton");
+      fireEvent.change(field, { target: { value: "20" } });
+      // Another image with the same shown radius is selected before the field is committed.
+      rerender(<ImageActions {...base} imageId="b" onRadius={onB} />);
+      expect(screen.queryByTestId("corners-control")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Corners" }));
+      const next = screen.getByRole("spinbutton") as HTMLInputElement;
+      expect(next.value).toBe("12");
+      fireEvent.blur(next);
+      expect(onB).not.toHaveBeenCalled();
+      expect(onA).not.toHaveBeenCalled();
+    },
+  );
 });

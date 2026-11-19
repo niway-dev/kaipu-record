@@ -1073,6 +1073,7 @@ function AnnotationLayerImpl({
             h: selectedImage.h * size.h,
           }}
           actions={{
+            imageId: actionState.id,
             hasCrop: actionState.hasCrop,
             ...(actionState.radius !== undefined ? { radius: actionState.radius } : {}),
             followRadius: followRadiusSource(radius, naturalW, size.w),
