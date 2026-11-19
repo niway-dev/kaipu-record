@@ -9,7 +9,7 @@ description: Transcribing a recording goes through one port in main, served on m
 
 | Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status        | Proposed, 2026-11-15. Not implemented: the M0 spike measures it, M1 builds it ([NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export)). Spec: [local transcription](/specs/2026-11-15-local-transcription-design/)                                                                                                                                                           |
+| Status        | Proposed, 2026-11-15. Not implemented: the M0 spike measured it (results below), M1 builds it ([NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export)). Spec: [local transcription](/specs/2026-11-15-local-transcription-design/)                                                                                                                                           |
 | Date          | 2026-11-15                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Relates to    | [0055](/architecture/decisions/0055-text-recognition-is-a-port-served-by-the-os-engine-on-each-platform/) (same shape: a port in main, a backend per platform, "unavailable" as the failure), [0021](/architecture/decisions/0021-tag-sync-on-events-with-server-version/) (local-first), [0063](/architecture/decisions/0063-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (what is done with the words) |
 | Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -29,7 +29,7 @@ Facts this decision rests on:
   ([hub: local speech-to-text](https://github.com/csdev19/general-knowledge/blob/main/desktop/local-speech-to-text.md)).
   The engine has to be a separate process.
 - **The websocket server opens a network port on every interface.** On 2026-11-15 on the owner's
-  M5 Pro, `sherpa-onnx-offline-websocket-server` accepts only `--port` and lsof showed it
+  M5, `sherpa-onnx-offline-websocket-server` accepts only `--port` and lsof showed it
   listening on `*:<port>`. The invisible-assistant notes say it exits on a malformed payload.
 - **The batch CLI works on the same files.** On the same machine, `sherpa-onnx-offline` with the
   v3 int8 model transcribed two short TTS clips (English and Spanish, 12.4 s) word-perfect with
@@ -51,8 +51,8 @@ Facts this decision rests on:
 2. **macOS arm64 backend: `sherpa-onnx-offline` from one pinned sherpa-onnx release**, with its
    `libonnxruntime`, shipped in `resources/native/`, asar unpacked, signed, checked by a
    `--version` handshake at startup and by the release workflow. v1.13.8 is the release verified
-   on the owner's machine; v2.0.0 and v2.0.1 (October 2026) exist and are unmeasured here, so M0
-   runs both and pins the one it chooses. It reads WAV files and writes
+   on the owner's machine; v2.0.1 (October 2026) exists and M0 measured it against v1.13.8 (see M0 results); v2.0.0 was not
+   measured. It reads WAV files and writes
    JSON on stdout. It opens no port. It runs under its own supervisor (deadline per batch,
    bounded stdout, kill on cancel), not the one-shot `runHelperProcess` with its 16 MB cap.
 3. **The renderer decodes once.** It turns the recording's audio track into a 16 kHz mono PCM file
@@ -125,6 +125,80 @@ Facts this decision rests on:
 
 ## M0 results
 
-To be filled by the M0 spike: machine, recordings (5, 20, 60 minutes), segmentation strategy
-compared, batch size, wall time, peak RSS of the process tree, empty-with-speech count, word timing
-error against hand marks, renderer decode time. No transcript text from the owner's recordings.
+Measured on 2026-11-15 on the owner's Apple M5 Mac (24 GB), `sherpa-onnx-offline` with Parakeet TDT
+0.6B v3 int8, 4 threads. The spike script is in
+`apps/kaipu-record/scripts/spikes/transcription-m0/`; it prints metrics only, and no transcript text
+from a recording is committed. The 5- and 20-minute inputs are cut from one real recording; the
+60-minute input is a **concatenation** (a 54-minute recording plus 6 minutes of another), because no
+single 60-minute recording exists. Every figure below is one run (the renderer decode is two), taken while other work was using
+the machine, so treat differences under about 10% as noise.
+
+**Decisions M0 makes**
+
+| Choice                              | Decision                                                                                     | Numbers behind it                                                                                                                                                                                                                                                                               |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Segmentation                        | Fixed 30 s windows overlapping by 3 s, one cut point in each overlap, rule `midpoint-dedupe` | Twice as fast as energy VAD (RTF 0.031 vs 0.066 on 60 min, both at 8 per call), no empty-with-speech segment (energy: 3 on 60 min), and a word error on known text (9.9%) no worse than energy VAD (11.6%) or a single pass (10.7%); one synthetic passage in one run cannot separate the three |
+| Batch size                          | 4 segments per CLI call                                                                      | RTF 0.033, 2.1 GB peak; 8 per call is about 10% faster (20 min: 36 s vs 40 s) but peaks at 3.0 GB, and 2 per call is slower (45 s) with 1.6 GB, so 4 is the middle                                                                                                                              |
+| sherpa-onnx release                 | Stay on **v1.13.8**                                                                          | v2.0.1 gives the same speed (energy VAD, 60 min: RTF 0.064 vs 0.066), memory, word count (8454 vs 8489) and word timing; nothing to gain from a bump                                                                                                                                            |
+| Silero VAD (`vad-with-offline-asr`) | Not measured                                                                                 | No fixed-window segment came back empty despite voiced audio, and the seam loss measured below is small (6 deleted words against 3 for a single pass), so there was no evidence of a problem for it to fix; words lost inside a non-empty segment are not measured                              |
+
+**Time and memory** (v1.13.8, fixed 30 s / 3 s, batch 4)
+
+| Audio                  | Segments | CLI wall time | Real-time factor | Peak RSS of the CLI |
+| ---------------------- | -------- | ------------- | ---------------- | ------------------- |
+| 5 min (batch 8)        | 11       | 9 s           | 0.030            | 3.0 GB              |
+| 20 min                 | 45       | 40 s          | 0.033            | 2.1 GB              |
+| 60 min (concatenation) | 134      | 126 s         | 0.035            | 2.2 GB              |
+
+One 60-minute run with 2 segments per call took 225 s, almost twice the 4-per-call time, while other work was using the machine; it is probably noise and was not repeated. The CLI is one process, so its RSS is the process tree. A 60-minute recording transcribes in about
+two minutes on this machine. Memory grows with batch size (energy VAD, 20 min: 1.3 GB at 1 segment
+per call, 2.0 at 4, 2.9 at 8, 4.7 at 16, 7.3 at 32), which is why the batch stays small. A batch of
+1 takes 132 s for the same 20 minutes (177 calls, decoding included), so the cost of one call is well
+under the 1.5 s of the first probe, which timed cold clips.
+
+**Boundary words.** Known text read by a speech synthesizer, so the true words are exact:
+
+| Input                                   | Strategy                   | Inserted | Deleted | Substituted | Word error |
+| --------------------------------------- | -------------------------- | -------- | ------- | ----------- | ---------- |
+| English, 900 words, one continuous take | single pass (reference)    | 18       | 3       | 75          | 10.7%      |
+|                                         | fixed 30 s / 3 s           | 15       | 6       | 68          | 9.9%       |
+|                                         | energy VAD                 | 19       | 9       | 76          | 11.6%      |
+| Spanish, 177 words                      | single pass, fixed, energy | 0        | 0       | 0           | 0%         |
+
+Fixed windows lose three more words than one pass across 11 seams in the English passage and insert
+three fewer; the substitutions are the synthesizer's identifiers and acronyms, not seams. On the
+real recordings the count of identical neighbouring words under 400 ms apart (a doubled boundary
+word looks like this, but so does genuine repetition) is 93 in 8,490 words at 60 minutes, against 97
+for energy VAD; `midpoint-dedupe` (drop a repeated word within
+250 ms that lies within 600 ms of a cut and comes from a different segment) is what every run in
+this section used. **The three rules in the script (`spec`, `midpoint`, `midpoint-dedupe`) were not
+compared with each other**, so nothing here shows that `midpoint-dedupe` beats the others; it is
+chosen because it is the only one that removes a doubled boundary word, and M1 pins its behaviour
+with unit tests (a word on a boundary appears exactly once).
+
+**Empty results on segments with speech:** 0 with fixed windows at 5, 20 and 60 minutes; 3 with
+energy VAD at 60 minutes.
+
+**Word timing against known marks** (synthesizer, one word at a time with 350 ms gaps, English and
+Spanish): the median start is 56 ms off (95th percentile 110 ms) and early on average (mean −58 ms); the median end
+is 33 ms off (95th percentile 100 ms) and late on average (mean +33 ms). The spec said hand-marked words; the marks here are built by construction, not by ear, but each
+is the span left after trimming samples below about −40 dBFS from the synthesizer's clip, so a
+quiet onset or a fading end falls outside it. That alone can account for part of the measured
+bias, so read it as an upper bound on the error, not a clean measurement. Subtitles and click-to-seek can live
+with a 60 ms offset; if it shows, a fixed shift in the projection removes the bias.
+
+**Renderer decode.** Decoding a 54-minute recording (AAC 44.1 kHz stereo, 1.12 GB) to 16 kHz mono
+PCM with mediabunny in headless Chrome took 7.0 and 7.1 s on the same Apple M5 (about 460 times
+faster than real time) and produced the expected 104 MB of PCM in 813 chunks of 128 KB. The
+page stayed responsive: the longest gap between animation frames was 16.8 ms and no gap passed
+100 ms. Peak renderer memory was about 0.98 GB and flat after the first seconds, so it does not
+grow with duration: a 10.4 GB export of the same length peaked at 0.5 GB, and a 17.8-hour
+near-silent recording (6.9 GB) decoded in 157 s at 0.99 GB. The 60-minute figure used for the
+engine is therefore decode (about 8 s) plus the 126 s job. Not diagnosed: what holds the roughly
+800 MB the renderer keeps after the PCM is freed. The build must keep one copy of `mediabunny`
+in the renderer bundle: with two, `AudioSampleSink` rejects the track.
+
+**What this does not show.** Two languages and one synthesizer say little about accented or noisy
+speech; the numbers cover speed, memory, boundaries and timing, not recognition quality on the
+owner's recordings. The 60-minute input is a concatenation, so its seam is a splice, not a single
+take.
