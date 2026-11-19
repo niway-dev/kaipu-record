@@ -27,7 +27,7 @@ const NO_UNSUBSCRIBE = (): void => {};
  * The Transcript tab of the Library detail page (NIW2-870): the editor's TranscriptPanel beside
  * the page's own video. The page plays the untouched recording, so the panel gets one clip from 0
  * to the duration on both axes, nothing muted: timeline time is the player's `currentTime` and the
- * projection (ADR 0063) returns every word where it was spoken.
+ * projection (ADR 0065) returns every word where it was spoken.
  */
 export function LibraryTranscriptTab({
   video,
