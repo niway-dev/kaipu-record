@@ -37,6 +37,16 @@
   pointer-events: none;
 }
 
+/* The crop window's outline: a thin white line, 1 px on screen whatever the zoom. The brackets,
+   bars and grid are `crop-chrome.module.css`. */
+.cropWindow {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 /* The crop mode's "Done": pinned under the window's bottom-right corner. */
 .cropDone {
   position: absolute;
