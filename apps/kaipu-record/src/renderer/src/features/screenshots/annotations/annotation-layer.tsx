@@ -97,6 +97,11 @@ type Drag =
   | { mode: "resize"; id: string; handle: HandleId; orig: Annotation }
   /** A corner drag on the selected base image: a proportional resize, written as `basePlacement`. */
   | { mode: "resize-base"; handle: HandleId; orig: BaseFields }
+  /**
+   * A drag on the base's own pixels: it moves alone, like a pasted image, written as
+   * `basePlacement` (the world origin and every annotation stay where they are).
+   */
+  | { mode: "move-base"; start: Pt; orig: BaseFields }
   /** A crop-mode drag of one handle of the crop window, from the window as the drag began. */
   | { mode: "crop-window"; handle: HandleId; orig: NormalizedRect }
   /** A text selection drag (the "Select text" tool); the range runs from `anchor`. */
@@ -510,6 +515,17 @@ function AnnotationLayerImpl({
       // shows (NIW2-853); padding and background clear the selection as before.
       const onBase = !hit && canvas && natural && inRect(p, baseVisibleRect(base));
       scene.select(hit?.id ?? (onBase ? BASE_IMAGE_ID : null));
+      // The base's own pixels drag it, like a pasted image's (NIW2-876). Not while the inline
+      // text editor is open (its blur commits a label mid-drag), and not where the image is
+      // read, not edited (Inspect passes no crop handlers).
+      if (onBase && !editing && onEnterCrop) {
+        drag.current = { mode: "move-base", start: p, orig: base };
+        setGesturing(true);
+        // A base drag owns the history until it ends, as a corner drag does.
+        scene.beginInteract();
+        ref.current?.setPointerCapture(e.pointerId);
+        return;
+      }
       // The label whose inline editor is open belongs to that editor. The hit-test
       // keeps an 8px margin around it, and the textarea only covers the box itself,
       // so a press in that ring would drag the label out from under its own caret.
@@ -621,6 +637,19 @@ function AnnotationLayerImpl({
       onLiveBase?.({ ...d.orig, basePlacement: placement });
       return;
     }
+    if (d.mode === "move-base") {
+      // From the ORIGINAL placement each frame: the pointer's travel since the press, in the
+      // same base-normalized units as the placement (the layer is the world anchor).
+      const from = d.orig.basePlacement ?? { x: 0, y: 0, scale: 1 };
+      const x = from.x + (p.x - d.start.x);
+      const y = from.y + (p.y - d.start.y);
+      // Back where it began: nothing to commit, and the preview shows the stored base.
+      const moved = x !== from.x || y !== from.y;
+      const placement = { ...from, x, y };
+      baseLiveRef.current = moved ? placement : null;
+      onLiveBase?.({ ...d.orig, basePlacement: placement });
+      return;
+    }
     if (d.mode === "move") {
       setGesturing(true);
       setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
@@ -693,7 +722,8 @@ function AnnotationLayerImpl({
     if (l) scene.commitAnnotation(l.id, l.patch);
   };
 
-  // Ends a base resize: one `basePlacement` commit (one undo step) with the last placement shown.
+  // Ends a base resize or move: one `basePlacement` commit (one undo step) with the last placement
+  // shown, or none when the pointer came back to where it began; the preview is dropped either way.
   const baseLiveRef = useRef<NonNullable<BaseFields["basePlacement"]> | null>(null);
   const commitBaseLive = (): void => {
     // Close the interaction first: the scene did not change during it (undo and redo were
@@ -701,8 +731,7 @@ function AnnotationLayerImpl({
     scene.endInteract();
     const placement = baseLiveRef.current;
     baseLiveRef.current = null;
-    if (!placement) return;
-    scene.commitBase({ basePlacement: placement });
+    if (placement) scene.commitBase({ basePlacement: placement });
     onLiveBase?.(null);
   };
 
@@ -711,7 +740,7 @@ function AnnotationLayerImpl({
     drag.current = null;
     setGesturing(false);
     if (!d || d.mode === "select-text" || d.mode === "crop-window") return;
-    if (d.mode === "resize-base") {
+    if (d.mode === "resize-base" || d.mode === "move-base") {
       commitBaseLive();
       return;
     }
@@ -766,7 +795,7 @@ function AnnotationLayerImpl({
     drag.current = null;
     setGesturing(false);
     if (d?.mode === "move" || d?.mode === "resize") commitLive();
-    if (d?.mode === "resize-base") commitBaseLive();
+    if (d?.mode === "resize-base" || d?.mode === "move-base") commitBaseLive();
     setDraft(null);
   };
 
@@ -1059,7 +1088,6 @@ function AnnotationLayerImpl({
           pixelHeight={selectedImage.pixelHeight}
           crop={selectedImage.crop}
           justAdded={justAddedId != null && justAddedId === selectedImage.id}
-          movable={selectedImage.id !== BASE_IMAGE_ID}
           gaps={gaps}
           unit={natural && natural.w > 0 ? size.w / natural.w : 1}
         />
