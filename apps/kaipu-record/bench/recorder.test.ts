@@ -69,6 +69,14 @@ describe("RunRecorder", () => {
     expect(run.roles.find((x) => x.role === "main")!.peakFootprintBytes).toBe(130);
   });
 
+  it("marks every process exited when a final tick finds none", () => {
+    const r = recorder();
+    r.addTick(tick(0, [proc(1, "main", 100, 120)], null));
+    r.addTick(tick(1000, [], null));
+    const run = r.finish({ startedAt: "a", endedAt: "b", durationMs: 1000, phases: [] });
+    expect(run.processes[0]!.exited).toBe(true);
+  });
+
   it("falls back to the sampled max when no lifetime peak was read", () => {
     const r = recorder();
     r.addTick(tick(0, [proc(1, "main", 100, null)], null));

@@ -30,11 +30,21 @@ export async function readProcessTable(): Promise<PsRow[]> {
   return parsePs(await out("ps", ["-axo", "pid,ppid,rss,%cpu,time,command"]));
 }
 
-export async function readFootprints(pids: number[]): Promise<FootprintRow[]> {
-  if (pids.length === 0) return [];
+export async function readFootprints(
+  pids: number[],
+): Promise<{ rows: FootprintRow[]; error: string | null }> {
+  if (pids.length === 0) return { rows: [], error: null };
   const args = ["-f", "bytes", "--noCategories"];
   for (const p of pids) args.push("-p", String(p));
-  return parseFootprint(await out("footprint", args));
+  try {
+    const r = await run("footprint", args, { maxBuffer: 64 * 1024 * 1024 });
+    return { rows: parseFootprint(r.stdout), error: null };
+  } catch (e) {
+    const err = e as { stdout?: string; stderr?: string; message?: string };
+    const rows = parseFootprint(err.stdout ?? "");
+    const detail = (err.stderr || err.message || "unknown error").trim().split("\n")[0];
+    return { rows, error: rows.length === 0 ? `footprint failed: ${detail}` : null };
+  }
 }
 
 export async function readSystem(): Promise<SystemSample> {
@@ -60,6 +70,8 @@ export interface ProcessReading {
   found: FoundProcess[];
   processes: ProcessSample[];
   system: SystemSample;
+  /** Set when processes were found but `footprint` gave nothing for them. */
+  error: string | null;
 }
 
 /** One tick: ps (+threads) and system in parallel, then one `footprint` call for every pid. */
@@ -70,16 +82,15 @@ export async function readTick(rootContains: string): Promise<ProcessReading> {
     readSystem(),
   ]);
   const found = discoverProcesses(table, { rootContains });
-  const footprints = new Map(
-    (await readFootprints(found.map((f) => f.pid))).map((f) => [f.pid, f]),
-  );
+  const fp = await readFootprints(found.map((f) => f.pid));
+  const footprints = new Map(fp.rows.map((f) => [f.pid, f]));
   const threads = parsePsThreads(threadsText);
   const byPid = new Map(table.map((r) => [r.pid, r]));
   const processes: ProcessSample[] = [];
   for (const f of found) {
     const ps = byPid.get(f.pid);
-    const fp = footprints.get(f.pid);
-    if (!ps || !fp) continue; // exited between the two reads
+    const row = footprints.get(f.pid);
+    if (!ps || !row) continue; // exited between the two reads
     processes.push({
       pid: f.pid,
       ppid: f.ppid,
@@ -88,15 +99,15 @@ export async function readTick(rootContains: string): Promise<ProcessReading> {
       cpuPct: ps.cpuPct,
       cpuTimeS: ps.cpuTimeS,
       threads: threads.get(f.pid) ?? 0,
-      footprintBytes: fp.footprintBytes,
-      peakBytes: fp.peakBytes,
+      footprintBytes: row.footprintBytes,
+      peakBytes: row.peakBytes,
     });
   }
-  return { found, processes, system };
+  return { found, processes, system, error: fp.error };
 }
 
-/** Total bytes of the files matching the watch spec; null when none exist. Names are never kept. */
-export function readWatchedBytes(spec: string): number | null {
+/** Bytes per file matching the watch spec. Names are kept in memory only, never written. */
+export function readWatchedFiles(spec: string): Map<string, number> {
   const isDir = (p: string): boolean => {
     try {
       return statSync(p).isDirectory();
@@ -106,26 +117,31 @@ export function readWatchedBytes(spec: string): number | null {
   };
   const { dir, pattern } = splitWatchSpec(spec, isDir);
   const re = globToRegExp(pattern);
-  let total = 0;
-  let any = false;
+  const files = new Map<string, number>();
   let names: string[];
   try {
     names = readdirSync(dir);
   } catch {
-    return null;
+    return files;
   }
   for (const n of names) {
     if (!re.test(n) || n.startsWith(".DS_Store")) continue;
     try {
       const st = statSync(`${dir}/${n}`);
-      if (!st.isFile()) continue;
-      total += st.size;
-      any = true;
+      if (st.isFile()) files.set(n, st.size);
     } catch {
       // the file was renamed between readdir and stat
     }
   }
-  return any ? total : null;
+  return files;
+}
+
+/** Total bytes of the watched files; null when none exist. */
+export function totalBytes(files: Map<string, number>): number | null {
+  if (files.size === 0) return null;
+  let total = 0;
+  for (const b of files.values()) total += b;
+  return total;
 }
 
 export async function gitHead(cwd: string): Promise<string> {

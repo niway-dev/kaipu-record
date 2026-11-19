@@ -66,7 +66,7 @@ export function checkOutputGrowth(
   let longestStallMs = 0;
   let growthEvents = 0;
   let judged = false;
-  let violated = false;
+  let flatViolation = false;
   for (const seg of segments) {
     let lastGrowthT = seg[0]!.tMs;
     let sawGrowth = false;
@@ -81,10 +81,11 @@ export function checkOutputGrowth(
     const spanMs = seg[seg.length - 1]!.tMs - seg[0]!.tMs;
     if (seg.length >= 2) judged = judged || sawGrowth || spanMs >= opts.maxStallMs;
     if (!sawGrowth && spanMs >= opts.maxStallMs) {
+      flatViolation = true;
       longestStallMs = Math.max(longestStallMs, spanMs);
     }
   }
-  violated = longestStallMs > opts.maxStallMs;
+  const violated = flatViolation || longestStallMs > opts.maxStallMs;
 
   if (violated) {
     return {
@@ -110,5 +111,77 @@ export function checkOutputGrowth(
     longestStallMs,
     growthEvents,
     reason: "the output file kept growing while it existed",
+  };
+}
+
+export interface FileTick {
+  tMs: number;
+  /** Bytes per watched file at this tick. Keys stay in memory; they are never written. */
+  files: Map<string, number>;
+}
+
+/**
+ * Judges each file on its own, so an idle or unrelated file never produces a VIOLATED.
+ * A file already present at the first tick is judged only from its first increase and is
+ * ignored if it never changes (a stale leftover). A file that appears later is judged
+ * from its first sample, so a new export stuck at 28 bytes still fails.
+ */
+export function checkOutputGrowthPerFile(
+  ticks: FileTick[],
+  opts: { maxStallMs: number },
+): OutputGrowthResult {
+  const keys = new Set<string>();
+  for (const t of ticks) for (const k of t.files.keys()) keys.add(k);
+  const first = ticks[0]?.files ?? new Map<string, number>();
+  const results: OutputGrowthResult[] = [];
+  let ignoredIdle = 0;
+  for (const key of keys) {
+    let series: OutputSample[] = ticks.map((t) => ({
+      tMs: t.tMs,
+      bytes: t.files.get(key) ?? null,
+    }));
+    if (first.has(key)) {
+      const grew = series.findIndex(
+        (s, i) =>
+          i > 0 &&
+          s.bytes !== null &&
+          series[i - 1]!.bytes !== null &&
+          s.bytes > (series[i - 1]!.bytes as number),
+      );
+      if (grew < 0) {
+        ignoredIdle++;
+        continue;
+      }
+      series = series.slice(grew - 1);
+    }
+    results.push(checkOutputGrowth(series, opts));
+  }
+  if (results.length === 0) {
+    return {
+      held: null,
+      maxStallMs: opts.maxStallMs,
+      longestStallMs: 0,
+      segments: 0,
+      growthEvents: 0,
+      firstBytes: null,
+      lastBytes: null,
+      reason:
+        ignoredIdle > 0
+          ? "only files that were already there and never changed (idle) were seen"
+          : "the output file never appeared",
+    };
+  }
+  const bad = results.find((r) => r.held === false);
+  const verdict = bad ? false : results.some((r) => r.held === true) ? true : null;
+  const pick = bad ?? results.find((r) => r.held === verdict) ?? results[0]!;
+  return {
+    held: verdict,
+    reason: pick.reason,
+    maxStallMs: opts.maxStallMs,
+    longestStallMs: Math.max(...results.map((r) => r.longestStallMs)),
+    segments: results.reduce((n, r) => n + r.segments, 0),
+    growthEvents: results.reduce((n, r) => n + r.growthEvents, 0),
+    firstBytes: results[0]!.firstBytes,
+    lastBytes: results[results.length - 1]!.lastBytes,
   };
 }

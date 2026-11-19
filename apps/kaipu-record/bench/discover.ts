@@ -13,12 +13,20 @@ function chromiumType(command: string): string | null {
   return /(?:^|\s)--type=(\S+)/.exec(command)?.[1] ?? null;
 }
 
+/**
+ * Executable name for a native helper. Cuts the command at the first flag or path
+ * argument so no argument or file name can reach the role, then keeps a safe token.
+ */
 function exeBasename(command: string): string {
-  // The executable path may contain spaces; cut at the first " --" argument.
-  const exe = command.split(/\s--/)[0]!.trim().split(" ")[0]!;
-  const full = command.split(/\s--/)[0]!.trim();
-  const base = (full.includes("/") ? full : exe).split("/").pop() ?? exe;
-  return base.split(" ")[0]!;
+  const head = command.split(/ --| \//)[0]!.trim();
+  const token = (head.split("/").pop() ?? "").split(/\s+/)[0] ?? "";
+  const safe = token.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 40);
+  return safe || "unknown";
+}
+
+/** The root with a trailing slash, so a sibling directory sharing the prefix does not match. */
+export function rootMatch(root: string): string {
+  return root.endsWith("/") ? root : `${root}/`;
 }
 
 /** Role from the arguments Chromium passes to its children. Never returns a command line. */

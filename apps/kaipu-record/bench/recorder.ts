@@ -1,6 +1,9 @@
-import { checkOutputGrowth, type OutputSample } from "./invariant";
+import { checkOutputGrowthPerFile, type FileTick, type OutputSample } from "./invariant";
 import type { PhaseMark } from "./phases";
 import { SCHEMA_VERSION, type RunJson } from "./schema";
+
+/** Sampling interval; the single definition for the loop and for run.json. */
+export const TICK_INTERVAL_MS = 1000;
 
 export interface ProcessSample {
   pid: number;
@@ -30,6 +33,8 @@ export interface Tick {
   system: SystemSample;
   /** Total bytes of the watched export file(s); null if none exists or none watched. */
   outputBytes: number | null;
+  /** Bytes per watched file, for judging each file alone. Omitted: `outputBytes` is one file. */
+  outputFiles?: Map<string, number>;
   /** Wall time the whole sampling tick took. */
   costMs: number;
 }
@@ -77,6 +82,7 @@ function percentile(sorted: number[], p: number): number {
 export class RunRecorder {
   private readonly procs = new Map<number, ProcState>();
   private readonly out: OutputSample[] = [];
+  private readonly fileTicks: FileTick[] = [];
   private readonly costs: number[] = [];
   private peakSwap = 0;
   private peakCompressed = 0;
@@ -95,6 +101,11 @@ export class RunRecorder {
     const rank = { normal: 0, unknown: 0, warn: 1, critical: 2 } as const;
     if (rank[t.system.pressure] > rank[this.worst]) this.worst = t.system.pressure;
     this.out.push({ tMs: t.tMs, bytes: t.outputBytes });
+    this.fileTicks.push({
+      tMs: t.tMs,
+      files:
+        t.outputFiles ?? (t.outputBytes === null ? new Map() : new Map([["_", t.outputBytes]])),
+    });
 
     this.lastPresent = new Set(t.processes.map((p) => p.pid));
     const sampleRows = t.processes.map((p) => {
@@ -171,7 +182,7 @@ export class RunRecorder {
       roles.set(p.role, r);
     }
     const existed = this.out.filter((s): s is { tMs: number; bytes: number } => s.bytes !== null);
-    const inv = checkOutputGrowth(this.out, { maxStallMs: this.opts.maxStallMs });
+    const inv = checkOutputGrowthPerFile(this.fileTicks, { maxStallMs: this.opts.maxStallMs });
     const costs = [...this.costs].sort((a, b) => a - b);
     const key = `field / dev / ${this.opts.machine}`;
     return {
@@ -181,7 +192,7 @@ export class RunRecorder {
       startedAt: meta.startedAt,
       endedAt: meta.endedAt,
       durationMs: meta.durationMs,
-      tickIntervalMs: 1000,
+      tickIntervalMs: TICK_INTERVAL_MS,
       tickCostMs: {
         p50: percentile(costs, 0.5),
         p95: percentile(costs, 0.95),

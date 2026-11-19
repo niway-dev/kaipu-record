@@ -4,13 +4,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 import { parseAttachArgs, USAGE } from "./args";
-import { gitHead, gitRoot, readTick, readWatchedBytes } from "./collect";
+import { gitHead, gitRoot, readTick, readWatchedFiles, totalBytes } from "./collect";
 import { PhaseTracker } from "./phases";
-import { RunRecorder, SAMPLES_HEADER, SYSTEM_HEADER } from "./recorder";
+import { rootMatch } from "./discover";
+import { RunRecorder, SAMPLES_HEADER, SYSTEM_HEADER, TICK_INTERVAL_MS } from "./recorder";
 import { runJsonSchema } from "./schema";
 import { outputCheckpoints, renderSummary } from "./summary";
 
-const INTERVAL_MS = 1000;
 /** A stuck output longer than this while the file exists violates the invariant. */
 const MAX_STALL_MS = 30_000;
 
@@ -27,7 +27,7 @@ async function main(): Promise<number> {
     return 0;
   }
   const benchDir = dirname(fileURLToPath(import.meta.url));
-  const root = args.match ?? (await gitRoot(benchDir)) ?? process.cwd();
+  const root = args.match ?? rootMatch((await gitRoot(benchDir)) ?? process.cwd());
   const ref = await gitHead(benchDir);
 
   const startedAt = new Date();
@@ -55,8 +55,10 @@ async function main(): Promise<number> {
   );
 
   let stopping = false;
-  let wasEmpty = true;
-  let emptyTicks = 0;
+  let attached = false;
+  let warnedEmpty = false;
+  let lastError: string | null = null;
+  let wake: () => void = () => {};
 
   const rl = createInterface({ input: process.stdin });
   rl.on("line", (line) => {
@@ -67,30 +69,39 @@ async function main(): Promise<number> {
   const tick = async (): Promise<void> => {
     const began = mono();
     const reading = await readTick(root);
-    const tMs = began - t0;
-    const outputBytes = args.watch ? readWatchedBytes(args.watch) : null;
-    if (reading.processes.length === 0) {
-      emptyTicks++;
-      if (wasEmpty && emptyTicks === 1)
+    const files = args.watch ? readWatchedFiles(args.watch) : new Map<string, number>();
+    if (reading.error) {
+      if (reading.error !== lastError) console.error(`  ${reading.error}`);
+      lastError = reading.error;
+    } else {
+      lastError = null;
+    }
+    if (reading.processes.length === 0 && !attached) {
+      if (!reading.error && !warnedEmpty) {
         console.log("  no dev Electron found yet; waiting (start `bun run dev`)");
+        warnedEmpty = true;
+      }
       return;
     }
-    if (wasEmpty) console.log(`  attached to ${reading.processes.length} processes`);
-    wasEmpty = false;
+    if (!attached) console.log(`  attached to ${reading.processes.length} processes`);
+    attached = true;
+    // An empty tick after attaching is recorded too: it is how a vanished app gets `exited`.
     const { sampleRows, systemRow } = recorder.addTick({
-      tMs,
+      tMs: began - t0,
       processes: reading.processes,
       system: reading.system,
-      outputBytes,
+      outputBytes: totalBytes(files),
+      outputFiles: files,
       costMs: mono() - began,
     });
-    appendFileSync(samplesPath, `${sampleRows.join("\n")}\n`);
+    if (sampleRows.length > 0) appendFileSync(samplesPath, `${sampleRows.join("\n")}\n`);
     appendFileSync(systemPath, `${systemRow}\n`);
   };
 
   const stopped = new Promise<void>((done) => {
     const stop = (): void => {
       stopping = true;
+      wake();
       done();
     };
     process.on("SIGINT", stop);
@@ -99,28 +110,38 @@ async function main(): Promise<number> {
   });
 
   // Fixed-rate loop: a slow tick shortens the next wait instead of piling up.
-  void (async () => {
+  const loopDone = (async () => {
     while (!stopping) {
       const began = mono();
       await tick();
-      const wait = Math.max(0, INTERVAL_MS - (mono() - began));
-      await new Promise((r) => setTimeout(r, wait));
+      const wait = Math.max(0, TICK_INTERVAL_MS - (mono() - began));
+      await new Promise<void>((r) => {
+        wake = r;
+        setTimeout(r, wait);
+      });
     }
   })();
 
   await stopped;
   rl.close();
+  // The tick in flight finishes before the final read, so the two never interleave.
+  await loopDone;
 
   // Final read: the lifetime peak of every process still alive, before anything exits.
-  const live = await readTick(root);
-  if (live.processes.length > 0) {
-    recorder.addTick({
+  // Recorded even when empty, so processes that went away are marked exited.
+  if (attached) {
+    const live = await readTick(root);
+    const files = args.watch ? readWatchedFiles(args.watch) : new Map<string, number>();
+    const { sampleRows, systemRow } = recorder.addTick({
       tMs: mono() - t0,
       processes: live.processes,
       system: live.system,
-      outputBytes: args.watch ? readWatchedBytes(args.watch) : null,
+      outputBytes: totalBytes(files),
+      outputFiles: files,
       costMs: 0,
     });
+    if (sampleRows.length > 0) appendFileSync(samplesPath, `${sampleRows.join("\n")}\n`);
+    appendFileSync(systemPath, `${systemRow}\n`);
   }
 
   const endedAt = new Date();

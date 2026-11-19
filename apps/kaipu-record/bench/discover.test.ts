@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discoverProcesses, roleOf } from "./discover";
+import { discoverProcesses, roleOf, rootMatch } from "./discover";
 import type { PsRow } from "./parse-system";
 
 const ELECTRON =
@@ -71,5 +71,26 @@ describe("discoverProcesses", () => {
   it("does not treat a helper as a root", () => {
     const helperOnly = [TABLE[2]!, TABLE[3]!];
     expect(discoverProcesses(helperOnly, { rootContains: "/repo/" })).toEqual([]);
+  });
+});
+
+describe("rootMatch and sibling checkouts", () => {
+  const sibling = row(
+    400,
+    1,
+    "/repo-2/node_modules/.bun/electron@39/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+  );
+  it("adds a path boundary to the root", () => {
+    expect(rootMatch("/repo")).toBe("/repo/");
+    expect(rootMatch("/repo/")).toBe("/repo/");
+  });
+  it("does not attach to a sibling directory that shares the root as a prefix", () => {
+    const found = discoverProcesses([...TABLE, sibling], { rootContains: rootMatch("/repo") });
+    expect(found.map((p) => p.pid)).not.toContain(400);
+  });
+  it("keeps a native helper role free of argument fragments and file paths", () => {
+    expect(roleOf("/bin/tool /Users/me/My Video.mp4")).toBe("native:tool");
+    expect(roleOf("/bin/tool fd 3 secret=x")).toBe("native:tool");
+    expect(roleOf("/bin/we ird$name --x")).toBe("native:we");
   });
 });

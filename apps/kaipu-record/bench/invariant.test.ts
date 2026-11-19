@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkOutputGrowth, type OutputSample } from "./invariant";
+import { checkOutputGrowth, checkOutputGrowthPerFile, type OutputSample } from "./invariant";
 
 const s = (tMs: number, bytes: number | null): OutputSample => ({ tMs, bytes });
 const range = (n: number, f: (i: number) => number | null): OutputSample[] =>
@@ -72,5 +72,54 @@ describe("checkOutputGrowth", () => {
     expect(r.firstBytes).toBe(1);
     expect(r.lastBytes).toBe(9);
     expect(r.growthEvents).toBe(2);
+  });
+});
+
+describe("checkOutputGrowth at the boundary", () => {
+  it("a flat file seen for exactly maxStallMs is violated, not held", () => {
+    expect(
+      checkOutputGrowth(
+        range(31, () => 28),
+        { maxStallMs: 30_000 },
+      ).held,
+    ).toBe(false);
+  });
+  it("a gap between increases of exactly maxStallMs holds; one second more fails", () => {
+    const at = (gap: number): OutputSample[] => [s(0, 1), s(gap, 2), s(gap + 1000, 3)];
+    expect(checkOutputGrowth(at(30_000), { maxStallMs: 30_000 }).held).toBe(true);
+    expect(checkOutputGrowth(at(31_000), { maxStallMs: 30_000 }).held).toBe(false);
+  });
+});
+
+describe("checkOutputGrowthPerFile", () => {
+  const tick = (tMs: number, files: Record<string, number>) => ({
+    tMs,
+    files: new Map(Object.entries(files)),
+  });
+  const opts = { maxStallMs: 30_000 };
+
+  it("ignores a file that was already there and never changes (idle)", () => {
+    const ticks = Array.from({ length: 120 }, (_, i) => tick(i * 1000, { stale: 500 }));
+    const r = checkOutputGrowthPerFile(ticks, opts);
+    expect(r.held).toBeNull();
+    expect(r.reason).toMatch(/idle/);
+  });
+  it("an idle stale file does not spoil a healthy export that appears later", () => {
+    const ticks = Array.from({ length: 120 }, (_, i) =>
+      tick(i * 1000, i < 10 ? { stale: 500 } : { stale: 500, export: 28 + (i - 10) * 1000 }),
+    );
+    expect(checkOutputGrowthPerFile(ticks, opts).held).toBe(true);
+  });
+  it("still fails a file born during the run that gets stuck", () => {
+    const ticks = Array.from({ length: 120 }, (_, i) =>
+      tick(i * 1000, i < 5 ? { stale: 500 } : { stale: 500, export: 28 }),
+    );
+    expect(checkOutputGrowthPerFile(ticks, opts).held).toBe(false);
+  });
+  it("judges a preexisting file from its first increase, not from idle time before it", () => {
+    const ticks = Array.from({ length: 120 }, (_, i) =>
+      tick(i * 1000, { f: i < 60 ? 100 : 100 + (i - 59) * 1000 }),
+    );
+    expect(checkOutputGrowthPerFile(ticks, opts).held).toBe(true);
   });
 });
