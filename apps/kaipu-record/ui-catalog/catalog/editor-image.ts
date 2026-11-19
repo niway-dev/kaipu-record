@@ -335,6 +335,33 @@ export const editorImage = catalog(
       demonstrates: ["editorImage.canvas:cropped"],
       after: afterCrop,
     },
+    "image-action-bar": {
+      profile: "image-canvas",
+      how: "NIW2-876: with the flag forced on, open “Settings page” and click the image: the thin accent frame and small handles show, a bar with Crop, Corners and Reset floats above it (Reset is disabled: nothing is cropped), and the Tool tab offers the same three.",
+      steps: [
+        open(ASSETS.settingsShot),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 } },
+        { waitFor: { area: "editorImage.imageActionBar" } },
+      ],
+      demonstrates: ["editorImage.imageActionBar:shown", "editorImage.toolPanel:imageOptions"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+    },
+    "image-action-bar-cropped": {
+      profile: "image-canvas",
+      how: "NIW2-876: with the flag forced on, open “Settings page”, pick Crop, drag a frame, press Done, pick Select and click the image: the bar over the cropped image has Reset enabled.",
+      steps: [
+        ...drawCrop("Crop"),
+        cropDone,
+        chipInPage,
+        windowSettled,
+        tool("Select"),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 } },
+        { waitFor: { area: "editorImage.imageActionBar" } },
+      ],
+      demonstrates: ["editorImage.imageActionBar:cropped"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+      after: afterCrop,
+    },
     "inspect-cropped-run": {
       profile: "image-inspect",
       how: "NIW2-876: with the flag forced on, open “Settings page”, pick Crop, drag a frame, press Done, press Inspect, rest the pointer on the image and press 1: the horizontal run stops at the visible crop edge.",
@@ -711,7 +738,7 @@ export const editorImage = catalog(
     },
     "canvas-crop-mode": {
       profile: "image-canvas",
-      how: "With the flag forced on, open “Settings page” and double-click the image's own pixels: crop mode starts, the whole image shows dimmed with the crop window and its eight handles, and a Done button sits at the window's corner.",
+      how: "With the flag forced on, open “Settings page” and double-click the image's own pixels: crop mode starts, the whole image shows dimmed with a thin white window outline, thick white L corners, a short bar at the middle of each edge and a rule-of-thirds grid, and a Done button sits at the window's corner (NIW2-876).",
       steps: [
         open(ASSETS.settingsShot),
         { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true },
