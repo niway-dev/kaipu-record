@@ -128,20 +128,28 @@ async function main(): Promise<number> {
   await loopDone;
 
   // Final read: the lifetime peak of every process still alive, before anything exits.
-  // Recorded even when empty, so processes that went away are marked exited.
+  // Recorded even when empty (processes that went away are marked exited), unless the
+  // read itself failed: a failed `footprint` call also returns no processes.
   if (attached) {
-    const live = await readTick(root);
-    const files = args.watch ? readWatchedFiles(args.watch) : new Map<string, number>();
-    const { sampleRows, systemRow } = recorder.addTick({
-      tMs: mono() - t0,
-      processes: live.processes,
-      system: live.system,
-      outputBytes: totalBytes(files),
-      outputFiles: files,
-      costMs: 0,
-    });
-    if (sampleRows.length > 0) appendFileSync(samplesPath, `${sampleRows.join("\n")}\n`);
-    appendFileSync(systemPath, `${systemRow}\n`);
+    let live = await readTick(root);
+    if (live.error) live = await readTick(root);
+    if (live.error) {
+      console.error(
+        `  final read failed (${live.error}); not recorded, so processes keep their last known state`,
+      );
+    } else {
+      const files = args.watch ? readWatchedFiles(args.watch) : new Map<string, number>();
+      const { sampleRows, systemRow } = recorder.addTick({
+        tMs: mono() - t0,
+        processes: live.processes,
+        system: live.system,
+        outputBytes: totalBytes(files),
+        outputFiles: files,
+        costMs: 0,
+      });
+      if (sampleRows.length > 0) appendFileSync(samplesPath, `${sampleRows.join("\n")}\n`);
+      appendFileSync(systemPath, `${systemRow}\n`);
+    }
   }
 
   const endedAt = new Date();
