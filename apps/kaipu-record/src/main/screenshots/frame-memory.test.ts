@@ -34,7 +34,7 @@ describe("createFrameMemory", () => {
       screenshotFrame: { "7": { x: 1, y: 1, width: 50, height: 50 } },
     });
 
-    memory.save({ intent: "capture", displayId: 2, area: { displayId: 2, rect } });
+    memory.save([{ intent: "capture", displayId: 2, areas: [{ displayId: 2, rect }] }]);
 
     expect(update).toHaveBeenCalledOnce();
     expect(get().lastFrameDisplay).toEqual({ capture: 2, record: 4 });
@@ -48,7 +48,9 @@ describe("createFrameMemory", () => {
   it("saves a recording area with its ratio, apart from the screenshot frame", () => {
     const { memory, get } = memoryOver();
 
-    memory.save({ intent: "record", displayId: 1, area: { displayId: 1, rect, ratio: "16:9" } });
+    memory.save([
+      { intent: "record", displayId: 1, areas: [{ displayId: 1, rect, ratio: "16:9" }] },
+    ]);
 
     expect(get().recordingArea).toEqual({ "1": { ...rect, ratio: "16:9" } });
     expect(get().screenshotFrame).toEqual({});
@@ -58,7 +60,7 @@ describe("createFrameMemory", () => {
   it("saves the display alone when the rectangle was not touched", () => {
     const { memory, update } = memoryOver({ screenshotFrame: { "1": rect } });
 
-    memory.save({ intent: "capture", displayId: 2, area: null });
+    memory.save([{ intent: "capture", displayId: 2, areas: [] }]);
 
     expect(update).toHaveBeenCalledWith({ lastFrameDisplay: { capture: 2 } });
   });
@@ -66,7 +68,7 @@ describe("createFrameMemory", () => {
   it("saves the rectangle of another display than the one that holds the frame", () => {
     const { memory, get } = memoryOver();
 
-    memory.save({ intent: "capture", displayId: 2, area: { displayId: 1, rect } });
+    memory.save([{ intent: "capture", displayId: 2, areas: [{ displayId: 1, rect }] }]);
 
     expect(get().lastFrameDisplay).toEqual({ capture: 2 });
     expect(get().screenshotFrame).toEqual({ "1": rect });
@@ -78,8 +80,30 @@ describe("createFrameMemory", () => {
       screenshotFrame: { "2": rect },
     });
 
-    memory.save({ intent: "capture", displayId: 2, area: { displayId: 2, rect } });
+    memory.save([{ intent: "capture", displayId: 2, areas: [{ displayId: 2, rect }] }]);
 
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it("saves both intents and every display of a close in one settings write", () => {
+    const { memory, update, get } = memoryOver();
+    const other = { ...rect, width: 640 };
+
+    memory.save([
+      {
+        intent: "capture",
+        displayId: 2,
+        areas: [
+          { displayId: 1, rect },
+          { displayId: 2, rect: other },
+        ],
+      },
+      { intent: "record", displayId: 1, areas: [{ displayId: 1, rect, ratio: "16:9" }] },
+    ]);
+
+    expect(update).toHaveBeenCalledOnce();
+    expect(get().lastFrameDisplay).toEqual({ capture: 2, record: 1 });
+    expect(get().screenshotFrame).toEqual({ "1": rect, "2": other });
+    expect(get().recordingArea).toEqual({ "1": { ...rect, ratio: "16:9" } });
   });
 });

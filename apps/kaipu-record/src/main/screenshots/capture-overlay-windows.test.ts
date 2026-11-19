@@ -2205,7 +2205,7 @@ describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-87
     last: Partial<Record<"capture" | "record", number>> = {},
     cursor = { x: 100, y: 100 },
   ) {
-    const save = vi.fn<(update: FrameMemoryUpdate) => void>();
+    const save = vi.fn<(updates: FrameMemoryUpdate[]) => void>();
     const lastDisplay = vi.fn((intent: "capture" | "record") => last[intent] ?? null);
     const port = new CaptureOverlayWindows({
       enabledModes: CAPTURE_MODES,
@@ -2256,8 +2256,15 @@ describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-87
 
   describe("saving on close", () => {
     const rect = { x: 10, y: 20, width: 300, height: 200 };
+    // Reports carry the pick's session, as the overlay's own do.
+    const currentSession = (): number =>
+      (
+        created[0]!.window.webContents.send.mock.calls
+          .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+          .at(-1)![1] as { session: number }
+      ).session;
     const reportFrom = (window: FakeWindow, payload: Record<string, unknown>) =>
-      window.send(IPC_CHANNELS.screenshotOverlayFrame, payload);
+      window.send(IPC_CHANNELS.screenshotOverlayFrame, { session: currentSession(), ...payload });
 
     it("saves nothing while the frame moves or is resized, only when the widget closes", async () => {
       const { port, save } = remembering();
@@ -2290,11 +2297,13 @@ describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-87
       await picked;
 
       expect(save).toHaveBeenCalledOnce();
-      expect(save).toHaveBeenCalledWith({
-        intent: "record",
-        displayId: 1,
-        area: { displayId: 1, rect: { ...rect, width: 320 }, ratio: "16:9" },
-      });
+      expect(save).toHaveBeenCalledWith([
+        {
+          intent: "record",
+          displayId: 1,
+          areas: [{ displayId: 1, rect: { ...rect, width: 320 }, ratio: "16:9" }],
+        },
+      ]);
     });
 
     it("saves the display the frame was moved to, and the rectangle of the display it was drawn on", async () => {
@@ -2306,11 +2315,96 @@ describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-87
       port.cancelPick();
       await picked;
 
-      expect(save).toHaveBeenCalledWith({
-        intent: "capture",
-        displayId: 2,
-        area: { displayId: 1, rect },
-      });
+      expect(save).toHaveBeenCalledWith([
+        { intent: "capture", displayId: 2, areas: [{ displayId: 1, rect }] },
+      ]);
+    });
+
+    it("saves the rectangle of every display it was drawn on, not only the last one", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      const second = { ...rect, width: 640 };
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+      created[1]!.window.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 2 });
+      reportFrom(created[1]!.window, { displayId: 2, rect: second });
+
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledWith([
+        {
+          intent: "capture",
+          displayId: 2,
+          areas: [
+            { displayId: 1, rect },
+            { displayId: 2, rect: second },
+          ],
+        },
+      ]);
+    });
+
+    it("saves a rectangle under the intent it was drawn in, whatever intent the pick closes in", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+
+      port.switchIntent("record");
+      const recorded = { ...rect, width: 480 };
+      reportFrom(created[0]!.window, { displayId: 1, rect: recorded, ratio: "16:9" });
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledWith([
+        { intent: "capture", displayId: 1, areas: [{ displayId: 1, rect }] },
+        {
+          intent: "record",
+          displayId: 1,
+          areas: [{ displayId: 1, rect: recorded, ratio: "16:9" }],
+        },
+      ]);
+    });
+
+    it("never hands a screenshot rectangle to the recording area when the pick closes in Record", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+
+      port.switchIntent("record");
+      port.cancelPick();
+      await picked;
+
+      const updates = save.mock.calls[0]![0];
+      expect(updates.find((update) => update.intent === "record")?.areas).toEqual([]);
+    });
+
+    it("writes nothing more when the overlay is already saving the confirmed frame", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+      // The overlay says so right before its own settings write; Esc then lands in main.
+      reportFrom(created[0]!.window, { displayId: 1, rect, confirming: true });
+
+      created[0]!.window.emitContents(
+        "before-input-event",
+        { preventDefault: vi.fn() },
+        { type: "keyDown", key: "Escape" },
+      );
+      await picked;
+
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it("ignores a frame report that names no pick", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+
+      created[0]!.window.send(IPC_CHANNELS.screenshotOverlayFrame, { displayId: 1, rect });
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledWith([{ intent: "capture", displayId: 1, areas: [] }]);
     });
 
     it("saves the display alone when the frame was never changed", async () => {
@@ -2320,7 +2414,7 @@ describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-87
       port.cancelPick();
       await picked;
 
-      expect(save).toHaveBeenCalledWith({ intent: "capture", displayId: 1, area: null });
+      expect(save).toHaveBeenCalledWith([{ intent: "capture", displayId: 1, areas: [] }]);
     });
 
     it("saves nothing for a pick closed in Screen mode with no frame", async () => {
@@ -2364,7 +2458,7 @@ describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-87
       });
       await picked;
 
-      expect(save).toHaveBeenCalledWith({ intent: "record", displayId: 2, area: null });
+      expect(save).toHaveBeenCalledWith([{ intent: "record", displayId: 2, areas: [] }]);
     });
 
     it("ignores a report for a display that is not picked, a bad rectangle or an old pick", async () => {
@@ -2380,7 +2474,7 @@ describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-87
       port.cancelPick();
       await picked;
 
-      expect(save).toHaveBeenCalledWith({ intent: "capture", displayId: 1, area: null });
+      expect(save).toHaveBeenCalledWith([{ intent: "capture", displayId: 1, areas: [] }]);
     });
 
     it("does not let a failing save break the close", async () => {

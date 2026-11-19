@@ -220,8 +220,8 @@ component in `features/screenshots/overlay/` with three children: `AreaDrag`, `S
 `annotations/crop.ts`). It talks to main over these channels: `screenshot:overlay-answer`
 (renderer → main) and `screenshot:overlay-state` (main → every overlay: `{ session, mode, intent, hoverDisplayId, frameDisplayId, windows, cursor }`, so the
 chooser highlights only one display and only one display shows the frame), plus
-`screenshot:overlay-frame-display` (renderer → main) to move the frame, `screenshot:overlay-frame` (renderer → main, `{ displayId, rect, ratio?, session? }`
-when the box settles) and `screenshot:overlay-reset` (main → a kept window).
+`screenshot:overlay-frame-display` (renderer → main) to move the frame, `screenshot:overlay-frame` (renderer → main, `{ displayId, rect, ratio?, session?, confirming? }`
+when the box settles; a report with no session is dropped) and `screenshot:overlay-reset` (main → a kept window).
 
 ### Windows are kept between picks (NIW2-878)
 
@@ -247,7 +247,13 @@ next spare was ready, and an Esc sent in that gap reached no window.
   a recording (`AppSettings.lastFrameDisplay`), then the pointer display, then the primary.
   The rectangle is saved with the existing `screenshotFrame` / `recordingArea` memory, once, when
   the widget closes (Esc, a second press) and when a frame is confirmed. Nothing is written
-  while a box is dragged or resized: the overlay reports the settled box to main, which holds it.
+  while a box is dragged or resized: the overlay reports the settled box to main, which holds
+  the latest one per display and per intent (the intent showing when the report arrived), so a
+  screenshot rectangle never lands in `recordingArea` after a P / V switch, and a rectangle drawn
+  on one display is kept after the frame moved to another. Both intents and all displays of a
+  close go out in one settings write. A confirm writes its own frame from the overlay; it
+  reports `confirming` just before, so an Esc that lands in main during that write saves nothing
+  more.
 
 ### Entry points and shortcuts
 

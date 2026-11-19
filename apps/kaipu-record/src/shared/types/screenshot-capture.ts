@@ -240,6 +240,11 @@ export interface FrameReport {
   rect: CaptureRect;
   ratio?: RecordingRatio;
   session?: number;
+  /**
+   * Sent right before the overlay's own settings write for a confirmed frame: if Esc lands in
+   * main during that write, the close saves nothing more (one write for one close).
+   */
+  confirming?: true;
 }
 
 /**

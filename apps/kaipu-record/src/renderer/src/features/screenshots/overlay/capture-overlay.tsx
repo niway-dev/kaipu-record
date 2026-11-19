@@ -590,12 +590,13 @@ function ActiveFrame({
 
   // Reported, never saved here: main keeps the latest and writes it once if the pick closes.
   const settled = useCallback(
-    (rect: CaptureRect, ratio?: RecordingRatio) => {
+    (rect: CaptureRect, ratio?: RecordingRatio, confirming?: true) => {
       api.captureOverlay.reportFrame({
         displayId: query.displayId,
         rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
         ...(ratio ? { ratio } : {}),
         ...(session === undefined ? {} : { session }),
+        ...(confirming ? { confirming } : {}),
       });
     },
     [api, query.displayId, session],
@@ -623,6 +624,8 @@ function ActiveFrame({
           ...withRatio,
         },
         async () => {
+          // Main saves nothing for a close (Esc) that lands during this write.
+          settled(plain, ratio, true);
           // The window's copy, which main's broadcast keeps current, carries the other displays'
           // rectangles, so they are kept; a save from another display in the same few ms could be lost.
           // The display it was confirmed on is the one this intent reopens on (NIW2-878); one
@@ -638,7 +641,7 @@ function ActiveFrame({
         },
       );
     },
-    [api, key, query.displayId, send],
+    [api, key, query.displayId, send, settled],
   );
 
   // The dim sheet shows while the settings load (a few ms), so the window never flashes.

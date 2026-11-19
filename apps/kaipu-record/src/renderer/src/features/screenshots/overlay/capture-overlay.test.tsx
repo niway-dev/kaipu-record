@@ -788,6 +788,25 @@ describe("FrameBox (chrome and keys)", () => {
     );
   });
 
+  it("tells main the confirmed frame is being saved before its own settings write (NIW2-878)", async () => {
+    const remembered = { x: 100, y: 120, width: 400, height: 300 };
+    const { api } = fakeApi({ "42": remembered });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+
+    press("Enter");
+
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledOnce());
+    expect(api.captureOverlay.reportFrame).toHaveBeenCalledWith({
+      displayId: 42,
+      rect: remembered,
+      confirming: true,
+    });
+    expect(api.captureOverlay.reportFrame.mock.invocationCallOrder[0]).toBeLessThan(
+      api.updateSettings.mock.invocationCallOrder[0]!,
+    );
+  });
+
   it("re-clamps a remembered frame that no longer fits the work area", async () => {
     // Remembered on a bigger resolution: it now hangs off the bottom-right corner.
     const { api } = fakeApi({ "42": { x: 1500, y: 900, width: 800, height: 600 } });

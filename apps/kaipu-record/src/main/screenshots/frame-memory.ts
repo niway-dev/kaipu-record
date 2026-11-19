@@ -14,8 +14,8 @@ interface SettingsPort {
  *
  * Main owns the display and the close-time write. Settings are the store, not a new file, so
  * a restart keeps the selection and the overlay's own confirm-time write lands in the same
- * place. `save` is one `update` call (one persist, one broadcast), and none when nothing
- * changed.
+ * place. `save` takes every update of a close (each intent, each display) and makes one
+ * `update` call (one persist, one broadcast), or none when nothing changed.
  */
 export function createFrameMemory(settings: SettingsPort): FrameMemory {
   return {
@@ -23,23 +23,27 @@ export function createFrameMemory(settings: SettingsPort): FrameMemory {
       if (intent === "instant") return null;
       return settings.get().lastFrameDisplay[intent] ?? null;
     },
-    save: ({ intent, displayId, area }) => {
+    save: (updates) => {
       const current = settings.get();
-      const patch: Partial<AppSettings> = {};
-      if (displayId !== null && current.lastFrameDisplay[intent] !== displayId) {
-        patch.lastFrameDisplay = { ...current.lastFrameDisplay, [intent]: displayId };
-      }
-      if (area) {
-        const key = String(area.displayId);
-        if (intent === "record") {
-          const next = area.ratio ? { ...area.rect, ratio: area.ratio } : area.rect;
-          if (JSON.stringify(current.recordingArea[key]) !== JSON.stringify(next)) {
-            patch.recordingArea = { ...current.recordingArea, [key]: next };
+      let { lastFrameDisplay, recordingArea, screenshotFrame } = current;
+      for (const { intent, displayId, areas } of updates) {
+        if (displayId !== null) lastFrameDisplay = { ...lastFrameDisplay, [intent]: displayId };
+        for (const { displayId: areaDisplay, rect, ratio } of areas) {
+          const key = String(areaDisplay);
+          if (intent === "record") {
+            recordingArea = { ...recordingArea, [key]: ratio ? { ...rect, ratio } : rect };
+          } else {
+            screenshotFrame = { ...screenshotFrame, [key]: rect };
           }
-        } else if (JSON.stringify(current.screenshotFrame[key]) !== JSON.stringify(area.rect)) {
-          patch.screenshotFrame = { ...current.screenshotFrame, [key]: area.rect };
         }
       }
+      const patch: Partial<AppSettings> = {};
+      const changed = (a: unknown, b: unknown): boolean => JSON.stringify(a) !== JSON.stringify(b);
+      if (changed(lastFrameDisplay, current.lastFrameDisplay))
+        patch.lastFrameDisplay = lastFrameDisplay;
+      if (changed(recordingArea, current.recordingArea)) patch.recordingArea = recordingArea;
+      if (changed(screenshotFrame, current.screenshotFrame))
+        patch.screenshotFrame = screenshotFrame;
       if (Object.keys(patch).length > 0) settings.update(patch);
     },
   };
