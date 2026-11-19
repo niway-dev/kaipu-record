@@ -1,5 +1,5 @@
 /**
- * The transcription job in the main process (NIW2-818 M1, ADR 0062 and 0063).
+ * The transcription job in the main process (NIW2-818 M1, ADR 0062 and 0065).
  *
  * The renderer streams the recording's decoded audio (16 kHz mono PCM16) to `.kaipu/tmp`; this
  * service then segments it, runs `sherpa-onnx-offline` over the segments in batches and commits
