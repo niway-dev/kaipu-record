@@ -15,6 +15,13 @@ import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
 import es from "@kaipu/i18n/messages/es";
 import en from "@kaipu/i18n/messages/en";
+import {
+  loadSettings,
+  resetSettingsStoreForTests,
+  settingsSubscriberCount,
+} from "@renderer/features/settings/settings-store";
+import { STUB_SETTINGS } from "../../test/stub-settings";
+import { installSettingsIpc, type SettingsIpc } from "../../test/settings-ipc";
 
 // Assert the copy the store actually emits, resolved for whatever locale the app
 // falls back to — hard-coding a Spanish word here broke the moment the default
@@ -28,7 +35,6 @@ const prepareEngineMock = vi.mocked(prepareEngine);
 const reportErrorMock = vi.mocked(reportError);
 
 const callOrder: string[] = [];
-const appSettingsListeners: Array<(settings: AppSettings) => void> = [];
 const commands: Array<(command: ControlCommand) => void> = [];
 const recordingCreateMock = vi.fn(async () => {
   callOrder.push("recordingCreate");
@@ -43,12 +49,17 @@ window.electronAPI.onRecordingCommand = vi.fn((callback) => {
   commands.push(callback);
   return () => {};
 });
-// The countdown length is read live: the store primes it with getSettings and follows the
-// settings broadcast, both at import time.
-window.electronAPI.onSettingsChanged = vi.fn((callback) => {
-  appSettingsListeners.push(callback);
-  return () => {};
+// The countdown length and the take's audio settings come from the window's settings store,
+// which the recorder store primes at import. Every test gets a fresh fake main process and a
+// started store (the window just loaded), and plays main's broadcasts through `ipc`.
+let ipc: SettingsIpc;
+beforeEach(() => {
+  ipc = installSettingsIpc(STUB_SETTINGS as unknown as AppSettings);
+  void loadSettings();
 });
+/** A settings broadcast: the persisted defaults with these fields changed. */
+const broadcastSettings = (patch: Record<string, unknown>): void =>
+  ipc.broadcast({ ...STUB_SETTINGS, ...patch } as unknown as AppSettings);
 
 // The store registers its command listener as a MODULE-LEVEL side effect at
 // import time (that's the whole point — it must outlive any page's mount), so
@@ -938,11 +949,8 @@ describe("recorder-store", () => {
 
   describe("countdown length setting", () => {
     // The settings broadcast the store follows (Settings → Recording → Countdown).
-    const setCountdown = (seconds: unknown): void => {
-      for (const listener of appSettingsListeners) {
-        listener({ recordingCountdownSeconds: seconds } as AppSettings);
-      }
-    };
+    const setCountdown = (seconds: unknown): void =>
+      broadcastSettings({ recordingCountdownSeconds: seconds });
     afterEach(() => setCountdown(3));
 
     it("with 0 skips the counting state and the visible-wait and starts the engine at once", async () => {
@@ -1054,6 +1062,26 @@ describe("recorder-store", () => {
       store.stopOrCancelRecording();
     });
 
+    it("a broadcast that lands before the first read finishes wins over the read", async () => {
+      // The window loads again: its first read is held back while a newer broadcast arrives.
+      resetSettingsStoreForTests();
+      const late = installSettingsIpc(STUB_SETTINGS as unknown as AppSettings, {
+        deferRead: true,
+      });
+      void loadSettings();
+      late.broadcast({ ...STUB_SETTINGS, recordingCountdownSeconds: 5 } as unknown as AppSettings);
+      late.resolveRead({
+        ...STUB_SETTINGS,
+        recordingCountdownSeconds: 0,
+      } as unknown as AppSettings);
+      await vi.advanceTimersByTimeAsync(0);
+
+      store.requestStartRecording(() => input);
+
+      expect(store.getRecorderSnapshot()).toEqual({ status: "counting", countdown: 5 });
+      store.stopOrCancelRecording();
+    });
+
     it("falls back to 3 for a value that is not an offered length", () => {
       setCountdown(7);
       store.requestStartRecording(() => input);
@@ -1090,12 +1118,9 @@ describe("recorder-store live settings", () => {
     isCameraEnabled: false,
     area: null,
   };
-  const appListeners = new Set<(settings: AppSettings) => void>();
   /** An app-settings broadcast whose `audio` is the defaults patched; the rest is irrelevant here. */
-  const broadcastAudio = (patch: Partial<AudioSettings>): void => {
-    const settings = { audio: { ...DEFAULT_AUDIO_SETTINGS, ...patch } } as AppSettings;
-    for (const listener of appListeners) listener(settings);
-  };
+  const broadcastAudio = (patch: Partial<AudioSettings>): void =>
+    broadcastSettings({ audio: { ...DEFAULT_AUDIO_SETTINGS, ...patch } });
   const broadcast = (patch: Partial<RecordingSettings>): void => {
     for (const listener of settingsListeners) listener({ ...base, ...patch });
   };
@@ -1108,11 +1133,6 @@ describe("recorder-store live settings", () => {
     window.electronAPI.onRecordingSettingsChanged = vi.fn((listener) => {
       settingsListeners.add(listener);
       return () => settingsListeners.delete(listener);
-    });
-    appListeners.clear();
-    window.electronAPI.onSettingsChanged = vi.fn((listener) => {
-      appListeners.add(listener);
-      return () => appListeners.delete(listener);
     });
     window.electronAPI.recordingWrite = vi.fn();
     window.electronAPI.recordingFinalize = vi.fn(async () => RECORDING);
@@ -1403,9 +1423,9 @@ describe("recorder-store live settings", () => {
       pendingPrepare();
       store.requestStartRecording(() => input);
       await vi.advanceTimersByTimeAsync(3000);
-      expect(appListeners.size).toBe(1);
+      expect(settingsSubscriberCount()).toBe(1);
       store.stopOrCancelRecording();
-      expect(appListeners.size).toBe(0);
+      expect(settingsSubscriberCount()).toBe(0);
     });
 
     it("stops listening when the start fails", async () => {
@@ -1413,7 +1433,7 @@ describe("recorder-store live settings", () => {
       store.requestStartRecording(() => input);
       await vi.advanceTimersByTimeAsync(3000);
       expect(store.getRecorderSnapshot().status).toBe("idle");
-      expect(appListeners.size).toBe(0);
+      expect(settingsSubscriberCount()).toBe(0);
     });
   });
 
@@ -1486,12 +1506,12 @@ describe("recorder-store live settings", () => {
       prepareEngineMock.mockResolvedValue(fakePrepared());
       store.requestStartRecording(() => input);
       await vi.advanceTimersByTimeAsync(1000);
-      expect(appListeners.size).toBe(1);
+      expect(settingsSubscriberCount()).toBe(1);
       expect(settingsListeners.size).toBe(1);
 
       store.stopOrCancelRecording();
 
-      expect(appListeners.size).toBe(0);
+      expect(settingsSubscriberCount()).toBe(0);
       expect(settingsListeners.size).toBe(0);
     });
   });
@@ -1502,7 +1522,7 @@ describe("recorder-store live settings", () => {
     await stopAndSettle();
 
     expect(settingsListeners.size).toBe(0);
-    expect(appListeners.size).toBe(0);
+    expect(settingsSubscriberCount()).toBe(0);
     broadcastAudio({ micLevel: 10 });
     expect(engine.setMicLevel).not.toHaveBeenCalled();
     broadcast({ isMicrophoneEnabled: false });

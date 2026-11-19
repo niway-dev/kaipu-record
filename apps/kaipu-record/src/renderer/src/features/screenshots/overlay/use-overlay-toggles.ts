@@ -3,6 +3,7 @@ import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { RecordingSettings } from "@shared/types/ipc";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleShape } from "@shared/camera-bubble";
 import { useCameraAccess } from "@renderer/features/camera-settings/use-camera-settings";
+import { loadSettings } from "@renderer/features/settings/settings-store";
 import type { InputToggleKey } from "./overlay-keys";
 
 /** The bubble's look the overlay's placeholder needs (`AppSettings.cameraBubble`). */
@@ -20,7 +21,7 @@ export type RecordingTogglesApi = Pick<
   KaipuElectronAPI,
   "getRecordingSettings" | "updateRecordingSettings" | "onRecordingSettingsChanged"
 > &
-  Partial<Pick<KaipuElectronAPI, "getCameraAccessStatus" | "getSettings">>;
+  Partial<Pick<KaipuElectronAPI, "getCameraAccessStatus">>;
 
 export interface OverlayToggles {
   microphone: boolean;
@@ -73,8 +74,7 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
         if (live && revision.current === revisionAtRequest) setSettings(current);
       })
       .catch(() => {});
-    api
-      .getSettings?.()
+    loadSettings()
       .then((app) => {
         if (live && app.cameraBubble) {
           setBubble({

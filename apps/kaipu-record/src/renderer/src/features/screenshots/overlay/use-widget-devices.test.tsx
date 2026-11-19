@@ -1,11 +1,19 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RecordingSettings } from "@shared/types/ipc";
+import type { AppSettings } from "@shared/types";
+import { installSettingsIpc } from "@renderer/test/settings-ipc";
+import { STUB_SETTINGS } from "@renderer/test/stub-settings";
 import { useWidgetDevices } from "./use-widget-devices";
+
+const settingsWithCamera = (deviceId: string): AppSettings =>
+  ({
+    ...STUB_SETTINGS,
+    cameraBubble: { ...(STUB_SETTINGS as { cameraBubble?: object }).cameraBubble, deviceId },
+  }) as unknown as AppSettings;
 
 const noSettings = {
   getRecordingSettings: vi.fn(() => new Promise(() => {})),
-  getSettings: vi.fn(() => new Promise(() => {})),
   updateRecordingSettings: vi.fn(),
   onRecordingSettingsChanged: vi.fn(() => () => {}),
 } as unknown as Parameters<typeof useWidgetDevices>[0];
@@ -61,7 +69,6 @@ describe("useWidgetDevices", () => {
         getRecordingSettings: vi.fn(
           () => new Promise<RecordingSettings>((resolve) => (resolveRead = resolve)),
         ),
-        getSettings: vi.fn(() => new Promise(() => {})),
         updateRecordingSettings: vi.fn(),
         onRecordingSettingsChanged: vi.fn((callback: (settings: RecordingSettings) => void) => {
           broadcast = callback;
@@ -114,28 +121,20 @@ describe("useWidgetDevices", () => {
     afterEach(cleanup);
 
     function pendingCameraRead() {
-      // Only the mount read is held back: `selectCamera` reads settings too, and a pick's own
-      // read-then-write must not stand in for the first reply.
-      let resolveRead: (settings: unknown) => void = () => {};
-      let reads = 0;
-      let broadcast: (settings: unknown) => void = () => {};
+      // The window's settings store holds the first read back; `selectCamera` waits on the same
+      // read before writing, so a pick's own write must not stand in for the first reply.
+      const ipc = installSettingsIpc(settingsWithCamera("cam-0"), { deferRead: true });
       const api = {
         getRecordingSettings: vi.fn(() => new Promise(() => {})),
-        getSettings: vi.fn(() =>
-          reads++ === 0 ? new Promise((resolve) => (resolveRead = resolve)) : new Promise(() => {}),
-        ),
         updateSettings: vi.fn(),
         updateRecordingSettings: vi.fn(),
         onRecordingSettingsChanged: vi.fn(() => () => {}),
-        onSettingsChanged: vi.fn((callback: (settings: unknown) => void) => {
-          broadcast = callback;
-          return () => {};
-        }),
       } as unknown as Parameters<typeof useWidgetDevices>[0];
       return {
         api,
-        settle: (deviceId: string) => resolveRead({ cameraBubble: { deviceId } }),
-        broadcast: (deviceId: string) => broadcast({ cameraBubble: { deviceId } }),
+        ipc,
+        settle: (deviceId: string) => ipc.resolveRead(settingsWithCamera(deviceId)),
+        broadcast: (deviceId: string) => ipc.broadcast(settingsWithCamera(deviceId)),
       };
     }
 
@@ -149,6 +148,31 @@ describe("useWidgetDevices", () => {
       // The reply was computed before the choice: it must not undo it.
       await act(async () => bridge.settle("cam-1"));
       expect(result.current.cameraId).toBe("cam-2");
+    });
+
+    it("writes the pick with the whole bubble once the first read answered", async () => {
+      const bridge = pendingCameraRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+
+      act(() => result.current.selectCamera("cam-2"));
+      await act(async () => bridge.settle("cam-1"));
+
+      await waitFor(() =>
+        expect(bridge.api.updateSettings).toHaveBeenCalledWith({
+          cameraBubble: expect.objectContaining({ deviceId: "cam-2" }),
+        }),
+      );
+    });
+
+    it("stops showing a pick once main's echo or another window changes the camera", async () => {
+      const bridge = pendingCameraRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+
+      act(() => result.current.selectCamera("cam-2"));
+      await act(async () => bridge.settle("cam-1"));
+      act(() => bridge.broadcast("cam-3"));
+
+      expect(result.current.cameraId).toBe("cam-3");
     });
 
     it("keeps a broadcast that landed before the first read answered", async () => {
@@ -171,30 +195,80 @@ describe("useWidgetDevices", () => {
     });
   });
 
+  describe("a pick that main has already answered", () => {
+    afterEach(cleanup);
+
+    it("shows the saved camera again when it returns to the value the pick was made over", async () => {
+      const ipc = installSettingsIpc(settingsWithCamera("cam-1"));
+      const api = {
+        getRecordingSettings: vi.fn(() => new Promise(() => {})),
+        updateSettings: vi.fn(),
+        updateRecordingSettings: vi.fn(),
+        onRecordingSettingsChanged: vi.fn(() => () => {}),
+      } as unknown as Parameters<typeof useWidgetDevices>[0];
+      const { result } = renderHook(() => useWidgetDevices(api, true));
+      await waitFor(() => expect(result.current.cameraId).toBe("cam-1"));
+
+      act(() => result.current.selectCamera("cam-2"));
+      expect(result.current.cameraId).toBe("cam-2");
+      // Main's echo makes the pick the saved value; the pick is spent.
+      act(() => ipc.broadcast(settingsWithCamera("cam-2")));
+      expect(result.current.cameraId).toBe("cam-2");
+
+      // Another display (or Settings) puts cam-1 back: this widget must follow, not keep cam-2.
+      act(() => ipc.broadcast(settingsWithCamera("cam-1")));
+      expect(result.current.cameraId).toBe("cam-1");
+    });
+  });
+
+  describe("a pick and publishes the window skips rendering", () => {
+    afterEach(cleanup);
+
+    it("is spent by a camera that was published and put back before the next render", async () => {
+      const ipc = installSettingsIpc(settingsWithCamera("cam-1"));
+      const api = {
+        getRecordingSettings: vi.fn(() => new Promise(() => {})),
+        updateSettings: vi.fn(),
+        updateRecordingSettings: vi.fn(),
+        onRecordingSettingsChanged: vi.fn(() => () => {}),
+      } as unknown as Parameters<typeof useWidgetDevices>[0];
+      const { result } = renderHook(() => useWidgetDevices(api, true));
+      await waitFor(() => expect(result.current.cameraId).toBe("cam-1"));
+
+      act(() => result.current.selectCamera("cam-2"));
+      expect(result.current.cameraId).toBe("cam-2");
+      // Two broadcasts reach the window before React renders: another display moves the camera
+      // to cam-3 and back to cam-1. The render sees cam-1 again, the value the pick was made
+      // over, but the store moved off it in between, so the pick is spent.
+      act(() => {
+        ipc.broadcast(settingsWithCamera("cam-3"));
+        ipc.broadcast(settingsWithCamera("cam-1"));
+      });
+
+      expect(result.current.cameraId).toBe("cam-1");
+    });
+  });
+
   describe("the camera across displays", () => {
     afterEach(cleanup);
     it("follows a camera chosen in another overlay window", async () => {
-      let broadcast: (settings: unknown) => void = () => {};
-      const unsubscribe = vi.fn();
+      const ipc = installSettingsIpc(settingsWithCamera("cam-1"));
       const api = {
         getRecordingSettings: vi.fn(() => new Promise(() => {})),
-        getSettings: vi.fn(async () => ({ cameraBubble: { deviceId: "cam-1" } })),
         updateRecordingSettings: vi.fn(),
         onRecordingSettingsChanged: vi.fn(() => () => {}),
-        onSettingsChanged: vi.fn((callback: (settings: unknown) => void) => {
-          broadcast = callback;
-          return unsubscribe;
-        }),
       } as unknown as Parameters<typeof useWidgetDevices>[0];
       const { result, unmount } = renderHook(() => useWidgetDevices(api, true));
       await waitFor(() => expect(result.current.cameraId).toBe("cam-1"));
 
       // Display B chose another camera: this window's widget must show it too.
-      act(() => broadcast({ cameraBubble: { deviceId: "cam-2" } }));
+      act(() => ipc.broadcast(settingsWithCamera("cam-2")));
       expect(result.current.cameraId).toBe("cam-2");
 
+      // The window's one listener serves this hook; unmounting it opens or closes nothing.
+      expect(ipc.activeSubscriptions()).toBe(1);
       unmount();
-      expect(unsubscribe).toHaveBeenCalled();
+      expect(ipc.onSettingsChanged).toHaveBeenCalledTimes(1);
     });
   });
 });

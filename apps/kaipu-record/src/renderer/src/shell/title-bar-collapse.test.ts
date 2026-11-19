@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { dirnameOf } from "../test/source-tree";
 
 /**
  * A crowded title bar degrades instead of overflowing (NIW2-619 review S1). With a page's
@@ -10,7 +11,7 @@ import { describe, expect, it } from "vitest";
  * jsdom has no layout, so this reads the stylesheet; the harness shots at 1024 and 720 px
  * are the visual proof.
  */
-const dir = path.dirname(new URL(import.meta.url).pathname);
+const dir = dirnameOf(import.meta.url);
 const css = readFileSync(path.join(dir, "title-bar.module.css"), "utf8").replace(
   /\/\*[\s\S]*?\*\//g,
   "",

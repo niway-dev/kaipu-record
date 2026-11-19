@@ -87,7 +87,7 @@ Two existing models were weighed:
    listener receives is the effective settings of the active workspace**: the `settings:get`
    result, the `settings:update` response (`settings-store.ts:182-188`, handler `:200-203`),
    the `settings:changed` broadcast, and the argument of `onSettingsChanged` and
-   `onSettingsKeysChanged` (`:138-158`). Today's renderer readers keep working without
+   `onSettingsKeysChanged` (`:194-214`). Today's renderer readers keep working without
    knowing about scopes, and `useAppSettings` writing the update response into its cache
    (`use-app-settings.ts:21`) stays correct: with Work overriding `screenshotCopy` to
    `manual`, an update of an app-wide key returns `manual`, not the All value. A switch

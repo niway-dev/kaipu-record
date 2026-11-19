@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppSettings, CameraAccessStatus } from "@shared/types";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "@shared/camera-bubble";
+import { getSettingsSnapshot, watchSettings } from "@renderer/features/settings/settings-store";
 
 export interface CameraDevice {
   deviceId: string;
@@ -95,10 +96,13 @@ export function useCameraAccess(
 /**
  * The camera bubble settings (persisted in AppSettings by main), plus what the settings
  * UI needs around them: the cameras to choose from and whether access is blocked.
- * Query on mount + subscribe, like every cross-window setting.
+ * Followed through the window's settings store like every cross-window setting: a window that
+ * already holds them starts on them, otherwise the defaults stand until the first read lands.
  */
 export function useCameraSettings(): CameraSettingsStore {
-  const [bubble, setBubble] = useState<CameraBubbleSettings>(DEFAULT_CAMERA_BUBBLE);
+  const [bubble, setBubble] = useState<CameraBubbleSettings>(
+    () => getSettingsSnapshot()?.cameraBubble ?? DEFAULT_CAMERA_BUBBLE,
+  );
   const latest = useRef(bubble);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSent = useRef(0);
@@ -126,8 +130,7 @@ export function useCameraSettings(): CameraSettingsStore {
       setBubble(next);
       if (patch) send();
     };
-    void window.electronAPI.getSettings().then(accept);
-    const unsubscribe = window.electronAPI.onSettingsChanged(accept);
+    const unsubscribe = watchSettings(accept);
     return () => {
       unsubscribe();
       // A change still throttled when the popover or drawer closes is sent now, not lost.

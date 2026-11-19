@@ -1,13 +1,10 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { dirnameOf } from "../../../test/source-tree";
 
 // jsdom does not lay out CSS modules, so the tag's placement (mock A4) is pinned in the rule.
-const css = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "image-selection.module.css"),
-  "utf8",
-);
+const css = readFileSync(join(dirnameOf(import.meta.url), "image-selection.module.css"), "utf8");
 const rule = (selector: string): string => {
   const match = css.match(new RegExp(`(?:^|\\n)${selector}\\s*\\{([^}]*)\\}`));
   if (!match) throw new Error(`no ${selector} rule`);

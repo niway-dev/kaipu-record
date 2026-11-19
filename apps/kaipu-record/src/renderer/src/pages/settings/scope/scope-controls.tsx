@@ -15,6 +15,7 @@ import type { AppSettings } from "@shared/types";
 import { useOptionalWorkspaces } from "@renderer/features/workspaces/workspaces-context";
 import { Select } from "@renderer/ui/select";
 import { cx } from "@renderer/ui/cx";
+import { subscribeSettings } from "@renderer/features/settings/settings-store";
 import { useSettingsScope, useScopedSetting, type ScopedSetting } from "./settings-scope";
 import styles from "./scope.module.css";
 
@@ -505,7 +506,7 @@ export function PendingSettingsHost(): React.JSX.Element | null {
 
   useEffect(() => {
     const refresh = (): void => setTick((n) => n + 1);
-    const off = window.electronAPI.onSettingsChanged(refresh);
+    const off = subscribeSettings(refresh);
     // A sync may land while the app is in the background: look again when it comes back.
     window.addEventListener("focus", refresh);
     return () => {

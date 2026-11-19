@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { dirnameOf } from "../../../test/source-tree";
 
 /**
  * The invariant, enforced rather than written down: NO consumer computes text geometry.
@@ -19,7 +20,7 @@ import { describe, expect, it } from "vitest";
  * test catches "someone wrote an eighth copy", and the failure it guards has now shipped
  * seven times.
  */
-const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), "../..");
+const ROOT = path.join(dirnameOf(import.meta.url), "../..");
 
 /** Where the presets legitimately live: the module that owns them. */
 const OWNER = path.join(ROOT, "screenshots/annotations/tools.ts");

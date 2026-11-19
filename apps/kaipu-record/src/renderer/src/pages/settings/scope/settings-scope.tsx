@@ -21,6 +21,7 @@ import type { WorkspaceView } from "@shared/types/workspaces";
 import { useOptionalWorkspaces } from "@renderer/features/workspaces/workspaces-context";
 import { showToast } from "@renderer/ui/toast-store";
 import { useAppSettings } from "../use-app-settings";
+import { subscribeSettings } from "@renderer/features/settings/settings-store";
 
 /**
  * Where a Settings control writes (ADR 0034, decision 6):
@@ -101,7 +102,7 @@ function useScopeState(enabled: boolean): SettingsScopeState {
   // A change from any window (an override written, an answer, a switch) reads the scope again.
   useEffect(() => {
     if (!enabled) return;
-    return window.electronAPI.onSettingsChanged(() => refresh());
+    return subscribeSettings(() => refresh());
   }, [enabled, refresh]);
 
   const target = useMemo(

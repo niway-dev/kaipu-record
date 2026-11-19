@@ -16,6 +16,8 @@ import {
 import { bubblePreviewLines } from "@shared/webcam-track";
 import styles from "./camera-bubble.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
+import { useSettings } from "@renderer/features/settings/settings-store";
+import type { AppSettings } from "@shared/types";
 
 /**
  * The bubble's height: the window's, minus the pad main sizes it with. Main makes the window
@@ -26,14 +28,11 @@ function sizeFromWindow(): number {
   return Math.max(0, window.innerHeight - 2 * CAMERA_BUBBLE_WINDOW_PAD);
 }
 
-/** The persisted bubble settings, query on mount + subscribe. */
+const pickBubble = (settings: AppSettings): CameraBubbleSettings => settings.cameraBubble;
+
+/** The persisted bubble settings, from the window's settings store (the defaults until it has them). */
 function useBubbleSettings(): CameraBubbleSettings {
-  const [bubble, setBubble] = useState<CameraBubbleSettings>(DEFAULT_CAMERA_BUBBLE);
-  useEffect(() => {
-    void window.electronAPI.getSettings().then((settings) => setBubble(settings.cameraBubble));
-    return window.electronAPI.onSettingsChanged((settings) => setBubble(settings.cameraBubble));
-  }, []);
-  return bubble;
+  return useSettings(pickBubble) ?? DEFAULT_CAMERA_BUBBLE;
 }
 
 /**

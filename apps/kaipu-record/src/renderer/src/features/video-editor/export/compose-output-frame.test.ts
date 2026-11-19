@@ -7,6 +7,7 @@ import {
 import { track } from "../cursor/cursor-test-fixtures";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { dirnameOf } from "../../../test/source-tree";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WEBCAM_DEFAULTS, type WebcamScene } from "../webcam/webcam-model";
 import type { Redaction } from "../privacy/redaction";
@@ -244,7 +245,7 @@ describe("createOutputComposer: the webcam layer (ADR 0038)", () => {
 // the encoders): a tripwire over its source that the plan's webcam reaches both the composer
 // and the clip loop. A harmless refactor of the call shape can trip it.
 describe("the MP4 worker hands the plan's webcam to the composer and the clip loop", () => {
-  const dir = path.dirname(new URL(import.meta.url).pathname);
+  const dir = dirnameOf(import.meta.url);
   const source = readFileSync(path.join(dir, "export-worker.ts"), "utf8").replace(
     /\/\*[\s\S]*?\*\/|\/\/.*$/gm,
     "",

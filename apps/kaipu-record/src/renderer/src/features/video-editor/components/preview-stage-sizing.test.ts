@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { dirnameOf } from "../../../test/source-tree";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -22,7 +23,7 @@ import { describe, expect, it } from "vitest";
  * CONTAINER rather than the viewport; they do not prove what it looks like, because jsdom
  * has no layout engine. The visual proof belongs in the Playwright suite.
  */
-const dir = path.dirname(new URL(import.meta.url).pathname);
+const dir = dirnameOf(import.meta.url);
 const stageCss = readFileSync(path.join(dir, "preview-stage.module.css"), "utf8");
 const pageCss = readFileSync(
   path.join(dir, "../../../pages/video-editor/video-editor-page.module.css"),

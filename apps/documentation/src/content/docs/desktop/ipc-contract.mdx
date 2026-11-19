@@ -20,7 +20,7 @@ El contrato está **tipado de punta a punta** por archivos puros en `src/shared/
 
 ## La fuente de verdad son los tipos, no este doc
 
-**`IPC_CHANNELS` (`shared/types/ipc.ts`) es la lista autoritativa de canales**, y `KaipuElectronAPI` (`shared/types/electron-api.ts`) es la forma completa de `window.electronAPI`. Este doc **agrupa** los canales por subsistema para orientarse; para el conteo exacto, mirá esos dos archivos (verificados por el compilador, así que no pueden desincronizarse del código). Al momento de escribir esto son ~49 canales en `IPC_CHANNELS` más 3 canales de string crudo (ver [Canales fuera del mapa](#canales-fuera-del-mapa)).
+**`IPC_CHANNELS` (`shared/types/ipc.ts`) es la lista autoritativa de canales**, y `KaipuElectronAPI` (`shared/types/electron-api.ts`) es la forma completa de `window.electronAPI`. Este doc **agrupa** los canales por subsistema para orientarse; para el conteo exacto, mirá esos dos archivos (verificados por el compilador, así que no pueden desincronizarse del código). Al 2026-11-18 son 176 canales en `IPC_CHANNELS` más 3 canales de string crudo (ver [Canales fuera del mapa](#canales-fuera-del-mapa)).
 
 ## Canales por subsistema
 
@@ -52,7 +52,7 @@ Screenshots page, the tray panel and the generic capture shortcut. Only main wri
 capture completes (see § Screenshots), through `updateAppSettings(patch)` in `settings-store.ts`, the
 same path as `settings:update`; no UI control writes it directly.
 
-`settings:changed` se emite a **todas** las ventanas tras cada cambio (patrón consultar-al-montar + suscribir), para que consumidores como el hint de atajo de la barra flotante no queden stale.
+`settings:changed` se emite a **todas** las ventanas tras cada cambio (patrón consultar-al-montar + suscribir), para que consumidores como el hint de atajo de la barra flotante no queden stale. En el renderer, cada ventana lo escucha una sola vez, en un store: ver [Renderer settings store](/desktop/renderer-settings-store).
 
 ### Permisos
 
