@@ -360,6 +360,27 @@ describe("a window reused by many picks (NIW2-878)", () => {
     expect(answer).toHaveBeenCalledWith({ kind: "cancelled", session: 4 });
   });
 
+  it("tags a settled-frame report and a confirmed rect answer with the pick's session", async () => {
+    const frame = { x: 100, y: 120, width: 640, height: 360 };
+    const { api, answer } = fakeApi({ "42": frame }, { ...FRAME_ON_42, session: 7 });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "1:1" }));
+    const box = frameGeometry();
+    await waitFor(() => expect(api.captureOverlay.reportFrame).toHaveBeenCalledOnce());
+    expect(api.captureOverlay.reportFrame).toHaveBeenCalledWith({
+      displayId: 42,
+      rect: box,
+      session: 7,
+    });
+
+    press("Enter");
+    await waitFor(() => expect(answer).toHaveBeenCalledOnce());
+    expect(answer).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "rect", rect: box, session: 7 }),
+    );
+  });
+
   it("sends the answer as before when main sent no session", () => {
     const { api, answer } = fakeApi({}, SCREEN);
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
@@ -2808,6 +2829,9 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
     });
     first.unmount();
 
+    // The window's settings store caches the first render's settings; start the second clean
+    // so it reads its own fake, whose recording area is `area`.
+    resetSettingsStoreForTests();
     const rec = fakeApi({}, FRAME_ON_42, { "42": area });
     render(
       <CaptureOverlay
@@ -2817,6 +2841,7 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
       />,
     );
     await screen.findByTestId("capture-frame");
+    await waitFor(() => expect(frameGeometry()).toEqual(area));
     fireEvent.click(
       within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "16:9" }),
     );

@@ -370,11 +370,11 @@ export function FrameBox({
   );
 }
 
-/** Big enough to record (ADR 0030): at least `MIN_AREA_SIZE` DIP on each side. */
 function sameRect(a: CaptureRect, b: CaptureRect): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
+/** Big enough to record (ADR 0030): at least `MIN_AREA_SIZE` DIP on each side. */
 function recordable(frame: CaptureRect): boolean {
   return frame.width >= MIN_AREA_SIZE && frame.height >= MIN_AREA_SIZE;
 }

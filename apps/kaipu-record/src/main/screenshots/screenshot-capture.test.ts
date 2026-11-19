@@ -226,7 +226,7 @@ describe("MacProvider", () => {
       expect(runCli).toHaveBeenCalledTimes(1);
     });
 
-    it("screen with two displays picks, hides, captures the chosen display, then destroys", async () => {
+    it("screen with two displays picks, hides, captures the chosen display, then ends the pick", async () => {
       displays = [main, left];
       answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
       const out = await macProvider().capture({ mode: "screen", overlay: fake });
@@ -352,7 +352,7 @@ describe("MacProvider", () => {
       expect(fake.pick).toHaveBeenCalledWith("frame", [main]);
     });
 
-    it("cancel at pick answers cancelled, captures nothing, and still destroys", async () => {
+    it("cancel at pick answers cancelled, captures nothing, and still ends the pick", async () => {
       displays = [main, left];
       expect(await macProvider().capture({ mode: "screen", overlay: fake })).toEqual({
         kind: "cancelled",
@@ -483,7 +483,7 @@ describe("MacProvider", () => {
       });
     });
 
-    it("destroys the overlay and rethrows when runCli throws", async () => {
+    it("ends the pick and rethrows when runCli throws", async () => {
       runCli = vi.fn(async () => {
         log.push("runCli");
         throw new Error("boom");
@@ -495,7 +495,7 @@ describe("MacProvider", () => {
       expect(log).toEqual(["pick:screen", "hideAll", "settle", "runCli", "endPick"]);
     });
 
-    it("destroys the overlay when pick itself throws", async () => {
+    it("ends the pick when pick itself throws", async () => {
       displays = [main, left];
       fake.pick = vi.fn(async () => {
         throw new Error("renderer crashed");
@@ -638,7 +638,7 @@ describe("WindowsProvider", () => {
     expect(log).toEqual(["settle", "hideAll", "getSources", "endPick"]);
   });
 
-  it("frame: pick, hide, capture, destroy, in that order, cropped in physical pixels", async () => {
+  it("frame: pick, hide, capture, end the pick, in that order, cropped in physical pixels", async () => {
     answer = {
       kind: "rect",
       mode: "frame",
@@ -890,7 +890,7 @@ describe("WindowsProvider", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("display 2"));
   });
 
-  it("an empty source list answers cancelled with a warning and destroys", async () => {
+  it("an empty source list answers cancelled with a warning and ends the pick", async () => {
     answer = { kind: "display", mode: "screen", action: "capture", displayId: 1 };
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     sources = [];
@@ -926,14 +926,14 @@ describe("WindowsProvider", () => {
     });
   });
 
-  it("cancel at pick answers cancelled, captures nothing, and still destroys", async () => {
+  it("cancel at pick answers cancelled, captures nothing, and still ends the pick", async () => {
     expect(await provider().capture({ mode: "frame", overlay: fake })).toEqual({
       kind: "cancelled",
     });
     expect(log).toEqual(["pick:frame", "endPick"]);
   });
 
-  it("destroys the overlay and rethrows when getSources throws", async () => {
+  it("ends the pick and rethrows when getSources throws", async () => {
     answer = { kind: "display", mode: "screen", action: "capture", displayId: 1 };
     const throwing = new WindowsProvider({
       getSources: async () => {

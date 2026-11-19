@@ -214,13 +214,14 @@ overlay opens over a full-screen app without blanking the menu bar. Esc anywhere
 `requestAnimationFrame` round-trip in the renderer, which is what "waits one frame" means in
 decision 5.
 
-Renderer: `?window=capture-overlay&display=<id>&ui=<mode>&index=<n>&count=<n>&bounds=<x,y,w,h>&work=<x,y,w,h>&ids=<id,id,...>[&frame=<id>]` (built by `overlaySpareQuery`; `bounds` and `work` are absolute DIP, `ids` is the ordered display list so the digit keys agree across overlays; `frame` is only a placeholder now: the mode, intent and frame display reach every window as `screenshot:overlay-state`, see "Windows are kept between picks") in `main.tsx`, a `CaptureOverlay`
+Renderer: `?window=capture-overlay&display=<id>&ui=frame&index=<n>&count=<n>&bounds=<x,y,w,h>&work=<x,y,w,h>&ids=<id,id,...>[&internal=1]&scale=<n>&spare=1` (built by `overlaySpareQuery`; `bounds` and `work` are absolute DIP, `ids` is the ordered display list so the digit keys agree across overlays; `ui=frame` is only a placeholder and `frame` is never written: the mode, intent and frame display reach every window as `screenshot:overlay-state`, see "Windows are kept between picks") in `main.tsx`, a `CaptureOverlay`
 component in `features/screenshots/overlay/` with three children: `AreaDrag`, `ScreenChooser`,
 `FrameBox` (reusing `clampCrop`, `moveCrop`, `resizeCrop`, `hitCropHandle` from
-`annotations/crop.ts`). It talks to main over two channels: `screenshot:overlay-answer`
-(renderer → main) and `screenshot:overlay-state` (main → every overlay: `{ hoverDisplayId, frameDisplayId }`, so the
+`annotations/crop.ts`). It talks to main over these channels: `screenshot:overlay-answer`
+(renderer → main) and `screenshot:overlay-state` (main → every overlay: `{ session, mode, intent, hoverDisplayId, frameDisplayId, windows, cursor }`, so the
 chooser highlights only one display and only one display shows the frame), plus
-`screenshot:overlay-frame-display` (renderer → main) to move the frame.
+`screenshot:overlay-frame-display` (renderer → main) to move the frame, `screenshot:overlay-frame` (renderer → main, `{ displayId, rect, ratio?, session? }`
+when the box settles) and `screenshot:overlay-reset` (main → a kept window).
 
 ### Windows are kept between picks (NIW2-878)
 

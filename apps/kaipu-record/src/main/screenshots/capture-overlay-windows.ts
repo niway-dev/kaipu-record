@@ -786,7 +786,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     const entry: OverlayEntry = { window, displayId: display.id, ready: false, protected: protect };
     window.once("ready-to-show", () => {
       entry.ready = true;
-      // A spare waits hidden for its pick; one whose pick ended was destroyed with it.
+      // A spare waits hidden for its pick; one whose pick ended is kept, not in `entries`, and waits for the next.
       if (this.entries.includes(entry)) this.reveal(entry);
     });
     window.on("closed", () => {
