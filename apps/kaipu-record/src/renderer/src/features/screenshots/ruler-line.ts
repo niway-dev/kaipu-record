@@ -11,6 +11,7 @@ export const RULER_STROKE_PX = 1.5;
 /** The white outline under the line and caps, in display px. */
 export const RULER_HALO_PX = 3.5;
 /**
- * The outline's opacity (0.9) and colour (white) are literals in three places: inspect.module.css,
- * annotation-layer.module.css and the export in compositor.ts. Change them together.
+ * The outline's opacity (0.9) is a literal in inspect.module.css, annotation-layer.module.css and the
+ * export in compositor.ts; its colour is the --ie-ink-light token on screen and #fff in the export.
+ * Change them together.
  */
