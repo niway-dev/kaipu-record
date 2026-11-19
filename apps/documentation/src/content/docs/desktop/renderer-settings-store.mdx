@@ -102,7 +102,7 @@ points below say what they do not cover.
    one that looks suspicious and is not: `setOverridesSource()` recomputes the effective settings
    without broadcasting, but it runs before any window exists, so nothing can be stale. In
    `main/index.ts`, `await initWorkspaces()` calls it (the `setOverridesSource(...)` call in
-   `initWorkspaces()` in `main/workspaces/index.ts`, just before its first `settings.refresh`),
+   `initWorkspaceSettings()`, which `initWorkspaces()` awaits, in `main/workspaces/index.ts`),
    then `registerSettings()` loads the file, recomputes the effective settings
    (`recomputeEffective()`) and registers the `settings:get` handler
    (`infrastructure/settings-store.ts`), and the first window is created after that (the
