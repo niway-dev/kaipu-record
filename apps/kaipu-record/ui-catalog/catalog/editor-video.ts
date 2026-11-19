@@ -932,6 +932,28 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.transcriptPanel" },
       gates: [transcribeOn],
     },
+    "transcript-export-menu": {
+      profile: "transcription-transcripts",
+      how: "With a transcript beside “Walkthrough 1”, open it, press Transcript in the tool column and then Export at the top of the right column: a menu lists the three file formats (SRT, WebVTT, plain text) under the panel's header.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ css: "[data-w]" }),
+        {
+          click: {
+            area: "editorVideo.transcriptPanel",
+            part: { css: '[data-testid="transcript-export"]' },
+          },
+        },
+        // The menu is portalled to the body, outside the panel.
+        { waitFor: { area: "editorVideo.transcriptExportMenu" } },
+      ],
+      demonstrates: ["editorVideo.transcriptExportMenu:open"],
+      ready: { area: "editorVideo.transcriptExportMenu" },
+      gates: [transcribeOn],
+    },
     "transcript-unresolved": {
       profile: "transcription-transcripts",
       how: "With a transcript beside “Release demo” that has two stretches the engine could not recognise, open it and press Transcript in the tool column: the words show with those stretches marked and a note above them.",

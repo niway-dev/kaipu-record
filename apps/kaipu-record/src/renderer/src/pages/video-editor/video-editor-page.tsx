@@ -2902,6 +2902,7 @@ function VideoEditor({
             <TranscriptPanel
               itemId={source.id}
               assetId={source.assetId}
+              title={source.title}
               mediaUrl={sourceUrl}
               durationMs={Math.round(source.durationSeconds * 1000)}
               layout={layout}

@@ -9,6 +9,7 @@ import type {
 import type { TranscribeControlState } from "@renderer/features/transcription/transcribe-control";
 import type { TranscriptApi } from "@renderer/features/transcription/use-transcript";
 import type { LayoutEntry } from "./timeline";
+import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { TranscriptPanel, type TranscriptPanelProps } from "./transcript-panel";
 
 const analytics = vi.hoisted(() => ({ reportError: vi.fn() }));
@@ -124,6 +125,7 @@ function baseProps(over: Partial<TranscriptPanelProps> = {}): TranscriptPanelPro
   return {
     itemId: "item-1",
     assetId: "asset-1",
+    title: "Launch demo",
     mediaUrl: "kaipu-media://recording/item-1",
     durationMs: 20_000,
     layout: WHOLE,
@@ -691,6 +693,167 @@ describe("TranscriptPanel — copy", () => {
   it("is disabled with nothing to copy", () => {
     setup({ audioMuted: true });
     expect(screen.getByRole("button", { name: /Copy all text/ })).toBeDisabled();
+  });
+});
+
+describe("TranscriptPanel — export", () => {
+  const saveTextFile = vi.fn();
+  let originalSaveTextFile: typeof window.electronAPI.saveTextFile;
+  const openMenu = (): void => {
+    fireEvent.click(screen.getByRole("button", { name: "Export the transcript" }));
+  };
+  beforeEach(() => {
+    saveTextFile.mockReset();
+    saveTextFile.mockResolvedValue({
+      status: "saved",
+      path: "/Users/me/Downloads/Launch demo.srt",
+    });
+    originalSaveTextFile = window.electronAPI.saveTextFile;
+    window.electronAPI.saveTextFile = saveTextFile;
+    for (const toast of getToasts()) dismissToast(toast.id);
+  });
+  afterEach(() => {
+    window.electronAPI.saveTextFile = originalSaveTextFile;
+  });
+
+  it("returns focus to the Export button after a format is picked with the keyboard", () => {
+    setup();
+    openMenu();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Enter" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("button", { name: "Export the transcript" })).toHaveFocus();
+  });
+
+  it("opens the menu with ArrowDown on the button, and Space on it does not reach the editor", () => {
+    setup();
+    const button = screen.getByRole("button", { name: "Export the transcript" });
+    const reachedWindow = vi.fn();
+    window.addEventListener("keydown", reachedWindow);
+    try {
+      fireEvent.keyDown(button, { key: " " });
+      expect(reachedWindow).not.toHaveBeenCalled();
+      expect(screen.queryByRole("menu")).toBeNull();
+      fireEvent.keyDown(button, { key: "ArrowDown" });
+      expect(reachedWindow).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", reachedWindow);
+    }
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "SubRip (.srt)" })).toHaveFocus();
+  });
+
+  it("offers SubRip, WebVTT and plain text in a menu that Escape closes", () => {
+    setup();
+    openMenu();
+    const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
+    expect(items).toEqual(["SubRip (.srt)", "WebVTT (.vtt)", "Plain text (.txt)"]);
+    expect(screen.getByRole("menuitem", { name: "SubRip (.srt)" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "WebVTT (.vtt)" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("button", { name: "Export the transcript" })).toHaveFocus();
+  });
+
+  it("saves the text of what the panel shows, named after the video, and confirms", async () => {
+    setup();
+    openMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Plain text (.txt)" }));
+    });
+    expect(saveTextFile).toHaveBeenCalledExactlyOnceWith({
+      suggestedName: "Launch demo",
+      extension: "txt",
+      text: "Hello brave new world.\n\nHello again\n",
+    });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(getToasts().map((toast) => [toast.message, toast.detail])).toEqual([
+      ["Transcript saved", "Launch demo.srt"],
+    ]);
+  });
+
+  it("an SRT of the edited video uses edited-timeline times", async () => {
+    // Only the second paragraph's footage is kept: source 8-9 s plays at 0-1 s.
+    const layout: LayoutEntry[] = [
+      { itemId: "b", kind: "clip", timelineStart: 0, timelineEnd: 1, sourceStart: 8, sourceEnd: 9 },
+    ];
+    setup({ layout });
+    openMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "SubRip (.srt)" }));
+    });
+    const sent = saveTextFile.mock.calls[0][0];
+    expect(sent.extension).toBe("srt");
+    expect(sent.text).toBe("1\n00:00:00,000 --> 00:00:00,900\nHello again\n");
+  });
+
+  it("says nothing when the user cancels the save dialog", async () => {
+    saveTextFile.mockResolvedValue({ status: "cancelled" });
+    setup();
+    openMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "WebVTT (.vtt)" }));
+    });
+    expect(getToasts()).toEqual([]);
+  });
+
+  it("tells the user when the file could not be written", async () => {
+    saveTextFile.mockResolvedValue({ status: "failed" });
+    setup();
+    openMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "WebVTT (.vtt)" }));
+    });
+    expect(getToasts().map((toast) => toast.message)).toEqual([
+      "Couldn't save the transcript file. Try again or pick another folder.",
+    ]);
+  });
+
+  it("tells the user when the save call itself fails", async () => {
+    const failure = new Error("boom");
+    saveTextFile.mockRejectedValue(failure);
+    setup();
+    openMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "WebVTT (.vtt)" }));
+    });
+    // `reportError` is mocked here; the real one shows the user message as a toast.
+    expect(analytics.reportError).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/Couldn't save the transcript file/),
+      failure,
+      expect.objectContaining({ context: { phase: "export-transcript", format: "vtt" } }),
+    );
+  });
+
+  it("is disabled, with the reason, when no spoken word is left", () => {
+    setup({ audioMuted: true });
+    const button = screen.getByRole("button", { name: "Export the transcript" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/Nothing to export/));
+  });
+
+  it("is there for a stale transcript and absent in every state without words", () => {
+    hooks.transcript.mockReturnValue(READY({}, true));
+    setup();
+    expect(screen.getByTestId("transcript-export")).toBeInTheDocument();
+    cleanup();
+
+    hooks.transcript.mockReturnValue(NO_TRANSCRIPT);
+    for (const state of [
+      { kind: "idle" },
+      { kind: "needs-model" },
+      { kind: "running", phase: "transcribing", segmentsDone: 1, segmentsTotal: 2 },
+      { kind: "busy-elsewhere" },
+    ] as TranscribeControlState[]) {
+      control(state);
+      setup();
+      expect(screen.queryByTestId("transcript-export")).toBeNull();
+      cleanup();
+    }
+    hooks.transcript.mockReturnValue({ ...NO_TRANSCRIPT, state: "invalid" });
+    control({ kind: "idle" });
+    setup();
+    expect(screen.queryByTestId("transcript-export")).toBeNull();
   });
 });
 

@@ -18,6 +18,12 @@
   gap: var(--space-sm);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .title {
   margin: 0;
   font-size: var(--font-size-md);

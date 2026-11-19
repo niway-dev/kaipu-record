@@ -523,6 +523,8 @@ export const IPC_CHANNELS = {
   clipboardPeekImage: "clipboard:peek-image",
   // Write an exported capture (PDF today) to a path the user picks in a save dialog.
   screenshotExportFile: "screenshot:export-file",
+  // Write a text file (transcript as SRT, VTT or TXT) to a path the user picks in a save dialog.
+  saveTextFile: "file:save-text",
   // Renderer → main: capture done + navigated to the editor, bring the app back.
   screenshotReveal: "screenshot:reveal",
   // Renderer → main: the resolved `capture-while-recording` flag (main has no PostHog client).

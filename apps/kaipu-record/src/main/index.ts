@@ -38,6 +38,7 @@ import { registerPermissionHandlers } from "./permissions";
 import { broadcastLibraryChanged, currentVault, registerLibraryVaultHandlers } from "./library";
 import { resolveTranscriptionOverride } from "./transcription/dev-override";
 import { registerTranscriptionIpc } from "./transcription/transcription-ipc";
+import { registerSaveTextFileIpc } from "./save-text-file-ipc";
 import type { TranscriptionService } from "./transcription/transcription-service";
 import { vaultActivity, type ActivityLease } from "./library/vault-activity";
 import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copies";
@@ -1092,6 +1093,7 @@ app.whenReady().then(async () => {
     isExportActive: () => exportActive,
   });
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
+  registerSaveTextFileIpc();
   transcription = registerTranscriptionIpc({
     resourcesPath: process.resourcesPath,
     appPath: app.isPackaged ? undefined : app.getAppPath(),

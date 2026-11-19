@@ -9,6 +9,9 @@ import { useTranscribeControl } from "@renderer/features/transcription/use-trans
 import { useTranscript } from "@renderer/features/transcription/use-transcript";
 import { useTranscriptionStatus } from "@renderer/features/transcription/use-transcription-status";
 import { uiArea } from "@renderer/lib/ui-area";
+import { showToast } from "@renderer/ui/toast-store";
+import { buildTranscriptExport, type TranscriptExportFormat } from "./subtitles";
+import { TranscriptExportMenu } from "./transcript-export-menu";
 import type { ProjectionAudio } from "./transcript-projection";
 import { projectTranscript } from "./transcript-projection";
 import type { LayoutEntry } from "./timeline";
@@ -34,6 +37,8 @@ export interface TranscriptPanelProps {
   /** The library item and its recording: what the transcript file and the job are keyed by. */
   itemId: string;
   assetId: string;
+  /** The video's title: the exported file's default name. */
+  title: string;
   mediaUrl: string;
   durationMs: number;
   /** The edited timeline, so the panel shows only the words that play. */
@@ -62,6 +67,7 @@ export interface TranscriptPanelProps {
 export function TranscriptPanel({
   itemId,
   assetId,
+  title,
   mediaUrl,
   durationMs,
   layout,
@@ -206,6 +212,34 @@ export function TranscriptPanel({
     copiedTimer.current = setTimeout(() => setCopied(false), COPIED_MS);
   };
 
+  // Export: the file holds what the panel shows (same occurrences). Unresolved stretches are not
+  // written, see `buildTranscriptExport`.
+  const exportAs = async (format: TranscriptExportFormat): Promise<void> => {
+    if (occurrences.length === 0) return;
+    let result;
+    try {
+      result = await window.electronAPI.saveTextFile({
+        suggestedName: title,
+        extension: format,
+        text: buildTranscriptExport(occurrences, format),
+      });
+    } catch (error) {
+      reportError(t("transcriptExportFailed"), error, {
+        context: { phase: "export-transcript", format },
+      });
+      return;
+    }
+    if (result.status === "saved") {
+      showToast({
+        message: t("transcriptExportSaved"),
+        detail: result.path.split(/[\\/]/).pop(),
+        tone: "success",
+      });
+    } else if (result.status === "failed") {
+      showToast({ message: t("transcriptExportFailed") });
+    }
+  };
+
   // One handler for every word and every time stamp.
   const onListClick = (event: React.MouseEvent<HTMLDivElement>): void => {
     const target = event.target as HTMLElement;
@@ -253,15 +287,23 @@ export function TranscriptPanel({
     >
       <div className={styles.header}>
         <h2 className={styles.title}>{t("transcriptTitle")}</h2>
-        <button
-          type="button"
-          className={styles.close}
-          aria-label={t("transcriptClose")}
-          title={t("transcriptClose")}
-          onClick={onClose}
-        >
-          <X size={14} />
-        </button>
+        <div className={styles.headerActions}>
+          {showWords && (
+            <TranscriptExportMenu
+              hasWords={occurrences.length > 0}
+              onExport={(format) => void exportAs(format)}
+            />
+          )}
+          <button
+            type="button"
+            className={styles.close}
+            aria-label={t("transcriptClose")}
+            title={t("transcriptClose")}
+            onClick={onClose}
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {view.kind === "loading" && <p className={styles.note}>{t("transcriptLoading")}</p>}

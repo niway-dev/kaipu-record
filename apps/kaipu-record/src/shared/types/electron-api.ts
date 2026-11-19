@@ -39,6 +39,7 @@ import type {
   TranscriptionModelProgress,
   TranscriptionStatus,
 } from "./transcription";
+import type { SaveTextFileRequest, SaveTextFileResult } from "./save-text-file";
 import type {
   TextCacheSavePayload,
   TextRecognitionRequest,
@@ -803,6 +804,12 @@ export interface KaipuElectronAPI {
   cancelTranscription(jobId: string): Promise<void>;
   onTranscriptionJobProgress(callback: (progress: TranscriptionJobProgress) => void): () => void;
   readTranscript(id: string): Promise<TranscriptReadResult>;
+  /**
+   * Ask where to put a text file (a native save dialog seeded with `suggestedName`.`extension`)
+   * and write `text` there as UTF-8. Never rejects for the user's choices: it resolves `cancelled`
+   * when the dialog is dismissed and `failed` when the write did not complete.
+   */
+  saveTextFile(request: SaveTextFileRequest): Promise<SaveTextFileResult>;
   /** The image on the system clipboard as PNG, or null when it holds no image. */
   readClipboardImage(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
   /** The clipboard image's size, or null when it holds no image. No bytes cross IPC. */
