@@ -306,11 +306,27 @@ export const editorImage = catalog(
     },
     "base-cropped-selected": {
       profile: "image-canvas",
-      how: "NIW2-876: with the flag forced on, open “Settings page”, pick Crop, drag a frame, press Done, pick Select and click the image: the selection tag under the cropped image reads “Showing W×H of W×H px” (the visible part of the whole shot).",
+      how: "NIW2-876: with the flag forced on, open “Settings page”, double-click the image, drag the crop window's bottom-right handle inward and press Done, then pick Select and click the image: the selection tag under the cropped image reads “Showing W×H of W×H px” (the visible part of the whole shot).",
       steps: [
-        ...drawCrop("Crop"),
-        cropDone,
-        chipInPage,
+        open(ASSETS.settingsShot),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true },
+        { waitFor: { area: "editorImage.imageCropMode" } },
+        {
+          drag: {
+            area: "editorImage.imageCropMode",
+            part: { css: "[data-testid='crop-handle']" },
+            nth: 4,
+          },
+          from: { x: 0.5, y: 0.5 },
+          to: { x: -20, y: -15 },
+        },
+        {
+          click: {
+            area: "editorImage.canvas",
+            part: { role: "button", name: "Done", exact: true },
+          },
+        },
+        { waitFor: { area: "editorImage.imageCropMode", state: "hidden" } },
         windowSettled,
         tool("Select"),
         { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 } },
