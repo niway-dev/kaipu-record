@@ -1,0 +1,482 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Capture default mocks</title>
+    <style>
+      :root{
+        --bg-app:#060607;--bg-card:#0e0e10;--bg-hover:#17171a;--bg-active:#202024;
+        --border:rgba(255,255,255,.08);--border-light:rgba(255,255,255,.14);
+        --text:#e8e8ed;--text-2:#c8c8d0;--text-3:#a1a1aa;--text-4:#92929c;
+        --accent:#f6055c;--accent-soft:rgba(246,5,92,.14);--accent-ring:rgba(246,5,92,.5);
+        --mono:"SF Mono",ui-monospace,Menlo,monospace;
+      }
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{background:#2a2a2e;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,sans-serif;color:var(--text);padding:24px}
+      .variant{display:none}
+      .variant.on{display:block}
+      .label{font:600 13px/1.4 var(--mono);color:#fff;background:var(--accent);display:inline-block;padding:4px 10px;border-radius:6px;margin-bottom:12px;letter-spacing:.04em}
+      .window{width:880px;background:var(--bg-app);border:1px solid var(--border-light);border-radius:14px;overflow:hidden}
+      .titlebar{height:44px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text-2)}
+      .dots{display:flex;gap:7px}.dots i{width:12px;height:12px;border-radius:50%;display:block}
+      .dots i:nth-child(1){background:#ff5f57}.dots i:nth-child(2){background:#febc2e}.dots i:nth-child(3){background:#28c840}
+      .body{display:flex}
+      .side{width:52px;border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:16px}
+      .side span{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--text-4);opacity:.6}
+      .side span.on{border-color:var(--accent);opacity:1;background:var(--accent-soft)}
+      .main{flex:1;padding:28px 30px 30px}
+      h1{font-size:19px;font-weight:600;display:flex;align-items:baseline;gap:8px}
+      h1 small{font-size:13px;color:var(--text-3);font-weight:400}
+      h1 a{font-size:13px;color:var(--accent);font-weight:500}
+      .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+      .card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:12px;padding:16px;display:flex;gap:14px;position:relative}
+      .ico{width:46px;height:46px;border-radius:10px;background:var(--accent);flex:none;display:grid;place-items:center;color:#fff;font-size:20px}
+      .card b{font-size:16px;font-weight:600;display:block}
+      .card p{font-size:12.5px;color:var(--text-3);margin-top:3px;line-height:1.35}
+      .meta{font:500 10.5px/1 var(--mono);letter-spacing:.08em;color:var(--text-4);margin-top:9px;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+      .kbd{font:500 10.5px/1 var(--mono);border:1px solid var(--border-light);border-radius:5px;padding:4px 6px;color:var(--text-2);background:var(--bg-hover)}
+      .card .kbd.corner{position:absolute;top:14px;right:14px}
+      .chev{position:absolute;right:16px;top:50%;color:var(--text-3)}
+      .instant{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-3);margin-top:12px}
+      .instant b{color:var(--text)}
+      hr{border:0;border-top:1px solid var(--border);margin:20px 0}
+      .sect{display:flex;align-items:baseline;gap:8px;font-size:15px;font-weight:600}
+      .sect small{font-size:12.5px;color:var(--text-3);font-weight:400}
+      .setup{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+      .dev{background:var(--bg-card);border:1px solid var(--border-light);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px}
+      .dev.on{background:#1a0710;border-color:rgba(246,5,92,.35)}
+      .dev div{flex:1;min-width:0}.dev b{font-size:13px;font-weight:600;display:block}.dev span{font-size:11.5px;color:var(--text-3)}
+      .tog{width:34px;height:20px;border-radius:10px;background:#3a3a40;position:relative;flex:none}
+      .tog::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff}
+      .tog.on{background:var(--accent)}.tog.on::after{left:16px}
+      .onoff{font:600 9.5px var(--mono);color:var(--text-4);letter-spacing:.08em}.dev.on .onoff{color:var(--accent)}
+      /* segmented */
+      .seg{display:inline-flex;background:var(--bg-app);border:1px solid var(--border-light);border-radius:8px;padding:2px;gap:2px}
+      .seg span{font-size:12px;padding:5px 10px;border-radius:6px;color:var(--text-2);display:flex;align-items:center;gap:6px}
+      .seg span.on{background:var(--accent-soft);color:#fff;box-shadow:inset 0 0 0 1px var(--accent-ring)}
+      .seg span.off{color:var(--text-4);opacity:.55}
+      .soon{font:600 8.5px var(--mono);letter-spacing:.06em;color:var(--text-4)}
+      /* defaults panel (A) */
+      .defaults{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+      .dbox{background:var(--bg-card);border:1px solid var(--border-light);border-radius:10px;padding:14px}
+      .dbox h4{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+      .row{display:flex;align-items:center;justify-content:space-between;margin-top:11px;gap:10px}
+      .row label{font:500 10.5px var(--mono);letter-spacing:.08em;color:var(--text-4);text-transform:uppercase}
+      .check{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2);margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}
+      .preview{font-size:11.5px;color:var(--text-3);margin-top:10px}
+      .preview b{color:var(--text)}
+      /* selector bar */
+      .desk{width:880px;height:auto;background:linear-gradient(135deg,#1d2230,#14151b);border-radius:14px;padding:26px 20px 20px;position:relative}
+      .bar{background:#0b0b0d;border:1px solid var(--border-light);border-radius:14px;padding:12px 14px}
+      .groups{display:flex;gap:18px;align-items:flex-end}
+      .grp label{display:block;font:600 9.5px var(--mono);letter-spacing:.1em;color:var(--text-4);margin-bottom:6px}
+      .chips{display:flex;gap:6px}
+      .chip{font-size:12.5px;font-weight:500;padding:7px 10px;border-radius:8px;border:1px solid var(--border-light);background:var(--bg-card);display:flex;align-items:center;gap:7px;color:var(--text-2);position:relative}
+      .chip.on{border-color:var(--accent);background:#1d0711;color:#fff}
+      .chip.off{opacity:.45}
+      .chip .kbd{padding:2px 4px;font-size:9.5px}
+      .dtag{position:absolute;top:-8px;left:50%;transform:translateX(-50%);font:700 8px/1 var(--mono);letter-spacing:.08em;background:var(--accent);color:#fff;padding:3px 5px;border-radius:4px;white-space:nowrap}
+      .dtag.ghost{background:#2b2b31;color:var(--text-2)}
+      .pin{font-size:11px;color:var(--text-4)}
+      .chip.on .pin{color:var(--accent)}
+      .bar2{display:flex;gap:8px;margin-top:12px}
+      .clip{flex:1;font-size:12.5px;padding:10px 12px;border:1px solid var(--border-light);border-radius:8px;color:var(--text-2);background:var(--bg-card)}
+      .btn{font-size:13px;padding:10px 16px;border-radius:8px;border:1px solid var(--border-light);background:var(--bg-card)}
+      .btn.cta{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;width:180px;text-align:center}
+      .hint{display:flex;gap:16px;justify-content:center;font:500 10px var(--mono);color:var(--text-4);margin-top:10px;letter-spacing:.04em}
+      .hint b{color:var(--text-2)}
+      .menu{position:absolute;background:#141417;border:1px solid var(--border-light);border-radius:10px;padding:5px;width:230px;box-shadow:0 12px 32px rgba(0,0,0,.6);z-index:5}
+      .menu div{font-size:12.5px;padding:7px 9px;border-radius:6px;display:flex;justify-content:space-between;color:var(--text-2)}
+      .menu div.on{background:var(--accent-soft);color:#fff}
+      .menu .sep{height:1px;background:var(--border);padding:0;margin:4px 0}
+      .menu small{color:var(--text-4);font-size:11px}
+      .note{font-size:12px;color:#ffd0e1;background:rgba(246,5,92,.1);border:1px dashed var(--accent-ring);border-radius:8px;padding:8px 10px;margin-top:12px}
+      .dd{display:inline-flex;align-items:center;gap:4px;color:var(--text);border-bottom:1px dashed var(--text-4);padding-bottom:1px}
+      .stack{display:flex;flex-direction:column;gap:16px}
+      .split{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+      .split div{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2)}
+      .split div .kbd{margin-left:auto}
+      .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+      .dot.g{background:var(--text-4)}
+    </style>
+  </head>
+  <body>
+    <!-- ============ shared page header (copied per variant) ============ -->
+    <template id="head">
+      <div class="titlebar">
+        <div class="dots"><i></i><i></i><i></i></div>
+        &nbsp;&nbsp;‹ › &nbsp;<b style="color:var(--text)">Kaipu Record</b> &nbsp;/&nbsp; Cricut
+        Workspace · This Mac
+      </div>
+    </template>
+
+    <!-- ============ A: owner's idea ============ -->
+    <section class="variant" id="a">
+      <div class="label">A · YOUR IDEA — "Selector opens with" panel on the Capture page</div>
+      <div class="stack">
+        <div class="window">
+          <div class="titlebar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            &nbsp;&nbsp;‹ › &nbsp;<b style="color:var(--text)">Kaipu Record</b>&nbsp;/&nbsp;Cricut
+            Workspace · This Mac
+          </div>
+          <div class="body">
+            <div class="side">
+              <span class="on"></span><span></span><span></span><span></span><span></span
+              ><span></span>
+            </div>
+            <div class="main">
+              <h1>Capture <small>to Cricut Workspace</small> <a>Switch</a></h1>
+              <div class="cards">
+                <div class="card">
+                  <div class="ico">◎</div>
+                  <div>
+                    <b>Screenshot</b>
+                    <p>Pick an area, then annotate or copy it.</p>
+                    <div class="meta">Opens in · Frame</div>
+                  </div>
+                  <span class="kbd corner">⇧⌘1</span>
+                </div>
+                <div class="card">
+                  <div class="ico">●</div>
+                  <div>
+                    <b>Recording</b>
+                    <p>Pick an area, then record with sound and camera.</p>
+                    <div class="meta">Opens in · Screen</div>
+                  </div>
+                  <span class="kbd corner">⇧⌘2</span>
+                </div>
+              </div>
+              <div class="instant">
+                <span class="kbd">^⌘X</span><b>Instant</b> captures the screen under the cursor at
+                once, without the selector.
+              </div>
+              <hr />
+              <div class="sect">
+                Recording setup
+                <small>Set once. In the selector you only turn these on or off.</small>
+              </div>
+              <div class="setup">
+                <div class="dev on">
+                  <div><b>Microphone</b><span>Yeti Nano</span></div>
+                  <span class="onoff">ON</span><span class="tog on"></span>
+                </div>
+                <div class="dev">
+                  <div><b>System audio</b><span>All sound</span></div>
+                  <span class="onoff">OFF</span><span class="tog"></span>
+                </div>
+                <div class="dev">
+                  <div><b>Camera</b><span>iPhone Camera</span></div>
+                  <span class="onoff">OFF</span><span class="tog"></span>
+                </div>
+              </div>
+              <hr />
+              <div class="sect">
+                Selector opens with
+                <small>What ⇧⌘1 and ⇧⌘2 show first. You can still change it in the selector.</small>
+              </div>
+              <div class="defaults">
+                <div class="dbox">
+                  <h4>Screenshot <span class="kbd">⇧⌘1</span></h4>
+                  <div class="row">
+                    <label>Area</label>
+                    <div class="seg">
+                      <span class="on">Frame</span><span>Screen</span
+                      ><span class="off">Window <i class="soon">SOON</i></span>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <label>Ratio</label>
+                    <div class="seg">
+                      <span class="on">Free</span><span>16:9</span><span>9:16</span><span>1:1</span>
+                    </div>
+                  </div>
+                  <div class="check">
+                    <span class="tog"></span>Remember the last one I used instead
+                  </div>
+                </div>
+                <div class="dbox">
+                  <h4>Recording <span class="kbd">⇧⌘2</span></h4>
+                  <div class="row">
+                    <label>Area</label>
+                    <div class="seg">
+                      <span>Frame</span><span class="on">Screen</span
+                      ><span class="off">Window <i class="soon">SOON</i></span>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <label>Ratio</label>
+                    <div class="seg">
+                      <span class="off">Free</span><span class="off">16:9</span
+                      ><span class="off">9:16</span><span class="off">1:1</span>
+                    </div>
+                  </div>
+                  <div class="check">
+                    <span class="tog"></span>Remember the last one I used instead
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="desk">
+          <div class="bar">
+            <div class="groups">
+              <div class="grp">
+                <label>CAPTURE AS</label>
+                <div class="chips">
+                  <span class="chip on">Screenshot <span class="kbd">P</span></span
+                  ><span class="chip">Recording <span class="kbd">V</span></span>
+                </div>
+              </div>
+              <div class="grp">
+                <label>AREA</label>
+                <div class="chips">
+                  <span class="chip on"
+                    ><span class="dtag">DEFAULT</span>Frame <span class="kbd">1</span></span
+                  ><span class="chip">Screen <span class="kbd">2</span></span
+                  ><span class="chip off">Window</span>
+                </div>
+              </div>
+              <div class="grp">
+                <label>RATIO</label>
+                <div class="chips">
+                  <span class="chip on"><span class="dtag">DEFAULT</span>Free</span
+                  ><span class="chip">16:9</span><span class="chip">9:16</span
+                  ><span class="chip">1:1</span>
+                </div>
+              </div>
+            </div>
+            <div class="bar2">
+              <span class="clip">Copy to clipboard</span><span class="btn">Cancel</span
+              ><span class="btn cta">Capture ↵</span>
+            </div>
+            <div class="hint">
+              <span
+                >The <b>DEFAULT</b> tag marks what the selector opened with · change it on the
+                Capture page</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ B: pin inside the selector ============ -->
+    <section class="variant" id="b">
+      <div class="label">B · SET IT WHERE YOU USE IT — pin the default inside the selector</div>
+      <div class="desk" style="padding-top:150px;padding-bottom:30px">
+        <div class="menu" style="left:250px;top:12px;width:250px">
+          <div class="on">◉ Open in Frame by default <small>pinned</small></div>
+          <div>Open in Screen by default</div>
+          <div class="sep"></div>
+          <div>Open in the last one I used</div>
+        </div>
+        <div class="bar">
+          <div class="groups">
+            <div class="grp">
+              <label>CAPTURE AS</label>
+              <div class="chips">
+                <span class="chip on">Screenshot <span class="kbd">P</span></span
+                ><span class="chip">Recording <span class="kbd">V</span></span>
+              </div>
+            </div>
+            <div class="grp">
+              <label>AREA</label>
+              <div class="chips">
+                <span class="chip on"
+                  ><span class="pin">⌖</span>Frame <span class="kbd">1</span></span
+                ><span class="chip">Screen <span class="kbd">2</span></span
+                ><span class="chip off">Window</span>
+              </div>
+            </div>
+            <div class="grp">
+              <label>RATIO</label>
+              <div class="chips">
+                <span class="chip on"><span class="pin">⌖</span>Free</span
+                ><span class="chip">16:9</span><span class="chip">9:16</span
+                ><span class="chip">1:1</span>
+              </div>
+            </div>
+          </div>
+          <div class="bar2">
+            <span class="clip">Copy to clipboard</span><span class="btn">Cancel</span
+            ><span class="btn cta">Capture ↵</span>
+          </div>
+          <div class="hint">
+            <span><b>⌖</b> pinned = opens first</span
+            ><span>right-click or <b>D</b> on a chip to pin</span
+            ><span>SWITCH <b>1</b> <b>2</b> area</span><span>GO <b>↵</b></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ C: the card's line becomes the control ============ -->
+    <section class="variant" id="c">
+      <div class="label">C · NO NEW SECTION — the card's "Last used" line becomes the control</div>
+      <div class="window" style="position:relative">
+        <div class="titlebar">
+          <div class="dots"><i></i><i></i><i></i></div>
+          &nbsp;&nbsp;‹ › &nbsp;<b style="color:var(--text)">Kaipu Record</b>&nbsp;/&nbsp;Cricut
+          Workspace · This Mac
+        </div>
+        <div class="body">
+          <div class="side">
+            <span class="on"></span><span></span><span></span><span></span><span></span
+            ><span></span>
+          </div>
+          <div class="main">
+            <h1>Capture <small>to Cricut Workspace</small> <a>Switch</a></h1>
+            <div class="cards">
+              <div class="card">
+                <div class="ico">◎</div>
+                <div>
+                  <b>Screenshot</b>
+                  <p>Pick an area, then annotate or copy it.</p>
+                  <div class="meta">Opens in · <span class="dd">Frame ▾</span></div>
+                </div>
+                <span class="kbd corner">⇧⌘1</span>
+              </div>
+              <div class="card">
+                <div class="ico">●</div>
+                <div>
+                  <b>Recording</b>
+                  <p>Pick an area, then record with sound and camera.</p>
+                  <div class="meta">
+                    Opens in · <span class="dd">Last used (Frame · Free) ▾</span>
+                  </div>
+                </div>
+                <span class="kbd corner">⇧⌘2</span>
+              </div>
+            </div>
+            <div class="menu" style="left:230px;top:232px">
+              <div>Last used <small>now: Screen</small></div>
+              <div class="sep"></div>
+              <div class="on">Frame <small>✓</small></div>
+              <div>Screen</div>
+              <div style="opacity:.45">Window <small>soon</small></div>
+            </div>
+            <div class="instant">
+              <span class="kbd">^⌘X</span><b>Instant</b> captures the screen under the cursor at
+              once, without the selector.
+            </div>
+            <hr />
+            <div class="sect">
+              Recording setup
+              <small>Set once. In the selector you only turn these on or off.</small>
+            </div>
+            <div class="setup">
+              <div class="dev on">
+                <div><b>Microphone</b><span>Yeti Nano</span></div>
+                <span class="onoff">ON</span><span class="tog on"></span>
+              </div>
+              <div class="dev">
+                <div><b>System audio</b><span>All sound</span></div>
+                <span class="onoff">OFF</span><span class="tog"></span>
+              </div>
+              <div class="dev">
+                <div><b>Camera</b><span>iPhone Camera</span></div>
+                <span class="onoff">OFF</span><span class="tog"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ D: no default — one key per area ============ -->
+    <section class="variant" id="d">
+      <div class="label">D · REMOVE THE QUESTION — one shortcut per area, like macOS ⇧⌘3 / ⇧⌘4</div>
+      <div class="window">
+        <div class="titlebar">
+          <div class="dots"><i></i><i></i><i></i></div>
+          &nbsp;&nbsp;‹ › &nbsp;<b style="color:var(--text)">Kaipu Record</b>&nbsp;/&nbsp;Cricut
+          Workspace · This Mac
+        </div>
+        <div class="body">
+          <div class="side">
+            <span class="on"></span><span></span><span></span><span></span><span></span
+            ><span></span>
+          </div>
+          <div class="main">
+            <h1>Capture <small>to Cricut Workspace</small> <a>Switch</a></h1>
+            <div class="cards">
+              <div class="card" style="display:block">
+                <div style="display:flex;gap:14px">
+                  <div class="ico">◎</div>
+                  <div>
+                    <b>Screenshot</b>
+                    <p>Pick what to capture with the key you press.</p>
+                  </div>
+                </div>
+                <div class="split">
+                  <div>
+                    <span class="dot"></span>Frame — drag an area, then annotate<span class="kbd"
+                      >⇧⌘1</span
+                    >
+                  </div>
+                  <div>
+                    <span class="dot g"></span>Whole screen — no selector, captured at once<span
+                      class="kbd"
+                      >^⌘X</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="card" style="display:block">
+                <div style="display:flex;gap:14px">
+                  <div class="ico">●</div>
+                  <div>
+                    <b>Recording</b>
+                    <p>Pick what to record with the key you press.</p>
+                  </div>
+                </div>
+                <div class="split">
+                  <div>
+                    <span class="dot"></span>Frame — drag an area, then record<span class="kbd"
+                      >⇧⌘2</span
+                    >
+                  </div>
+                  <div>
+                    <span class="dot g"></span>Whole screen — 3‑2‑1 and record<span class="kbd"
+                      >⇧⌘3</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="note">
+              The selector stops guessing: ⇧⌘1 / ⇧⌘2 always open in Frame (with your last box and
+              ratio). Whole screen never needs a box, so it gets its own key and skips the selector.
+            </div>
+            <hr />
+            <div class="sect">
+              Recording setup
+              <small>Set once. In the selector you only turn these on or off.</small>
+            </div>
+            <div class="setup">
+              <div class="dev on">
+                <div><b>Microphone</b><span>Yeti Nano</span></div>
+                <span class="onoff">ON</span><span class="tog on"></span>
+              </div>
+              <div class="dev">
+                <div><b>System audio</b><span>All sound</span></div>
+                <span class="onoff">OFF</span><span class="tog"></span>
+              </div>
+              <div class="dev">
+                <div><b>Camera</b><span>iPhone Camera</span></div>
+                <span class="onoff">OFF</span><span class="tog"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      const id=(location.hash||"#a").slice(1);
+      document.getElementById(id).classList.add("on");
+    </script>
+  </body>
+</html>
