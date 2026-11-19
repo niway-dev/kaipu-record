@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { dirnameOf, relativeId } from "./source-tree";
+import { dirnameOf, filenameOf, relativeId } from "./source-tree";
 
 describe("source-tree helpers for the tests that scan the renderer source", () => {
   it("dirnameOf turns a file URL into a filesystem path, spaces included", () => {
@@ -12,6 +12,12 @@ describe("source-tree helpers for the tests that scan the renderer source", () =
     expect(url).toContain("%20");
 
     expect(dirnameOf(url)).toBe(path.dirname(file));
+  });
+
+  it("filenameOf turns a file URL into the file's own path, spaces included", () => {
+    const file = path.join(os.tmpdir(), "Kaipu Work", "features", "settings", "x.test.ts");
+
+    expect(filenameOf(pathToFileURL(file).href)).toBe(file);
   });
 
   it("relativeId names a file with forward slashes whatever the platform separator is", () => {

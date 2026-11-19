@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
  * and keeps a leading `/C:/` on Windows, so a scan of the source tree reads the wrong place.
  */
 export function dirnameOf(metaUrl: string): string {
-  return path.dirname(fileURLToPath(metaUrl));
+  return path.dirname(filenameOf(metaUrl));
+}
+
+/** The path of the test file whose `import.meta.url` is `metaUrl`, for the same reason. */
+export function filenameOf(metaUrl: string): string {
+  return fileURLToPath(metaUrl);
 }
 
 /** `path.relative`, spelled with forward slashes so it compares with ids written in source. */

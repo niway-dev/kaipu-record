@@ -1,8 +1,10 @@
+import path from "node:path";
 import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@shared/types";
 import type { RecordingSettings } from "@shared/types/ipc";
 import { STUB_SETTINGS } from "../../test/stub-settings";
+import { dirnameOf, filenameOf, relativeId } from "../../test/source-tree";
 import { installSettingsIpc, type SettingsIpc } from "../../test/settings-ipc";
 import { useAudioSettings } from "../audio-settings/use-audio-settings";
 import { useCameraSettings } from "../camera-settings/use-camera-settings";
@@ -196,7 +198,9 @@ const here = SETTINGS_CONSUMERS.filter((entry) => entry.behaviour === "here");
 
 describe("each consumer that says here behaves as the map says", () => {
   it("the map names this file as the behaviour test", () => {
-    expect(new URL(import.meta.url).pathname.endsWith(`/${BEHAVIOUR_TEST}`)).toBe(true);
+    expect(
+      relativeId(path.join(dirnameOf(import.meta.url), "../.."), filenameOf(import.meta.url)),
+    ).toBe(BEHAVIOUR_TEST);
     expect(here.length).toBeGreaterThan(5);
   });
 
