@@ -231,11 +231,23 @@ describe("the image action bar (AC7)", () => {
       const scene = sceneOf([image], "i1");
       const { layer } = mount(scene, handlers());
       fireEvent.pointerDown(layer, { clientX: 70, clientY: 65 });
-      expect(bar()).toBeNull();
       fireEvent.pointerMove(layer, { clientX: 72, clientY: 66 });
       expect(bar()).toBeNull();
       fireEvent.pointerUp(layer);
       expect(bar()).not.toBeNull();
+    });
+
+    it("but not by a plain press: the bar stays mounted and an open Corners panel keeps its value", () => {
+      const { layer } = mount(sceneOf([image], "i1"), handlers());
+      fireEvent.click(inBar("Corners"));
+      const field = screen.getByRole("spinbutton") as HTMLInputElement;
+      fireEvent.change(field, { target: { value: "12" } });
+      const before = bar();
+      fireEvent.pointerDown(layer, { clientX: 70, clientY: 65 });
+      expect(bar()).toBe(before);
+      fireEvent.pointerUp(layer);
+      expect(bar()).toBe(before);
+      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("12");
     });
 
     it("while the base is resized by a corner", () => {

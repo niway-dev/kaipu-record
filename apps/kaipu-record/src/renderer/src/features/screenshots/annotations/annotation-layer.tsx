@@ -513,7 +513,8 @@ function AnnotationLayerImpl({
       const editingThis = editing?.id !== undefined && hit?.id === editing.id;
       if (hit && !editingThis) {
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
-        setGesturing(true);
+        // The action bar steps aside on the first move, not on the press: a plain click on the
+        // selected image must not unmount the bar and drop an open Corners panel's value.
         (e.target as Element).setPointerCapture?.(e.pointerId);
       }
       return;
@@ -616,6 +617,7 @@ function AnnotationLayerImpl({
     }
     if (d.mode === "move") {
       setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
+      setGesturing(true);
       return;
     }
     if (d.mode === "resize") {
