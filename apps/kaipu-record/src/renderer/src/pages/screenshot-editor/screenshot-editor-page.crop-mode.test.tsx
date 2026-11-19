@@ -532,7 +532,7 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
     await waitFor(() => expect(undoButton()).toBeDisabled());
   });
 
-  it("Corners writes the base's own radius in one undo step, and Follow slider clears it", async () => {
+  it("Corners writes the base's own radius, and Follow slider clears it", async () => {
     await open({});
     selectBase();
     fireEvent.click(await barButton("Corners"));
@@ -548,6 +548,19 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Follow slider" })).toBeDisabled(),
     );
+  });
+
+  it("a Corners commit is one undo step: one undo removes the base's own radius", async () => {
+    await open({});
+    selectBase();
+    fireEvent.click(await barButton("Corners"));
+    const field = screen.getByRole("spinbutton");
+    fireEvent.change(field, { target: { value: "24" } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(undoButton()).toBeEnabled());
+    undoKey();
+    // The one step took the radius back and left nothing else to undo.
+    await waitFor(() => expect(undoButton()).toBeDisabled());
   });
 
   it("the Tool tab shows the same Crop, Corners and Reset for the selected base", async () => {

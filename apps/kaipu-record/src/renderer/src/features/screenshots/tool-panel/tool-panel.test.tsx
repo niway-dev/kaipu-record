@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ToolPanel } from "./tool-panel";
+import type { InspectController } from "../inspect";
 import { ANNOTATION_COLORS } from "../annotations/tools";
 import type { Annotation } from "../annotations/scene";
 import type { EditorScene } from "../annotations/use-editor-scene";
@@ -75,6 +76,10 @@ const text: Annotation = {
 const blur: Annotation = { id: "u1", kind: "blur", x: 0.1, y: 0.1, w: 0.2, h: 0.2 };
 
 const state = () => document.querySelector('[data-ui-area="editorImage.toolPanel"]');
+
+vi.mock("../inspect", () => ({
+  InspectBar: () => <div data-testid="inspect-bar-stub" />,
+}));
 
 describe("ToolPanel", () => {
   describe("empty state", () => {
@@ -281,9 +286,38 @@ describe("ToolPanel", () => {
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
 
-    it("are not shown without them (Inspect, crop mode, another tool)", () => {
+    it("are not shown when the prop is absent", () => {
       render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode />);
       expect(state()).toHaveAttribute("data-state", "empty");
+      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+    });
+
+    it("are not shown in Inspect, which reads the image: the Inspect bar wins", () => {
+      render(
+        <ToolPanel
+          tools={makeTools()}
+          scene={makeScene()}
+          canvasMode
+          inspect={{} as InspectController}
+          imageActions={actions()}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "inspect");
+      expect(screen.getByTestId("inspect-bar-stub")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+    });
+
+    it("are not shown with the Export frame tool: its card wins", () => {
+      render(
+        <ToolPanel
+          tools={makeTools({ tool: "crop" })}
+          scene={makeScene()}
+          canvasMode
+          exportFrame={{ hasFrame: false, onFit: vi.fn(), onRemove: vi.fn() }}
+          imageActions={actions()}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "crop");
       expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
     });
   });
