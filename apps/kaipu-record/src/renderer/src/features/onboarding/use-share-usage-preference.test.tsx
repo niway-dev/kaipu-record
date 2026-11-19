@@ -66,4 +66,49 @@ describe("useShareUsagePreference", () => {
 
     expect(result.current.enabled).toBe(true);
   });
+
+  it.each([
+    { from: true, to: false },
+    { from: false, to: true },
+  ])(
+    "keeps the requested $to when the write and the re-read both fail ($from to $to)",
+    async ({ from, to }) => {
+      const ipc = installSettingsIpc(withDiagnostics(from));
+      window.electronAPI.updateSettings = vi.fn(async () => {
+        throw new Error("update failed");
+      });
+      const { result } = renderHook(() => useShareUsagePreference());
+      await waitFor(() => expect(result.current.enabled).toBe(from));
+      // Main may have stored the new value before it failed, and it cannot be asked now.
+      ipc.getSettings.mockImplementationOnce(async () => {
+        throw new Error("read failed");
+      });
+
+      act(() => result.current.setEnabled(to));
+      await waitFor(() => expect(ipc.getSettings).toHaveBeenCalledTimes(2));
+      await act(async () => {});
+
+      expect(result.current.enabled).toBe(to);
+    },
+  );
+
+  it("follows a later broadcast after a double failure kept the requested value", async () => {
+    const ipc = installSettingsIpc(withDiagnostics(true));
+    window.electronAPI.updateSettings = vi.fn(async () => {
+      throw new Error("update failed");
+    });
+    const { result } = renderHook(() => useShareUsagePreference());
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+    ipc.getSettings.mockImplementationOnce(async () => {
+      throw new Error("read failed");
+    });
+    act(() => result.current.setEnabled(false));
+    await waitFor(() => expect(ipc.getSettings).toHaveBeenCalledTimes(2));
+    await act(async () => {});
+    expect(result.current.enabled).toBe(false);
+
+    act(() => ipc.broadcast(withDiagnostics(true)));
+
+    expect(result.current.enabled).toBe(true);
+  });
 });

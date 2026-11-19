@@ -93,6 +93,15 @@ export function loadSettings(): Promise<AppSettings> {
   return current ? Promise.resolve(current) : readOnce();
 }
 
+/**
+ * How many values the store has taken (a broadcast, a read, a write's answer). A caller that
+ * compares it before and after an `updateSettings` that rejected learns whether the store
+ * heard from main in between: unchanged means neither a broadcast nor the re-read got through.
+ */
+export function getSettingsRevision(): number {
+  return revision;
+}
+
 /** The settings the window holds now, `null` before the first read lands. Starts nothing. */
 export function getSettingsSnapshot(): AppSettings | null {
   return current;
