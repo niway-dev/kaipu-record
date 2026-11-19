@@ -207,6 +207,17 @@ describe("dragging the base with the select tool (AC9)", () => {
     expect(scene.select).toHaveBeenLastCalledWith(BASE_IMAGE_ID);
   });
 
+  it("a right-button press on the base selects it but does not drag it", () => {
+    const scene = sceneOf([]);
+    const { layer, onLiveBase } = mount(scene);
+    fireEvent.pointerDown(layer, { clientX: 50, clientY: 50, button: 2 });
+    fireEvent.pointerMove(layer, { clientX: 70, clientY: 50 });
+    fireEvent.pointerUp(layer);
+    expect(scene.beginInteract).not.toHaveBeenCalled();
+    expect(scene.commitBase).not.toHaveBeenCalled();
+    expect(onLiveBase.mock.calls.every(([live]) => live === null)).toBe(true);
+  });
+
   it("a move that comes back to where it began commits nothing", () => {
     const scene = sceneOf([]);
     const { layer, onLiveBase } = mount(scene);

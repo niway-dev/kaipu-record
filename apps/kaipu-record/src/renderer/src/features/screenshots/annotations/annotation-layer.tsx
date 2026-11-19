@@ -517,8 +517,9 @@ function AnnotationLayerImpl({
       scene.select(hit?.id ?? (onBase ? BASE_IMAGE_ID : null));
       // The base's own pixels drag it, like a pasted image's (NIW2-876). Not while the inline
       // text editor is open (its blur commits a label mid-drag), and not where the image is
-      // read, not edited (Inspect passes no crop handlers).
-      if (onBase && !editing && onEnterCrop) {
+      // read, not edited (Inspect passes no crop handlers). Primary button only: a right-click
+      // must not move the base, as it does not place a badge or hide a block.
+      if (onBase && e.button === 0 && !editing && onEnterCrop) {
         drag.current = { mode: "move-base", start: p, orig: base };
         setGesturing(true);
         // A base drag owns the history until it ends, as a corner drag does.
