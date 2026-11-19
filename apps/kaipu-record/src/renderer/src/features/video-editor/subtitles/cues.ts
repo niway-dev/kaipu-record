@@ -1,7 +1,7 @@
 import type { WordOccurrence } from "../transcript-occurrence";
 
 /**
- * Subtitle cues, rebuilt from the words that survive the edit (NIW2-818, ADR 0063 point 5).
+ * Subtitle cues, rebuilt from the words that survive the edit (NIW2-818, ADR 0065 point 5).
  * Cues are never cut from stored sentences: a deleted, muted or repeated stretch changes which
  * words arrive here, and the cues follow.
  *
