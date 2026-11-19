@@ -55,7 +55,7 @@ on an M5 with 11 processes; `run.json` records p50, p95 and max.
 ## The output-grows invariant
 
 While the output file exists, its size on disk must keep increasing. It fails when the time
-between two increases reaches 30 s (or a new file never grows for 30 s). Each file is judged on
+between two increases is more than 30 s (or a new file stays flat for 30 s or more). Each file is judged on
 its own: a file that was already in the folder when sampling started is judged only from its
 first increase and ignored if it never changes, so idle leftovers never cause a violation. On 2026-11-14 the file
 stayed at 28 bytes for four minutes, then jumped to 5.59 GB: that violates it, provided sampling
