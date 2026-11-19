@@ -24,6 +24,7 @@ the acceptance criteria of each.
 2. **M1** — the engine, the consented model download, and the transcript file.
 3. **M2** — the Transcript panel.
 4. **M3** — SRT, VTT and TXT export.
+5. **M4** — the engine downloads inside the app with the model (no build-time fetch, no bundled binary).
 
 Later: a separate microphone track, word corrections, burned-in captions, more models, Windows.
 

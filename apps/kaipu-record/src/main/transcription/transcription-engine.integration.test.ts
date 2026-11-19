@@ -41,6 +41,7 @@ describe.skipIf(!engineDir || !modelDir)("transcription with the real engine", (
         libDir: join(engineDir!, "lib"),
         version: "test",
       }),
+      engineStore: { install: async () => engineDir! },
       modelStore: {
         status: () => ({ state: "ready", dir: modelDir! }),
         locate: () => modelDir!,

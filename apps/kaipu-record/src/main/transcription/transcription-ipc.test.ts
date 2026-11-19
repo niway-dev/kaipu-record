@@ -84,7 +84,7 @@ const REQUEST = {
 beforeAll(async () => {
   state.dir = await mkdtemp(join(tmpdir(), "kaipu-transcription-ipc-"));
   registerTranscriptionIpc({
-    resourcesPath: state.dir,
+    engineRoot: join(state.dir, "speech-engine"),
     modelsRoot: join(state.dir, "models"),
     service: service as unknown as TranscriptionService,
   });
@@ -425,7 +425,7 @@ describe("a dev override", () => {
   beforeAll(() => {
     service.status.mockImplementation((async () => REAL_STATUS) as never);
     registerTranscriptionIpc({
-      resourcesPath: state.dir,
+      engineRoot: join(state.dir, "speech-engine"),
       modelsRoot: join(state.dir, "models"),
       service: service as unknown as TranscriptionService,
       override: { kind: "ready" },
@@ -435,7 +435,7 @@ describe("a dev override", () => {
     // Registering again replaces the override handlers (the mock's `handle` overwrites by
     // channel) with the plain ones, so a test added after this block sees no override.
     registerTranscriptionIpc({
-      resourcesPath: state.dir,
+      engineRoot: join(state.dir, "speech-engine"),
       modelsRoot: join(state.dir, "models"),
       service: service as unknown as TranscriptionService,
     });
@@ -473,7 +473,7 @@ describe("a dev override", () => {
 describe("a dev override with a pinned job", () => {
   beforeAll(() => {
     registerTranscriptionIpc({
-      resourcesPath: state.dir,
+      engineRoot: join(state.dir, "speech-engine"),
       modelsRoot: join(state.dir, "models"),
       service: service as unknown as TranscriptionService,
       override: { kind: "ready", job: { kind: "running", segmentsDone: 3, segmentsTotal: 12 } },
@@ -481,7 +481,7 @@ describe("a dev override with a pinned job", () => {
   });
   afterAll(() => {
     registerTranscriptionIpc({
-      resourcesPath: state.dir,
+      engineRoot: join(state.dir, "speech-engine"),
       modelsRoot: join(state.dir, "models"),
       service: service as unknown as TranscriptionService,
     });

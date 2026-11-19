@@ -19,7 +19,7 @@ const BASE: TranscribeControlInput = {
 };
 
 const RUNNING = { itemId: "a", phase: "transcribing", segmentsDone: 3, segmentsTotal: 9 } as const;
-const UNAVAILABLE = { status: "unavailable", reason: "engine-missing" } as const;
+const UNAVAILABLE = { status: "unavailable", reason: "unsupported-platform" } as const;
 
 function stateOf(over: Partial<TranscribeControlInput>): TranscribeControlState {
   return transcribeControlState({ ...BASE, ...over });

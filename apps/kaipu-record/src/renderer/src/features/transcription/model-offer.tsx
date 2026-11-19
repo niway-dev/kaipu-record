@@ -220,6 +220,8 @@ function failureText(
       return t("failed_corrupt");
     case "insufficient-disk-space":
       return t("failed_disk", { size });
+    case "engine-failed-to-start":
+      return t("failed_engine");
     case "busy":
       return t("failed_busy");
     default:

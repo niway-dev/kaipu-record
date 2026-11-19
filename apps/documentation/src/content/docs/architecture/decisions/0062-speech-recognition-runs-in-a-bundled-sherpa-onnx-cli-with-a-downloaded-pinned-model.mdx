@@ -86,6 +86,58 @@ Facts this decision rests on:
    the fetch script copies them into `resources/native/sherpa-onnx/licenses/` (it fails if there are
    none) and the release checks that folder in the packaged arm64 app.
 
+## Amendment, 2026-11-16: the engine downloads with the model
+
+The owner tested the stack in `bun run dev`, where nobody had run `bun run fetch:speech-engine`.
+The app reported the engine as missing, so Settings said "Not available", the onboarding step
+never appeared and the editor panel refused to run. A separate command is one more thing that
+silently hides the whole feature, and a 30 MB binary in every installer is paid by people who
+never transcribe. The owner decided the engine is downloaded inside the app, as Handy does with
+its models.
+
+This replaces points 2 and 8 above where they say "shipped in `resources/native/`" and "an
+explicit script":
+
+- **The engine is part of the consented download.** The one download the user agrees to installs
+  the pinned sherpa-onnx archive (18 MB, macOS arm64, version and SHA-256 fixed in
+  `engine-catalog.ts`) and then the model. The prompt's size is the sum of both while the engine
+  is missing. One progress bar, one Cancel.
+- **Where it lives.** `userData/speech-engine/<version>/{bin,lib}`, next to `userData/models/`.
+  The archive is staged in a `.partial` directory, its SHA-256 and size are checked before
+  anything is extracted, it is extracted with the system `/usr/bin/tar`, only the two binaries and
+  the three libraries are kept, the version handshake runs from the staged directory, and one
+  rename puts it in place.
+- **Nothing in the installer.** `build` no longer fetches the engine, `fetch-speech-engine.sh`
+  and its lock are removed, `afterPack` and the release workflow no longer copy, sign or check it.
+- **A missing engine is "not installed", not "unavailable".** On macOS arm64 a missing engine
+  makes the model read as missing, so every surface offers the download. An installed engine whose
+  handshake fails reads the same way, and the download reinstalls it; if the fresh engine still
+  does not start, the download fails with `engine-failed-to-start`. "Unavailable" is only
+  `unsupported-platform`.
+- **The source is one constant.** Today the archive comes from the sherpa-onnx GitHub release.
+  Serving it (and the model) from Kaipu's own server later changes the URL in the catalog, not
+  the code; the hash pins the bytes either way.
+- **A version bump is checked by hand.** When `ENGINE_ARCHIVE` or `ENGINE_LIBRARIES` in
+  `engine-catalog.ts` changes, list the new archive with `tar -tv`, check the real binaries'
+  dependencies with `otool -L`, and update the pinned size, SHA-256 and library list together.
+  No automated check runs against the real archive.
+
+Superseded by this amendment: the Consequences bullet "One more signed binary and a ~25 MB
+library in the macOS app; the release workflow checks them", and the "a missing binary" case in
+point 7 (a missing engine is now a download to offer, not "unavailable"). The original sections
+stay as written.
+
+Consequences that change: the installer does not grow; the release workflow has nothing to check;
+the first download needs about 18 MB more; a downloaded binary is ad-hoc signed by its publisher,
+not by Kaipu's Developer ID (a child process does not inherit the app's hardened runtime, and
+Node's download does not set the quarantine flag, so macOS runs it; this is not yet confirmed on a
+packaged build, see the open item below).
+
+- [ ] Confirm that Gatekeeper and the hardened runtime accept the downloaded engine. The engine is a
+      third-party binary, not signed by Kaipu, and it runs with its dylibs from `userData`. Check once on
+      a packaged build (`bun run build:mac`, flag `transcription` on, transcribe a recording), and before
+      the flag leaves OFF in production.
+
 ## Alternatives rejected
 
 - **The websocket server, as in invisible-assistant.** Fits live dictation; a recording is a batch.
@@ -97,6 +149,9 @@ Facts this decision rests on:
   sherpa-onnx. Reopens if the CLI's speed or memory fails M0.
 - **Whisper as the default.** Worse on Spanish in the owner's measurement and slower; it remains
   a catalog entry for later.
+- **The engine inside the installer** (this ADR's first version). Rejected on 2026-11-16, see
+  the amendment: a separate fetch step hid the feature in development, and every installer paid
+  for it.
 - **The model inside the installer.** Adds ~640 MB to every download, including for people who
   never transcribe.
 - **Cloud transcription.** Sends the user's audio out and needs an account; contrary to local-first.

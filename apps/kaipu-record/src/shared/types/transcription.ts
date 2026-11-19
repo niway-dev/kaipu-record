@@ -9,14 +9,15 @@
  * batches, writes `.kaipu/<id>.transcript.json` and broadcasts `TranscriptionJobProgress`.
  */
 
-/** Why the engine cannot run. The panel and the settings entry say "unavailable" for all three. */
+/**
+ * Why the engine cannot run at all. A missing engine, or an installed one that fails its version
+ * check, is not here: both read as a model to download, and the download reinstalls the engine.
+ */
 export type TranscriptionUnavailableReason =
   /** Not macOS arm64 (the first supported target). */
   | "unsupported-platform"
-  /** The `sherpa-onnx-offline` binary or its library is not in the app bundle. */
-  | "engine-missing"
-  /** The binary is there but its `--version` handshake failed. */
-  | "engine-broken";
+  /** Never sent by main: the renderer's own answer when the status request itself failed. */
+  | "unreachable";
 
 export type TranscriptionAvailability =
   | { status: "available" }
@@ -76,6 +77,8 @@ export type TranscriptionModelDownloadResult =
         | "hash-mismatch"
         | "size-mismatch"
         | "insufficient-disk-space"
+        /** The engine downloaded and verified, but could not be unpacked or does not start here. */
+        | "engine-failed-to-start"
         | "busy"
         | "unknown-model";
     };

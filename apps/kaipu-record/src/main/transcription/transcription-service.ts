@@ -24,13 +24,15 @@ import type {
   TranscriptionModelProgress,
   TranscriptionModelStatus,
   TranscriptionStatus,
-  TranscriptionUnavailableReason,
 } from "@shared/types/transcription";
 import { atomicWriteFile } from "../library/atomic-write";
-import type { EngineLocation, EngineUnavailableReason } from "./engine/engine-locator";
+import { ENGINE_ARCHIVE, type EngineArchive } from "./engine/engine-catalog";
+import type { EngineStore } from "./engine/engine-store";
+import type { EngineLocation } from "./engine/engine-locator";
 import { SherpaError, type CliResult, type RunBatchOptions } from "./engine/sherpa-supervisor";
 import { DEFAULT_MODEL_ID, listModels, type ModelCatalogEntry } from "./models/catalog";
-import { ModelStoreError, type ModelStore } from "./models/model-store";
+import { DownloadError } from "./download-file";
+import type { ModelStore } from "./models/model-store";
 import { PcmWriter, computeFrameLevelsDb, writeSegmentWav } from "./pcm";
 import { planSegments, type Segment } from "./segment";
 import { buildTranscript, writeTranscriptFileAtomic } from "./transcript-file";
@@ -79,8 +81,14 @@ type ModelStoreApi = Pick<
   "status" | "locate" | "destination" | "download" | "cancel" | "remove"
 >;
 
+type EngineStoreApi = Pick<EngineStore, "install">;
+
 export interface TranscriptionServiceDeps {
   locateEngine: () => Promise<EngineLocation>;
+  /** Installs the engine the first time a model is downloaded (ADR 0062, amendment). */
+  engineStore: EngineStoreApi;
+  /** Defaults to the pinned release; its size is part of the first download's size. */
+  engineArchive?: Pick<EngineArchive, "archiveName" | "sizeBytes">;
   modelStore: ModelStoreApi;
   /** The vault of the active workspace. Called from `begin`, inside the workspace gate. */
   openVault: () => TranscriptionVault;
@@ -155,19 +163,53 @@ interface Job {
   receivedBytes: number;
 }
 
-function toUnavailableReason(reason: EngineUnavailableReason): TranscriptionUnavailableReason {
-  switch (reason) {
+/**
+ * A missing engine, or an installed one that fails its check, is "not installed": the download
+ * is offered and is the repair (it reinstalls). Unavailable is only for a machine that cannot
+ * run the engine at all.
+ */
+function availabilityOf(engine: EngineLocation): TranscriptionStatus["availability"] {
+  if (engine.available) return { status: "available" };
+  switch (engine.reason) {
     case "unsupported-platform":
-      return "unsupported-platform";
+      return { status: "unavailable", reason: "unsupported-platform" };
     case "binary-missing":
-      return "engine-missing";
     case "handshake-failed":
-      return "engine-broken";
+      return { status: "available" };
   }
+}
+
+/** The engine has to be (re)installed before a model can be used. */
+const needsEngine = (engine: EngineLocation): boolean =>
+  !engine.available && (engine.reason === "binary-missing" || engine.reason === "handshake-failed");
+
+/** Minimum gap between engine progress events, as ModelStore's default. */
+const ENGINE_PROGRESS_INTERVAL_MS = 200;
+
+/**
+ * One `downloadModel` call, from its first await to its result. It owns the abort signal for
+ * both phases (engine, then model) and the numbers `status` shows while it runs.
+ */
+interface ModelDownload {
+  id: string;
+  controller: AbortController;
+  promise: Promise<TranscriptionModelDownloadResult>;
+  phase: "checking" | "engine" | "model";
+  /** Bytes of the engine archive received so far. */
+  engineReceived: number;
+  /** Engine plus model bytes this call will download. */
+  totalBytes: number;
+  /** The engine's bytes once it is installed in this call: added to every model byte. */
+  engineBytes: number;
 }
 
 function toModelStatus(status: ReturnType<ModelStoreApi["status"]>): TranscriptionModelStatus {
   return status.state === "ready" ? { state: "ready" } : status;
+}
+
+function toDownloadResult(error: DownloadError): TranscriptionModelDownloadResult {
+  if (error.code === "cancelled") return { status: "cancelled" };
+  return { status: "failed", code: error.code };
 }
 
 function toBytes(pcm: ArrayBuffer | Uint8Array): Uint8Array {
@@ -252,11 +294,22 @@ export class TranscriptionService {
   private readonly catalog: readonly ModelCatalogEntry[];
   private readonly setTimer: NonNullable<TranscriptionServiceDeps["setTimer"]>;
   private readonly newJobId: () => string;
+  private readonly engineArchive: NonNullable<TranscriptionServiceDeps["engineArchive"]>;
+  private download: ModelDownload | null = null;
   private engineCache: EngineLocation | null = null;
   private engineInflight: Promise<EngineLocation> | null = null;
+  /** Bumped when the install ends: a probe started before it must not write its old answer. */
+  private engineGeneration = 0;
+  /** Why the engine phase of the last download of a model failed (a cancel is not recorded). */
+  private readonly engineFailures = new Map<string, string>();
   private job: Job | null = null;
   /** The model id of a `begin` that passed its checks and is still resolving the item. */
   private opening: string | null = null;
+  /**
+   * Removals in flight per model id: `begin` refuses a model while it has any, because the store
+   * still reports it installed. Overlapping calls each hold one until their own delete ends.
+   */
+  private readonly removing = new Map<string, number>();
   private readonly sweptDirs = new Set<string>();
 
   constructor(private readonly deps: TranscriptionServiceDeps) {
@@ -268,46 +321,181 @@ export class TranscriptionService {
         return () => clearTimeout(handle);
       });
     this.newJobId = deps.newJobId ?? randomUUID;
+    this.engineArchive = deps.engineArchive ?? ENGINE_ARCHIVE;
   }
 
   async status(): Promise<TranscriptionStatus> {
     const engine = await this.locate();
+    const engineMissing = needsEngine(engine);
+    const engineSize = this.engineArchive.sizeBytes;
     return {
-      availability: engine.available
-        ? { status: "available" }
-        : { status: "unavailable", reason: toUnavailableReason(engine.reason) },
+      availability: availabilityOf(engine),
       defaultModelId: DEFAULT_MODEL_ID,
-      models: this.catalog.map(
-        (model): TranscriptionModelInfo => ({
+      models: this.catalog.map((model): TranscriptionModelInfo => {
+        const own = toModelStatus(this.deps.modelStore.status(model.id));
+        const download = this.download?.id === model.id ? this.download : null;
+        // What the consent prompt shows: only what will actually be downloaded.
+        const sizeBytes = !engineMissing
+          ? model.sizeBytes
+          : own.state === "ready"
+            ? engineSize
+            : model.sizeBytes + engineSize;
+        let status = own;
+        if (download?.phase === "checking") {
+          // The run has not looked at the engine yet, but it is running: a poll that lands here
+          // must not read it as missing, or the renderer stops polling.
+          status = { state: "downloading", receivedBytes: 0, totalBytes: sizeBytes };
+        } else if (download?.phase === "engine") {
+          status = {
+            state: "downloading",
+            receivedBytes: download.engineReceived,
+            totalBytes: download.totalBytes,
+          };
+        } else if (own.state === "downloading" && download) {
+          status = {
+            state: "downloading",
+            receivedBytes: own.receivedBytes + download.engineBytes,
+            totalBytes: own.totalBytes + download.engineBytes,
+          };
+        } else if (engineMissing && (own.state === "ready" || own.state === "missing")) {
+          // Same shape ModelStore gives a failed download, so the offer shows its message.
+          const failure = this.engineFailures.get(model.id);
+          status =
+            failure === undefined ? { state: "missing" } : { state: "failed", reason: failure };
+        }
+        return {
           id: model.id,
           label: model.label,
           languages: model.languages,
-          sizeBytes: model.sizeBytes,
+          sizeBytes,
           location: this.deps.modelStore.destination(model.id),
           license: model.license,
-          status: toModelStatus(this.deps.modelStore.status(model.id)),
-        }),
-      ),
+          status,
+        };
+      }),
       job: this.job ? this.progressOf(this.job) : null,
     };
   }
 
-  async downloadModel(id: string): Promise<TranscriptionModelDownloadResult> {
-    if (!this.catalog.some((model) => model.id === id)) {
-      return { status: "failed", code: "unknown-model" };
+  /**
+   * Installs the engine when it is missing, then the model: one call, one progress stream (the
+   * engine's bytes first, then the model's), one cancel. A call for the model already
+   * downloading returns the same promise; a call for another one is `busy`.
+   */
+  downloadModel(id: string): Promise<TranscriptionModelDownloadResult> {
+    const model = this.catalog.find((entry) => entry.id === id);
+    if (!model) return Promise.resolve({ status: "failed", code: "unknown-model" });
+    if (this.download) {
+      return this.download.id === id
+        ? this.download.promise
+        : Promise.resolve({ status: "failed", code: "busy" });
     }
+    // Its install is being deleted: a download now could report `ready` for a model that is gone.
+    if (this.removing.has(id)) return Promise.resolve({ status: "failed", code: "busy" });
+    this.engineFailures.delete(id);
+    const run: ModelDownload = {
+      id,
+      controller: new AbortController(),
+      promise: undefined as unknown as Promise<TranscriptionModelDownloadResult>,
+      phase: "checking",
+      engineReceived: 0,
+      totalBytes: 0,
+      engineBytes: 0,
+    };
+    this.download = run;
+    run.promise = this.runDownload(model, run).finally(() => {
+      if (this.download === run) this.download = null;
+    });
+    return run.promise;
+  }
+
+  private async runDownload(
+    model: ModelCatalogEntry,
+    run: ModelDownload,
+  ): Promise<TranscriptionModelDownloadResult> {
+    const { signal } = run.controller;
     try {
-      await this.deps.modelStore.download(id, (progress) => this.deps.broadcastModel(progress));
+      const engine = await this.locate();
+      const engineMissing = needsEngine(engine);
+      const modelInstalled = this.deps.modelStore.locate(model.id) !== null;
+      // The check is over: the model's own status now reports the progress (an install moves on first).
+      run.phase = "model";
+      if (engineMissing) {
+        // An engine whose files exist but fail the handshake is reinstalled, not reused.
+        const force = !engine.available && engine.reason === "handshake-failed";
+        await this.installEngine(model, run, modelInstalled, force);
+      }
+      if (signal.aborted) return { status: "cancelled" };
+      // Engine installed, model already there: nothing left to download.
+      if (!(engineMissing && modelInstalled)) {
+        await this.deps.modelStore.download(
+          model.id,
+          (progress) =>
+            this.deps.broadcastModel({
+              ...progress,
+              receivedBytes: progress.receivedBytes + run.engineBytes,
+              totalBytes: progress.totalBytes + run.engineBytes,
+            }),
+          signal,
+        );
+      }
       return { status: "ready" };
     } catch (error) {
-      if (!(error instanceof ModelStoreError)) throw error;
-      return error.code === "cancelled"
-        ? { status: "cancelled" }
-        : { status: "failed", code: error.code };
+      if (!(error instanceof DownloadError)) throw error;
+      if (run.phase === "engine" && error.code !== "cancelled") {
+        this.engineFailures.set(model.id, error.message);
+      }
+      return toDownloadResult(error);
     }
   }
 
+  /** The engine phase: progress is the archive's bytes out of the engine plus the model. */
+  private async installEngine(
+    model: ModelCatalogEntry,
+    run: ModelDownload,
+    modelInstalled: boolean,
+    force: boolean,
+  ): Promise<void> {
+    const archive = this.engineArchive;
+    run.phase = "engine";
+    run.totalBytes = archive.sizeBytes + (modelInstalled ? 0 : model.sizeBytes);
+    let lastEmitAt = Number.NEGATIVE_INFINITY;
+    let lastEmittedBytes = -1;
+    const emit = () => {
+      lastEmitAt = this.deps.now().getTime();
+      lastEmittedBytes = run.engineReceived;
+      this.deps.broadcastModel({
+        id: model.id,
+        receivedBytes: run.engineReceived,
+        totalBytes: run.totalBytes,
+        fileName: archive.archiveName,
+      });
+    };
+    try {
+      await this.deps.engineStore.install({
+        force,
+        signal: run.controller.signal,
+        onBytes: (bytes) => {
+          run.engineReceived += bytes;
+          if (this.deps.now().getTime() - lastEmitAt >= ENGINE_PROGRESS_INTERVAL_MS) emit();
+        },
+      });
+    } finally {
+      // Whatever happened, the next `locate` looks at the disk again, and no probe that began
+      // before this point is joined or believed.
+      this.engineGeneration += 1;
+      this.engineCache = null;
+      this.engineInflight = null;
+    }
+    this.engineFailures.clear();
+    run.engineBytes = archive.sizeBytes;
+    run.engineReceived = archive.sizeBytes;
+    if (lastEmittedBytes !== run.engineReceived) emit();
+    run.phase = "model";
+  }
+
   cancelModel(id: string): void {
+    if (this.download?.id === id) this.download.controller.abort();
     this.deps.modelStore.cancel(id);
   }
 
@@ -315,7 +503,20 @@ export class TranscriptionService {
     if (this.job?.request.modelId === id || this.opening === id) {
       throw new Error("The speech model is in use by a transcription job");
     }
-    await this.deps.modelStore.remove(id);
+    // Reserved in the same tick as the check above, so a `begin` cannot slip in between.
+    this.removing.set(id, (this.removing.get(id) ?? 0) + 1);
+    try {
+      const running = this.download;
+      if (running?.id === id) {
+        running.controller.abort();
+        await running.promise.catch(() => undefined);
+      }
+      await this.deps.modelStore.remove(id);
+    } finally {
+      const left = (this.removing.get(id) ?? 1) - 1;
+      if (left > 0) this.removing.set(id, left);
+      else this.removing.delete(id);
+    }
   }
 
   async begin(request: TranscriptionJobRequest): Promise<TranscriptionBeginResult> {
@@ -323,7 +524,9 @@ export class TranscriptionService {
     if (!engine.available) return { status: "refused", reason: "unavailable" };
     const model = this.catalog.find((m) => m.id === request.modelId);
     const modelDir = model ? this.deps.modelStore.locate(model.id) : null;
-    if (!model || !modelDir) return { status: "refused", reason: "model-missing" };
+    if (!model || !modelDir || this.removing.has(model.id)) {
+      return { status: "refused", reason: "model-missing" };
+    }
     if (this.job || this.opening) return { status: "refused", reason: "busy" };
 
     this.opening = model.id;
@@ -456,13 +659,33 @@ export class TranscriptionService {
     return job;
   }
 
+  /**
+   * A call that joined a probe begun before an engine install ended must not get that probe's
+   * "missing": it looks again once (the new probe is current).
+   */
+  private async locate(): Promise<EngineLocation> {
+    const generation = this.engineGeneration;
+    const location = await this.probe();
+    if (location.available || generation === this.engineGeneration) return location;
+    return this.probe();
+  }
+
   /** The engine is located once; a result of "unavailable" is looked up again on the next ask. */
-  private locate(): Promise<EngineLocation> {
+  private probe(): Promise<EngineLocation> {
     if (this.engineCache?.available) return Promise.resolve(this.engineCache);
-    this.engineInflight ??= this.deps
-      .locateEngine()
-      .then((location) => (this.engineCache = location))
-      .finally(() => (this.engineInflight = null));
+    if (!this.engineInflight) {
+      const generation = this.engineGeneration;
+      const probe: Promise<EngineLocation> = this.deps
+        .locateEngine()
+        .then((location) => {
+          if (generation === this.engineGeneration) this.engineCache = location;
+          return location;
+        })
+        .finally(() => {
+          if (this.engineInflight === probe) this.engineInflight = null;
+        });
+      this.engineInflight = probe;
+    }
     return this.engineInflight;
   }
 

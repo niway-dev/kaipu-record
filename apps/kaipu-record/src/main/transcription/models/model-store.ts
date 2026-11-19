@@ -1,8 +1,18 @@
-import { createHash } from "node:crypto";
-import { createReadStream, readdirSync, rmSync, statSync } from "node:fs";
-import { mkdir, open, rename, rm, statfs } from "node:fs/promises";
+import { readdirSync, rmSync, statSync } from "node:fs";
+import { mkdir, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { listModels, type ModelCatalogEntry, type ModelFile } from "./catalog";
+import {
+  assertAllowedUrl,
+  assertDiskSpace,
+  defaultStatfs,
+  DownloadError,
+  downloadVerifiedFile,
+  hashFile,
+  toDownloadError,
+  type DownloadErrorCode,
+  type StatfsImpl,
+} from "../download-file";
+import { listModels, type ModelCatalogEntry } from "./catalog";
 
 /**
  * Consented, verified, cancellable model download (ADR 0062, decision 5).
@@ -12,21 +22,13 @@ import { listModels, type ModelCatalogEntry, type ModelFile } from "./catalog";
  * move the directory to `<rootDir>/<id>/`, so the engine never sees a half-installed model.
  */
 
-export type ModelStoreErrorCode =
-  | "network"
-  | "hash-mismatch"
-  | "size-mismatch"
-  | "cancelled"
-  | "insufficient-disk-space"
-  | "busy";
+export type ModelStoreErrorCode = DownloadErrorCode;
 
-export class ModelStoreError extends Error {
-  readonly code: ModelStoreErrorCode;
-
+/** What `download` rejects with: the shared download's error, named for the model store. */
+export class ModelStoreError extends DownloadError {
   constructor(code: ModelStoreErrorCode, message: string, options?: { cause?: unknown }) {
-    super(message, options);
+    super(code, message, options);
     this.name = "ModelStoreError";
-    this.code = code;
   }
 }
 
@@ -54,7 +56,7 @@ export interface ModelStoreOptions {
   catalog?: readonly ModelCatalogEntry[];
   fetchImpl?: typeof fetch;
   /** Free-space probe; defaults to `fs.statfs` (blocks available times block size). */
-  statfsImpl?: (path: string) => Promise<{ bavail: number | bigint; bsize: number | bigint }>;
+  statfsImpl?: StatfsImpl;
   /** Deletes a directory tree in `remove`; tests hold it open to pin the ordering. */
   rmImpl?: (path: string, options: { recursive: true; force: true }) => Promise<void>;
   now?: () => number;
@@ -83,7 +85,7 @@ export class ModelStore {
   private readonly rootDir: string;
   private readonly catalog: readonly ModelCatalogEntry[];
   private readonly fetchImpl: typeof fetch;
-  private readonly statfsImpl: NonNullable<ModelStoreOptions["statfsImpl"]>;
+  private readonly statfsImpl: StatfsImpl;
   private readonly rmImpl: NonNullable<ModelStoreOptions["rmImpl"]>;
   private readonly now: () => number;
   private readonly allowInsecureHttp: boolean;
@@ -95,7 +97,7 @@ export class ModelStore {
     this.rootDir = resolve(options.rootDir);
     this.catalog = options.catalog ?? listModels();
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
-    this.statfsImpl = options.statfsImpl ?? ((path) => statfs(path));
+    this.statfsImpl = options.statfsImpl ?? defaultStatfs;
     this.rmImpl = options.rmImpl ?? ((path, rmOptions) => rm(path, rmOptions));
     this.now = options.now ?? Date.now;
     this.allowInsecureHttp = options.allowInsecureHttpForTests ?? false;
@@ -282,9 +284,14 @@ export class ModelStore {
     const partial = this.partialDir(entry.id);
     const finalDir = this.destination(entry.id);
     try {
-      for (const file of entry.files) this.assertAllowedUrl(file.url);
+      for (const file of entry.files) assertAllowedUrl(file.url, this.allowInsecureHttp);
       await mkdir(this.rootDir, { recursive: true });
-      await this.assertDiskSpace(entry);
+      await assertDiskSpace(
+        this.rootDir,
+        entry.sizeBytes * DISK_SPACE_FACTOR,
+        entry.id,
+        this.statfsImpl,
+      );
       await rm(partial, { recursive: true, force: true });
       await mkdir(partial, { recursive: true });
 
@@ -306,9 +313,19 @@ export class ModelStore {
 
       for (const file of entry.files) {
         lastFileName = file.name;
-        await this.downloadFile(file, join(partial, file.name), signal, (bytes) => {
-          active.receivedBytes += bytes;
-          if (this.now() - lastEmitAt >= this.progressIntervalMs) emit(file.name);
+        await downloadVerifiedFile({
+          url: file.url,
+          name: file.name,
+          sizeBytes: file.sizeBytes,
+          sha256: file.sha256,
+          path: join(partial, file.name),
+          signal,
+          fetchImpl: this.fetchImpl,
+          allowInsecureHttp: this.allowInsecureHttp,
+          onBytes: (bytes) => {
+            active.receivedBytes += bytes;
+            if (this.now() - lastEmitAt >= this.progressIntervalMs) emit(file.name);
+          },
         });
       }
       if (lastEmittedBytes !== active.receivedBytes) emit(lastFileName);
@@ -322,125 +339,10 @@ export class ModelStore {
       throw error;
     }
   }
-
-  private async downloadFile(
-    file: ModelFile,
-    path: string,
-    signal: AbortSignal,
-    onBytes: (bytes: number) => void,
-  ): Promise<void> {
-    let response: Response;
-    try {
-      response = await this.fetchImpl(file.url, { signal, redirect: "follow" });
-    } catch (error) {
-      throw toStoreError(error, signal, `Could not reach the server for ${file.name}.`);
-    }
-    if (response.url) this.assertAllowedUrl(response.url);
-    if (!response.ok || !response.body) {
-      await response.body?.cancel().catch(() => undefined);
-      throw new ModelStoreError(
-        "network",
-        `The server answered ${response.status} for ${file.name}.`,
-      );
-    }
-    const declared = response.headers.get("content-length");
-    if (declared !== null && Number(declared) !== file.sizeBytes) {
-      await response.body.cancel().catch(() => undefined);
-      throw new ModelStoreError(
-        "size-mismatch",
-        `${file.name} is ${declared} bytes on the server, expected ${file.sizeBytes}.`,
-      );
-    }
-
-    const hash = createHash("sha256");
-    const handle = await open(path, "w");
-    let received = 0;
-    try {
-      const reader = response.body.getReader();
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          received += value.byteLength;
-          if (received > file.sizeBytes) {
-            await reader.cancel().catch(() => undefined);
-            throw new ModelStoreError(
-              "size-mismatch",
-              `${file.name} is larger than the expected ${file.sizeBytes} bytes.`,
-            );
-          }
-          hash.update(value);
-          let offset = 0;
-          while (offset < value.byteLength) {
-            const { bytesWritten } = await handle.write(value, offset, value.byteLength - offset);
-            offset += bytesWritten;
-          }
-          onBytes(value.byteLength);
-          if (signal.aborted) throw new ModelStoreError("cancelled", "The download was cancelled.");
-        }
-      } catch (error) {
-        if (error instanceof ModelStoreError) throw error;
-        throw toStoreError(error, signal, `The connection dropped while downloading ${file.name}.`);
-      }
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-
-    if (received !== file.sizeBytes) {
-      throw new ModelStoreError(
-        "size-mismatch",
-        `${file.name} is ${received} bytes, expected ${file.sizeBytes}.`,
-      );
-    }
-    if (hash.digest("hex") !== file.sha256) {
-      throw new ModelStoreError("hash-mismatch", `${file.name} does not match its pinned SHA-256.`);
-    }
-  }
-
-  private assertAllowedUrl(raw: string): void {
-    let url: URL;
-    try {
-      url = new URL(raw);
-    } catch {
-      throw new ModelStoreError("network", `Invalid download URL: ${raw}`);
-    }
-    if (url.protocol === "https:") return;
-    if (this.allowInsecureHttp && url.protocol === "http:" && url.hostname === "127.0.0.1") return;
-    throw new ModelStoreError("network", `Refusing a non-https download URL: ${url.origin}`);
-  }
-
-  private async assertDiskSpace(entry: ModelCatalogEntry): Promise<void> {
-    let free: number;
-    try {
-      const stats = await this.statfsImpl(this.rootDir);
-      free = Number(stats.bavail) * Number(stats.bsize);
-    } catch {
-      // The platform cannot report free space: the download itself will fail on a full disk.
-      return;
-    }
-    const needed = entry.sizeBytes * DISK_SPACE_FACTOR;
-    if (free < needed) {
-      throw new ModelStoreError(
-        "insufficient-disk-space",
-        `${entry.id} needs ${Math.ceil(needed)} bytes free, ${free} available.`,
-      );
-    }
-  }
 }
 
-function toStoreError(error: unknown, signal: AbortSignal, message?: string): ModelStoreError {
+function toStoreError(error: unknown, signal: AbortSignal): ModelStoreError {
   if (error instanceof ModelStoreError) return error;
-  if (signal.aborted) return new ModelStoreError("cancelled", "The download was cancelled.");
-  return new ModelStoreError("network", message ?? "The download failed.", { cause: error });
-}
-
-function hashFile(path: string): Promise<string> {
-  return new Promise((resolveHash, reject) => {
-    const hash = createHash("sha256");
-    createReadStream(path)
-      .on("data", (chunk) => hash.update(chunk))
-      .on("error", reject)
-      .on("end", () => resolveHash(hash.digest("hex")));
-  });
+  const base = toDownloadError(error, signal);
+  return new ModelStoreError(base.code, base.message, { cause: base.cause });
 }

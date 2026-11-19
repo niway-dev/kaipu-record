@@ -7,6 +7,8 @@ import type {
   TranscriptionJobProgress,
   TranscriptionModelProgress,
 } from "@shared/types/transcription";
+import { ENGINE_ARCHIVE } from "./engine/engine-catalog";
+import { DownloadError } from "./download-file";
 import type { EngineLocation } from "./engine/engine-locator";
 import { SherpaError, type CliResult, type RunBatchOptions } from "./engine/sherpa-supervisor";
 import { DEFAULT_MODEL_ID, getModel } from "./models/catalog";
@@ -118,6 +120,24 @@ function makeHarness(overrides: Partial<TranscriptionServiceDeps> = {}) {
     cancel: vi.fn(),
     remove: vi.fn(async () => {}),
   };
+  /** The downloaded engine: `missing` plays a machine where it was never installed. */
+  const engine = { missing: false, broken: false };
+  const engineStore = {
+    install: vi.fn(
+      async (options: {
+        force?: boolean;
+        signal?: AbortSignal;
+        onBytes?: (bytes: number) => void;
+      }) => {
+        const half = Math.floor(ENGINE_ARCHIVE.sizeBytes / 2);
+        options.onBytes?.(half);
+        options.onBytes?.(ENGINE_ARCHIVE.sizeBytes - half);
+        engine.missing = false;
+        engine.broken = false;
+        return "/engine";
+      },
+    ),
+  };
   const runBatch = vi.fn(async (options: RunBatchOptions): Promise<CliResult[]> => {
     calls.push(options.wavPaths.map((p) => basename(p, ".wav")));
     optionsSeen.push(options);
@@ -126,8 +146,16 @@ function makeHarness(overrides: Partial<TranscriptionServiceDeps> = {}) {
     return options.wavPaths.map(cannedResult);
   });
   const deps: TranscriptionServiceDeps = {
-    locateEngine: vi.fn(async () => AVAILABLE),
+    locateEngine: vi.fn(
+      async (): Promise<EngineLocation> =>
+        engine.missing
+          ? { available: false, reason: "binary-missing" }
+          : engine.broken
+            ? { available: false, reason: "handshake-failed" }
+            : AVAILABLE,
+    ),
     modelStore,
+    engineStore,
     openVault: () => vault,
     runBatch,
     hashMedia: vi.fn(async () => "hash-1"),
@@ -168,6 +196,8 @@ function makeHarness(overrides: Partial<TranscriptionServiceDeps> = {}) {
     supervisor,
     modelStatus,
     modelStore,
+    engine,
+    engineStore,
     runBatch,
     settled,
   };
@@ -245,7 +275,8 @@ describe("status", () => {
       const { availability } = await h.service.status();
       reasons.push(availability.status === "unavailable" ? availability.reason : null);
     }
-    expect(reasons).toEqual(["engine-missing", "engine-broken", "unsupported-platform"]);
+    // A missing or failing engine is "not installed", never "unavailable": the download is the repair.
+    expect(reasons).toEqual([null, null, "unsupported-platform"]);
     await h.service.status();
     await h.service.status();
     expect(locateEngine).toHaveBeenCalledTimes(4);
@@ -327,6 +358,447 @@ describe("models", () => {
   });
 });
 
+describe("the engine downloads with the model", () => {
+  const ENGINE = ENGINE_ARCHIVE.sizeBytes;
+  const MODEL = getModel(MODEL_ID)!.sizeBytes;
+  const OTHER_ID = "parakeet-tdt-0.6b-v2-int8";
+
+  /** A clock that moves 300 ms per read, so the progress throttle never swallows an event. */
+  const steppingClock = () => {
+    let ms = 0;
+    return () => new Date((ms += 300));
+  };
+
+  /** An install that waits until released or aborted, like a download in flight. */
+  function pausedInstall(h: ReturnType<typeof makeHarness>) {
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    h.engineStore.install.mockImplementationOnce(async (options) => {
+      options.onBytes?.(1000);
+      started.resolve();
+      await new Promise<void>((resolve, reject) => {
+        release.promise.then(resolve);
+        options.signal?.addEventListener("abort", () =>
+          reject(new DownloadError("cancelled", "The download was cancelled.")),
+        );
+      });
+      h.engine.missing = false;
+      return "/engine";
+    });
+    return { started: started.promise, release: release.resolve };
+  }
+
+  it("offers the download: models read missing and the size includes the engine", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const status = await h.service.status();
+    expect(status.availability).toEqual({ status: "available" });
+    const info = (id: string) => status.models.find((m) => m.id === id)!;
+    expect(info(MODEL_ID).status).toEqual({ state: "missing" });
+    expect(info(MODEL_ID).sizeBytes).toBe(MODEL + ENGINE);
+    expect(info(OTHER_ID).sizeBytes).toBe(getModel(OTHER_ID)!.sizeBytes + ENGINE);
+  });
+
+  it("reads an installed model as missing while the engine is missing, sized as the engine only", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    const status = await h.service.status();
+    const info = status.models.find((m) => m.id === MODEL_ID)!;
+    expect(info.status).toEqual({ state: "missing" });
+    expect(info.sizeBytes).toBe(ENGINE);
+  });
+
+  it("leaves other model states and the plain size alone once the engine is installed", async () => {
+    const h = makeHarness();
+    const info = (await h.service.status()).models.find((m) => m.id === MODEL_ID)!;
+    expect(info.status).toEqual({ state: "ready" });
+    expect(info.sizeBytes).toBe(MODEL);
+  });
+
+  it("treats an engine that fails its handshake like a missing one: the download is the repair", async () => {
+    const h = makeHarness();
+    h.engine.broken = true;
+    const status = await h.service.status();
+    expect(status.availability).toEqual({ status: "available" });
+    const info = status.models.find((m) => m.id === MODEL_ID)!;
+    expect(info.status).toEqual({ state: "missing" });
+    expect(info.sizeBytes).toBe(ENGINE);
+  });
+
+  it("keeps an unsupported machine unavailable, with every model state as the store reports it", async () => {
+    const h = makeHarness({
+      locateEngine: async () => ({ available: false, reason: "unsupported-platform" }),
+    });
+    const status = await h.service.status();
+    expect(status.availability).toEqual({
+      status: "unavailable",
+      reason: "unsupported-platform",
+    });
+    const info = status.models.find((m) => m.id === MODEL_ID)!;
+    expect(info.status).toEqual({ state: "ready" });
+    expect(info.sizeBytes).toBe(MODEL);
+  });
+
+  it("force-reinstalls a failing engine on download, and a missing one without force", async () => {
+    const h = makeHarness();
+    h.engine.broken = true;
+    await h.service.downloadModel(MODEL_ID);
+    expect(h.engineStore.install).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
+    expect((await h.service.status()).availability).toEqual({ status: "available" });
+    expect(h.engine.broken).toBe(false);
+
+    const fresh = makeHarness();
+    fresh.engine.missing = true;
+    await fresh.service.downloadModel(MODEL_ID);
+    expect(fresh.engineStore.install.mock.calls[0]![0].force).toBeFalsy();
+  });
+
+  it("reports engine-failed-to-start when the fresh engine fails its handshake", async () => {
+    const h = makeHarness();
+    h.engine.broken = true;
+    h.engineStore.install.mockRejectedValueOnce(
+      new DownloadError("engine-failed-to-start", "did not pass its version check"),
+    );
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({
+      status: "failed",
+      code: "engine-failed-to-start",
+    });
+    expect(h.modelStore.download).not.toHaveBeenCalled();
+    // The failure stays visible to the offer, as a failed ModelStore download does.
+    expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      state: "failed",
+      reason: "did not pass its version check",
+    });
+  });
+
+  it("installs the engine, then the model, in one monotonic progress stream", async () => {
+    const h = makeHarness({ now: steppingClock() });
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    h.modelStore.download.mockImplementationOnce(async (_id, onProgress) => {
+      onProgress({ id: MODEL_ID, receivedBytes: 100, totalBytes: MODEL, fileName: "encoder" });
+      onProgress({ id: MODEL_ID, receivedBytes: MODEL, totalBytes: MODEL, fileName: "tokens" });
+      return `/models/${MODEL_ID}`;
+    });
+
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+
+    expect(h.engineStore.install).toHaveBeenCalledTimes(1);
+    const received = h.modelEvents.map((e) => e.receivedBytes);
+    expect(received).toEqual([...received].sort((a, b) => a - b));
+    expect(new Set(h.modelEvents.map((e) => e.id))).toEqual(new Set([MODEL_ID]));
+    expect(new Set(h.modelEvents.map((e) => e.totalBytes))).toEqual(new Set([ENGINE + MODEL]));
+    expect(received).toContain(ENGINE);
+    expect(received.at(-1)).toBe(ENGINE + MODEL);
+    expect(h.modelEvents[0]!.fileName).toBe(ENGINE_ARCHIVE.archiveName);
+    expect(h.modelEvents.at(-1)!.fileName).toBe("tokens");
+    // The install happened before the model's first byte.
+    expect(h.engineStore.install.mock.invocationCallOrder[0]!).toBeLessThan(
+      h.modelStore.download.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("reports the model as downloading with the combined numbers during the engine phase", async () => {
+    const h = makeHarness({ now: steppingClock() });
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const install = pausedInstall(h);
+
+    const pending = h.service.downloadModel(MODEL_ID);
+    await install.started;
+    const status = await h.service.status();
+    const info = (id: string) => status.models.find((m) => m.id === id)!;
+    expect(info(MODEL_ID).status).toEqual({
+      state: "downloading",
+      receivedBytes: 1000,
+      totalBytes: ENGINE + MODEL,
+    });
+    expect(info(OTHER_ID).status).toEqual({ state: "missing" });
+
+    install.release();
+    await pending;
+  });
+
+  it("adds the engine's bytes to the model's own while the model downloads", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const reached = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    h.modelStore.download.mockImplementationOnce(async () => {
+      h.modelStatus.set(MODEL_ID, { state: "downloading", receivedBytes: 50, totalBytes: MODEL });
+      reached.resolve();
+      await finish.promise;
+      return `/models/${MODEL_ID}`;
+    });
+
+    const pending = h.service.downloadModel(MODEL_ID);
+    await reached.promise;
+    const info = (await h.service.status()).models.find((m) => m.id === MODEL_ID)!;
+    expect(info.status).toEqual({
+      state: "downloading",
+      receivedBytes: ENGINE + 50,
+      totalBytes: ENGINE + MODEL,
+    });
+    finish.resolve();
+    await pending;
+  });
+
+  it("finds the engine after the install, without asking for a restart", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    expect((await h.service.status()).availability).toEqual({ status: "available" });
+    await h.service.downloadModel(MODEL_ID);
+    h.modelStatus.set(MODEL_ID, { state: "ready", dir: `/models/${MODEL_ID}` });
+    const status = await h.service.status();
+    expect(status.models.find((m) => m.id === MODEL_ID)!.status).toEqual({ state: "ready" });
+    const begin = await h.service.begin({ ...REQUEST, id: "missing-item" });
+    expect(begin).not.toEqual({ status: "refused", reason: "unavailable" });
+  });
+
+  it("cancels during the engine phase and the model never starts", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const install = pausedInstall(h);
+
+    const pending = h.service.downloadModel(MODEL_ID);
+    await install.started;
+    h.service.cancelModel(MODEL_ID);
+
+    expect(await pending).toEqual({ status: "cancelled" });
+    expect(h.modelStore.download).not.toHaveBeenCalled();
+    expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      state: "missing",
+    });
+  });
+
+  it("cancels during the model phase through the same call", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    h.modelStore.download.mockImplementationOnce(
+      (_id, _onProgress, signal?: AbortSignal) =>
+        new Promise<string>((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new ModelStoreError("cancelled", "The download was cancelled.")),
+          );
+          queueMicrotask(() => h.service.cancelModel(MODEL_ID));
+        }),
+    );
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "cancelled" });
+    expect(h.modelStore.cancel).toHaveBeenCalledWith(MODEL_ID);
+  });
+
+  it("does not let a probe that was in flight across the install report the engine as missing", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    const install = pausedInstall(h);
+    const pending = h.service.downloadModel(MODEL_ID);
+    await install.started;
+    // A status call during the install probes the disk and sees no engine, slowly.
+    const stale = Promise.withResolvers<EngineLocation>();
+    vi.mocked(h.deps.locateEngine).mockImplementationOnce(() => stale.promise);
+    const duringInstall = h.service.status();
+    await Promise.resolve();
+
+    install.release();
+    await pending;
+    // Asked while the old probe is still running: it must start its own, not join the old one.
+    const afterInstall = h.service.status();
+    stale.resolve({ available: false, reason: "binary-missing" });
+    // The call that joined the old probe gets the post-install state, not the old answer.
+    const early = await duringInstall;
+    expect(early.availability).toEqual({ status: "available" });
+    expect(early.models.find((m) => m.id === MODEL_ID)!.status).toEqual({ state: "ready" });
+
+    const status = await afterInstall;
+    expect(status.models.find((m) => m.id === MODEL_ID)!.status).toEqual({ state: "ready" });
+    expect(await h.service.begin({ ...REQUEST, id: "none" })).not.toEqual({
+      status: "refused",
+      reason: "unavailable",
+    });
+  });
+
+  it("reports the model as downloading, not missing, to a poll that resumes during the engine check", async () => {
+    const h = makeHarness({ now: steppingClock() });
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const install = pausedInstall(h);
+    // A poll is already waiting on the engine probe when the download starts and joins it.
+    const probe = Promise.withResolvers<EngineLocation>();
+    vi.mocked(h.deps.locateEngine).mockImplementationOnce(() => probe.promise);
+    const poll = h.service.status();
+    const pending = h.service.downloadModel(MODEL_ID);
+    probe.resolve({ available: false, reason: "binary-missing" });
+
+    // The poll resumes before the download leaves its "checking" phase.
+    const status = await poll;
+    expect(status.models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      state: "downloading",
+      receivedBytes: 0,
+      totalBytes: MODEL + ENGINE,
+    });
+
+    await install.started;
+    install.release();
+    expect(await pending).toEqual({ status: "ready" });
+  });
+
+  it("reports the model's own progress while only the model downloads", async () => {
+    const h = makeHarness();
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const reached = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    h.modelStore.download.mockImplementationOnce(async () => {
+      h.modelStatus.set(MODEL_ID, { state: "downloading", receivedBytes: 50, totalBytes: MODEL });
+      reached.resolve();
+      await finish.promise;
+      return `/models/${MODEL_ID}`;
+    });
+
+    const pending = h.service.downloadModel(MODEL_ID);
+    await reached.promise;
+    const info = (await h.service.status()).models.find((m) => m.id === MODEL_ID)!;
+    // The engine is installed, so nothing leaves the "checking" phase except the model's own state.
+    expect(info.status).toEqual({ state: "downloading", receivedBytes: 50, totalBytes: MODEL });
+    finish.resolve();
+    await pending;
+  });
+
+  it("installs only the engine when the model is already installed", async () => {
+    const h = makeHarness({ now: steppingClock() });
+    h.engine.missing = true;
+
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+
+    expect(h.engineStore.install).toHaveBeenCalledTimes(1);
+    expect(h.modelStore.download).not.toHaveBeenCalled();
+    expect(new Set(h.modelEvents.map((e) => e.totalBytes))).toEqual(new Set([ENGINE]));
+    expect(h.modelEvents.at(-1)!.receivedBytes).toBe(ENGINE);
+  });
+
+  it("does not touch the engine store when the engine is installed", async () => {
+    const h = makeHarness();
+    await h.service.downloadModel(MODEL_ID);
+    expect(h.engineStore.install).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["network", "network"],
+    ["hash-mismatch", "hash-mismatch"],
+    ["size-mismatch", "size-mismatch"],
+    ["insufficient-disk-space", "insufficient-disk-space"],
+    ["engine-failed-to-start", "engine-failed-to-start"],
+  ] as const)(
+    "maps an engine %s failure to %s, and the model is not downloaded",
+    async (code, expected) => {
+      const h = makeHarness();
+      h.engine.missing = true;
+      h.modelStatus.set(MODEL_ID, { state: "missing" });
+      h.engineStore.install.mockRejectedValueOnce(new DownloadError(code, "x"));
+      expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "failed", code: expected });
+      expect(h.modelStore.download).not.toHaveBeenCalled();
+      // The offer shows the failure until the next try, which starts clean.
+      const model = (await h.service.status()).models.find((m) => m.id === MODEL_ID)!;
+      expect(model.status).toEqual({ state: "failed", reason: "x" });
+      expect((await h.service.status()).models.find((m) => m.id === OTHER_ID)!.status).toEqual({
+        state: "missing",
+      });
+      const retry = Promise.withResolvers<void>();
+      h.engineStore.install.mockImplementationOnce(async () => {
+        retry.resolve();
+        await new Promise(() => {});
+        return "/engine";
+      });
+      void h.service.downloadModel(MODEL_ID);
+      await retry.promise;
+      expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status.state).toBe(
+        "downloading",
+      );
+    },
+  );
+
+  it("does not keep an engine failure after the next download succeeds", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    h.engineStore.install.mockRejectedValueOnce(new DownloadError("network", "offline"));
+    await h.service.downloadModel(MODEL_ID);
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      state: "missing",
+    });
+  });
+
+  it("does not hide an engine error nobody classified", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.engineStore.install.mockRejectedValueOnce(new Error("boom"));
+    await expect(h.service.downloadModel(MODEL_ID)).rejects.toThrow("boom");
+    // The run is over: a new download is not refused as busy.
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+  });
+
+  it("shares the run for the same model and refuses another model with busy", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const install = pausedInstall(h);
+
+    const first = h.service.downloadModel(MODEL_ID);
+    await install.started;
+    expect(h.service.downloadModel(MODEL_ID)).toBe(first);
+    expect(await h.service.downloadModel(OTHER_ID)).toEqual({ status: "failed", code: "busy" });
+
+    install.release();
+    expect(await first).toEqual({ status: "ready" });
+    expect(h.engineStore.install).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes a model without touching the engine", async () => {
+    const h = makeHarness();
+    await h.service.removeModel(MODEL_ID);
+    expect(h.modelStore.remove).toHaveBeenCalledTimes(1);
+    expect(h.engineStore.install).not.toHaveBeenCalled();
+  });
+
+  it("stops a running engine download before removing its model", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const install = pausedInstall(h);
+    const pending = h.service.downloadModel(MODEL_ID);
+    await install.started;
+    await h.service.removeModel(MODEL_ID);
+    expect(await pending).toEqual({ status: "cancelled" });
+    expect(h.modelStore.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a download of a model whose removal is still running", async () => {
+    const h = makeHarness();
+    let finishRemoval!: () => void;
+    h.modelStore.remove.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishRemoval = resolve)),
+    );
+    const removal = h.service.removeModel(MODEL_ID);
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "failed", code: "busy" });
+    finishRemoval();
+    await removal;
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+  });
+
+  it("refuses a job while the engine is not installed", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "unavailable" });
+  });
+});
+
 describe("begin", () => {
   it("refuses with unavailable when the engine is not available", async () => {
     const h = makeHarness({
@@ -376,6 +848,45 @@ describe("begin", () => {
     ]);
     await h.service.chunk("job-1", new Uint8Array(64).buffer);
     expect(await readdir(h.vault.tmpDir)).toEqual(["job-1.pcm"]);
+  });
+
+  it("refuses a model with model-missing while its removal is pending", async () => {
+    const h = makeHarness();
+    await mkdir(join(root, ".kaipu"), { recursive: true });
+    await writeFile(h.state.mediaPath, "media");
+    const deletion = Promise.withResolvers<void>();
+    // The store keeps reporting the model as installed until the delete finishes.
+    h.modelStore.remove.mockImplementationOnce(() => deletion.promise);
+
+    const removing = h.service.removeModel(MODEL_ID);
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "model-missing" });
+
+    deletion.resolve();
+    await removing;
+    // The reservation is gone once the removal returned.
+    expect((await h.service.begin(REQUEST)).status).toBe("accepted");
+  });
+
+  it("keeps refusing the model until the last of two overlapping removals returns", async () => {
+    const h = makeHarness();
+    await mkdir(join(root, ".kaipu"), { recursive: true });
+    await writeFile(h.state.mediaPath, "media");
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    h.modelStore.remove
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+
+    const removingFirst = h.service.removeModel(MODEL_ID);
+    const removingSecond = h.service.removeModel(MODEL_ID);
+    first.resolve();
+    await removingFirst;
+    // One delete is still in flight, so the model stays reserved.
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "model-missing" });
+
+    second.resolve();
+    await removingSecond;
+    expect((await h.service.begin(REQUEST)).status).toBe("accepted");
   });
 
   it("refuses a second job with busy, also while the first is still being opened", async () => {

@@ -156,6 +156,7 @@ describe("ModelOffer", () => {
       ["hash-mismatch", /corrupt/i],
       ["size-mismatch", /corrupt/i],
       ["insufficient-disk-space", /not enough free disk space/i],
+      ["engine-failed-to-start", /downloaded but does not start on this Mac/i],
       ["busy", /already running/i],
       ["unknown", /could not be downloaded/i],
     ])("explains a %s failure", (failure, message) => {
@@ -163,6 +164,19 @@ describe("ModelOffer", () => {
 
       expect(screen.getByTestId("model-offer")).toHaveAttribute("data-state", "failed");
       expect(screen.getByRole("alert")).toHaveTextContent(message);
+    });
+
+    it("explains an engine failure as main reports it, and offers to try again", () => {
+      const { onDownload } = setup(
+        { state: "failed", reason: "The downloaded speech engine did not pass its version check." },
+        { failure: "engine-failed-to-start" },
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "The speech engine downloaded but does not start on this Mac. Try again; if it keeps failing, this Mac may not support it yet.",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(onDownload).toHaveBeenCalledOnce();
     });
 
     it("names the space to free when the disk is full", () => {
@@ -193,8 +207,7 @@ describe("ModelOffer", () => {
         "unsupported-platform",
         /Local transcription is not available on this Mac or this platform yet/,
       ],
-      ["engine-missing", /engine is missing/i],
-      ["engine-broken", /engine did not start/i],
+      ["unreachable", /Local transcription is not responding\. Close and reopen Kaipu Record/],
     ])("explains %s and offers no download", (reason, message) => {
       setup({ state: "missing" }, { availability: { status: "unavailable", reason } });
 
@@ -219,7 +232,7 @@ describe("ModelOffer", () => {
     it("wins over the model's own state", () => {
       setup(
         { state: "ready" },
-        { availability: { status: "unavailable", reason: "engine-missing" } },
+        { availability: { status: "unavailable", reason: "unsupported-platform" } },
       );
 
       expect(screen.getByTestId("model-offer")).toHaveAttribute("data-state", "unavailable");

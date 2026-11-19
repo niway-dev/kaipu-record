@@ -118,37 +118,6 @@ else
   fi
 fi
 
-# --- speech engine ----------------------------------------------------------
-# Local transcription (ADR 0062) runs the sherpa-onnx CLI bundled in
-# apps/kaipu-record/resources/native/sherpa-onnx. It is fetched by an explicit script (never an
-# install script): the pinned archive, checked against its SHA-256. Reported, never run, like the
-# native dependencies above. Without it the transcription panel says "unavailable" and nothing
-# else changes. macOS arm64 only; elsewhere there is nothing to fetch.
-printf '\n%sSpeech engine%s\n' "$bold" "$off"
-if [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
-  printf '  %s·%s %-12s %snot needed (macOS arm64 only)%s\n' "$yellow" "$off" "sherpa-onnx" "$dim" "$off"
-else
-  engine_lock="$native_app_dir/scripts/speech-engine.lock"
-  engine_stamp="$native_app_dir/resources/native/sherpa-onnx/.engine-stamp"
-  engine_cli="$native_app_dir/resources/native/sherpa-onnx/bin/sherpa-onnx-offline"
-  engine_version="$(grep -E '^SHERPA_VERSION=' "$engine_lock" 2>/dev/null | cut -d= -f2-)"
-  engine_sha="$(grep -E '^SHERPA_SHA256=' "$engine_lock" 2>/dev/null | cut -d= -f2-)"
-  engine_expected="version=$engine_version
-sha256=$engine_sha"
-  if [ -x "$engine_cli" ] && [ "$(cat "$engine_stamp" 2>/dev/null || echo "")" = "$engine_expected" ]; then
-    printf '  %s✓%s %-12s %s\n' "$green" "$off" "sherpa-onnx" "$engine_version"
-  else
-    if [ -f "$engine_stamp" ]; then
-      printf '  %s·%s %-12s %sinstalled engine does not match the pinned %s%s\n' \
-        "$yellow" "$off" "sherpa-onnx" "$dim" "$engine_version" "$off"
-    else
-      printf '  %s·%s %-12s %snot fetched yet%s\n' "$yellow" "$off" "sherpa-onnx" "$dim" "$off"
-    fi
-    printf '       %swithout it:%s transcription says "unavailable"; nothing else changes\n' "$dim" "$off"
-    printf '       %srun:%s        bun run fetch:speech-engine\n' "$dim" "$off"
-  fi
-fi
-
 # --- UI catalog reminder ----------------------------------------------------
 # When the private catalog repository was last recounted, and whether a newer desktop release
 # exists. A reminder, never a failure: no access, no repository yet or no bun all print nothing

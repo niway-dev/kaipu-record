@@ -1,12 +1,10 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { existsSync as nodeExistsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { ENGINE_ARCHIVE, ENGINE_FILES } from "./engine-catalog";
 
-/**
- * The sherpa-onnx release the app ships. `scripts/speech-engine.lock` pins the same version for
- * the fetch script; `engine-locator.test.ts` fails when the two differ, so a bump touches both.
- */
-export const PINNED_ENGINE_VERSION = "1.13.8";
+/** The release the app runs: the one `engine-catalog.ts` pins, so there is a single source. */
+export const PINNED_ENGINE_VERSION = ENGINE_ARCHIVE.version;
 
 const CLI_NAME = "sherpa-onnx-offline";
 /** Ships in the same archive and is the only binary that prints the release version. */
@@ -22,29 +20,17 @@ export type EngineLocation =
   | { available: true; cliPath: string; libDir: string; version: string }
   | { available: false; reason: EngineUnavailableReason };
 
-export interface LocateEngineOptions {
-  resourcesPath: string;
-  appPath?: string;
-  platform?: NodeJS.Platform;
-  arch?: string;
+export interface InspectEngineOptions {
   existsSync?: (path: string) => boolean;
   spawn?: typeof nodeSpawn;
   handshakeTimeoutMs?: number;
 }
 
-/** `<root>/resources/native/sherpa-onnx`, in the dev tree first, then under asar.unpacked. */
-export function engineDir(
-  resourcesPath: string,
-  appPath: string | undefined,
-  existsSync: (path: string) => boolean = nodeExistsSync,
-): string {
-  if (appPath) {
-    for (const root of [appPath, join(appPath, "..", "..")]) {
-      const dev = join(root, "resources", "native", "sherpa-onnx");
-      if (existsSync(join(dev, "bin", CLI_NAME))) return dev;
-    }
-  }
-  return join(resourcesPath, "app.asar.unpacked", "resources", "native", "sherpa-onnx");
+export interface LocateEngineOptions extends InspectEngineOptions {
+  /** The install directory holding `bin/` and `lib/` (`EngineStore.installDir`). */
+  engineDir: string;
+  platform?: NodeJS.Platform;
+  arch?: string;
 }
 
 interface ProbeResult {
@@ -99,27 +85,24 @@ export function parseEngineVersion(output: string): string | undefined {
 }
 
 /**
- * Finds the bundled `sherpa-onnx-offline` and checks it is the pinned release.
- *
- * Handshake: `sherpa-onnx-version` must print `sherpa-onnx version : <pinned>` (this also proves
- * `libonnxruntime.dylib` loads through the shared rpath), and `sherpa-onnx-offline --help` must
- * exit 0 (this proves the CLI itself starts). The CLI has no `--version` of its own: it prints
- * its usage for that flag. Never throws.
+ * Checks an engine directory: every kept file is there, `sherpa-onnx-version` prints
+ * `sherpa-onnx version : <pinned>` (this also proves `libonnxruntime.dylib` loads through the
+ * shared rpath), and `sherpa-onnx-offline --help` exits 0 (this proves the CLI itself starts).
+ * The CLI has no `--version` of its own: it prints its usage for that flag. A directory missing
+ * any file is `binary-missing`, so a damaged install reads as "not installed" and can be
+ * downloaded again. No platform check: the install runs it before the engine is in place.
+ * Never throws.
  */
-export async function locateEngine(options: LocateEngineOptions): Promise<EngineLocation> {
-  const platform = options.platform ?? process.platform;
-  const arch = options.arch ?? process.arch;
-  if (platform !== "darwin" || arch !== "arm64") {
-    return { available: false, reason: "unsupported-platform" };
-  }
+export async function inspectEngineDir(
+  dir: string,
+  options: InspectEngineOptions = {},
+): Promise<EngineLocation> {
   const exists = options.existsSync ?? nodeExistsSync;
-  const dir = engineDir(options.resourcesPath, options.appPath, exists);
-  const cliPath = join(dir, "bin", CLI_NAME);
-  const libDir = join(dir, "lib");
-  const versionPath = join(dirname(cliPath), VERSION_NAME);
-  if (!exists(cliPath) || !exists(versionPath)) {
+  if (!ENGINE_FILES.every((file) => exists(join(dir, file)))) {
     return { available: false, reason: "binary-missing" };
   }
+  const cliPath = join(dir, "bin", CLI_NAME);
+  const versionPath = join(dir, "bin", VERSION_NAME);
 
   const spawnImpl = options.spawn ?? nodeSpawn;
   const timeoutMs = options.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
@@ -131,5 +114,15 @@ export async function locateEngine(options: LocateEngineOptions): Promise<Engine
   const cliRun = await probe(spawnImpl, cliPath, ["--help"], timeoutMs);
   if (cliRun?.code !== 0) return { available: false, reason: "handshake-failed" };
 
-  return { available: true, cliPath, libDir, version };
+  return { available: true, cliPath, libDir: join(dir, "lib"), version };
+}
+
+/** The downloaded engine, when this machine can run it and the handshake passes. Never throws. */
+export async function locateEngine(options: LocateEngineOptions): Promise<EngineLocation> {
+  const platform = options.platform ?? process.platform;
+  const arch = options.arch ?? process.arch;
+  if (platform !== "darwin" || arch !== "arm64") {
+    return { available: false, reason: "unsupported-platform" };
+  }
+  return inspectEngineDir(options.engineDir, options);
 }

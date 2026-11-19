@@ -106,7 +106,7 @@ describe("useTranscriptionStatus", () => {
     expect(onTranscriptionModelProgress).not.toHaveBeenCalled();
   });
 
-  it("treats a rejected status call as unavailable instead of crashing", async () => {
+  it("treats a rejected status call as unreachable (not an unsupported platform) instead of crashing", async () => {
     stubApi({
       getTranscriptionStatus: async () => {
         throw new Error("ipc down");
@@ -117,7 +117,7 @@ describe("useTranscriptionStatus", () => {
     await waitFor(() => expect(result.current.status).not.toBeNull());
     expect(result.current.status?.availability).toEqual({
       status: "unavailable",
-      reason: "engine-broken",
+      reason: "unreachable",
     });
     expect(result.current.status?.models).toEqual([]);
   });

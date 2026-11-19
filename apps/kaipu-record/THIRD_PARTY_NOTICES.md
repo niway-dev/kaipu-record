@@ -26,33 +26,25 @@ upstream's published terms and not re-read against the pinned artifact.
 - The files are fetched at the person's request, stored in the app's data folder and never part of
   the installer.
 
-## Bundled engine (inside the signed arm64 app, `resources/native/sherpa-onnx/`)
+## Speech engine (downloaded by the app into its data folder, macOS arm64)
 
 ### sherpa-onnx `sherpa-onnx-offline`, release `v1.13.8`
 
 - License: Apache-2.0, <https://www.apache.org/licenses/LICENSE-2.0>. Upstream:
   <https://github.com/k2-fsa/sherpa-onnx> (not verified against the release archive's own
   `LICENSE`).
-- Pinned in `scripts/speech-engine.lock` with the SHA-256 of the release archive (verified).
+- Pinned in `src/main/transcription/engine/engine-catalog.ts` with the SHA-256 of the release archive (verified).
 - Kaipu runs it as a separate process; it does not link it.
 
 ### ONNX Runtime `libonnxruntime.dylib`
 
 - License: MIT. Upstream: <https://github.com/microsoft/onnxruntime> (not verified against the
   copy inside the sherpa-onnx archive).
-- Shipped inside the sherpa-onnx release archive and copied next to the CLI.
+- Comes inside the sherpa-onnx release archive; the app keeps it next to the CLI in its data folder.
 
 ## Where the notices are
 
-- The Apache-2.0 text (sherpa-onnx, copied from its repository at tag `v1.13.8`) and the MIT text
-  (ONNX Runtime) live in `scripts/speech-engine-licenses/`. The pinned release archive carries no
-  license file of its own (checked 2026-11-18 by listing it), so `scripts/fetch-speech-engine.sh`
-  copies these into `resources/native/sherpa-onnx/licenses/`, next to `bin/` and `lib/`, and they
-  ship inside the app. The fetch fails if the folder is empty, and the release checks that the
-  destination is not empty, both before packaging and in the packaged arm64 app.
-- The app has no screen that lists third-party notices (NIW2-818 tracks local transcription). The
-  model credit is shown in the download prompt. This file is the repository's record.
-- Not verified: the ONNX Runtime MIT text was written from the upstream license's well-known
-  wording ("Copyright (c) Microsoft Corporation") and not copied from the upstream repository, which
-  was not reachable when this was written; it is also not checked against the ONNX Runtime version
-  inside the pinned archive. Nobody has run the fetch since the license copy was added.
+The engine is downloaded from the upstream sherpa-onnx release into the app's data folder, not
+shipped in the installer. What is still outstanding is the license texts: the full Apache-2.0 and
+MIT texts are neither shown in the app nor stored next to the downloaded files, and one of the two
+has to happen (tracked in the PR that introduced this file).
