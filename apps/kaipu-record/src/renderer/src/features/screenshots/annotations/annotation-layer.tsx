@@ -61,6 +61,7 @@ import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import type { RecognizedWord } from "@kaipu/domain/schemas";
 import {
+  assetRectToWorld,
   blockRedactionRect,
   lineBoxesNorm,
   nearestBlock,
@@ -236,12 +237,15 @@ function AnnotationLayerImpl({
   const hoverBlock = redactText ? (blocks.find((b) => b.line === hoverHideLine) ?? null) : null;
   const blockAt = (p: Pt): TextBlock | null => {
     if (!redactText) return null;
-    const hit = nearestBlock(blocks, p, redactText.natural, size);
+    const hit = nearestBlock(blocks, p, redactText.natural, size, redactText.basePlacement);
     return hit && hit.distPx <= TEXT_HIT_PX ? blocks[hit.index] : null;
   };
   // One underline per line, under the words' union box. Cheap, and only for the active tool.
   const recognizedLines = useMemo(
-    () => (activeText ? lineBoxesNorm(activeText.words, activeText.natural) : []),
+    () =>
+      activeText
+        ? lineBoxesNorm(activeText.words, activeText.natural, activeText.basePlacement)
+        : [],
     [activeText],
   );
   const hoverTag = recognizedLines.find((l) => l.line === hoverLine)?.box ?? null;
@@ -441,7 +445,13 @@ function AnnotationLayerImpl({
     if (tools.tool === "selectText") {
       // A press on or near a word starts a selection there; one on empty space clears it.
       if (!activeText) return;
-      const hit = nearestWord(activeText.words, p, activeText.natural, size);
+      const hit = nearestWord(
+        activeText.words,
+        p,
+        activeText.natural,
+        size,
+        activeText.basePlacement,
+      );
       if (hit && hit.distPx <= TEXT_HIT_PX) {
         const anchor = activeText.words[hit.index];
         drag.current = { mode: "select-text", anchor };
@@ -555,7 +565,13 @@ function AnnotationLayerImpl({
         setHoverLockedId(locked?.id ?? null);
       }
       if (activeText) {
-        const hit = nearestWord(activeText.words, toNorm(e), activeText.natural, size);
+        const hit = nearestWord(
+          activeText.words,
+          toNorm(e),
+          activeText.natural,
+          size,
+          activeText.basePlacement,
+        );
         setHoverLine(
           hit !== null && hit.distPx <= TEXT_HIT_PX ? activeText.words[hit.index].line : null,
         );
@@ -566,7 +582,9 @@ function AnnotationLayerImpl({
     const p = toNorm(e);
     if (d.mode === "select-text") {
       // The word under the pointer, or the nearest one when it is between words.
-      const hit = activeText ? nearestWord(activeText.words, p, activeText.natural, size) : null;
+      const hit = activeText
+        ? nearestWord(activeText.words, p, activeText.natural, size, activeText.basePlacement)
+        : null;
       if (activeText && hit) activeText.select(d.anchor, activeText.words[hit.index]);
       return;
     }
@@ -704,14 +722,14 @@ function AnnotationLayerImpl({
   // the next line is one more click; the hidden words leave `text.words` at once, so the
   // block stops being a target.
   const hideBlock = (block: TextBlock, model: TextLayerModel): void => {
-    const { natural } = model;
+    const { natural, basePlacement: placement } = model;
     const r = blockRedactionRect(block, model.words, natural);
     if (r.w <= 0 || r.h <= 0) return;
     const { id } = nextAnnotationId();
     scene.addAnnotation({
       id,
       kind: "blur",
-      ...pixelRectToNorm(r, natural),
+      ...pixelRectToNorm(r, natural, placement),
       ...(tools.redactionStyle === "solid" ? { style: "solid" as const } : {}),
     });
     scene.select(null);
@@ -837,11 +855,13 @@ function AnnotationLayerImpl({
       w: a.w * natural.w,
       h: a.h * natural.h,
     });
-    const others: WorldRect[] = [{ x: 0, y: 0, w: natural.w, h: natural.h }];
+    // The base as the picture shows it: its visible window at its placement, not the unplaced
+    // natural size, so a resized, moved or cropped base measures its real edge (NIW2-876).
+    const others: WorldRect[] = [world(baseVisibleRect({ baseCrop, basePlacement }))];
     for (const a of shown)
       if (a.kind === "image" && a.id !== selectedImage.id) others.push(world(a));
     return gapMeasures(world(selectedImage), others);
-  }, [selectedImage, natural, shown]);
+  }, [selectedImage, natural, shown, baseCrop, basePlacement]);
 
   return (
     <div
@@ -971,7 +991,7 @@ function AnnotationLayerImpl({
             {activeText.words
               .filter((w) => activeText.selected.has(w))
               .map((w, i) => {
-                const b = wordBoxNorm(w, activeText.natural);
+                const b = wordBoxNorm(w, activeText.natural, activeText.basePlacement);
                 return (
                   <rect
                     key={i}
@@ -1005,6 +1025,7 @@ function AnnotationLayerImpl({
           }}
           pixelWidth={selectedImage.pixelWidth}
           pixelHeight={selectedImage.pixelHeight}
+          crop={selectedImage.crop}
           justAdded={justAddedId != null && justAddedId === selectedImage.id}
           movable={selectedImage.id !== BASE_IMAGE_ID}
           gaps={gaps}
@@ -1146,12 +1167,15 @@ function TextTarget({
   model: TextLayerModel;
   size: Size;
 }): React.JSX.Element {
-  const r = blockRedactionRect(block, model.words, model.natural);
-  const sx = size.w / model.natural.w;
-  const sy = size.h / model.natural.h;
+  const { natural, basePlacement } = model;
+  const r = assetRectToWorld(
+    blockRedactionRect(block, model.words, natural),
+    natural,
+    basePlacement,
+  );
   return (
     <g data-testid="text-target" className={styles.textTarget}>
-      <rect x={r.x * sx} y={r.y * sy} width={r.w * sx} height={r.h * sy} rx={3} />
+      <rect x={r.x * size.w} y={r.y * size.h} width={r.w * size.w} height={r.h * size.h} rx={3} />
     </g>
   );
 }

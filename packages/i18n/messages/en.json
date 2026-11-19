@@ -1183,6 +1183,7 @@
     "exportFrameRemove": "Remove",
     "exportFrameLabel": "{w} × {h} px · EXPORT FRAME",
     "dragToMove": "Drag to move",
+    "imageSizeShowing": "Showing {visibleW}×{visibleH} of {w}×{h} px",
     "justAddedDragToPlace": "Just added · drag to place",
     "imageAddedRight": "Image added to the right of your content",
     "offContentUp": "Most of the content is above",

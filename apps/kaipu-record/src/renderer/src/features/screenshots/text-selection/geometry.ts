@@ -1,5 +1,10 @@
-import type { RecognizedWord } from "@kaipu/domain/schemas";
-import { baseFullRect, type Annotation, type BasePlacement } from "../annotations/scene";
+import { wordsOutsideRects, type RecognizedWord } from "@kaipu/domain/schemas";
+import {
+  baseFullRect,
+  type Annotation,
+  type BasePlacement,
+  type CropRect,
+} from "../annotations/scene";
 
 /** A size in pixels. */
 export interface PixelSize {
@@ -19,18 +24,73 @@ export interface PixelRect {
 }
 
 /**
- * A recognized word's box in normalized (0–1) coordinates of the base image. Words are
- * stored in the image's own pixels; normalizing them puts them in the same space as the
- * annotations, so the layer draws and hit-tests them under the same pan and zoom.
+ * A rect in the base ASSET's pixels, as a rect in the editor's world (base-normalized, the
+ * space annotations are stored in): the asset's pixel grid goes through the rect the WHOLE
+ * asset covers, `baseFullRect`. Without a placement that is the unit square, so this is just
+ * `px / natural`; a resized or moved base puts its asset elsewhere and at another size, and
+ * the same pixel lands at the same spot of the picture (NIW2-876). It never reads the crop: a
+ * pixel's place does not depend on how much of the asset shows. An invalid placement throws,
+ * like `baseFullRect`.
  */
-export function wordBoxNorm(word: RecognizedWord, natural: PixelSize): PixelRect {
+export function assetRectToWorld(
+  r: PixelRect,
+  natural: PixelSize,
+  basePlacement?: BasePlacement,
+): PixelRect {
+  const at = baseFullRect({ basePlacement });
   return {
-    x: word.rect.x / natural.w,
-    y: word.rect.y / natural.h,
-    w: word.rect.w / natural.w,
-    h: word.rect.h / natural.h,
+    x: at.x + (r.x / natural.w) * at.w,
+    y: at.y + (r.y / natural.h) * at.h,
+    w: (r.w / natural.w) * at.w,
+    h: (r.h / natural.h) * at.h,
   };
 }
+
+/**
+ * A recognized word's box in the editor's world (base-normalized, like an annotation). Words
+ * are stored in the asset's own pixels; mapping them through the placed base puts them in the
+ * same space as the annotations, so the layer draws and hit-tests them under the same pan and
+ * zoom, whether or not the base was resized or moved.
+ */
+export function wordBoxNorm(
+  word: RecognizedWord,
+  natural: PixelSize,
+  basePlacement?: BasePlacement,
+): PixelRect {
+  return assetRectToWorld(word.rect, natural, basePlacement);
+}
+
+/**
+ * The words a person may select, copy or hide: the recognized ones that no redaction covers
+ * and that lie entirely inside the part of the base that shows. A word in the cropped-out
+ * part, or one that crosses the crop's edge, is never offered: hiding or copying it would act
+ * on pixels nobody can see. A crop that is not a real window offers nothing.
+ */
+export function selectableWords(
+  words: RecognizedWord[],
+  annotations: readonly Annotation[],
+  natural: PixelSize,
+  basePlacement?: BasePlacement,
+  baseCrop?: CropRect,
+): RecognizedWord[] {
+  const uncovered = wordsOutsideRects(
+    words,
+    redactionRectsInPixels(annotations, natural, basePlacement),
+  );
+  if (!baseCrop) return uncovered;
+  const { x, y, w, h } = baseCrop;
+  if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return [];
+  const x0 = x * natural.w - CROP_EDGE_EPS_PX;
+  const y0 = y * natural.h - CROP_EDGE_EPS_PX;
+  const x1 = (x + w) * natural.w + CROP_EDGE_EPS_PX;
+  const y1 = (y + h) * natural.h + CROP_EDGE_EPS_PX;
+  return uncovered.filter(
+    ({ rect }) => rect.x >= x0 && rect.y >= y0 && rect.x + rect.w <= x1 && rect.y + rect.h <= y1,
+  );
+}
+
+/** Float noise in a crop edge, far below a pixel. */
+const CROP_EDGE_EPS_PX = 1e-3;
 
 /**
  * Where every redaction sits in base-image pixels, the way the save bakes it (same rounding:
@@ -78,10 +138,11 @@ export function nearestWord(
   p: NormPoint,
   natural: PixelSize,
   display: PixelSize,
+  basePlacement?: BasePlacement,
 ): { index: number; distPx: number } | null {
   let best: { index: number; distPx: number } | null = null;
   for (let i = 0; i < ordered.length; i += 1) {
-    const box = wordBoxNorm(ordered[i], natural);
+    const box = wordBoxNorm(ordered[i], natural, basePlacement);
     const dx = Math.max(box.x - p.x, 0, p.x - (box.x + box.w)) * display.w;
     const dy = Math.max(box.y - p.y, 0, p.y - (box.y + box.h)) * display.h;
     const distPx = Math.hypot(dx, dy);
@@ -150,15 +211,14 @@ export function nearestBlock(
   p: NormPoint,
   natural: PixelSize,
   display: PixelSize,
+  basePlacement?: BasePlacement,
 ): { index: number; distPx: number } | null {
   if (natural.w <= 0 || natural.h <= 0) return null;
   let best: { index: number; distPx: number } | null = null;
   for (let i = 0; i < blocks.length; i += 1) {
-    const r = blocks[i].rect;
-    const x = r.x / natural.w;
-    const y = r.y / natural.h;
-    const dx = Math.max(x - p.x, 0, p.x - (x + r.w / natural.w)) * display.w;
-    const dy = Math.max(y - p.y, 0, p.y - (y + r.h / natural.h)) * display.h;
+    const { x, y, w, h } = assetRectToWorld(blocks[i].rect, natural, basePlacement);
+    const dx = Math.max(x - p.x, 0, p.x - (x + w)) * display.w;
+    const dy = Math.max(y - p.y, 0, p.y - (y + h)) * display.h;
     const distPx = Math.hypot(dx, dy);
     if (best === null || distPx < best.distPx) best = { index: i, distPx };
     if (distPx === 0) break;
@@ -179,20 +239,23 @@ function rectsIntersect(a: PixelRect, b: PixelRect): boolean {
 const ROUND_TRIP_INSET_PX = 1e-3;
 
 /**
- * A whole-pixel rect as the normalized geometry of an annotation, so that the save, the
- * preview and the text cache (`redactionRectsInPixels`, which round OUT to whole pixels) land
- * on exactly these pixels. A plain `x / w` does not: `(20/1000 + 31/1000) * 1000` is
+ * A whole-pixel rect of the base asset as the world geometry of an annotation (through the
+ * placed base, see `assetRectToWorld`), so that the save, the preview and the text cache
+ * (`redactionRectsInPixels`, which round OUT to whole pixels) land on exactly these pixels. A plain `x / w` does not: `(20/1000 + 31/1000) * 1000` is
  * `51.00000000000001`, which rounds out to 52 and reaches one pixel into a neighbour. Each
  * edge moves a thousandth of a pixel inward, so the outward rounding returns to it.
  */
-export function pixelRectToNorm(r: PixelRect, natural: PixelSize): PixelRect {
+export function pixelRectToNorm(
+  r: PixelRect,
+  natural: PixelSize,
+  basePlacement?: BasePlacement,
+): PixelRect {
   const e = ROUND_TRIP_INSET_PX;
-  return {
-    x: (r.x + e) / natural.w,
-    y: (r.y + e) / natural.h,
-    w: (r.w - 2 * e) / natural.w,
-    h: (r.h - 2 * e) / natural.h,
-  };
+  return assetRectToWorld(
+    { x: r.x + e, y: r.y + e, w: r.w - 2 * e, h: r.h - 2 * e },
+    natural,
+    basePlacement,
+  );
 }
 
 /**

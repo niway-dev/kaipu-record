@@ -7,7 +7,7 @@
  * walked end to end (spec, section 3). The difference is the per-channel maximum, alpha
  * included, in 0–255 sRGB units.
  */
-import type { PixelBuffer } from "./pixel-buffer";
+import type { PixelBuffer, PixelWindow } from "./pixel-buffer";
 
 export type RulerAxis = "x" | "y";
 
@@ -54,7 +54,8 @@ function within(data: Uint8ClampedArray, seed: number, i: number, tolerance: num
 
 /**
  * From the pixel at position `start` on the line, walk in `dir` (-1 or +1) while each pixel is
- * within the tolerance of `start`. Returns the last position still inside the run.
+ * within the tolerance of `start`, never leaving `[lo, hi)`. Returns the last position still
+ * inside the run.
  */
 function walk(
   buf: PixelBuffer,
@@ -63,12 +64,13 @@ function walk(
   start: number,
   dir: -1 | 1,
   tolerance: number,
+  lo: number,
+  hi: number,
 ): number {
-  const length = axis === "x" ? buf.width : buf.height;
   const pos = (p: number): number => (axis === "x" ? offset(buf, p, at) : offset(buf, at, p));
   const seed = pos(start);
   let last = start;
-  for (let p = start + dir; p >= 0 && p < length; p += dir) {
+  for (let p = start + dir; p >= lo && p < hi; p += dir) {
     if (!within(buf.data, seed, pos(p), tolerance)) break;
     last = p;
   }
@@ -78,6 +80,10 @@ function walk(
 /**
  * The run through pixel (x, y) along `axis`. null when (x, y) is not a pixel of the image,
  * which is how a pointer over padding or empty canvas reports no measurement at all.
+ *
+ * `win` is the part of the image that shows (a cropped base): the run starts inside it, never
+ * leaves it, and `outer` finds nothing beyond its edge, as at the image's own edge. Without it
+ * the whole image counts.
  *
  * `outer`: the outer size (the `Shift` modifier). From each edge of the run, the next pixel
  * outward seeds a second scan, and the result reaches the far end of those neighboring runs:
@@ -91,18 +97,22 @@ export function scanRun(
   axis: RulerAxis,
   tolerance: number,
   outer = false,
+  win?: PixelWindow,
 ): PixelRun | null {
   if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
   if (x < 0 || y < 0 || x >= buf.width || y >= buf.height) return null;
+  const bounds = win ?? { x0: 0, y0: 0, x1: buf.width, y1: buf.height };
+  if (x < bounds.x0 || y < bounds.y0 || x >= bounds.x1 || y >= bounds.y1) return null;
   const tol = clampTolerance(tolerance);
   const at = axis === "x" ? y : x;
   const start = axis === "x" ? x : y;
-  const length = axis === "x" ? buf.width : buf.height;
-  let lo = walk(buf, axis, at, start, -1, tol);
-  let hi = walk(buf, axis, at, start, 1, tol);
+  const min = axis === "x" ? bounds.x0 : bounds.y0;
+  const max = axis === "x" ? bounds.x1 : bounds.y1;
+  let lo = walk(buf, axis, at, start, -1, tol, min, max);
+  let hi = walk(buf, axis, at, start, 1, tol, min, max);
   if (outer) {
-    if (lo > 0) lo = walk(buf, axis, at, lo - 1, -1, tol);
-    if (hi < length - 1) hi = walk(buf, axis, at, hi + 1, 1, tol);
+    if (lo > min) lo = walk(buf, axis, at, lo - 1, -1, tol, min, max);
+    if (hi < max - 1) hi = walk(buf, axis, at, hi + 1, 1, tol, min, max);
   }
   return { axis, from: lo, to: hi + 1, at };
 }
