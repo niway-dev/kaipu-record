@@ -15,7 +15,8 @@ import type { DestinationId } from "@renderer/features/prepare/destinations";
 import { DestinationTag } from "@renderer/features/prepare/components/destination-tag";
 import { SelectCheck, type ItemSelection } from "./select-check";
 import styles from "./video-card.module.css";
-import type { UiAreaProps } from "@renderer/lib/ui-area";
+import { uiArea, type UiAreaProps } from "@renderer/lib/ui-area";
+import { LibraryTranscribeButton } from "@renderer/features/transcription/library-transcribe-button";
 
 const CARD_TAGS_SHOWN = 3;
 
@@ -151,37 +152,48 @@ export function VideoCard({
         <div className={styles.metaLine}>
           <StorageMeta video={video} />
           <EditBadge state={badge} />
-          <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
-            {onTags && (
-              <button className={styles.action} onClick={onTags} title={t("tagsEdit")}>
-                <Tag size={14} strokeWidth={1.8} />
-              </button>
-            )}
-            {onEdit && (
-              <button className={styles.action} onClick={onEdit} title={t("edit")}>
-                <PenLine size={14} strokeWidth={1.8} />
-              </button>
-            )}
-            {onPrepare && (
-              <button
-                className={styles.action}
-                onClick={onPrepare}
-                title={t("exportCopy")}
-                aria-label={t("exportCopy")}
-              >
-                <Upload size={14} strokeWidth={1.8} />
-              </button>
-            )}
-            {moveMenu}
-            {video.id !== null && (
-              <button
-                className={cx(styles.action, styles.delete)}
-                onClick={onDelete}
-                title={t("delete")}
-              >
-                <Trash2 size={14} strokeWidth={1.8} />
-              </button>
-            )}
+          <div className={styles.end}>
+            {/* Outside the hover-only actions: a running job and a "Transcribed" badge stay
+                visible; the idle button appears with the other actions. */}
+            <div className={styles.transcribeSlot}>
+              <LibraryTranscribeButton
+                video={video}
+                variant="card"
+                ui={uiArea("library.videoCardTranscribe")}
+              />
+            </div>
+            <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
+              {onTags && (
+                <button className={styles.action} onClick={onTags} title={t("tagsEdit")}>
+                  <Tag size={14} strokeWidth={1.8} />
+                </button>
+              )}
+              {onEdit && (
+                <button className={styles.action} onClick={onEdit} title={t("edit")}>
+                  <PenLine size={14} strokeWidth={1.8} />
+                </button>
+              )}
+              {onPrepare && (
+                <button
+                  className={styles.action}
+                  onClick={onPrepare}
+                  title={t("exportCopy")}
+                  aria-label={t("exportCopy")}
+                >
+                  <Upload size={14} strokeWidth={1.8} />
+                </button>
+              )}
+              {moveMenu}
+              {video.id !== null && (
+                <button
+                  className={cx(styles.action, styles.delete)}
+                  onClick={onDelete}
+                  title={t("delete")}
+                >
+                  <Trash2 size={14} strokeWidth={1.8} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <span className={styles.specs}>

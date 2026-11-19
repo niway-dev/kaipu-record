@@ -1,7 +1,8 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { VideoRow } from "./video-row";
+import { stubTranscriptionStatus } from "./stub-transcription-status";
 
 function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
@@ -23,6 +24,7 @@ function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     ...overrides,
   };
 }
@@ -35,6 +37,11 @@ function renderRow(overrides: Partial<React.ComponentProps<typeof VideoRow>> = {
   );
   return { ...result, onNavigate, onDelete };
 }
+
+const transcribeFlag = vi.hoisted(() => ({ on: false }));
+vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
+
+const realElectronApi = window.electronAPI;
 
 describe("VideoRow", () => {
   it("says an imported video was imported in its specs line (NIW2-579)", () => {
@@ -148,5 +155,64 @@ describe("VideoRow keyboard and select mode (PR 479)", () => {
     const selection = { checked: true, disabledReason: null, label: "Select", onToggle: vi.fn() };
     const { container } = renderRow({ selection });
     expect(container.firstElementChild).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("VideoRow Transcribe button (NIW2-818)", () => {
+  beforeEach(() => {
+    transcribeFlag.on = false;
+  });
+  afterEach(() => {
+    window.electronAPI = realElectronApi;
+  });
+
+  it("shows nothing and reads nothing with the flag off", async () => {
+    const getStatus = stubTranscriptionStatus("ready");
+    render(<VideoRow video={makeVideo()} onNavigate={vi.fn()} onDelete={vi.fn()} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Transcribe" })).toBeNull();
+    expect(getStatus).not.toHaveBeenCalled();
+  });
+
+  it("offers Transcribe on a local recording with the flag on, in its catalog area", async () => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("ready");
+    const { container } = render(
+      <VideoRow video={makeVideo()} onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(await screen.findByRole("button", { name: "Transcribe" })).toBeInTheDocument();
+    expect(container.querySelector('[data-ui-area="library.videoRowTranscribe"]')).not.toBeNull();
+  });
+
+  it("clicking Transcribe does not open the item", async () => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("missing");
+    const onNavigate = vi.fn();
+    render(<VideoRow video={makeVideo()} onNavigate={onNavigate} onDelete={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Transcribe" }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a screenshot", { kind: "screenshot" as const }],
+    ["a GIF export", { kind: "gif" as const }],
+    ["a cloud-only item", { id: null }],
+  ])("is not offered for %s", async (_name, over) => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("ready");
+    render(<VideoRow video={makeVideo(over)} onNavigate={vi.fn()} onDelete={vi.fn()} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Transcribe" })).toBeNull();
+  });
+
+  it("shows a Transcribed badge for a video that already has a transcript", async () => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("ready");
+    render(
+      <VideoRow video={makeVideo({ transcribedAt: 5 })} onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(await screen.findByTestId("transcribe-done")).toHaveTextContent("Transcribed");
   });
 });

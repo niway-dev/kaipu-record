@@ -18,6 +18,7 @@ const base: LibraryItem = {
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
   capture: null,
   local: null,
   cloud: null,

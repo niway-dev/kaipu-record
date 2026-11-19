@@ -1,4 +1,4 @@
-import { catalog, type Step } from "../types";
+import { catalog, type Part, type Step } from "../types";
 import { nc } from "./not-capturable";
 
 const library: Step = { navigate: "/library" };
@@ -7,6 +7,39 @@ const listView: Step = {
 };
 const gridView: Step = {
   click: { area: "library.toolbar", part: { role: "button", name: "Gallery view" } },
+};
+
+const transcribeOn = { flag: "transcription", side: "on" } as const;
+
+/**
+ * The Transcribe action of a card (`library.videoCardTranscribe`) or a row
+ * (`library.videoRowTranscribe`). It is drawn once the speech model status is read, so a state
+ * waits for it. An idle or needs-model button shows only while the card or row is hovered.
+ */
+const control = (kind: "Card" | "Row") => {
+  const area = `library.video${kind}Transcribe` as const;
+  const button: Part = { role: "button", name: "Transcribe", exact: true };
+  return {
+    area,
+    present: { waitFor: { area } } satisfies Step,
+    hover: { hover: { area } } satisfies Step,
+    click: { click: { area, part: button } } satisfies Step,
+    running: {
+      waitFor: { area, part: { text: "Transcribing 3/12" } },
+    } satisfies Step,
+    /** Cancels the pinned job and waits for the progress to go, so the next state starts idle. */
+    cancel: [
+      { click: { area, part: { role: "button", name: "Cancel transcription", exact: true } } },
+      { waitFor: { area, part: { role: "status" }, state: "hidden" } },
+    ] satisfies Step[],
+  };
+};
+const card = control("Card");
+const row = control("Row");
+const dialog = "library.transcribeModelDialog" as const;
+/** Closes the speech model offer with its own button. */
+const closeOffer: Step = {
+  click: { area: dialog, part: { role: "button", name: "Not now", exact: true } },
 };
 
 /** The Library (`#/library`) over the demo workspace: six recordings, three screenshots, a GIF. */
@@ -26,7 +59,10 @@ export const libraryCatalog = catalog(
         "library.grid:items",
         "library.videoCard:recording",
       ],
-      gates: [{ account: "cloud", side: "signed-out" }],
+      gates: [
+        { account: "cloud", side: "signed-out" },
+        { flag: "transcription", side: "off" },
+      ],
     },
     "grid@min": {
       profile: "default",
@@ -112,6 +148,84 @@ export const libraryCatalog = catalog(
       demonstrates: ["library.videoRow:screenshot"],
       crops: { "library.videoRow": { hasText: "Settings page" } },
       after: [gridView],
+    },
+    "card-transcribe-needs-model": {
+      profile: "transcription-missing",
+      how: "With the flag forced on and the speech model pinned as not installed, rest the pointer on the first recording's card: its Transcribe button shows. A click opens the download offer.",
+      steps: [library, card.present, card.hover],
+      demonstrates: ["library.videoCardTranscribe:needsModel"],
+      gates: [transcribeOn],
+      keepPointer: true,
+    },
+    "card-transcribe-ready": {
+      profile: "transcription-ready",
+      how: "With the flag forced on and the speech model pinned as installed, rest the pointer on the first recording's card: its Transcribe button shows.",
+      steps: [library, card.present, card.hover],
+      demonstrates: ["library.videoCardTranscribe:ready"],
+      gates: [transcribeOn],
+      keepPointer: true,
+    },
+    "card-transcribe-running": {
+      profile: "transcription-job-running",
+      how: "With a job pinned at 3 of 12 parts (no engine runs), click Transcribe on the first recording's card: the card shows “Transcribing 3/12” and a Cancel button. The state cancels the job afterwards.",
+      steps: [library, card.present, card.click, card.running],
+      demonstrates: ["library.videoCardTranscribe:running"],
+      crops: { "library.videoCardTranscribe": { hasText: "Transcribing" } },
+      gates: [transcribeOn],
+      after: card.cancel,
+    },
+    "card-transcribe-done": {
+      profile: "transcription-transcripts",
+      how: "With transcript files beside four recordings (the badge follows the file, so the unreadable “Team notes” and the stale “Onboarding flow” carry it too), the crop shows one of the Transcribed cards.",
+      steps: [library, { waitFor: { area: card.area, part: { text: "Transcribed" } } }],
+      demonstrates: ["library.videoCardTranscribe:done"],
+      crops: { "library.videoCardTranscribe": { hasText: "Transcribed" } },
+      gates: [transcribeOn],
+    },
+    "row-transcribe-needs-model": {
+      profile: "transcription-missing",
+      how: "With the speech model pinned as not installed, switch to the list and rest the pointer on the first recording's row: its Transcribe button shows.",
+      steps: [library, listView, row.present, row.hover],
+      demonstrates: ["library.videoRowTranscribe:needsModel"],
+      gates: [transcribeOn],
+      keepPointer: true,
+      after: [gridView],
+    },
+    "row-transcribe-ready": {
+      profile: "transcription-ready",
+      how: "With the speech model pinned as installed, switch to the list and rest the pointer on the first recording's row: its Transcribe button shows.",
+      steps: [library, listView, row.present, row.hover],
+      demonstrates: ["library.videoRowTranscribe:ready"],
+      gates: [transcribeOn],
+      keepPointer: true,
+      after: [gridView],
+    },
+    "row-transcribe-running": {
+      profile: "transcription-job-running",
+      how: "With a job pinned at 3 of 12 parts (no engine runs), switch to the list and click Transcribe on the first recording's row: the row shows “Transcribing 3/12” and a Cancel button. The state cancels the job afterwards.",
+      steps: [library, listView, row.present, row.click, row.running],
+      demonstrates: ["library.videoRowTranscribe:running"],
+      crops: { "library.videoRowTranscribe": { hasText: "Transcribing" } },
+      gates: [transcribeOn],
+      after: [...row.cancel, gridView],
+    },
+    "row-transcribe-done": {
+      profile: "transcription-transcripts",
+      how: "With transcript files beside four recordings, switch to the list: all four rows show the Transcribed badge (it follows the file, so the unreadable “Team notes” and the stale “Onboarding flow” carry it too).",
+      steps: [library, listView, { waitFor: { area: row.area, part: { text: "Transcribed" } } }],
+      demonstrates: ["library.videoRowTranscribe:done"],
+      crops: { "library.videoRowTranscribe": { hasText: "Transcribed" } },
+      gates: [transcribeOn],
+      after: [gridView],
+    },
+    "transcribe-model-dialog": {
+      profile: "transcription-missing",
+      how: "With the speech model pinned as not installed, click Transcribe on the first recording's card: the dialog offers the download. The state closes it with Not now.",
+      steps: [library, card.present, card.click],
+      demonstrates: ["library.transcribeModelDialog:open"],
+      ready: { area: dialog },
+      gates: [transcribeOn],
+      after: [closeOffer, { waitFor: { area: dialog, state: "hidden" } }],
     },
     "tag-panel-item": {
       profile: "default",

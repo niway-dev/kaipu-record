@@ -9,7 +9,13 @@ vi.mock("./vault-location", () => ({
 }));
 
 import { saveSession, sessionMetaPath } from "./video-edit-session";
-import { hasEditSession, probeEditing, probeEditSession, probeWebcam } from "./edit-project-probe";
+import {
+  hasEditSession,
+  probeEditing,
+  probeEditSession,
+  probeTranscribedAt,
+  probeWebcam,
+} from "./edit-project-probe";
 
 describe("probeEditing", () => {
   let dir: string;
@@ -174,5 +180,36 @@ describe("probeWebcam", () => {
   it("none when the sidecar's webcam field is malformed, as describe() reads it", async () => {
     await sidecar("r", { webcam: { startOffsetMs: 0 } });
     expect(await probeWebcam(dir, "r")).toBe("none");
+  });
+});
+
+describe("probeTranscribedAt", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "kaipu-probe-transcript-"));
+    await mkdir(join(dir, ".kaipu"), { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("returns the transcript file's mtime without reading it", async () => {
+    const path = join(dir, ".kaipu", "r.transcript.json");
+    // Not valid JSON on purpose: the probe must not parse the file.
+    await writeFile(path, "not json");
+    expect(await probeTranscribedAt(dir, "r")).toBe(Math.trunc((await stat(path)).mtimeMs));
+  });
+
+  it("is null when the item has no transcript file", async () => {
+    expect(await probeTranscribedAt(dir, "r")).toBeNull();
+  });
+
+  it("is null when the metadata folder does not exist", async () => {
+    expect(await probeTranscribedAt(join(dir, "missing"), "r")).toBeNull();
+  });
+
+  it("is null when the transcript path is not a regular file", async () => {
+    await mkdir(join(dir, ".kaipu", "r.transcript.json"));
+    expect(await probeTranscribedAt(dir, "r")).toBeNull();
   });
 });

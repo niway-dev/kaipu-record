@@ -25,6 +25,8 @@ export interface ModelOfferProps {
   onDownload: () => void;
   onCancel: () => void;
   onRemove: () => void;
+  /** The label of the download button when the model is missing; default "Download". */
+  downloadLabel?: string;
   /** The catalog area this offer is on the screen that hosts it (`uiArea("<screen>.<area>")`). */
   ui?: UiAreaProps;
 }
@@ -54,6 +56,7 @@ export function ModelOffer({
   onDownload,
   onCancel,
   onRemove,
+  downloadLabel,
   ui,
 }: ModelOfferProps): React.JSX.Element | null {
   const t = useTranslations("transcription");
@@ -97,7 +100,7 @@ export function ModelOffer({
           </p>
           <div className={styles.actions}>
             <Button variant="primary" size="sm" onClick={onDownload}>
-              {t("download")}
+              {downloadLabel ?? t("download")}
             </Button>
           </div>
         </>

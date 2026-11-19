@@ -40,6 +40,7 @@ function video(
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     webcam: WEBCAM,
     thumbnailNeedsWebcam: true,
     ...over,

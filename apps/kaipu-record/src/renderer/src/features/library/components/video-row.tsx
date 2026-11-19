@@ -12,7 +12,8 @@ import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import { SelectCheck, type ItemSelection } from "./select-check";
 import styles from "./video-row.module.css";
-import type { UiAreaProps } from "@renderer/lib/ui-area";
+import { uiArea, type UiAreaProps } from "@renderer/lib/ui-area";
+import { LibraryTranscribeButton } from "@renderer/features/transcription/library-transcribe-button";
 
 interface VideoRowProps {
   video: LibraryVideo;
@@ -123,6 +124,15 @@ export function VideoRow({
         </div>
       </div>
 
+      {/* Outside the hover-only actions: a running job and a "Transcribed" badge stay visible;
+          the idle button appears with the other actions. */}
+      <div className={styles.transcribeSlot}>
+        <LibraryTranscribeButton
+          video={video}
+          variant="row"
+          ui={uiArea("library.videoRowTranscribe")}
+        />
+      </div>
       <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
         {onTags && (
           <button className={styles.action} onClick={onTags} title={t("tagsEdit")}>

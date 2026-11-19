@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import type {
   TranscriptionModelDownloadResult,
   TranscriptionStatus,
@@ -44,122 +44,196 @@ export interface TranscriptionStatusOptions {
   enabled?: boolean;
 }
 
-/**
- * The speech model's state for the offer UI: loaded once, kept live by the progress events
- * main pushes during a download, and refreshed whenever a call changes it.
- */
-export function useTranscriptionStatus({
-  enabled = true,
-}: TranscriptionStatusOptions = {}): TranscriptionStatusApi {
-  const [status, setStatus] = useState<TranscriptionStatus | null>(null);
-  const [failures, setFailures] = useState<Record<string, ModelDownloadFailure>>({});
-  const mounted = useRef(true);
+interface StoreSnapshot {
+  status: TranscriptionStatus | null;
+  failures: Readonly<Record<string, ModelDownloadFailure>>;
+}
 
-  const refresh = useCallback(async () => {
-    const next = await window.electronAPI.getTranscriptionStatus().catch(() => UNREACHABLE);
-    if (mounted.current) setStatus(next);
-  }, []);
+const IDLE: StoreSnapshot = { status: null, failures: {} };
 
-  useEffect(() => {
-    if (!enabled) return;
-    mounted.current = true;
-    void refresh();
-    const unsubscribe = window.electronAPI.onTranscriptionModelProgress((progress) => {
-      setStatus((current) => {
-        if (!current?.models.some((m) => m.id === progress.id)) return current;
-        return {
-          ...current,
-          models: current.models.map((m) =>
-            m.id === progress.id
-              ? {
-                  ...m,
-                  status: {
-                    state: "downloading",
-                    receivedBytes: progress.receivedBytes,
-                    totalBytes: progress.totalBytes,
-                  },
-                }
-              : m,
-          ),
-        };
-      });
-    });
-    return () => {
-      mounted.current = false;
-      unsubscribe();
-    };
-  }, [enabled, refresh]);
+// One store for every consumer: a Library of 200 cards must cost one status read, one progress
+// listener and one download poller, and a download started by any consumer must show in all.
+let snapshot: StoreSnapshot = IDLE;
+const listeners = new Set<() => void>();
+let stopProgress: (() => void) | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollInFlight = false;
+/** Bumped whenever the store goes idle, so a call that started before that cannot write after it. */
+let generation = 0;
 
-  // A download started elsewhere (another mount of this hook, an earlier visit to the page) ends
-  // with no event this mount hears, so while one runs the status is re-read until it settles.
-  const downloading = status?.models.some((m) => m.status.state === "downloading") ?? false;
-  useEffect(() => {
-    if (!downloading) return;
-    let inFlight = false;
-    const timer = setInterval(() => {
-      if (inFlight) return;
-      inFlight = true;
+function publish(next: StoreSnapshot): void {
+  snapshot = next;
+  syncPoll();
+  for (const listener of listeners) listener();
+}
+
+function setStatus(update: (current: TranscriptionStatus | null) => TranscriptionStatus | null) {
+  const next = update(snapshot.status);
+  if (next !== snapshot.status) publish({ ...snapshot, status: next });
+}
+
+function isDownloading(status: TranscriptionStatus | null): boolean {
+  return status?.models.some((m) => m.status.state === "downloading") ?? false;
+}
+
+// A download started elsewhere (an earlier visit to the page, another window) ends with no event
+// this store hears, so while one runs the status is re-read until it settles.
+function syncPoll(): void {
+  const wanted = listeners.size > 0 && isDownloading(snapshot.status);
+  if (wanted && pollTimer === null) {
+    const owner = generation;
+    pollTimer = setInterval(() => {
+      if (pollInFlight) return;
+      pollInFlight = true;
       // A failed background read keeps what is on screen: only the first load and a user's own
       // call may report the engine as unreachable.
       void window.electronAPI
         .getTranscriptionStatus()
         .then((next) => {
-          if (mounted.current) setStatus(next);
+          if (owner === generation) setStatus(() => next);
         })
         .catch(() => {})
         .finally(() => {
-          inFlight = false;
+          // `stop()` already reset the gate; a poll that outlived it must not reopen it for the
+          // poll that replaced it.
+          if (owner === generation) pollInFlight = false;
         });
     }, DOWNLOAD_POLL_MS);
-    return () => clearInterval(timer);
-  }, [downloading]);
+  } else if (!wanted && pollTimer !== null) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
 
-  const download = useCallback(
-    async (id: string) => {
-      setFailures((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      // Main's first progress event can be a moment away; the button must change at once.
-      setStatus((current) =>
-        current
-          ? {
-              ...current,
-              models: current.models.map((m) =>
-                m.id === id
-                  ? {
-                      ...m,
-                      status: { state: "downloading", receivedBytes: 0, totalBytes: m.sizeBytes },
-                    }
-                  : m,
-              ),
-            }
-          : current,
-      );
-      const failure = await window.electronAPI
-        .downloadTranscriptionModel(id)
-        .then((result) => (result.status === "failed" ? result.code : null))
-        .catch((): ModelDownloadFailure => "unknown");
-      if (failure && mounted.current) setFailures((current) => ({ ...current, [id]: failure }));
-      await refresh();
+/**
+ * Re-reads the model status for every consumer. Anything that learns the status changed behind
+ * the store's back (main refusing a job because the model is gone) calls this; with no consumer
+ * mounted it does nothing.
+ */
+export async function refreshTranscriptionStatus(): Promise<void> {
+  await refresh();
+}
+
+async function refresh(): Promise<void> {
+  const owner = generation;
+  const next = await window.electronAPI.getTranscriptionStatus().catch(() => UNREACHABLE);
+  if (owner === generation && listeners.size > 0) setStatus(() => next);
+}
+
+function start(): void {
+  void refresh();
+  stopProgress = window.electronAPI.onTranscriptionModelProgress((progress) => {
+    setStatus((current) => {
+      if (!current?.models.some((m) => m.id === progress.id)) return current;
+      return {
+        ...current,
+        models: current.models.map((m) =>
+          m.id === progress.id
+            ? {
+                ...m,
+                status: {
+                  state: "downloading",
+                  receivedBytes: progress.receivedBytes,
+                  totalBytes: progress.totalBytes,
+                },
+              }
+            : m,
+        ),
+      };
+    });
+  });
+}
+
+function stop(): void {
+  generation += 1;
+  stopProgress?.();
+  stopProgress = null;
+  if (pollTimer !== null) clearInterval(pollTimer);
+  pollTimer = null;
+  pollInFlight = false;
+  snapshot = IDLE;
+}
+
+function subscribeToStatus(listener: () => void): () => void {
+  listeners.add(listener);
+  if (listeners.size === 1) start();
+  return () => {
+    // Already gone (the store was reset under it): nothing to release.
+    if (!listeners.delete(listener)) return;
+    if (listeners.size === 0) stop();
+  };
+}
+
+function subscribeIdle(): () => void {
+  return () => {};
+}
+
+const getSnapshot = (): StoreSnapshot => snapshot;
+const getIdleSnapshot = (): StoreSnapshot => IDLE;
+
+async function download(id: string): Promise<void> {
+  const owner = generation;
+  const live = (): boolean => owner === generation && listeners.size > 0;
+  const { [id]: _cleared, ...rest } = snapshot.failures;
+  // Main's first progress event can be a moment away; every button must change at once.
+  publish({
+    failures: rest,
+    status: snapshot.status && {
+      ...snapshot.status,
+      models: snapshot.status.models.map((m) =>
+        m.id === id
+          ? { ...m, status: { state: "downloading", receivedBytes: 0, totalBytes: m.sizeBytes } }
+          : m,
+      ),
     },
-    [refresh],
+  });
+  const failure = await window.electronAPI
+    .downloadTranscriptionModel(id)
+    .then((result) => (result.status === "failed" ? result.code : null))
+    .catch((): ModelDownloadFailure => "unknown");
+  if (failure && live())
+    publish({ ...snapshot, failures: { ...snapshot.failures, [id]: failure } });
+  await refresh();
+}
+
+// A rejected IPC call is swallowed, not left as an unhandled rejection. Remove then re-reads the
+// state, so a model that is still on disk keeps showing as installed.
+async function cancel(id: string): Promise<void> {
+  await window.electronAPI.cancelTranscriptionModelDownload(id).catch(() => {});
+}
+
+async function remove(id: string): Promise<void> {
+  await window.electronAPI.removeTranscriptionModel(id).catch(() => {});
+  await refresh();
+}
+
+/** Test seam: drops the shared status, the failures, every subscriber and the poller. */
+export function resetTranscriptionStatusStore(): void {
+  listeners.clear();
+  stop();
+}
+
+/**
+ * The speech model's state for the offer UI, shared by every consumer: loaded once when the first
+ * one subscribes, kept live by the progress events main pushes during a download, and refreshed
+ * whenever a call changes it.
+ */
+export function useTranscriptionStatus({
+  enabled = true,
+}: TranscriptionStatusOptions = {}): TranscriptionStatusApi {
+  const current = useSyncExternalStore(
+    enabled ? subscribeToStatus : subscribeIdle,
+    enabled ? getSnapshot : getIdleSnapshot,
   );
-
-  // A rejected IPC call is swallowed, not left as an unhandled rejection. Remove then re-reads the
-  // state, so a model that is still on disk keeps showing as installed.
-  const cancel = useCallback(async (id: string) => {
-    await window.electronAPI.cancelTranscriptionModelDownload(id).catch(() => {});
-  }, []);
-
-  const remove = useCallback(
-    async (id: string) => {
-      await window.electronAPI.removeTranscriptionModel(id).catch(() => {});
-      await refresh();
-    },
-    [refresh],
+  return useMemo(
+    () => ({
+      status: current.status,
+      failures: current.failures,
+      refresh,
+      download,
+      cancel,
+      remove,
+    }),
+    [current],
   );
-
-  return { status, failures, refresh, download, cancel, remove };
 }

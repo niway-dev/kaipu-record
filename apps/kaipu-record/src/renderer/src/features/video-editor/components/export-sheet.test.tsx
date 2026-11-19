@@ -376,6 +376,7 @@ describe("already exported → reuse (NIW2-218)", () => {
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     export: { preset: "youtube-1440" as const, fingerprint: "whole" },
   };
 

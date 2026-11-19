@@ -124,3 +124,18 @@ export async function probeEditSession(vaultDir: string, id: string): Promise<Ed
     return NO_SESSION;
   }
 }
+
+/**
+ * When the item's transcript file was last written (epoch ms), or null when there is none.
+ * One `stat`, no read and no parse: `list()` runs this per item, and whether a transcript is
+ * valid is the reader's concern. Any stat error reads as "no transcript" so a vault the
+ * list can still open never fails because of this one probe.
+ */
+export async function probeTranscribedAt(vaultDir: string, id: string): Promise<number | null> {
+  try {
+    const info = await stat(join(vaultDir, ".kaipu", `${id}.transcript.json`));
+    return info.isFile() ? Math.trunc(info.mtimeMs) : null;
+  } catch {
+    return null;
+  }
+}

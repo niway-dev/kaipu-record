@@ -8,6 +8,7 @@ import { VAULT_MAINTENANCE_MARKER } from "@shared/types/library-storage";
 const state = vi.hoisted(() => ({
   dir: "",
   handle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  sent: [] as string[],
 }));
 
 vi.mock("electron", () => ({
@@ -17,7 +18,15 @@ vi.mock("electron", () => ({
       state.handle.set(channel, fn),
     on: () => {},
   },
-  BrowserWindow: { getAllWindows: () => [], fromWebContents: () => null },
+  BrowserWindow: {
+    getAllWindows: () => [
+      {
+        isDestroyed: () => false,
+        webContents: { send: (channel: string) => state.sent.push(channel) },
+      },
+    ],
+    fromWebContents: () => null,
+  },
   dialog: { showOpenDialog: vi.fn(), showMessageBox: vi.fn() },
   nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
   shell: { openPath: vi.fn(async () => ""), showItemInFolder: vi.fn() },
@@ -40,7 +49,11 @@ import { sha256FileBase64 } from "../library/content-hash";
 import { LibraryVault } from "../library/library-vault";
 import { vaultActivity } from "../library/vault-activity";
 import type { Transcript } from "./transcript-file";
-import { openTranscriptionVault, registerTranscriptionIpc } from "./transcription-ipc";
+import {
+  broadcastJobProgress,
+  openTranscriptionVault,
+  registerTranscriptionIpc,
+} from "./transcription-ipc";
 import { MAX_CHUNK_BYTES, type TranscriptionService } from "./transcription-service";
 
 const STAMP = { workspaceId: "ws-test", generation: 1 };
@@ -81,6 +94,29 @@ afterAll(async () => {
 });
 beforeEach(() => {
   for (const fn of Object.values(service)) fn.mockClear();
+});
+
+describe("broadcastJobProgress", () => {
+  const progress = (phase: "transcribing" | "done" | "failed") =>
+    ({ jobId: "j", id: "r", phase, segmentsDone: 1, segmentsTotal: 1 }) as never;
+
+  beforeEach(() => {
+    state.sent.length = 0;
+  });
+
+  it("re-lists the library when a job finishes, because its transcript file now exists", () => {
+    broadcastJobProgress(progress("done"));
+    expect(state.sent).toEqual([
+      IPC_CHANNELS.transcriptionJobProgress,
+      IPC_CHANNELS.libraryChanged,
+    ]);
+  });
+
+  it("does not re-list for a phase that wrote no transcript", () => {
+    broadcastJobProgress(progress("transcribing"));
+    broadcastJobProgress(progress("failed"));
+    expect(state.sent).not.toContain(IPC_CHANNELS.libraryChanged);
+  });
 });
 
 describe("registration", () => {
@@ -431,5 +467,47 @@ describe("a dev override", () => {
       reason: "unavailable",
     });
     expect(service.begin).not.toHaveBeenCalled();
+  });
+});
+
+describe("a dev override with a pinned job", () => {
+  beforeAll(() => {
+    registerTranscriptionIpc({
+      resourcesPath: state.dir,
+      modelsRoot: join(state.dir, "models"),
+      service: service as unknown as TranscriptionService,
+      override: { kind: "ready", job: { kind: "running", segmentsDone: 3, segmentsTotal: 12 } },
+    });
+  });
+  afterAll(() => {
+    registerTranscriptionIpc({
+      resourcesPath: state.dir,
+      modelsRoot: join(state.dir, "models"),
+      service: service as unknown as TranscriptionService,
+    });
+  });
+  beforeEach(() => {
+    state.sent.length = 0;
+  });
+
+  it("accepts a job without the service, announces progress on the first audio, and cancels", async () => {
+    const begin = (await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, REQUEST)) as {
+      status: string;
+      jobId: string;
+    };
+    expect(begin.status).toBe("accepted");
+    expect(service.begin).not.toHaveBeenCalled();
+    expect(state.sent).toEqual([]);
+
+    await call(IPC_CHANNELS.transcriptionJobChunk, begin.jobId, new Uint8Array(4));
+    expect(state.sent).toEqual([IPC_CHANNELS.transcriptionJobProgress]);
+    await call(IPC_CHANNELS.transcriptionJobEnd, begin.jobId);
+    expect(state.sent).toHaveLength(1);
+    expect(service.chunk).not.toHaveBeenCalled();
+    expect(service.end).not.toHaveBeenCalled();
+
+    await call(IPC_CHANNELS.transcriptionJobCancel, begin.jobId);
+    expect(state.sent).toHaveLength(2);
+    expect(service.cancel).not.toHaveBeenCalled();
   });
 });

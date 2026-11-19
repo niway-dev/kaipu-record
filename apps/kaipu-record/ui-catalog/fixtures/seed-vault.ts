@@ -7,7 +7,13 @@ import {
   type RecordingCut,
 } from "./make-fixtures";
 import { REDACTION_SOLID_RGB } from "../../src/renderer/src/features/screenshots/annotations/redaction";
+import { sha256FileBase64 } from "../../src/main/library/content-hash";
 import { paintPng, redactionPng, stepSizesPng } from "./mock-shots";
+import {
+  buildFixtureTranscript,
+  INVALID_TRANSCRIPT_TEXT,
+  SEEDED_TRANSCRIPTS,
+} from "./seed-transcripts";
 
 /**
  * The neutral workspace every catalog profile opens (spec "Fixtures"): six recordings cut
@@ -688,6 +694,12 @@ export interface SeedOptions {
    */
   corruptCanvas?: boolean;
   /**
+   * Add a transcript file beside four recordings (`seed-transcripts.ts`): complete, with
+   * unresolved stretches, out of date, and unreadable. Only the profile that shows transcripts
+   * turns it on, so no other state's Library or editor changes.
+   */
+  transcripts?: boolean;
+  /**
    * Make "Check and fix files" find something: `fixable`, a recording whose file name does
    * not match its title; `attention`, a recording whose record cannot be read.
    */
@@ -1069,6 +1081,25 @@ async function writeEditMeta(
   });
 }
 
+/** The transcript files of `SEEDED_TRANSCRIPTS`, beside the recordings `seedRecording` wrote. */
+export async function seedTranscripts(vaultDir: string, meta: string): Promise<void> {
+  for (const { stem, kind } of SEEDED_TRANSCRIPTS) {
+    const target = path.join(meta, `${stem}.transcript.json`);
+    if (kind === "invalid") {
+      await writeFile(target, INVALID_TRANSCRIPT_TEXT);
+      continue;
+    }
+    const recording = RECORDINGS.find((r) => r.stem === stem);
+    if (!recording) throw new Error(`seedTranscripts: no recording "${stem}"`);
+    const doc = buildFixtureTranscript({
+      kind,
+      durationMs: recording.cut * 1000,
+      contentHash: await sha256FileBase64(path.join(vaultDir, `${stem}.mp4`)),
+    });
+    await writeFile(target, `${JSON.stringify(doc)}\n`);
+  }
+}
+
 /** Build the catalog's workspace in `vaultDir` (an empty, throwaway folder). */
 export async function seedCatalogVault(vaultDir: string, options: SeedOptions): Promise<void> {
   const { now } = options;
@@ -1128,6 +1159,7 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
     ),
   ];
   for (const item of recordings) await seedRecording(vaultDir, meta, fixtures, now, item);
+  if (options.transcripts) await seedTranscripts(vaultDir, meta);
 
   for (const shot of SCREENSHOTS) {
     await copyFile(

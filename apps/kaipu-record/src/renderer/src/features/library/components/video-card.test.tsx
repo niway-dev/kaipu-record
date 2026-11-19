@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { VideoCard } from "./video-card";
 import type { LibraryVideo } from "../types";
+import { stubTranscriptionStatus } from "./stub-transcription-status";
 
 const video: LibraryVideo = {
   id: "x",
@@ -23,7 +24,13 @@ const video: LibraryVideo = {
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
 };
+
+const transcribeFlag = vi.hoisted(() => ({ on: false }));
+vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
+
+const realElectronApi = window.electronAPI;
 
 describe("VideoCard", () => {
   it("tags the poster with how the recording was captured, and nothing without it", () => {
@@ -278,5 +285,64 @@ describe("VideoCard keyboard and select mode (PR 479)", () => {
     );
     expect(container.firstElementChild).toHaveAttribute("aria-pressed", "false");
     expect(container.firstElementChild).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
+describe("VideoCard Transcribe button (NIW2-818)", () => {
+  beforeEach(() => {
+    transcribeFlag.on = false;
+  });
+  afterEach(() => {
+    window.electronAPI = realElectronApi;
+  });
+
+  it("shows nothing and reads nothing with the flag off", async () => {
+    const getStatus = stubTranscriptionStatus("ready");
+    render(<VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Transcribe" })).toBeNull();
+    expect(getStatus).not.toHaveBeenCalled();
+  });
+
+  it("offers Transcribe on a local recording with the flag on, in its catalog area", async () => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("ready");
+    const { container } = render(
+      <VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(await screen.findByRole("button", { name: "Transcribe" })).toBeInTheDocument();
+    expect(container.querySelector('[data-ui-area="library.videoCardTranscribe"]')).not.toBeNull();
+  });
+
+  it("clicking Transcribe does not open the item", async () => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("missing");
+    const onNavigate = vi.fn();
+    render(<VideoCard video={video} onNavigate={onNavigate} onDelete={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Transcribe" }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a screenshot", { kind: "screenshot" as const }],
+    ["a GIF export", { kind: "gif" as const }],
+    ["a cloud-only item", { id: null }],
+  ])("is not offered for %s", async (_name, over) => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("ready");
+    render(<VideoCard video={{ ...video, ...over }} onNavigate={vi.fn()} onDelete={vi.fn()} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Transcribe" })).toBeNull();
+  });
+
+  it("shows a Transcribed badge for a video that already has a transcript", async () => {
+    transcribeFlag.on = true;
+    stubTranscriptionStatus("ready");
+    render(
+      <VideoCard video={{ ...video, transcribedAt: 5 }} onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(await screen.findByTestId("transcribe-done")).toHaveTextContent("Transcribed");
   });
 });

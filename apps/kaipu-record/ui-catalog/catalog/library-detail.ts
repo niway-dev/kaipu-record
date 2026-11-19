@@ -12,6 +12,17 @@ const moreActions: Step = {
   click: { area: "libraryDetail.actions", part: { role: "button", name: "More actions" } },
 };
 
+const transcribeOn = { flag: "transcription", side: "on" } as const;
+/** The Transcribe action beside the header's other buttons, drawn once the model status is read. */
+const transcribePresent: Step = { waitFor: { area: "libraryDetail.transcribe" } };
+const transcribeClick: Step = {
+  click: {
+    area: "libraryDetail.transcribe",
+    part: { role: "button", name: "Transcribe", exact: true },
+  },
+};
+const dialog = "libraryDetail.transcribeModelDialog" as const;
+
 /** An item's page (`#/library/:assetId`), opened on the seeded items by their fixed ids. */
 export const libraryDetail = catalog(
   "libraryDetail",
@@ -30,6 +41,74 @@ export const libraryDetail = catalog(
         "libraryDetail.versions:withCopies",
       ],
       ready: { video: "paused-at-start" },
+      gates: [{ flag: "transcription", side: "off" }],
+    },
+    "transcribe-needs-model": {
+      profile: "transcription-missing",
+      how: "With the flag forced on and the speech model pinned as not installed, open “Walkthrough 1”: Transcribe sits in the header, and a click opens the download offer.",
+      steps: [detail(ASSETS.walkthrough), transcribePresent],
+      demonstrates: ["libraryDetail.transcribe:needsModel"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+    },
+    "transcribe-ready": {
+      profile: "transcription-ready",
+      how: "With the flag forced on and the speech model pinned as installed, open “Walkthrough 1”: Transcribe sits in the header.",
+      steps: [detail(ASSETS.walkthrough), transcribePresent],
+      demonstrates: ["libraryDetail.transcribe:ready"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+    },
+    "transcribe-running": {
+      profile: "transcription-job-running",
+      how: "With a job pinned at 3 of 12 parts (no engine runs), open “Walkthrough 1” and click Transcribe: the header shows “Transcribing 3/12” and a Cancel button. The state cancels the job afterwards.",
+      steps: [
+        detail(ASSETS.walkthrough),
+        transcribePresent,
+        transcribeClick,
+        { waitFor: { area: "libraryDetail.transcribe", part: { text: "Transcribing 3/12" } } },
+      ],
+      demonstrates: ["libraryDetail.transcribe:running"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+      after: [
+        {
+          click: {
+            area: "libraryDetail.transcribe",
+            part: { role: "button", name: "Cancel transcription", exact: true },
+          },
+        },
+        {
+          waitFor: {
+            area: "libraryDetail.transcribe",
+            part: { role: "status" },
+            state: "hidden",
+          },
+        },
+      ],
+    },
+    "transcribe-done": {
+      profile: "transcription-transcripts",
+      how: "With a transcript beside “Walkthrough 1”, open it: the header shows the Transcribed badge.",
+      steps: [
+        detail(ASSETS.walkthrough),
+        { waitFor: { area: "libraryDetail.transcribe", part: { text: "Transcribed" } } },
+      ],
+      demonstrates: ["libraryDetail.transcribe:done"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+    },
+    "transcribe-model-dialog": {
+      profile: "transcription-missing",
+      how: "With the speech model pinned as not installed, open “Walkthrough 1” and click Transcribe: the dialog offers the download. The state closes it with Not now.",
+      steps: [detail(ASSETS.walkthrough), transcribePresent, transcribeClick],
+      demonstrates: ["libraryDetail.transcribeModelDialog:open"],
+      ready: { area: dialog },
+      gates: [transcribeOn],
+      after: [
+        { click: { area: dialog, part: { role: "button", name: "Not now", exact: true } } },
+        { waitFor: { area: dialog, state: "hidden" } },
+      ],
     },
     "recording-no-copies": {
       profile: "default",

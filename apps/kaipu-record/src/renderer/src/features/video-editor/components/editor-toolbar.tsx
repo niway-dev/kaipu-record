@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BookOpen,
   Camera,
+  Captions,
   Check,
   Download,
   Droplet,
@@ -305,7 +306,8 @@ export interface EditorToolbarProps {
  *
  * A group's button shows its current variant's icon and a corner mark that it has
  * more. The webcam and cursor buttons follow, below a rule, only for a recording that
- * has a webcam or a redrawable cursor. Captures (NIW2-764) comes last, below its own rule.
+ * has a webcam or a redrawable cursor. Captures (NIW2-764) and, behind the `transcription`
+ * flag, the Transcript (NIW2-818) come last, below their own rule.
  */
 export interface EditorToolRailProps {
   /** Silence a stretch of audio at the playhead. */
@@ -336,6 +338,11 @@ export interface EditorToolRailProps {
   onToggleCaptures?(): void;
   /** The Captures panel is open; the Select tool then shows as not active. */
   capturesOpen?: boolean;
+  /** Open or close the Transcript panel (NIW2-818), which takes the right column like the
+   *  Captures panel. Absent with the `transcription` flag off: no button. */
+  onToggleTranscript?(): void;
+  /** The Transcript panel is open; the Select tool then shows as not active. */
+  transcriptOpen?: boolean;
 }
 
 const GROUP_LABEL: Record<ToolGroup, "toolAnnotate" | "toolPrivacy"> = {
@@ -379,6 +386,8 @@ export function EditorToolRail({
   cursorSelected = false,
   onToggleCaptures,
   capturesOpen = false,
+  onToggleTranscript,
+  transcriptOpen = false,
 }: EditorToolRailProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   // The variant each group shows while another tool is active: the last one used.
@@ -547,7 +556,7 @@ export function EditorToolRail({
         data-tool-group="select"
         title={`${t("toolSelect")} (${TOOL_SHORTCUT.select})`}
         aria-label={t("toolSelect")}
-        className={`${styles.tool} ${tool === "select" && !cursorSelected && !capturesOpen ? styles.toolActive : ""}`}
+        className={`${styles.tool} ${tool === "select" && !cursorSelected && !capturesOpen && !transcriptOpen ? styles.toolActive : ""}`}
         onClick={() => onToolChange("select")}
       >
         <MousePointer2 size={19} />
@@ -622,20 +631,33 @@ export function EditorToolRail({
       )}
       {/* The frames captured from this video (NIW2-764). Capture frame itself sits in the
           title bar; this only shows the list. */}
+      {(onToggleCaptures || onToggleTranscript) && (
+        <span className={styles.railSeparator} aria-hidden />
+      )}
       {onToggleCaptures && (
-        <>
-          <span className={styles.railSeparator} aria-hidden />
-          <button
-            type="button"
-            title={t("capturesTitle")}
-            aria-label={t("capturesTitle")}
-            aria-pressed={capturesOpen}
-            className={`${styles.tool} ${capturesOpen ? styles.toolActive : ""}`}
-            onClick={onToggleCaptures}
-          >
-            <Images size={19} />
-          </button>
-        </>
+        <button
+          type="button"
+          title={t("capturesTitle")}
+          aria-label={t("capturesTitle")}
+          aria-pressed={capturesOpen}
+          className={`${styles.tool} ${capturesOpen ? styles.toolActive : ""}`}
+          onClick={onToggleCaptures}
+        >
+          <Images size={19} />
+        </button>
+      )}
+      {/* The words of the edited video (NIW2-818), behind the `transcription` flag. */}
+      {onToggleTranscript && (
+        <button
+          type="button"
+          title={t("transcriptTitle")}
+          aria-label={t("transcriptTitle")}
+          aria-pressed={transcriptOpen}
+          className={`${styles.tool} ${transcriptOpen ? styles.toolActive : ""}`}
+          onClick={onToggleTranscript}
+        >
+          <Captions size={19} />
+        </button>
       )}
     </div>
   );

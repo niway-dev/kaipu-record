@@ -81,12 +81,18 @@ vi.mock("@renderer/features/video-editor/export/use-still-capture", () => ({
 // analytics index mocked below). Off by default, so every other test sees the page as shipped;
 // the Add recording tests (NIW2-782) switch it on and put it back.
 const levelsFlag = vi.hoisted(() => ({ on: false }));
+const flags = vi.hoisted(() => ({ transcription: false }));
 // A test that switches the flag on must not leak it into the next one.
 afterEach(() => {
   levelsFlag.on = false;
 });
 vi.mock("@renderer/features/analytics/use-flag", () => ({
-  useFlag: (name: string) => (name === "timeline-levels" ? levelsFlag.on : false),
+  useFlag: (name: string) =>
+    name === "timeline-levels"
+      ? levelsFlag.on
+      : name === "transcription"
+        ? flags.transcription
+        : false,
 }));
 
 // The page reports one product event for the speed button. The real client is a no-op
@@ -97,7 +103,35 @@ vi.mock("@renderer/features/analytics", async (importOriginal) => ({
   captureEvent: captureEventSpy,
   // Add to timeline is behind the timeline-levels flag (NIW2-772); the wiring tests need it on.
   // The panel's own tests pin the button hidden with the flag off.
-  useFlag: (name: string) => (name === "timeline-levels" ? true : false),
+  useFlag: (name: string) =>
+    name === "timeline-levels" ? true : name === "transcription" ? flags.transcription : false,
+}));
+
+// The Transcript panel (NIW2-818) is behind the `transcription` flag; a test turns it on. Its
+// own states are pinned in transcript-panel.test.tsx, so here its data hooks answer "nothing
+// to show yet" and the page tests only watch which panel owns the right column.
+vi.mock("@renderer/features/transcription/use-transcript", () => ({
+  useTranscript: () => ({
+    state: "none",
+    transcript: null,
+    stale: false,
+    refresh: async () => {},
+  }),
+}));
+vi.mock("@renderer/features/transcription/use-transcribe-control", () => ({
+  useTranscribeControl: () => ({
+    state: { kind: "idle" },
+    start: async () => null,
+    cancel: () => {},
+    offer: {
+      status: null,
+      failures: {},
+      refresh: async () => {},
+      download: async () => {},
+      cancel: async () => {},
+      remove: async () => {},
+    },
+  }),
 }));
 
 // Thumbnails never decode in jsdom (no WebCodecs); spying on the hook lets the webcam tests
@@ -462,6 +496,22 @@ describe("VideoEditorPage — actions in the title bar (NIW2-619)", () => {
     expect(badge.closest("[data-collapse]")).toHaveAttribute("data-collapse", "badge");
     const buttons = within(headerActions).getAllByRole("button");
     expect(buttons[buttons.length - 1]).toHaveAccessibleName("Export");
+  });
+
+  it("marks the badge to collapse early only when the Transcribe button shares the bar", async () => {
+    const collapse = (): string | null =>
+      within(headerActions)
+        .getByText("ORIGINAL UNTOUCHED", { exact: false })
+        .closest("[data-collapse]")!
+        .getAttribute("data-collapse");
+    flags.transcription = true;
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      expect(collapse()).toBe("badge badge-early");
+    } finally {
+      flags.transcription = false;
+    }
   });
 });
 
@@ -3552,5 +3602,154 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       );
       expect(screen.queryByText("Floating image")).toBeNull();
     });
+  });
+});
+
+describe("VideoEditorPage — one right-column panel at a time (NIW2-818)", () => {
+  const CURSOR_TRACK = JSON.stringify({
+    version: 1,
+    display: { id: "1", width: 1000, height: 600, scaleFactor: 2 },
+    anchor: "exact",
+    clicksAvailable: true,
+    t: [0, 1000, 2000],
+    x: [0.1, 0.5, 0.9],
+    y: [0.1, 0.5, 0.9],
+    clicks: [],
+  });
+  const CURSOR_SOURCE = {
+    ...SOURCE,
+    capture: { mode: "screen", cursorPixels: "excluded", width: 1000, height: 600, ratio: null },
+  } as unknown as VideoEditorSource;
+  const original = { loadCursorTrack: window.electronAPI.loadCursorTrack };
+
+  beforeEach(() => {
+    flags.transcription = true;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => CURSOR_TRACK);
+  });
+  afterEach(() => {
+    flags.transcription = false;
+    window.electronAPI.loadCursorTrack = original.loadCursorTrack;
+  });
+
+  const transcript = (): HTMLElement | null => screen.queryByTestId("transcript-panel");
+  const captures = (): HTMLElement | null => screen.queryByTestId("captures-panel");
+  const cursor = (): Element | null =>
+    document.querySelector('[data-ui-area="editorVideo.cursorInspector"]');
+  /** The panels in the right column right now, by name. */
+  const open = (): string[] =>
+    [transcript() && "transcript", captures() && "captures", cursor() && "cursor"].filter(
+      (name): name is string => Boolean(name),
+    );
+  const press = (name: string): void => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  };
+
+  async function renderWithCursor(): Promise<HTMLElement> {
+    renderEditor(CURSOR_SOURCE);
+    const footer = await waitForEditorLoaded();
+    await screen.findByRole("button", { name: "Cursor" });
+    return footer;
+  }
+
+  it("has no Transcript button, and the panel cannot open, with the flag off", async () => {
+    flags.transcription = false;
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(screen.queryByRole("button", { name: "Transcript" })).toBeNull();
+    expect(transcript()).toBeNull();
+  });
+
+  it("opens the Transcript panel from the rail and closes it from the same button and from Close", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    press("Transcript");
+    expect(open()).toEqual(["transcript"]);
+    expect(screen.getByRole("button", { name: "Transcript" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    press("Transcript");
+    expect(open()).toEqual([]);
+    expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
+
+    press("Transcript");
+    press("Close transcript");
+    expect(open()).toEqual([]);
+  });
+
+  it("opening a panel closes the one that was open, through every pair", async () => {
+    await renderWithCursor();
+
+    press("Captures");
+    expect(open()).toEqual(["captures"]);
+    press("Transcript");
+    expect(open()).toEqual(["transcript"]);
+    press("Cursor");
+    expect(open()).toEqual(["cursor"]);
+    press("Transcript");
+    expect(open()).toEqual(["transcript"]);
+    press("Captures");
+    expect(open()).toEqual(["captures"]);
+    press("Cursor");
+    expect(open()).toEqual(["cursor"]);
+    press("Captures");
+    expect(open()).toEqual(["captures"]);
+  });
+
+  it("toggling the open panel's own button closes it, for each panel", async () => {
+    await renderWithCursor();
+    for (const name of ["Captures", "Transcript", "Cursor"]) {
+      press(name);
+      expect(open()).toHaveLength(1);
+      press(name);
+      expect(open()).toEqual([]);
+    }
+  });
+
+  it("Escape and picking a tool close whichever panel is open", async () => {
+    await renderWithCursor();
+    for (const name of ["Captures", "Transcript", "Cursor"]) {
+      press(name);
+      expect(open()).toHaveLength(1);
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(open()).toEqual([]);
+
+      press(name);
+      expect(open()).toHaveLength(1);
+      fireEvent.keyDown(window, { key: "r" });
+      expect(open()).toEqual([]);
+    }
+  });
+
+  it("selecting a timeline item gives the column to its inspector, over any panel", async () => {
+    const footer = await renderWithCursor();
+    for (const name of ["Captures", "Transcript", "Cursor"]) {
+      press(name);
+      expect(open()).toHaveLength(1);
+      fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
+      await waitFor(() => expect(open()).toEqual([]));
+      expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
+      fireEvent.keyDown(window, { key: "Escape" });
+    }
+  });
+
+  it("opening the Transcript panel clears the selection, so Delete cannot remove an unseen item", async () => {
+    const footer = await renderWithCursor();
+    // Two segments, so deleting one is allowed.
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+    await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS).length).toBeGreaterThan(1));
+    const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+    fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete segment" })).toBeEnabled(),
+    );
+    press("Transcript");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled(),
+    );
+    fireEvent.keyDown(document.body, { key: "Delete" });
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before);
   });
 });

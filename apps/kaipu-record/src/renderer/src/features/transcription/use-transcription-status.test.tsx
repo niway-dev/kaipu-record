@@ -1,12 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   TranscriptionModelDownloadResult,
   TranscriptionModelInfo,
   TranscriptionModelProgress,
   TranscriptionStatus,
 } from "@shared/types/transcription";
-import { useTranscriptionStatus } from "./use-transcription-status";
+import { resetTranscriptionStatusStore, useTranscriptionStatus } from "./use-transcription-status";
 
 const MODEL_ID = "parakeet-tdt-0.6b-v3-int8";
 
@@ -36,6 +36,10 @@ const realApi = window.electronAPI;
 function stubApi(over: Partial<typeof window.electronAPI>): void {
   window.electronAPI = { ...realApi, ...over };
 }
+
+beforeEach(() => {
+  resetTranscriptionStatusStore();
+});
 
 afterEach(() => {
   window.electronAPI = realApi;
@@ -291,5 +295,122 @@ describe("useTranscriptionStatus", () => {
 
     expect(getStatus).toHaveBeenCalledTimes(2);
     expect(result.current.status?.models[0].status).toEqual({ state: "ready" });
+  });
+
+  it("shares one status call, one progress listener and one poller between many consumers", async () => {
+    vi.useFakeTimers();
+    try {
+      const getStatus = vi.fn(async () =>
+        statusOf({ state: "downloading", receivedBytes: 1, totalBytes: 10 }),
+      );
+      const unsubscribe = vi.fn();
+      const onProgress = vi.fn(() => unsubscribe);
+      stubApi({ getTranscriptionStatus: getStatus, onTranscriptionModelProgress: onProgress });
+      const hooks = Array.from({ length: 20 }, () => renderHook(() => useTranscriptionStatus()));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(getStatus).toHaveBeenCalledTimes(1);
+      expect(onProgress).toHaveBeenCalledTimes(1);
+      for (const { result } of hooks) {
+        expect(result.current.status?.models[0].status.state).toBe("downloading");
+      }
+
+      // One poll tick is one more read, not twenty.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(getStatus).toHaveBeenCalledTimes(2);
+
+      // The store stays up until the last consumer leaves.
+      for (const { unmount } of hooks.slice(1)) unmount();
+      expect(unsubscribe).not.toHaveBeenCalled();
+      hooks[0]!.unmount();
+      expect(unsubscribe).toHaveBeenCalledOnce();
+      const callsAtStop = getStatus.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(getStatus).toHaveBeenCalledTimes(callsAtStop);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a poll from before a restart does not reopen the gate for the poll that replaced it", async () => {
+    vi.useFakeTimers();
+    try {
+      const downloading = statusOf({ state: "downloading", receivedBytes: 1, totalBytes: 10 });
+      const pending: Array<(status: TranscriptionStatus) => void> = [];
+      let call = 0;
+      const getStatus = vi.fn(() => {
+        call += 1;
+        // Loads (1 and 3) answer at once; the polls (2 and 4) stay out until resolved by hand.
+        if (call % 2 === 1) return Promise.resolve(downloading);
+        return new Promise<TranscriptionStatus>((resolve) => pending.push(resolve));
+      });
+      stubApi({ getTranscriptionStatus: getStatus });
+
+      const first = renderHook(() => useTranscriptionStatus());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000); // poll 2 starts and stays in flight
+      });
+      first.unmount(); // the store goes idle with that poll still out
+      renderHook(() => useTranscriptionStatus());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000); // load 3 settled; poll 4 starts and stays in flight
+      });
+      expect(getStatus).toHaveBeenCalledTimes(4);
+
+      // The old poll ends now. It must not tell the new poll's gate that nothing is in flight.
+      await act(async () => {
+        pending[0]!(downloading);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(getStatus).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not subscribe an idle consumer to the shared store", async () => {
+    const getStatus = vi.fn(async () => statusOf({ state: "missing" }));
+    const onProgress = vi.fn(() => () => {});
+    stubApi({ getTranscriptionStatus: getStatus, onTranscriptionModelProgress: onProgress });
+    const idle = renderHook(() => useTranscriptionStatus({ enabled: false }));
+    const live = renderHook(() => useTranscriptionStatus());
+    await waitFor(() => expect(live.result.current.status).not.toBeNull());
+
+    expect(idle.result.current.status).toBeNull();
+    expect(getStatus).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a download started by one consumer as downloading in another, failure included", async () => {
+    let resolveDownload: (result: TranscriptionModelDownloadResult) => void = () => {};
+    stubApi({
+      getTranscriptionStatus: async () => statusOf({ state: "missing" }),
+      downloadTranscriptionModel: () =>
+        new Promise<TranscriptionModelDownloadResult>((resolve) => (resolveDownload = resolve)),
+    });
+    const first = renderHook(() => useTranscriptionStatus());
+    const second = renderHook(() => useTranscriptionStatus());
+    await waitFor(() => expect(second.result.current.status).not.toBeNull());
+
+    let finished: Promise<void> = Promise.resolve();
+    act(() => {
+      finished = first.result.current.download(MODEL_ID);
+    });
+    expect(second.result.current.status?.models[0].status.state).toBe("downloading");
+
+    await act(async () => {
+      resolveDownload({ status: "failed", code: "hash-mismatch" });
+      await finished;
+    });
+    expect(second.result.current.failures).toEqual({ [MODEL_ID]: "hash-mismatch" });
   });
 });
