@@ -6,7 +6,7 @@ description: Transcribe recordings on the user's machine with NVIDIA Parakeet, s
 > 🔵 Proposed: [NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export).
 > Design: [spec](/specs/2026-11-15-local-transcription-design/),
 > [ADR 0062](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/) (engine and model download),
-> [ADR 0063](/architecture/decisions/0063-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (transcript file and projection).
+> [ADR 0065](/architecture/decisions/0065-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (transcript file and projection).
 
 ## What
 
