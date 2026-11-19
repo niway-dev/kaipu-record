@@ -34,6 +34,13 @@ export {
   type BaseFields,
   type CropTarget,
 } from "./image-crop";
+export {
+  followRadiusSource,
+  imageActionState,
+  resetImageCrop,
+  setImageRadius,
+  type ImageActionState,
+} from "./image-actions";
 export { measureLabel, measureLength } from "./measure";
 export {
   annotationBounds,
