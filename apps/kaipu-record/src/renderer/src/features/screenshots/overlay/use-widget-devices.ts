@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { RecordingSettings } from "@shared/types/ipc";
 import type { AppSettings } from "@shared/types";
-import { loadSettings, useSettings } from "@renderer/features/settings/settings-store";
+import {
+  getSettingsSnapshot,
+  loadSettings,
+  subscribeSettings,
+  useSettings,
+} from "@renderer/features/settings/settings-store";
 import { useCameras } from "@renderer/features/camera-settings/use-camera-settings";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import type { RecordingTogglesApi } from "./use-overlay-toggles";
@@ -52,7 +57,6 @@ export function useWidgetDevices(
   // A pick made before the store's first read answered stands over that read, which was
   // computed before the choice; the next change after it (main's echo) is the newer one.
   const app = useSettings(wholeSettings);
-  const loaded = app !== null;
   const savedCameraId = app?.cameraBubble?.deviceId ?? null;
   const [pick, setPick] = useState<{
     id: string;
@@ -60,18 +64,24 @@ export function useWidgetDevices(
   } | null>(null);
   const cameraId =
     pick && (pick.over === NOT_LOADED || pick.over === savedCameraId) ? pick.id : savedCameraId;
-  useEffect(() => {
-    if (loaded) {
-      setPick((current) => {
-        if (!current) return current;
-        // Settled over the first read's value.
-        if (current.over === NOT_LOADED) return { id: current.id, over: savedCameraId };
-        // The store moved off the value the pick was made over: the pick is spent, so the
-        // saved camera can come back to that value later without reviving it.
-        return current.over === savedCameraId ? current : null;
-      });
-    }
-  }, [loaded, savedCameraId]);
+  // Follows every value the store takes, not the rendered one: React renders the latest value
+  // and can skip the ones in between, so a camera that left the pick's baseline and came back
+  // before a render would look like no change and revive the pick.
+  useEffect(
+    () =>
+      subscribeSettings((published) => {
+        const camera = published.cameraBubble?.deviceId ?? null;
+        setPick((current) => {
+          if (!current) return current;
+          // Settled over the first read's value.
+          if (current.over === NOT_LOADED) return { id: current.id, over: camera };
+          // The store moved off the value the pick was made over: the pick is spent, so the
+          // saved camera can come back to that value later without reviving it.
+          return current.over === camera ? current : null;
+        });
+      }),
+    [],
+  );
   // Counts every microphone change after mount (a choice or a broadcast), so a late first
   // read can tell it is older than what the window already shows.
   const microphoneRevision = useRef(0);
@@ -111,7 +121,9 @@ export function useWidgetDevices(
 
   const selectCamera = useCallback(
     (id: string): void => {
-      setPick({ id, over: loaded ? savedCameraId : NOT_LOADED });
+      // What the store holds at this moment, not what was last rendered.
+      const held = getSettingsSnapshot();
+      setPick({ id, over: held ? (held.cameraBubble?.deviceId ?? null) : NOT_LOADED });
       // The whole bubble is written back, as the camera settings do: a partial would drop it.
       void loadSettings()
         .then((app) =>
@@ -119,7 +131,7 @@ export function useWidgetDevices(
         )
         .catch(() => {});
     },
-    [api, loaded, savedCameraId],
+    [api],
   );
 
   return {

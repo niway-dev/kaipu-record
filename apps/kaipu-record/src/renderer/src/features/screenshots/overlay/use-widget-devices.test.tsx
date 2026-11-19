@@ -221,6 +221,34 @@ describe("useWidgetDevices", () => {
     });
   });
 
+  describe("a pick and publishes the window skips rendering", () => {
+    afterEach(cleanup);
+
+    it("is spent by a camera that was published and put back before the next render", async () => {
+      const ipc = installSettingsIpc(settingsWithCamera("cam-1"));
+      const api = {
+        getRecordingSettings: vi.fn(() => new Promise(() => {})),
+        updateSettings: vi.fn(),
+        updateRecordingSettings: vi.fn(),
+        onRecordingSettingsChanged: vi.fn(() => () => {}),
+      } as unknown as Parameters<typeof useWidgetDevices>[0];
+      const { result } = renderHook(() => useWidgetDevices(api, true));
+      await waitFor(() => expect(result.current.cameraId).toBe("cam-1"));
+
+      act(() => result.current.selectCamera("cam-2"));
+      expect(result.current.cameraId).toBe("cam-2");
+      // Two broadcasts reach the window before React renders: another display moves the camera
+      // to cam-3 and back to cam-1. The render sees cam-1 again, the value the pick was made
+      // over, but the store moved off it in between, so the pick is spent.
+      act(() => {
+        ipc.broadcast(settingsWithCamera("cam-3"));
+        ipc.broadcast(settingsWithCamera("cam-1"));
+      });
+
+      expect(result.current.cameraId).toBe("cam-1");
+    });
+  });
+
   describe("the camera across displays", () => {
     afterEach(cleanup);
     it("follows a camera chosen in another overlay window", async () => {
