@@ -98,6 +98,9 @@ vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 
 const { CaptureOverlayWindows } = await import("./capture-overlay-windows");
 const { decideWidgetShortcut } = await import("../shortcuts/widget-shortcut");
+const { createCaptureHandler } = await import("./capture-handler");
+const { runWithOverlay } = await import("./screenshot-capture");
+const { IPC_CHANNELS } = await import("@shared/types/ipc");
 
 function display(id: number, x: number): Display {
   return {
@@ -162,3 +165,109 @@ for (const displays of [[display(1, 0)], [display(1, 0), display(2, 1440), displ
     });
   }
 }
+
+/**
+ * The same burst, but each pick ends in a shot, through the real capture handler: the press
+ * that follows lands while the previous shot is still being saved. The handler used to keep
+ * its guard until the save was done, so that press found the overlay "closed" (the pick had
+ * ended), decided to open it, and was answered `cancelled`: no widget, no error.
+ */
+it("opens on every press even while the previous shot is still saving, through the handler", async () => {
+  loadMs = 176;
+  const displays = [display(1, 0)];
+  const port = new CaptureOverlayWindows({
+    platform: "darwin",
+    enabledModes: CAPTURE_MODES,
+    warmup: { next: () => ({ ui: "frame", intent: "capture", displays }), canWarm: () => true },
+  });
+  port.prewarm();
+  await vi.advanceTimersByTimeAsync(5000);
+
+  const SAVE_MS = 200;
+  const saved: number[] = [];
+  const handler = createCaptureHandler({
+    platform: "darwin",
+    provider: {
+      supports: () => true,
+      supportedModes: () => [],
+      capture: ({ overlay, intent }) =>
+        runWithOverlay(
+          overlay,
+          async () => {
+            const answer = await overlay.pick("frame", displays, intent ?? "capture");
+            if (answer.kind !== "display") return null;
+            return {
+              display: displays[0]!,
+              rect: null,
+              mode: "screen",
+              action: "capture",
+              viaOverlay: true,
+            };
+          },
+          async () => ({
+            kind: "captured",
+            png: Buffer.from([1]),
+            mode: "screen",
+            action: "capture",
+          }),
+          { settle: async () => {}, getDisplays: async () => displays },
+        ),
+    },
+    overlay: {
+      pick: (ui, shown, intent) => port.pick(ui, shown, intent),
+      hideAll: () => port.hideAll(),
+      endPick: () => port.endPick(),
+    },
+    windows: { beforeCapture: () => {}, afterCapture: () => {}, reveal: () => {} },
+    measure: () => ({ width: 1, height: 1 }),
+    displayCount: () => 1,
+    track: () => {},
+    rememberMode: () => {},
+    settings: () => ({ copy: "manual" }),
+    saveToVault: () =>
+      new Promise((resolve) =>
+        setTimeout(() => {
+          saved.push(Date.now());
+          resolve({ id: "s", assetId: "a" });
+        }, SAVE_MS),
+      ),
+    copyToClipboard: () => {},
+    thumbnail: () => "data:image/png;base64,",
+  });
+
+  const answerFrom = (window: FakeWindow): void => {
+    const state = window.webContents.send.mock.calls
+      .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+      .at(-1)![1] as { session: number };
+    ipcListeners.get(IPC_CHANNELS.screenshotOverlayAnswer)!(
+      { sender: { id: window.webContents.id } },
+      { kind: "display", mode: "screen", action: "capture", displayId: 1, session: state.session },
+    );
+  };
+
+  const shownAtPress: boolean[] = [];
+  const results: Promise<unknown>[] = [];
+  for (let cycle = 0; cycle < 5; cycle += 1) {
+    const decision = decideWidgetShortcut({
+      key: "capture",
+      takeActive: false,
+      takePending: false,
+      overlayOpen: port.isPicking(),
+      overlayIntent: port.currentIntent(),
+    });
+    if (decision === "open") results.push(handler({ mode: "frame", intent: "capture" }));
+    await vi.advanceTimersByTimeAsync(ESC_AFTER_PRESS_MS);
+    const visible = created.filter((window) => window.shown);
+    shownAtPress.push(decision === "open" && visible.length >= displays.length);
+    if (visible.at(-1)) answerFrom(visible.at(-1)!);
+    // The next press comes while the shot is being hidden, grabbed and saved.
+    await vi.advanceTimersByTimeAsync(GAP_MS);
+  }
+  await vi.advanceTimersByTimeAsync(5000);
+
+  expect(shownAtPress).toEqual([true, true, true, true, true]);
+  expect((await Promise.all(results)).map((result) => (result as { kind: string }).kind)).toEqual(
+    Array(5).fill("captured"),
+  );
+  expect(saved).toHaveLength(5);
+});

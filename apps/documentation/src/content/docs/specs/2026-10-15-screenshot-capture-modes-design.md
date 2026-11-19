@@ -254,6 +254,13 @@ next spare was ready, and an Esc sent in that gap reached no window.
   close go out in one settings write. A confirm writes its own frame from the overlay; it
   reports `confirming` just before, so an Esc that lands in main during that write saves nothing
   more.
+- One capture right after another opens at once. The capture handler's re-entrancy guard
+  covers the pick and the grab only: when the provider returns the pick has ended, so a press
+  while the shot is still being saved opens its own overlay instead of being answered
+  `cancelled`. What the previous capture still does (save, copy, toast, `afterCapture`) is
+  chained: the new capture's `beforeCapture` and its hide/grab wait for it, because both share
+  the hidden-window state, the toast and the camera bubble. If a save never finishes, later
+  captures open but wait at the hide step.
 
 ### Entry points and shortcuts
 

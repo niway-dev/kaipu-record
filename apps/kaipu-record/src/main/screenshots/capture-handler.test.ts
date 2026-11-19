@@ -359,6 +359,102 @@ describe("createCaptureHandler", () => {
     expect(capture).toHaveBeenCalledTimes(2);
   });
 
+  describe("a press while the previous shot is still being saved (NIW2-878)", () => {
+    const shot: ProviderResult = {
+      kind: "captured",
+      png: Buffer.from([1]),
+      mode: "frame",
+      action: "capture",
+    };
+    const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    /** A handler whose first shot saves slowly; the second pick records what it does and when. */
+    function slowFirstSave() {
+      const log: string[] = [];
+      let releaseSave!: () => void;
+      let secondAnswer!: (result: ProviderResult) => void;
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          // The pick ended (the real provider's `endPick`) before the shot was saved.
+          await port.hideAll();
+          return shot;
+        })
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          log.push("second pick opened");
+          await port.hideAll();
+          log.push("second shot grabbed");
+          return new Promise<ProviderResult>((resolve) => (secondAnswer = resolve));
+        });
+      const harness = setup(capture);
+      harness.saveToVault.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseSave = () => resolve({ id: "screenshot-1", assetId: "asset-1" });
+          }),
+      );
+      harness.windows.beforeCapture.mockImplementation(() => void log.push("before"));
+      harness.windows.afterCapture.mockImplementation((ending) => void log.push(`after ${ending}`));
+      return { ...harness, capture, log, release: () => releaseSave(), answer: () => secondAnswer };
+    }
+
+    it("opens the next pick at once instead of answering it cancelled", async () => {
+      const { handler, capture, saveToVault } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+
+      const second = handler({ mode: "frame" });
+      await tick();
+
+      expect(capture).toHaveBeenCalledTimes(2);
+      const settled = await Promise.race([
+        second.then(() => "answered"),
+        tick().then(() => "open"),
+      ]);
+      expect(settled).toBe("open");
+      void first;
+    });
+
+    it("keeps the previous capture's window hooks and save ahead of the new pick's", async () => {
+      const { handler, saveToVault, log, release, answer } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+
+      const second = handler({ mode: "frame" });
+      await tick();
+      // Open, but its windows are not hidden and nothing is grabbed until the first has finished.
+      expect(log).toEqual(["before", "second pick opened"]);
+
+      release();
+      expect((await first).kind).toBe("captured");
+      await vi.waitFor(() => expect(answer()).toBeDefined());
+      answer()({ kind: "cancelled" });
+      await second;
+
+      expect(log).toEqual([
+        "before",
+        "second pick opened",
+        "after quiet",
+        "before",
+        "second shot grabbed",
+        "after cancelled",
+      ]);
+    });
+
+    it("still turns a press away while a pick is open", async () => {
+      const { handler, capture, release, saveToVault } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      void handler({ mode: "frame" });
+      await tick();
+
+      expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
+      expect(capture).toHaveBeenCalledTimes(2);
+      release();
+      await first;
+    });
+  });
+
   it("releases the guard and restores the window when hiding the windows throws", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const capture = vi.fn().mockResolvedValue({ kind: "cancelled" });
