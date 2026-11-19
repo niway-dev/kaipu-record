@@ -1,7 +1,7 @@
 import React from "react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { dirnameOf } from "../../../test/source-tree";
 import { ImageActions } from "./image-actions";
@@ -87,6 +87,26 @@ describe.each(["bar", "panel"] as const)("ImageActions (%s)", (variant) => {
     expect(p.onMove).toHaveBeenCalledTimes(1);
   });
 
+  it("the arrow keys wrap: ArrowRight or ArrowDown on Crop goes to Move", () => {
+    for (const key of ["ArrowRight", "ArrowDown"]) {
+      const p = mount({ variant, cropping: true });
+      fireEvent.keyDown(crop(), { key });
+      expect(p.onMove).toHaveBeenCalledTimes(1);
+      expect(p.onCrop).not.toHaveBeenCalled();
+      cleanup();
+    }
+  });
+
+  it("the arrow keys wrap: ArrowLeft or ArrowUp on Move goes to Crop", () => {
+    for (const key of ["ArrowLeft", "ArrowUp"]) {
+      const p = mount({ variant });
+      fireEvent.keyDown(move(), { key });
+      expect(p.onCrop).toHaveBeenCalledTimes(1);
+      expect(p.onMove).not.toHaveBeenCalled();
+      cleanup();
+    }
+  });
+
   it("Reset is disabled with no crop and asks to reset with one", () => {
     const none = mount({ variant, hasCrop: false });
     expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
@@ -112,6 +132,17 @@ describe("the mode control's look", () => {
     // The base segment rule is neutral; the accent lives on the checked one only.
     expect(rule(".segment {")).not.toMatch(/--ie-accent/);
     expect(rule('.segment[aria-checked="true"]')).toMatch(/background:\s*var\(--ie-accent\)/);
+  });
+
+  it("the floating bar's hover and track use the always-dark overlay tints, not the themed ones", () => {
+    // `--ie-card` is white and `--ie-sep` a 9% black in the light theme: light text on them is
+    // unreadable on the dark pill. The overlay tints stay light-on-dark in both themes.
+    expect(rule('.segment:hover:not([aria-checked="true"]) {')).toMatch(/--ie-ov-hover/);
+    expect(rule(".modes {")).toMatch(/--ie-ov-track/);
+    expect(rule(".button:hover:not(:disabled)")).toMatch(/--ie-ov-hover/);
+    // The Tool tab sits on themed chrome and keeps the themed tokens.
+    expect(rule(".panel .segment:hover:not")).toMatch(/--ie-card/);
+    expect(rule(".panel .modes {")).toMatch(/--ie-sep/);
   });
 
   it("the old always-pink Crop button is gone", () => {

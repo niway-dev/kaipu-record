@@ -71,17 +71,22 @@ function ImageActionsBody({
     if (mode === "crop" && !cropping) onCrop();
     else if (mode === "move" && cropping) onMove();
   };
-  // A radio group is one tab stop; the arrow keys move the choice, as the native radios do.
+  // A radio group is one tab stop; the arrow keys move the choice, as the native radios do, and
+  // wrap at both ends (ARIA radio group pattern): past the last option is the first.
   const onModeKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-      e.preventDefault();
-      choose("crop")();
-      cropRef.current?.focus();
-    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-      e.preventDefault();
-      choose("move")();
-      moveRef.current?.focus();
-    }
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    const modes = ["move", "crop"] as const;
+    const at = cropping ? 1 : 0;
+    const next = modes[(at + step + modes.length) % modes.length];
+    choose(next)();
+    (next === "crop" ? cropRef : moveRef).current?.focus();
   };
   return (
     <div
