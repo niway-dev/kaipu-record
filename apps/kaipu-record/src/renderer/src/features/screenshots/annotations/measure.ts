@@ -147,18 +147,25 @@ export function measureShape(
   // flips to the other side and slides along the line; on an image too small for either side
   // it is clamped inside (it may then cover the line). Only a label larger than the image itself
   // can still be cropped.
-  const inside = (c: number, half: number, max: number): number =>
-    Math.min(Math.max(c, half), Math.max(half, max - half));
+  // The label stays inside the asset's own rect: the whole world without a placement, the
+  // placed (moved, scaled) asset with one.
+  const f = baseFullRect({ basePlacement: placement });
+  const x0 = f.x * W;
+  const x1 = (f.x + f.w) * W;
+  const y0 = f.y * H;
+  const y1 = (f.y + f.h) * H;
+  const inside = (c: number, half: number, lo: number, hi: number): number =>
+    Math.min(Math.max(c, lo + half), Math.max(lo + half, hi - half));
   let cx: number;
   let cy: number;
   if (a.axis === "x") {
-    cx = inside(mx, w / 2, W);
+    cx = inside(mx, w / 2, x0, x1);
     cy = my - t - gap - h / 2;
-    if (cy - h / 2 < 0) cy = inside(my + t + gap + h / 2, h / 2, H);
+    if (cy - h / 2 < y0) cy = inside(my + t + gap + h / 2, h / 2, y0, y1);
   } else {
-    cy = inside(my, h / 2, H);
+    cy = inside(my, h / 2, y0, y1);
     cx = mx + t + gap + w / 2;
-    if (cx + w / 2 > W) cx = inside(mx - t - gap - w / 2, w / 2, W);
+    if (cx + w / 2 > x1) cx = inside(mx - t - gap - w / 2, w / 2, x0, x1);
   }
   return {
     p1,
