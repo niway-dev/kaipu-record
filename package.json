@@ -44,6 +44,7 @@
     "verify:release": "bash scripts/verify-release.sh",
     "verify:local": "bun scripts/check-adr-numbers.ts && bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types",
     "dev": "turbo run dev",
+    "bench:attach": "bun run --cwd apps/kaipu-record bench:attach",
     "env:pull": "bash scripts/env-pull.sh",
     "build": "turbo run build",
     "build:no-cache": "turbo run build --force",
