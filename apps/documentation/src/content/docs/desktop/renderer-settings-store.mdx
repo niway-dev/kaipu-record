@@ -145,6 +145,15 @@ points below say what they do not cover.
    new `onSettingsChanged` listener and the old one is never unsubscribed. Each edit of that file
    during `bun run dev` adds one. Reload the window after editing the store; a packaged app never
    reloads modules.
+8. **A rejected write re-reads main, and a second failure leaves the window on what it had.**
+   Main merges a patch before it persists and broadcasts, so `updateSettings` can reject after
+   main already holds the new value. The store then asks main what it holds (`resyncFromMain`) and
+   publishes the answer unless something newer landed, then rethrows the update's own error. If
+   that read fails as well, the store keeps its value and nothing says which side is right. A
+   control that decides something sensitive must choose for itself: the sharing switch
+   (`useShareUsagePreference`) keeps the value the user asked for until the store takes a new one.
+   The re-read is skipped for an update that settles after `resetSettingsStoreForTests()`, so a
+   late rejection never publishes into the next test.
 
 ## Never call `onSettingsChanged` directly
 

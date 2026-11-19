@@ -144,6 +144,10 @@ export function watchSettings(listener: SettingsListener): () => void {
  * reaches the consumers first. The answer is published to them only when the store took
  * nothing else while it was on its way; otherwise it is returned but not published, because
  * what the store holds is newer.
+ *
+ * When main rejects the patch, the store re-reads main before it rethrows, because main may
+ * have stored the value before it failed. The re-read is published under the same rule. If it
+ * fails too, the store keeps its value and the caller gets the update's own error.
  */
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   start();

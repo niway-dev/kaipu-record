@@ -51,6 +51,9 @@ have added a listener, with no test to notice.
    broadcasts the change to every window, this one included, before it replies, so the broadcast
    normally reaches the consumers first. The answer is published only when nothing newer landed
    while it was on its way, so a late answer never rolls the window back.
+   When main rejects a write, the store asks main for its settings, because main may have
+   stored the value before it failed, publishes the answer under the same rule, and rethrows the
+   write's own error.
 6. **A test enforces it.** No renderer source file other than the store may reference
    `onSettingsChanged` or call the bridge's `getSettings`; the test scans the source and fails
    otherwise.
