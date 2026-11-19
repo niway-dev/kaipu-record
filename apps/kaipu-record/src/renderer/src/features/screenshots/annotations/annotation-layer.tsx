@@ -723,7 +723,7 @@ function AnnotationLayerImpl({
   // block stops being a target.
   const hideBlock = (block: TextBlock, model: TextLayerModel): void => {
     const { natural, basePlacement: placement } = model;
-    const r = blockRedactionRect(block, model.words, natural);
+    const r = blockRedactionRect(block, model.marginWords ?? model.words, natural);
     if (r.w <= 0 || r.h <= 0) return;
     const { id } = nextAnnotationId();
     scene.addAnnotation({
@@ -1169,7 +1169,7 @@ function TextTarget({
 }): React.JSX.Element {
   const { natural, basePlacement } = model;
   const r = assetRectToWorld(
-    blockRedactionRect(block, model.words, natural),
+    blockRedactionRect(block, model.marginWords ?? model.words, natural),
     natural,
     basePlacement,
   );

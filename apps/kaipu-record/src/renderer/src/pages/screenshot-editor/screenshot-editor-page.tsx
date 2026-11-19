@@ -576,6 +576,12 @@ function ScreenshotEditorBody({
       scene.baseCrop,
     );
   }, [recognized, natural, scene.annotations, scene.basePlacement, scene.baseCrop]);
+  // The same words with the crop ignored: a redaction's margin must still stop at a word the
+  // crop hides, because the baked asset keeps that word's pixels.
+  const marginWords = useMemo(() => {
+    if (recognized.status !== "ready" || !natural || natural.w <= 0 || natural.h <= 0) return [];
+    return selectableWords(recognized.words, scene.annotations, natural, scene.basePlacement);
+  }, [recognized, natural, scene.annotations, scene.basePlacement]);
   const textSelection = useTextSelection(visibleWords);
   const textActive = textEnabled && tools.tool === "selectText";
   // The redact tool hides recognized lines in one click (NIW2-706), canvas mode only.
@@ -612,6 +618,7 @@ function ScreenshotEditorBody({
       textEnabled && natural && natural.w > 0 && natural.h > 0
         ? {
             words: textSelection.ordered,
+            marginWords,
             natural,
             basePlacement: scene.basePlacement,
             selected: textSelection.selectedSet,
@@ -623,6 +630,7 @@ function ScreenshotEditorBody({
       textEnabled,
       natural,
       scene.basePlacement,
+      marginWords,
       textSelection.ordered,
       textSelection.selectedSet,
       textSelection.select,

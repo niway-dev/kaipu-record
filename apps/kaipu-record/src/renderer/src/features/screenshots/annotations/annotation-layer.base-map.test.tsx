@@ -129,6 +129,25 @@ describe("one-click hide on a base that was resized or moved (NIW2-876, AC3)", (
     expect(added.h).toBeCloseTo((30 / 400) * 0.5, 4);
   });
 
+  it("keeps a cropped-out word in the margin collision check without making it a target", () => {
+    // A word just above the crop is not offered (not in `words`), but the margin still stops
+    // short of it: the saved redaction bakes the whole asset, so its pixels must stay.
+    const secret = word("secret", 0, 40, 40);
+    const cropped = word("above", 1, 40, 16);
+    const scene = makeScene([], null);
+    const { layer } = renderLayer(scene, makeTools({ tool: "blur" }), {
+      text: model({ words: [secret], marginWords: [secret, cropped] }),
+      base: { basePlacement },
+    });
+    fireEvent.pointerDown(layer, { clientX: 60, clientY: 31, pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 60, clientY: 31, pointerId: 1 });
+    const added = (scene.addAnnotation as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // The full 5 px margin would reach y 35 and cover the word's last rows (it ends at y 36);
+    // the half margin of 2 px does not: asset (38, 38) 84 x 24.
+    expect(added.y).toBeCloseTo(0.25 + (38 / 400) * 0.5, 4);
+    expect(added.h).toBeCloseTo((24 / 400) * 0.5, 4);
+  });
+
   it("does not take a press where the unmoved base had the word for a hit", () => {
     const scene = makeScene([], null);
     const { layer } = renderLayer(scene, makeTools({ tool: "blur" }), {

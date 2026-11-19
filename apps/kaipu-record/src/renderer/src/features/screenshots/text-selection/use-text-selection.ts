@@ -7,6 +7,12 @@ import { wordRange, type PixelSize } from "./geometry";
 export interface TextLayerModel {
   /** The selectable words (redacted ones already removed), in reading order. */
   words: RecognizedWord[];
+  /**
+   * Every uncovered recognized word, cropped-out ones included: what a one-click redaction's
+   * margin must not reach. The save bakes the whole asset, so a word the crop hides still has
+   * its pixels. Absent = `words`.
+   */
+  marginWords?: RecognizedWord[];
   /** The base image's pixel size, the space the words' rects are in. */
   natural: PixelSize;
   /**
