@@ -251,7 +251,7 @@ describe("the visible pixel window of a cropped base (NIW2-876, AC2)", () => {
   });
 
   it("clientToBasePixel pins the crop edges with hard-coded hits and misses", () => {
-    const buf = wide(); // 10 px wide, 1 px tall at 10 client px per source pixel
+    const buf = wide(); // 10 px wide, 4 px tall, 10 client px per source pixel
     const anchor = { left: 0, top: 0, width: 100, height: 40 };
     const crop = { x: 0.2, y: 0, w: 0.5, h: 1 }; // pixels 2..6 show
     const at = (clientX: number) => clientToBasePixel(clientX, 5, anchor, buf, { baseCrop: crop });
