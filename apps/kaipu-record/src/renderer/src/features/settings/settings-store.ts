@@ -8,8 +8,9 @@ import type { AppSettings } from "@shared/types";
  * preload opens one `ipcRenderer` listener per `onSettingsChanged` call. A hook that listened
  * for itself put a dozen listeners on the main window, past Node's default of ten, which warns
  * `MaxListenersExceededWarning`. So this module owns the window's ONLY `onSettingsChanged`
- * subscription and the ONLY caller of the bridge's `getSettings()` (one read at a time, asked
- * again after a failure); every consumer reads from here and a
+ * subscription and the ONLY caller of the bridge's `getSettings()` (one startup read at a
+ * time, asked again after a failure, and one more after an update that main rejected); every
+ * consumer reads from here and a
  * test fails if another file calls `onSettingsChanged` or the bridge's `getSettings`
  * (`settings-store-usage.test.ts`).
  *
@@ -132,9 +133,34 @@ export function watchSettings(listener: SettingsListener): () => void {
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   start();
   const revisionAtRequest = revision;
-  const saved = await window.electronAPI.updateSettings(patch);
-  if (revision === revisionAtRequest) publish(saved);
-  return saved;
+  try {
+    const saved = await window.electronAPI.updateSettings(patch);
+    if (revision === revisionAtRequest) publish(saved);
+    return saved;
+  } catch (error) {
+    // Main merges the patch before it persists, applies side effects and broadcasts, so a
+    // rejection can leave it holding the new value without having told any window. Ask what it
+    // holds, so a control such as the diagnostics switch never reads differently from main.
+    await resyncFromMain();
+    throw error;
+  }
+}
+
+/**
+ * Asks main for its settings and publishes them unless the store took something newer while
+ * the question was out. A failed read keeps what the window holds: the caller's own error is
+ * the one that matters.
+ */
+async function resyncFromMain(): Promise<void> {
+  const api = window.electronAPI;
+  if (!api.getSettings) return;
+  const revisionAtRequest = revision;
+  try {
+    const settings = await api.getSettings();
+    if (revision === revisionAtRequest) publish(settings);
+  } catch {
+    // Nothing newer to show; the window keeps its value.
+  }
 }
 
 /**

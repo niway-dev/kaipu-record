@@ -131,6 +131,59 @@ describe("settings store", () => {
     expect(getSettingsSnapshot()?.showInDock).toBe(false);
   });
 
+  it("a rejected updateSettings re-reads main, so the window does not keep a value main no longer holds", async () => {
+    const ipc = installSettingsIpc({ ...BASE, diagnosticsEnabled: true });
+    await loadSettings();
+    // Main stored the new value, then threw (a listener, a side effect) before it broadcast.
+    window.electronAPI.updateSettings = vi.fn(async () => {
+      throw new Error("update failed");
+    });
+    ipc.getSettings.mockImplementationOnce(async () => ({ ...BASE, diagnosticsEnabled: false }));
+    const heard = vi.fn();
+    subscribeSettings(heard);
+
+    await expect(updateSettings({ diagnosticsEnabled: false })).rejects.toThrow("update failed");
+
+    expect(getSettingsSnapshot()?.diagnosticsEnabled).toBe(false);
+    expect(heard).toHaveBeenLastCalledWith(expect.objectContaining({ diagnosticsEnabled: false }));
+  });
+
+  it("a rejected updateSettings whose re-read was overtaken by a broadcast keeps the broadcast", async () => {
+    const ipc = installSettingsIpc({ ...BASE, diagnosticsEnabled: true });
+    await loadSettings();
+    window.electronAPI.updateSettings = vi.fn(async () => {
+      throw new Error("update failed");
+    });
+    let answerRead: (settings: AppSettings) => void = () => {};
+    ipc.getSettings.mockImplementationOnce(
+      () => new Promise<AppSettings>((resolve) => (answerRead = resolve)),
+    );
+
+    const failed = updateSettings({ diagnosticsEnabled: false });
+    await vi.waitFor(() => expect(ipc.getSettings).toHaveBeenCalledTimes(2));
+    ipc.broadcast({ ...BASE, diagnosticsEnabled: true, showInDock: false });
+    answerRead({ ...BASE, diagnosticsEnabled: false });
+
+    await expect(failed).rejects.toThrow("update failed");
+    expect(getSettingsSnapshot()?.showInDock).toBe(false);
+    expect(getSettingsSnapshot()?.diagnosticsEnabled).toBe(true);
+  });
+
+  it("a rejected updateSettings whose re-read also fails rejects with the update's own error", async () => {
+    const ipc = installSettingsIpc({ ...BASE, diagnosticsEnabled: true });
+    await loadSettings();
+    window.electronAPI.updateSettings = vi.fn(async () => {
+      throw new Error("update failed");
+    });
+    ipc.getSettings.mockImplementationOnce(async () => {
+      throw new Error("read failed");
+    });
+
+    await expect(updateSettings({ diagnosticsEnabled: false })).rejects.toThrow("update failed");
+
+    expect(getSettingsSnapshot()?.diagnosticsEnabled).toBe(true);
+  });
+
   it("a read that was out when the store was reset cannot publish into the next one", async () => {
     installSettingsIpc(withLocale("es"));
     const reads: Array<(settings: AppSettings) => void> = [];

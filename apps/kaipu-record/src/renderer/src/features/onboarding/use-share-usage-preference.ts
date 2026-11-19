@@ -19,7 +19,8 @@ export function useShareUsagePreference(): {
 } {
   const saved = useSettings(pickEnabled);
   // What the switch shows while a write is out; cleared once main has answered, so the switch
-  // then shows what the store holds (main's answer, or the old value after a failed write).
+  // then shows what the store holds (main's answer, or, after a rejected write, the value the
+  // store re-read from main: main may have stored the new one before it threw).
   const [pending, setPending] = useState<boolean | null>(null);
   const latestRequest = useRef(0);
 
