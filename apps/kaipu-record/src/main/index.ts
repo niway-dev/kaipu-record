@@ -36,6 +36,9 @@ import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { broadcastLibraryChanged, currentVault, registerLibraryVaultHandlers } from "./library";
+import { resolveTranscriptionOverride } from "./transcription/dev-override";
+import { registerTranscriptionIpc } from "./transcription/transcription-ipc";
+import type { TranscriptionService } from "./transcription/transcription-service";
 import { vaultActivity, type ActivityLease } from "./library/vault-activity";
 import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
@@ -723,6 +726,8 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
 
 /** Set once the screenshot IPC is registered; until then a shortcut trusts the stored mode. */
 let screenshotHandlers: ScreenshotHandlers | null = null;
+/** The local transcription service; quitting signals its running job so the engine child ends. */
+let transcription: TranscriptionService | null = null;
 
 /**
  * A capture shortcut: the generic one opens the overlay in the current mode, the Window
@@ -1087,6 +1092,14 @@ app.whenReady().then(async () => {
     isExportActive: () => exportActive,
   });
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
+  transcription = registerTranscriptionIpc({
+    resourcesPath: process.resourcesPath,
+    appPath: app.isPackaged ? undefined : app.getAppPath(),
+    modelsRoot: join(app.getPath("userData"), "models"),
+    override: resolveTranscriptionOverride(process.env.KAIPU_TRANSCRIPTION, {
+      isPackaged: app.isPackaged,
+    }),
+  });
 
   // Screenshots: capture/copy/save IPC handlers.
   // The capture toast after a quiet capture (lazy window; shown on the shot's display).
@@ -1404,6 +1417,7 @@ app.on("before-quit", (event) => {
   unregisterGlobalShortcuts();
   tray?.destroy();
   tray = null;
+  transcription?.shutdown();
   void cleanupDragCopiesEverywhere();
   void shutdownMainAnalytics();
   // Then everything the app pre-loaded or holds open, and the deadline behind it. From here

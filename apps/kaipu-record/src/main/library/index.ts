@@ -44,7 +44,7 @@ function isJpeg(bytes: Buffer): boolean {
   return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
 }
 
-function broadcast(channel: string, ...args: unknown[]): void {
+export function broadcast(channel: string, ...args: unknown[]): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(channel, ...args);
   }

@@ -160,6 +160,7 @@ describe("LibraryVault.renameItem", () => {
     await writeFile(join(meta, `${id}.edit.meta.json`), '{"savedAt":1}');
     await writeFile(join(meta, `${id}.canvas.json`), '{"items":[]}');
     await writeFile(join(meta, `${id}.text.json`), '{"schemaVersion":1,"assets":{}}');
+    await writeFile(join(meta, `${id}.transcript.json`), '{"schemaVersion":1,"segments":[]}');
     await writeFile(join(meta, `${id}.assets`, "slide-1.png"), "slide");
   }
 
@@ -191,6 +192,7 @@ describe("LibraryVault.renameItem", () => {
         `${newId}.jpg`,
         `${newId}.json`,
         `${newId}.text.json`,
+        `${newId}.transcript.json`,
         `${newId}.webcam.mp4`,
       ].sort(),
     );
@@ -200,6 +202,9 @@ describe("LibraryVault.renameItem", () => {
     expect(await readFile(join(meta, `${newId}.canvas.json`), "utf-8")).toBe('{"items":[]}');
     expect(await readFile(join(meta, `${newId}.text.json`), "utf-8")).toBe(
       '{"schemaVersion":1,"assets":{}}',
+    );
+    expect(await readFile(join(meta, `${newId}.transcript.json`), "utf-8")).toBe(
+      '{"schemaVersion":1,"segments":[]}',
     );
     expect(await readFile(join(meta, `${newId}.assets`, "slide-1.png"), "utf-8")).toBe("slide");
     const sidecar = await readJson(join(meta, `${newId}.json`));
@@ -235,7 +240,9 @@ describe("LibraryVault.renameItem", () => {
     const companions = await readdir(meta);
     expect(companions).toContain("Demo.json");
     expect(companions).toContain("Demo.edit.json");
+    expect(companions).toContain("Demo.transcript.json");
     expect(companions).not.toContain("demo.json");
+    expect(companions).not.toContain("demo.transcript.json");
     expect((await readJson(join(meta, "Demo.json"))).title).toBe("Demo");
   });
 
@@ -248,6 +255,22 @@ describe("LibraryVault.renameItem", () => {
       const result = await renameById(vault, "demo", "Demo");
       expect(result).toMatchObject({ file: "renamed", recording: { id: "Demo" } });
       expect(await readdir(directory)).toEqual([".kaipu", "Demo.mp4"]);
+      expect(await readFile(join(meta, "Demo.transcript.json"), "utf-8")).toBe(
+        '{"schemaVersion":1,"segments":[]}',
+      );
+    },
+  );
+
+  it.runIf(CASE_INSENSITIVE_TMP)(
+    "undoes the in-place move of the transcript when the media cannot be renamed",
+    async () => {
+      await seedFullItem("demo");
+      renameFailure.codes = ["EIO"];
+      const result = await renameById(vault, "demo", "Demo", { retry: noWait });
+      expect(result).toMatchObject({ file: "kept-old-name", reason: "io" });
+      const names = await readdir(meta);
+      expect(names).toContain("demo.transcript.json");
+      expect(names).not.toContain("Demo.transcript.json");
     },
   );
 
@@ -283,8 +306,12 @@ describe("LibraryVault.renameItem", () => {
     // A crash after step 4 left a sidecar (and a poster) for the target, without media.
     await writeFile(join(meta, "Target.json"), JSON.stringify({ assetId: "asset-1" }));
     await writeFile(join(meta, "Target.jpg"), "stale");
+    await writeFile(join(meta, "Target.transcript.json"), "stale");
     const result = await renameById(vault, "old", "Target");
     expect(result).toMatchObject({ file: "renamed", recording: { id: "Target" } });
+    expect(await readFile(join(meta, "Target.transcript.json"), "utf-8")).toBe(
+      '{"schemaVersion":1,"segments":[]}',
+    );
     expect(await readFile(join(meta, "Target.jpg"), "utf-8")).toBe("poster");
     expect((await readJson(join(meta, "Target.json"))).title).toBe("Target");
   });
@@ -572,6 +599,9 @@ describe("LibraryVault.renameItem", () => {
     expect(await readdir(directory)).toEqual([".kaipu", "clip.mp4"]);
     expect((await readdir(meta)).filter((n) => n.startsWith("New"))).toEqual([]);
     expect(await readFile(join(meta, "clip.edit.json"), "utf-8")).toBe('{"scene":1}');
+    expect(await readFile(join(meta, "clip.transcript.json"), "utf-8")).toBe(
+      '{"schemaVersion":1,"segments":[]}',
+    );
   });
 
   it("defaults to three retries, ≈1.5 s in total", () => {
@@ -749,6 +779,7 @@ describe("LibraryVault — writeMeta guard and companions", () => {
       ".edit.meta.json",
       ".canvas.json",
       ".text.json",
+      ".transcript.json",
     ]) {
       await writeFile(join(meta, `clip${suffix}`), "{}");
     }
@@ -771,6 +802,7 @@ describe("LibraryVault — writeMeta guard and companions", () => {
       join(".kaipu", "x.assets"),
       join(".kaipu", "x.text.json"),
       join(".kaipu", "x.webcam.mp4"),
+      join(".kaipu", "x.transcript.json"),
     ]);
   });
 });

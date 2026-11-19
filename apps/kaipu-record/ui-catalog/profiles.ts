@@ -174,6 +174,47 @@ export const PROFILES = {
     seed: "demo",
     cameraRecordings: true,
   },
+  transcription: {
+    description:
+      "Flag transcription forced on: the Transcription page in Settings and its speech model offer.",
+    seed: "demo",
+    flags: { transcription: true },
+  },
+  "transcription-missing": {
+    description:
+      "Like transcription, with the speech model offer pinned (KAIPU_TRANSCRIPTION=missing, unpackaged builds only): a Mac the engine runs on with no model installed. The offer cannot download or remove anything while it is pinned.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "missing" },
+  },
+  "transcription-downloading": {
+    description:
+      "Like transcription, with the speech model offer pinned (KAIPU_TRANSCRIPTION=downloading, unpackaged builds only): the download held at 42%. The offer cannot download or remove anything while it is pinned.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "downloading" },
+  },
+  "transcription-ready": {
+    description:
+      "Like transcription, with the speech model offer pinned (KAIPU_TRANSCRIPTION=ready, unpackaged builds only): the model installed. The offer cannot download or remove anything while it is pinned.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "ready" },
+  },
+  "transcription-failed": {
+    description:
+      "Like transcription, with the speech model offer pinned (KAIPU_TRANSCRIPTION=failed, unpackaged builds only): a download that failed. The offer cannot download or remove anything while it is pinned.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "failed" },
+  },
+  "transcription-unavailable": {
+    description:
+      "Like transcription, with the speech model offer pinned (KAIPU_TRANSCRIPTION=unavailable, unpackaged builds only): an engine that cannot run on this computer. The offer cannot download or remove anything while it is pinned.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "unavailable" },
+  },
   "image-inspect": {
     description:
       "Flag image-inspect forced on: the image editor's Inspect mode (loupe, live colour, format bar).",

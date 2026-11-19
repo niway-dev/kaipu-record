@@ -18,6 +18,7 @@ export const FLAG_NAMES = [
   "image-text",
   "timeline-levels",
   "zoom-filmstrip",
+  "transcription",
 ] as const;
 export type FlagName = (typeof FLAG_NAMES)[number];
 
@@ -49,6 +50,9 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   // own time when the timeline is zoomed in. Off until the budgets are proven on the 54-minute
   // take (spec decision 11); with it off the filmstrip is the 24 frames per file it always was.
   "zoom-filmstrip": false,
+  // Local transcription with Parakeet, macOS arm64 first (NIW2-818): the model offer in
+  // onboarding and settings, the Transcript panel and the Transcribe actions. Off until owner QA.
+  transcription: false,
 };
 
 /** Identity super-properties attached to every event/error for multi-surface filtering. */

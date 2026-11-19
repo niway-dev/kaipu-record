@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, Navigate, RouterProvider } from "react-router-dom";
 import { OnboardingContext } from "@renderer/features/onboarding/onboarding-context";
 import { SettingsLayout } from "./settings-layout";
@@ -9,9 +9,16 @@ import {
   PermissionsSettingsPage,
   RecordingQualitySettingsPage,
   RecordingSettingsPage,
+  TranscriptionSettingsPage,
   WorkspacesSettingsPage,
 } from "./settings-pages";
 import { WorkspacesProvider } from "@renderer/features/workspaces/workspaces-context";
+
+// `useFlag` reads PostHog; the tests pin each side of the transcription flag.
+const flags = vi.hoisted(() => ({ transcription: false }) as Record<string, boolean>);
+vi.mock("@renderer/features/analytics/use-flag", () => ({
+  useFlag: (name: string) => flags[name] ?? false,
+}));
 
 function renderAt(path: string, open = vi.fn()) {
   const router = createMemoryRouter(
@@ -26,6 +33,7 @@ function renderAt(path: string, open = vi.fn()) {
           { path: "permissions", element: <PermissionsSettingsPage /> },
           { path: "recording-quality", element: <RecordingQualitySettingsPage /> },
           { path: "recording", element: <RecordingSettingsPage /> },
+          { path: "transcription", element: <TranscriptionSettingsPage /> },
           { path: "workspaces", element: <WorkspacesSettingsPage /> },
           { path: "app", element: <AppSettingsPage /> },
         ],
@@ -65,6 +73,22 @@ describe("Settings layout", () => {
       ).not.toBeNull();
     }
     expect(screen.getByRole("link", { name: "General" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("lists Transcription in the nav only with the transcription flag on", async () => {
+    renderAt("/settings");
+    await screen.findByRole("heading", { level: 1, name: "General" });
+    expect(screen.queryByRole("link", { name: "Transcription" })).not.toBeInTheDocument();
+    cleanup();
+
+    flags.transcription = true;
+    try {
+      renderAt("/settings");
+      const link = await screen.findByRole("link", { name: "Transcription" });
+      expect(link).toHaveAttribute("href", "/settings/transcription");
+    } finally {
+      flags.transcription = false;
+    }
   });
 
   it("does not bring back unwired placeholder settings", async () => {

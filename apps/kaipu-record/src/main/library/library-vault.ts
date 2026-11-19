@@ -296,6 +296,11 @@ export interface CompanionPaths {
   textCache: string;
   /** The take's webcam file (ADR 0037): moved and removed with the item like the others. */
   webcam: string;
+  /**
+   * The recording's local transcript (derived data, like a thumbnail): moved and removed with
+   * the item, kept when only the local copy is removed.
+   */
+  transcript: string;
 }
 
 /** How a rename reaches its target stem. */
@@ -492,6 +497,7 @@ export class LibraryVault {
       assetsDir: join(meta, `${id}.assets`),
       textCache: join(meta, `${id}.text.json`),
       webcam: this.webcamFilePath(id),
+      transcript: join(meta, `${id}.transcript.json`),
     };
   }
 
@@ -815,6 +821,7 @@ export class LibraryVault {
               "editMeta",
               "canvasDoc",
               "textCache",
+              "transcript",
               "webcam",
             ] as const;
             for (const key of copied) {
@@ -975,6 +982,7 @@ export class LibraryVault {
       "editMeta",
       "canvasDoc",
       "textCache",
+      "transcript",
       "assetsDir",
       "webcam",
     ];

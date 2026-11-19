@@ -20,6 +20,10 @@ protocols:
 asarUnpack:
   - resources/**
   - "**/node_modules/uiohook-napi/**"
+# Drops the macOS arm64 speech engine (resources/native/sherpa-onnx, ADR 0062) from every package
+# that cannot run it: the x64 Mac app, and Windows/Linux builds made on an arm64 Mac. Runs per app,
+# before signing. What stays is signed with the other native files under asar.unpacked.
+afterPack: ./scripts/after-pack.cjs
 win:
   executableName: kaipu-record
   # Custom signing hook (read at build time, not packaged). No-ops with a CI

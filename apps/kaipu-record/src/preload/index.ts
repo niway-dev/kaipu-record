@@ -17,6 +17,10 @@ import { WorkspaceStampGuard } from "@shared/workspace-stamp-guard";
 import type { FlagName } from "@shared/analytics";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type {
+  TranscriptionJobProgress,
+  TranscriptionModelProgress,
+} from "@shared/types/transcription";
+import type {
   RecordingReadyHandOff,
   RecordingReadyPayload,
   RecordingReadyTimer,
@@ -475,6 +479,32 @@ const kaipuApi: KaipuElectronAPI = {
   readScreenshotCanvas: (id) => scopedInvoke(IPC_CHANNELS.screenshotReadCanvas, id),
   statScreenshotCanvas: (id) => scopedInvoke(IPC_CHANNELS.screenshotStatCanvas, id),
   recognizeScreenshotText: (request) => scopedInvoke(IPC_CHANNELS.screenshotRecognizeText, request),
+  getTranscriptionStatus: () => ipcRenderer.invoke(IPC_CHANNELS.transcriptionStatus),
+  downloadTranscriptionModel: (id) =>
+    ipcRenderer.invoke(IPC_CHANNELS.transcriptionModelDownload, id),
+  cancelTranscriptionModelDownload: (id) =>
+    ipcRenderer.invoke(IPC_CHANNELS.transcriptionModelCancel, id),
+  removeTranscriptionModel: (id) => ipcRenderer.invoke(IPC_CHANNELS.transcriptionModelRemove, id),
+  onTranscriptionModelProgress: (callback) => {
+    const listener = (_e: IpcRendererEvent, progress: TranscriptionModelProgress): void =>
+      callback(progress);
+    ipcRenderer.on(IPC_CHANNELS.transcriptionModelProgress, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.transcriptionModelProgress, listener);
+  },
+  beginTranscription: (request) => scopedInvoke(IPC_CHANNELS.transcriptionJobBegin, request),
+  sendTranscriptionAudio: (jobId, pcm) =>
+    ipcRenderer.invoke(IPC_CHANNELS.transcriptionJobChunk, jobId, pcm),
+  endTranscriptionAudio: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.transcriptionJobEnd, jobId),
+  failTranscriptionAudio: (jobId, reason) =>
+    ipcRenderer.invoke(IPC_CHANNELS.transcriptionJobEnd, jobId, reason),
+  cancelTranscription: (jobId) => ipcRenderer.invoke(IPC_CHANNELS.transcriptionJobCancel, jobId),
+  onTranscriptionJobProgress: (callback) => {
+    const listener = (_e: IpcRendererEvent, progress: TranscriptionJobProgress): void =>
+      callback(progress);
+    ipcRenderer.on(IPC_CHANNELS.transcriptionJobProgress, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.transcriptionJobProgress, listener);
+  },
+  readTranscript: (id) => scopedInvoke(IPC_CHANNELS.transcriptionReadTranscript, id),
   readClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardReadImage),
   peekClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardPeekImage),
   saveScreenshot: (png, meta) => scopedInvoke(IPC_CHANNELS.screenshotSave, png, meta),

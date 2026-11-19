@@ -11,7 +11,7 @@ description: Transcribing a recording goes through one port in main, served on m
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Status        | Proposed, 2026-11-15. Not implemented: the M0 spike measured it (results below), M1 builds it ([NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export)). Spec: [local transcription](/specs/2026-11-15-local-transcription-design/)                                                                                                                                           |
 | Date          | 2026-11-15                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Relates to    | [0055](/architecture/decisions/0055-text-recognition-is-a-port-served-by-the-os-engine-on-each-platform/) (same shape: a port in main, a backend per platform, "unavailable" as the failure), [0021](/architecture/decisions/0021-tag-sync-on-events-with-server-version/) (local-first), [0063](/architecture/decisions/0063-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (what is done with the words) |
+| Relates to    | [0055](/architecture/decisions/0055-text-recognition-is-a-port-served-by-the-os-engine-on-each-platform/) (same shape: a port in main, a backend per platform, "unavailable" as the failure), [0021](/architecture/decisions/0021-tag-sync-on-events-with-server-version/) (local-first), [0065](/architecture/decisions/0065-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (what is done with the words) |
 | Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ## Context
@@ -78,9 +78,13 @@ Facts this decision rests on:
    by exact version, checks its SHA-256 and copies the CLI and library into `resources/native/`;
    every packaging path calls it, `bun run setup` reports when it is missing, and a bump is a
    deliberate change with a new hash. Parakeet's CC-BY-4.0 license requires attribution: the
-   model's name, NVIDIA, the license and a link appear in the app's third-party notices and in the
-   download prompt, as invisible-assistant does in `THIRD_PARTY_NOTICES.md`. sherpa-onnx
-   (Apache-2.0) and onnxruntime (MIT) are listed there too.
+   model's name, NVIDIA, the license and a link appear in the download prompt, and the repository
+   records them in `apps/kaipu-record/THIRD_PARTY_NOTICES.md`, as invisible-assistant does. The
+   app has no screen of third-party notices. sherpa-onnx (Apache-2.0) and onnxruntime (MIT) require
+   their license text to travel with the binaries. The pinned archive carries
+   none of its own, so the repository keeps both texts in `apps/kaipu-record/scripts/speech-engine-licenses/`,
+   the fetch script copies them into `resources/native/sherpa-onnx/licenses/` (it fails if there are
+   none) and the release checks that folder in the packaged arm64 app.
 
 ## Alternatives rejected
 

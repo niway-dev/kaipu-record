@@ -245,6 +245,7 @@ describe("scanVault — records without media, and orphans", () => {
         ".kaipu/Gone.json": sidecar({ assetId: "g1", title: "Gone" }),
         ".kaipu/Gone.jpg": "j",
         ".kaipu/Gone.edit.json": "{}",
+        ".kaipu/Gone.transcript.json": "{}",
         ".kaipu/Gone.assets/s1.png": "p",
         // M1: cloud-only, never touched, with its companions.
         ".kaipu/Cloud.json": sidecar({ assetId: "c0", localRemovedAt: 1 }),
@@ -260,11 +261,13 @@ describe("scanVault — records without media, and orphans", () => {
         // M4: companions with no owner at all.
         ".kaipu/Lost.jpg": "j",
         ".kaipu/Lost.cursor.json": "{}",
+        ".kaipu/Lost.transcript.json": "{}",
         // M4 protected: owned both ways (Talk's edit session).
         "Talk.mp4": "v",
         ".kaipu/Talk.json": sidecar({ assetId: "t1", title: "Talk" }),
         ".kaipu/Talk.edit.json": "{}",
         ".kaipu/Talk.edit.meta.json": "{}",
+        ".kaipu/Talk.transcript.json": "{}",
         ".kaipu/Talk.assets/x.png": "p",
         // M5: never touched.
         ".kaipu/tags.json": "{}",
@@ -292,6 +295,7 @@ describe("scanVault — records without media, and orphans", () => {
       ".kaipu/Gone.edit.json",
       ".kaipu/Gone.jpg",
       ".kaipu/Gone.json",
+      ".kaipu/Gone.transcript.json",
     ]);
     expect(at(".kaipu/InCatalog.json")).toMatchObject({
       kind: "missing-media",
@@ -306,8 +310,18 @@ describe("scanVault — records without media, and orphans", () => {
     expect(lost.flatMap((f) => f.files ?? []).sort()).toEqual([
       ".kaipu/Lost.cursor.json",
       ".kaipu/Lost.jpg",
+      ".kaipu/Lost.transcript.json",
     ]);
     expect(findings).toHaveLength(3 + lost.length);
+  });
+
+  it("a transcript is a companion, never a record of its own: no finding while its recording is there", async () => {
+    const { findings } = await scan({
+      "Demo.mp4": "v",
+      ".kaipu/Demo.json": sidecar({ assetId: "d1", title: "Demo" }),
+      ".kaipu/Demo.transcript.json": JSON.stringify({ assetId: "d1", segments: [] }),
+    });
+    expect(findings).toEqual([]);
   });
 
   it("legacy shared companion paths: both items listed, nothing orphaned (M7)", async () => {

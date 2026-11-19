@@ -17,6 +17,7 @@ import {
   RecordingQualitySettingsPage,
   RecordingSettingsPage,
   ScreenshotsSettingsPage,
+  TranscriptionSettingsPage,
 } from "@renderer/pages/settings/settings-pages";
 import { CloudPage } from "@renderer/pages/cloud/cloud-page";
 import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
@@ -102,6 +103,7 @@ const router = createHashRouter([
               { path: "recording-quality", element: <RecordingQualitySettingsPage /> },
               { path: "recording", element: <RecordingSettingsPage /> },
               { path: "screenshots", element: <ScreenshotsSettingsPage /> },
+              { path: "transcription", element: <TranscriptionSettingsPage /> },
               { path: "workspaces", element: <WorkspacesSettingsPage /> },
               // The page was "Files" before workspaces (ADR 0032).
               { path: "files", element: <Navigate to="../workspaces" replace /> },

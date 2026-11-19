@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   AppWindow,
   Camera,
+  Captions,
   Code,
   Folder,
   Monitor,
@@ -11,6 +12,7 @@ import {
   Video,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { useFlag } from "@renderer/features/analytics/use-flag";
 import { cx } from "@renderer/ui/cx";
 import { ScopeDot, ScopeLegend, ScopeSelector } from "./scope/scope-controls";
 import { SettingsScopeProvider } from "./scope/settings-scope";
@@ -23,6 +25,7 @@ type SettingsNavKey =
   | "recordingQuality"
   | "recording"
   | "screenshots"
+  | "transcription"
   | "workspaces"
   | "app"
   | "developer";
@@ -33,6 +36,8 @@ const NAV: ReadonlyArray<{
   Icon: typeof Settings;
   /** The page holds settings a workspace may override (ADR 0034): it gets the blue dot. */
   perWorkspace?: boolean;
+  /** The entry shows only while this feature flag is on. */
+  flag?: "transcription";
 }> = [
   { to: "general", labelKey: "general", Icon: Settings },
   { to: "permissions", labelKey: "permissions", Icon: Monitor },
@@ -44,6 +49,7 @@ const NAV: ReadonlyArray<{
   },
   { to: "recording", labelKey: "recording", Icon: Video, perWorkspace: true },
   { to: "screenshots", labelKey: "screenshots", Icon: Camera, perWorkspace: true },
+  { to: "transcription", labelKey: "transcription", Icon: Captions, flag: "transcription" },
   { to: "workspaces", labelKey: "workspaces", Icon: Folder },
   { to: "app", labelKey: "app", Icon: AppWindow },
   // Dev-only page; `import.meta.env.DEV` is a build-time literal, so prod strips it.
@@ -65,12 +71,14 @@ export function SettingsLayout(): React.JSX.Element {
 
 function SettingsLayoutBody(): React.JSX.Element {
   const t = useTranslations("settings");
+  const enabled = { transcription: useFlag("transcription") };
+  const items = NAV.filter(({ flag }) => !flag || enabled[flag]);
   return (
     <div className={styles.layout}>
       <nav {...uiArea("shell.settingsNav")} className={styles.nav} aria-label={t("title")}>
         <ScopeSelector />
         <ul className={styles.navList}>
-          {NAV.map(({ to, labelKey, Icon, perWorkspace }) => (
+          {items.map(({ to, labelKey, Icon, perWorkspace }) => (
             <li key={to}>
               <NavLink
                 to={to}

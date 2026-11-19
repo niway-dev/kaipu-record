@@ -87,6 +87,7 @@ async function seedItem(dir: string, id = "Demo", options: { tags?: string[] } =
   );
   await writeFile(join(meta, `${id}.canvas.json`), '{"items":[]}');
   await writeFile(join(meta, `${id}.text.json`), '{"schemaVersion":1,"assets":{}}');
+  await writeFile(join(meta, `${id}.transcript.json`), '{"schemaVersion":1,"segments":[]}');
   await writeFile(join(meta, `${id}.assets`, "slide.png"), "png");
   await writeFile(join(meta, `${id}.webcam.mp4`), webcam);
   return { id, assetId, media, webcam } satisfies Seeded;
@@ -141,6 +142,7 @@ describe("moveItem — same volume", () => {
       "Demo.json",
       "Demo.mp4",
       "Demo.text.json",
+      "Demo.transcript.json",
       "Demo.webcam.mp4",
     ]);
     const moved = await new LibraryVault(dst.directory).describe("Demo");
@@ -174,7 +176,7 @@ describe("moveItem — same volume", () => {
     );
     const outcome = await moveItem({ source: src, target: dst, id: item.id }, deps());
     expect(outcome).toEqual({ ok: false, id: "Demo", reason: "already-there" });
-    expect(await filesOf(src.directory, "Demo")).toHaveLength(10);
+    expect(await filesOf(src.directory, "Demo")).toHaveLength(11);
   });
 
   it("refuses an id that holds another item now", async () => {
@@ -203,6 +205,9 @@ describe("moveItem — across volumes (EXDEV)", () => {
     );
     expect(await readFile(join(dst.directory, ".kaipu", "Demo.text.json"), "utf-8")).toBe(
       '{"schemaVersion":1,"assets":{}}',
+    );
+    expect(await readFile(join(dst.directory, ".kaipu", "Demo.transcript.json"), "utf-8")).toBe(
+      '{"schemaVersion":1,"segments":[]}',
     );
 
     // The hash cache matches the new file, and the edit project is still fresh (decision 8).
@@ -379,6 +384,10 @@ describe("crash at each step, then healing", () => {
         expect(copies).toHaveLength(1);
         const [only] = copies;
         expect(await readFile(join(only!.dir, `${only!.id}.mp4`))).toEqual(item.media);
+        // The transcript stays with the surviving copy, rolled back or forward.
+        expect(
+          await readFile(join(only!.dir, ".kaipu", `${only!.id}.transcript.json`), "utf-8"),
+        ).toBe('{"schemaVersion":1,"segments":[]}');
         // Rolled back or forward, the other side holds no file of the item.
         const other = only!.dir === src.directory ? dst.directory : src.directory;
         expect(await filesOf(other, "Demo")).toEqual([]);
@@ -434,6 +443,18 @@ describe("healing never deletes the only copy", () => {
     await heal();
     expect(await copiesOf(item.assetId)).toEqual([{ dir: src.directory, id: "Demo" }]);
     expect(await filesOf(dst.directory, "Demo")).toEqual([]);
+  });
+
+  it("never reads a transcript file as the record of an interrupted reservation", async () => {
+    const item = await seedItem(src.directory);
+    await crashAt("journal-written");
+    // A file that merely names the same asset must not be taken for a record without media.
+    const stray = join(dst.directory, ".kaipu", "Stray.transcript.json");
+    await mkdir(join(dst.directory, ".kaipu"), { recursive: true });
+    await writeFile(stray, JSON.stringify({ assetId: item.assetId, segments: [] }));
+    await heal();
+    expect(await readFile(stray, "utf-8")).toContain(item.assetId);
+    expect(await copiesOf(item.assetId)).toEqual([{ dir: src.directory, id: "Demo" }]);
   });
 
   it("keeps an unverifiable target when the source is gone, and surfaces the entry", async () => {

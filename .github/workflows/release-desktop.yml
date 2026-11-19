@@ -142,6 +142,15 @@ jobs:
           fi
           echo "uiohook-napi built for ${EXPECTED}"
 
+      # The speech engine (ADR 0062) is the macOS arm64 build of sherpa-onnx, pinned by
+      # scripts/speech-engine.lock (version and SHA-256, checked before anything is extracted).
+      # This runner is arm64 and builds both Mac apps from one `build`; `afterPack` then drops
+      # the engine from the x64 app, which shows "unavailable". It runs here, before Build,
+      # so a failed download stops the release instead of shipping an app without it.
+      - name: Fetch the speech engine (arm64 build only)
+        working-directory: apps/kaipu-record
+        run: bun run fetch:speech-engine
+
       - name: Prepare Apple API key file
         # @electron/notarize wants the .p8 as a file path, so materialize it to the
         # runner's temp dir and expose the path to later steps. Accept either the
@@ -210,6 +219,24 @@ jobs:
             done
           done
 
+      # The engine is not a universal binary like the Swift helpers: it exists for arm64 only, so
+      # it has its own check. Fail here if the fetch was skipped or fetched something that is not
+      # arm64; a release without it would silently show "unavailable" to every Apple Silicon user.
+      - name: Check the speech engine was fetched for arm64
+        working-directory: apps/kaipu-record
+        run: |
+          ENGINE=resources/native/sherpa-onnx
+          for FILE in "$ENGINE/bin/sherpa-onnx-offline" "$ENGINE/bin/sherpa-onnx-version" "$ENGINE/lib/libonnxruntime.dylib"; do
+            test -f "$FILE" || { echo "::error::$FILE was not fetched"; exit 1; }
+            ARCHS="$(lipo -archs "$FILE")"
+            [[ "$ARCHS" == "arm64" ]] || { echo "::error::$FILE must be arm64 only (has: $ARCHS)"; exit 1; }
+          done
+          test -x "$ENGINE/bin/sherpa-onnx-offline" || { echo "::error::sherpa-onnx-offline is not executable"; exit 1; }
+          # Apache-2.0 and MIT need their text to ship with the binaries (ADR 0062, point 8).
+          [[ -n "$(find "$ENGINE/licenses" -type f 2>/dev/null | head -n 1)" ]] ||
+            { echo "::error::$ENGINE/licenses has no license file"; exit 1; }
+          "$ENGINE/bin/sherpa-onnx-version"
+
       # Release gate, second half (ADR 0004): Playwright drives the build above — the very
       # bundle that gets signed — on the platform users run. This is the only place the
       # export path is exercised in the cloud: on Linux runners it self-skips (no WebCodecs
@@ -265,6 +292,43 @@ jobs:
               codesign -dv "$HELPER" 2>&1 | grep -q 'flags=.*runtime' ||
                 { echo "::error::$HELPER is not signed with the hardened runtime"; exit 1; }
             done
+          done
+
+      # The speech engine is per build, unlike the helpers above. The arm64 app must carry an arm64
+      # CLI and library, signed with the hardened runtime, and the CLI must start from inside the
+      # app. The x64 app must carry none (`afterPack` removes it): an arm64 binary there is dead
+      # weight, and it must not fail the release. A packaged app of any other architecture fails.
+      - name: Check the speech engine in every packaged app
+        working-directory: apps/kaipu-record
+        run: |
+          shopt -s nullglob
+          APPS=(dist/mac*/*.app)
+          [[ ${#APPS[@]} -gt 0 ]] || { echo "::error::no packaged .app under dist/"; exit 1; }
+          for APP in "${APPS[@]}"; do
+            ENGINE="$APP/Contents/Resources/app.asar.unpacked/resources/native/sherpa-onnx"
+            MAIN=("$APP"/Contents/MacOS/*)
+            APP_ARCHS="$(lipo -archs "${MAIN[0]}")"
+            if [[ "$APP_ARCHS" == "x86_64" ]]; then
+              test ! -e "$ENGINE" || { echo "::error::the x64 app must not carry the speech engine ($ENGINE)"; exit 1; }
+              echo "$APP (x64): no speech engine, as intended"
+              continue
+            fi
+            [[ "$APP_ARCHS" == "arm64" ]] || { echo "::error::$APP has unexpected architectures: $APP_ARCHS"; exit 1; }
+            for FILE in "$ENGINE/bin/sherpa-onnx-offline" "$ENGINE/bin/sherpa-onnx-version" "$ENGINE/lib/libonnxruntime.dylib"; do
+              test -f "$FILE" || { echo "::error::$FILE missing"; exit 1; }
+              ARCHS="$(lipo -archs "$FILE")"
+              [[ "$ARCHS" == "arm64" ]] || { echo "::error::$FILE must be arm64 (has: $ARCHS)"; exit 1; }
+              codesign --verify --strict --verbose=2 "$FILE"
+              codesign -dv "$FILE" 2>&1 | grep -q 'flags=.*runtime' ||
+                { echo "::error::$FILE is not signed with the hardened runtime"; exit 1; }
+            done
+            [[ -n "$(find "$ENGINE/licenses" -type f 2>/dev/null | head -n 1)" ]] ||
+              { echo "::error::$ENGINE/licenses has no license file"; exit 1; }
+            # Runs from inside the signed app: proves the signed CLI loads the signed library.
+            "$ENGINE/bin/sherpa-onnx-version" | grep -q '^sherpa-onnx version : ' ||
+              { echo "::error::the packaged sherpa-onnx-version did not run"; exit 1; }
+            "$ENGINE/bin/sherpa-onnx-offline" --help >/dev/null 2>&1 ||
+              { echo "::error::the packaged sherpa-onnx-offline did not start"; exit 1; }
           done
 
       # Always uploaded, tag or not: `publish` downloads it. Short retention because the

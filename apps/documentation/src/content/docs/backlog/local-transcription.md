@@ -6,7 +6,7 @@ description: Transcribe recordings on the user's machine with NVIDIA Parakeet, s
 > 🔵 Proposed: [NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export).
 > Design: [spec](/specs/2026-11-15-local-transcription-design/),
 > [ADR 0062](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/) (engine and model download),
-> [ADR 0063](/architecture/decisions/0063-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (transcript file and projection).
+> [ADR 0065](/architecture/decisions/0065-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (transcript file and projection).
 
 ## What
 
@@ -39,3 +39,16 @@ Kept verbatim; the spec wins where they disagree.
 6. [Competitor transcript UX](/backlog/local-transcription/6-competitor-transcript-ux/)
 7. [Weak points: engine pipeline](/backlog/local-transcription/7-attack-engine-pipeline/)
 8. [Weak points: transcript model and panel](/backlog/local-transcription/8-attack-transcript-model-and-panel/)
+
+## UI catalog hook
+
+The model offer in Settings → Transcription follows what main reports about the engine and the
+model folder, so the UI state catalog cannot reach its five looks on its own. `KAIPU_TRANSCRIPTION`
+pins them (unpackaged builds only, like `KAIPU_TEXT_RECOGNITION`; a packaged app ignores it):
+`missing`, `downloading` or `downloading:<1-99>` (default 42), `ready`, `failed` or `unavailable`.
+The pinned status keeps the real catalog entry and replaces only the default model's state and
+the engine's availability. While it is set, a download answers `cancelled`, removing a model does
+nothing and a transcription job is refused as unavailable. The catalog profiles
+`transcription-missing`, `transcription-downloading`, `transcription-ready`,
+`transcription-failed` and `transcription-unavailable` set it; the code is
+`src/main/transcription/dev-override.ts`.

@@ -182,6 +182,20 @@ describe("LibraryVault", () => {
     expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.cursor.json.tmp");
   });
 
+  it("removes the transcript with the recording and keeps it when only the local copy goes", async () => {
+    await writeRecording("rec");
+    await mkdir(join(directory, ".kaipu"), { recursive: true });
+    const path = vault.companionPaths("rec").transcript;
+    expect(path).toBe(join(directory, ".kaipu", "rec.transcript.json"));
+    await writeFile(path, '{"schemaVersion":1,"segments":[]}');
+    await vault.removeLocalCopy("rec");
+    expect(await readFile(path, "utf-8")).toBe('{"schemaVersion":1,"segments":[]}');
+    await writeRecording("other");
+    await writeFile(vault.companionPaths("other").transcript, "{}");
+    await vault.remove("other");
+    expect(await readdir(join(directory, ".kaipu"))).not.toContain("other.transcript.json");
+  });
+
   it("removes the webcam file with the recording (ADR 0037)", async () => {
     await writeRecording("rec");
     await mkdir(join(directory, ".kaipu"), { recursive: true });
