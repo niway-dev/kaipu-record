@@ -410,6 +410,11 @@ const kaipuApi: KaipuElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.screenshotOverlayState, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOverlayState, listener);
     },
+    onReset: (callback) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(IPC_CHANNELS.screenshotOverlayReset, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOverlayReset, listener);
+    },
     onHiddenAckRequest: (callback) => {
       const listener = (): void => callback();
       ipcRenderer.on(IPC_CHANNELS.screenshotOverlayHiddenAck, listener);

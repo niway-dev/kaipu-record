@@ -226,6 +226,12 @@ export type OverlayAnswer =
   | { kind: "cancelled" };
 
 /**
+ * What an overlay sends main: its answer, tagged with the `OverlayState.session` it was
+ * showing, so main drops an answer that belongs to an earlier pick of a reused window.
+ */
+export type TaggedOverlayAnswer = OverlayAnswer & { session?: number };
+
+/**
  * Main → every overlay. `mode`: the mode every overlay renders right now. `hoverDisplayId`:
  * the display the pointer is over, so only that one highlights (Screen). `frameDisplayId`:
  * the one display that shows the Frame box; `null` in every other mode. `windows`: `null`

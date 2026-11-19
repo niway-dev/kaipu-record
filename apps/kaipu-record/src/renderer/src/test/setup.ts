@@ -304,6 +304,7 @@ window.electronAPI = {
     setCounting: () => {},
     openRecordSettings: () => {},
     onState: () => () => {},
+    onReset: () => () => {},
     onHiddenAckRequest: () => () => {},
     hiddenAck: () => {},
     requestState: () => {},

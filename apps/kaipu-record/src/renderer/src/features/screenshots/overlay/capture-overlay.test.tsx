@@ -127,6 +127,7 @@ function fakeApi(
           stateListener = null;
         };
       }),
+      onReset: vi.fn(() => () => {}),
       onHiddenAckRequest: vi.fn((cb: () => void) => {
         ackListener = cb;
         return () => {
@@ -326,6 +327,43 @@ describe("a spare (loaded ahead of its pick)", () => {
     pushState({ mode: "frame", frameDisplayId: 42, intent: "record" });
     await waitFor(() => expect(screen.getByTestId("capture-frame")).toBeInTheDocument());
     expect(frameGeometry()).toMatchObject({ width: 300, height: 200 });
+  });
+});
+
+describe("a window reused by many picks (NIW2-878)", () => {
+  it("paints the state the host seeds it with, without waiting for main", () => {
+    const { api } = fakeApi({}, null);
+    const { container } = render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        initialState={{ ...SCREEN, session: 4, intent: "capture" }}
+        api={api}
+      />,
+    );
+    expect(container).not.toBeEmptyDOMElement();
+    expect(screen.getByTestId("capture-widget")).toBeInTheDocument();
+  });
+
+  it("tags its answer with the pick it belongs to, so main can drop a late one", () => {
+    const { api, answer } = fakeApi({}, null);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        initialState={{ ...SCREEN, session: 4, intent: "capture" }}
+        api={api}
+      />,
+    );
+    press("Escape");
+    expect(answer).toHaveBeenCalledWith({ kind: "cancelled", session: 4 });
+  });
+
+  it("sends the answer as before when main sent no session", () => {
+    const { api, answer } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
+    press("Escape");
+    expect(answer).toHaveBeenCalledWith({ kind: "cancelled" });
   });
 });
 
