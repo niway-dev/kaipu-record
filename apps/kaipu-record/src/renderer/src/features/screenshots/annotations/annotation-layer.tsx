@@ -26,6 +26,8 @@ import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import {
   MEASURE_FONT,
+  MEASURE_STROKE_PX,
+  MEASURE_TICK_PX,
   measureEndpoints,
   measureLabel,
   measureShape,
@@ -110,8 +112,10 @@ type Drag =
 /** How far from a word, in display px, a press still starts a selection on it. */
 const TEXT_HIT_PX = 6;
 
-/** Radius of a selected measure's end dot: 10 px across (mock C9). */
-const MEASURE_DOT_R = 5;
+/** A selected measure's end cap: a flat bar across the line, as long as the I-beam ticks plus a
+ *  pixel each side, and this thick along it. */
+const MEASURE_CAP_LEN = MEASURE_TICK_PX * 2 + 2;
+const MEASURE_CAP_THICK = 3;
 
 /** Side of a resize handle in px, and the click tolerance around it. */
 const HANDLE_PX = 10;
@@ -1335,23 +1339,30 @@ function CropWindow({ target, size }: { target: CropTarget; size: Size }): React
 function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element {
   const { w: W, h: H } = size;
   if (a.kind === "measure") {
-    // Mock C9: round end dots in the measure's own color (same grab targets, same hit-testing).
+    // Flat bars across the line (like the I-beam ticks) in the measure's own color, white
+    // inside. The invisible square keeps the grab target as large as the old dot's; the hit
+    // test itself is geometric.
+    const horizontal = a.axis === "x";
+    const capW = horizontal ? MEASURE_CAP_THICK : MEASURE_CAP_LEN;
+    const capH = horizontal ? MEASURE_CAP_LEN : MEASURE_CAP_THICK;
     return (
       <g>
         {handlesFor(a, size).map((h) => (
           <g key={h.id} style={{ cursor: handleCursor(h.id) }}>
-            <circle
-              className={styles.measureDotRing}
-              cx={h.x * W}
-              cy={h.y * H}
-              r={MEASURE_DOT_R + 1}
+            <rect
+              className={styles.measureCapHit}
+              x={h.x * W - HANDLE_HIT_PX / 2}
+              y={h.y * H - HANDLE_HIT_PX / 2}
+              width={HANDLE_HIT_PX}
+              height={HANDLE_HIT_PX}
             />
-            <circle
+            <rect
               data-testid="resize-handle"
-              className={styles.measureDot}
-              cx={h.x * W}
-              cy={h.y * H}
-              r={MEASURE_DOT_R}
+              className={styles.measureCap}
+              x={h.x * W - capW / 2}
+              y={h.y * H - capH / 2}
+              width={capW}
+              height={capH}
               stroke={a.color}
             />
           </g>
@@ -1580,7 +1591,7 @@ const Shape = React.memo(function Shape({
 
   if (a.kind === "measure") {
     const s = measureShape(a, W, H);
-    const sw = STROKE_WIDTHS[1];
+    const sw = MEASURE_STROKE_PX;
     return (
       <g
         {...uiArea("editorImage.measure")}

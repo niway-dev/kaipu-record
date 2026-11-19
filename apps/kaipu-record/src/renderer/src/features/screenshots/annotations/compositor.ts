@@ -1,7 +1,13 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
-import { MEASURE_FONT, measureLabel, measureShape, measureTextColor } from "./measure";
+import {
+  MEASURE_FONT,
+  MEASURE_STROKE_PX,
+  measureLabel,
+  measureShape,
+  measureTextColor,
+} from "./measure";
 import {
   BLUR_STD,
   HAND_FONT,
@@ -645,7 +651,7 @@ function annotationSvg(
   }
   if (a.kind === "measure") {
     const s = measureShape(a, W, H, scale);
-    const sw = STROKE_WIDTHS[1] * scale;
+    const sw = MEASURE_STROKE_PX * scale;
     const ticks = s.ticks
       .map(
         (t) =>

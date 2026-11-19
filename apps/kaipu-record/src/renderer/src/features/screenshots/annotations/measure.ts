@@ -78,6 +78,8 @@ export function moveMeasure(
 export const MEASURE_FONT_PX = 12;
 export const MEASURE_FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 export const MEASURE_TICK_PX = 6;
+/** Line and end-cap stroke, in display px: a width indicator is a hairline, not a drawing stroke. */
+export const MEASURE_STROKE_PX = 1.5;
 const PILL_PAD_X = 6;
 const PILL_PAD_Y = 3;
 const PILL_GAP = 4;

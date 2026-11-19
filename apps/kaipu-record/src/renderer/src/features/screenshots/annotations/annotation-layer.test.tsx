@@ -1030,19 +1030,29 @@ describe("AnnotationLayer — measure (NIW2-702)", () => {
     expect(screen.queryAllByTestId("resize-handle")).toHaveLength(0);
     expect(g?.querySelector("rect")?.getAttribute("stroke")).toBeNull();
     expect(g?.querySelector("[data-measure-halo]")).not.toBeNull();
+    // A width indicator is a hairline: the line is 1.5 px, not the drawing stroke.
+    expect(g?.querySelector(`g[stroke="${ruler.color}"]`)?.getAttribute("stroke-width")).toBe(
+      "1.5",
+    );
   });
 
-  it("a selected measure draws round end dots in its color and a bordered pill", () => {
+  it("a selected measure draws flat end bars across the line in its color and a bordered pill", () => {
     const { container } = renderMeasureLayer(makeScene([ruler], "m1"));
     const g = container.querySelector('[data-kind="measure"]');
     expect(g?.getAttribute("data-selected")).toBe("true");
     const dots = screen.getAllByTestId("resize-handle");
     expect(dots).toHaveLength(2);
     for (const d of dots) {
-      expect(d.tagName.toLowerCase()).toBe("circle");
-      expect(d.getAttribute("r")).toBe("5");
+      // A bar, not a dot: thin along the line, long across it (a horizontal measure here).
+      expect(d.tagName.toLowerCase()).toBe("rect");
+      expect(Number(d.getAttribute("width"))).toBeLessThan(Number(d.getAttribute("height")));
       expect(d.getAttribute("stroke")).toBe(ruler.color);
+      // The grab target stays at least as large as the old 10 px dot (a 12 px invisible square).
+      const hit = d.parentElement?.querySelector("rect:not([data-testid])");
+      expect(Number(hit?.getAttribute("width"))).toBeGreaterThanOrEqual(12);
+      expect(Number(hit?.getAttribute("height"))).toBeGreaterThanOrEqual(12);
     }
+    expect(g?.querySelector("circle")).toBeNull();
     expect(g?.querySelector("rect")?.getAttribute("stroke")).not.toBeNull();
   });
 
