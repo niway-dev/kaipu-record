@@ -321,7 +321,8 @@ no watermark are needed.
 
 ## 2. The overlay with an intent
 
-- Query gains `&intent=capture|record` (default `capture`), built by `overlayQuery`. The
+- Query gains `&intent=capture|record` (default `capture`), built by `overlaySpareQuery` (since NIW2-878 the intent also reaches a reused window as
+  state). The
   provider's `pick(ui, displays)` gains `intent` in its options; `CaptureOverlayWindows` forwards it.
 - `CaptureAction` becomes `"capture" | "copy" | "record" | "select"`. `OverlayAnswer` carries it
   as today; the overlay never captures or records (ADR 0022 decision 3).
