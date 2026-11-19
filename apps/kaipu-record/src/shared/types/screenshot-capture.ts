@@ -234,6 +234,12 @@ export type OverlayAnswer =
  * highlight the window under a pointer that has not moved over it yet.
  */
 export interface OverlayState {
+  /**
+   * The pick this state belongs to. A window is reused by many picks, so the renderer
+   * remounts on a new id (nothing of the last pick survives) and tags its answer with it.
+   * Absent from older senders.
+   */
+  session?: number;
   mode: CaptureMode;
   /**
    * Capture or record, as switched by any overlay (P / V or the switch). Main broadcasts it

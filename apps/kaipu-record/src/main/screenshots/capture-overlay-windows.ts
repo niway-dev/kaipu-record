@@ -189,6 +189,8 @@ type OverlayEntry = {
 type Spares = { key: string; entries: OverlayEntry[] };
 
 type PickSession = {
+  /** Counts picks; the renderer remounts on a new id, so a reused window starts clean. */
+  id: number;
   displays: Display[];
   displayIds: Set<number>;
   /** Set once the window lister has been asked; it is asked at most once per pick. */
@@ -214,36 +216,6 @@ function contains(bounds: Rectangle, point: { x: number; y: number }): boolean {
 
 function rectParam({ x, y, width, height }: Rectangle): string {
   return `${x},${y},${width},${height}`;
-}
-
-/**
- * The overlay's render-target query: everything the renderer needs to draw, so it never
- * has to ask main. `index` is 1-based among the picked displays; `bounds` and `work` are
- * the display's bounds and work area in DIP. `ids` lists every picked display in order,
- * so whichever overlay has keyboard focus can map the digit N to the N-th display.
- * `frame` (Frame only) is the display that starts with the frame, so each overlay paints
- * the right thing at once instead of waiting for the first state message. `internal=1`
- * marks the built-in display, which the Screen card labels "Built-in".
- */
-export function overlayQuery(
-  ui: OverlayUi,
-  display: Display,
-  index: number,
-  displayIds: readonly number[],
-  frameDisplayId: number | null = null,
-  intent: CaptureIntent = "capture",
-): string {
-  return (
-    `?window=capture-overlay&display=${display.id}&ui=${ui}` +
-    `&index=${index}&count=${displayIds.length}` +
-    `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
-    `&ids=${displayIds.join(",")}` +
-    (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "") +
-    (display.internal ? "&internal=1" : "") +
-    // Only the record intent is written: every screenshot query stays exactly as it was.
-    // The scale only feeds the record intent's size readout (device pixels).
-    (intent === "record" ? `&intent=record&scale=${display.scaleFactor}` : "")
-  );
 }
 
 /**
@@ -356,10 +328,12 @@ function parseAnswer(
  * `features/screenshots/overlay/`). It only ever answers "this rectangle / this window / this display"
  * or "cancelled"; the provider captures the pixels.
  *
- * The provider drives one session: `pick` → answer → `hideAll` → capture → `destroyAll`.
- * `pick` does not destroy the windows when it settles, so the dim sheet never flashes
- * off and back before the shot; a second `pick` before `destroyAll` answers `cancelled`
- * without touching the session in progress.
+ * The provider drives one session: `pick` → answer → `hideAll` → capture → `endPick`.
+ * `pick` does not hide or destroy the windows when it settles, so the dim sheet never flashes
+ * off and back before the shot; a second `pick` before `endPick` answers `cancelled`
+ * without touching the session in progress. `endPick` keeps the windows, hidden, as the next
+ * pick's (the same as the warm-up's spares); only a change of displays, language or theme, or
+ * a broken window, makes the next pick load new ones.
  *
  * On macOS each overlay is a `panel` at the screen-saver level, so it floats over a
  * full-screen app on the Space the user is on, and it joins every Space only while it is
@@ -393,6 +367,13 @@ export class CaptureOverlayWindows implements OverlayPort {
   private lastIntent: CaptureIntent | null = null;
   /** `dispose()` ran: the app is quitting, so no window is loaded again. */
   private disposed = false;
+  /** The last pick's id; every pick gets the next one. */
+  private lastSessionId = 0;
+  /**
+   * The displays, language or theme changed while a pick was open: its windows were laid out
+   * or loaded for the old ones, so they are destroyed at the end instead of kept.
+   */
+  private keptStale = false;
   /**
    * True while the overlay runs its own recording countdown: Esc then belongs to the
    * renderer (it cancels only the countdown). Reset on every session start and end.
@@ -419,7 +400,9 @@ export class CaptureOverlayWindows implements OverlayPort {
     const ui: OverlayUi = this.deps.enabledModes.includes(requested) ? requested : "frame";
 
     return new Promise<OverlayAnswer>((resolve) => {
+      this.keptStale = false;
       this.session = {
+        id: ++this.lastSessionId,
         displays,
         displayIds: new Set(displays.map((display) => display.id)),
         windowsRequested: false,
@@ -436,10 +419,9 @@ export class CaptureOverlayWindows implements OverlayPort {
       // Keyboard focus (Esc, Enter, 1/2/3): the Frame's Enter only works in the window
       // that holds the frame, so there focus follows the frame, not the pointer.
       this.focusDisplayId = this.frameDisplayId ?? displays[Math.max(0, underCursor)].id;
-      const queries = this.queriesFor(ui, displays, frameDisplayId, intent);
-      // Spares loaded for the same displays are used as they are, whatever the mode, intent or
-      // frame display: those reach them as state. Any others (the displays changed) are
-      // thrown away, and this pick loads its own as it always did.
+      // Windows kept or loaded ahead for the same displays are used as they are, whatever the
+      // mode, intent or frame display: those reach them as state. Any others (the displays
+      // changed) are thrown away, and this pick loads its own.
       const spares = this.spares;
       this.spares = null;
       if (spares && spares.key === this.spareQueries(displays).join("|")) {
@@ -448,6 +430,7 @@ export class CaptureOverlayWindows implements OverlayPort {
       } else {
         markRecordTiming("overlay loaded fresh");
         this.destroySpares(spares);
+        const queries = this.spareQueries(displays);
         displays.forEach((display, index) => {
           this.entries.push(this.createOverlay(display, queries[index]!));
         });
@@ -479,6 +462,8 @@ export class CaptureOverlayWindows implements OverlayPort {
 
   /** Throw the spares away and load them again (the next pick changed: mode, language). */
   refreshSpares(): void {
+    // An open pick's windows are not spares yet, but they would be kept when it ends.
+    if (this.session) this.keptStale = true;
     if (!this.spares) return;
     this.destroySpares(this.spares);
     this.spares = null;
@@ -500,18 +485,6 @@ export class CaptureOverlayWindows implements OverlayPort {
     const frame =
       displays[underCursor] ?? displays.find((display) => display.id === primary) ?? displays[0];
     return { frameDisplayId: frame!.id, underCursor };
-  }
-
-  private queriesFor(
-    ui: OverlayUi,
-    displays: Display[],
-    frameDisplayId: number | null,
-    intent: CaptureIntent,
-  ): string[] {
-    const displayIds = displays.map((display) => display.id);
-    return displays.map((display, index) =>
-      overlayQuery(ui, display, index + 1, displayIds, frameDisplayId, intent),
-    );
   }
 
   /** What the spares of `displays` load: independent of mode, intent and frame (`overlaySpareQuery`). */
@@ -573,6 +546,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     if (!spares?.entries.includes(entry)) return;
     this.spares = null;
     this.destroySpares(spares);
+    this.scheduleWarm(this.deps.warmDelayMs);
   }
 
   hideAll(): Promise<void> {
@@ -675,18 +649,40 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.answer({ kind: "cancelled" });
   }
 
+  /**
+   * End the pick session and keep its windows for the next one (NIW2-878): hidden, out of
+   * every Space, and told to forget the pick, so the next press shows them at once instead of
+   * waiting for a reload. The windows are destroyed instead when they cannot serve a later pick:
+   * the app is quitting, a window went away, or the displays, language or theme changed under
+   * the pick. Safe to call with no pick open.
+   */
+  endPick(): void {
+    const keep =
+      !this.disposed &&
+      !this.keptStale &&
+      this.session !== null &&
+      !this.spares &&
+      this.entries.length > 0 &&
+      this.entries.every(({ window }) => !window.isDestroyed());
+    if (!keep) {
+      this.destroyAll();
+      return;
+    }
+    const { entries, session } = this.closeSession();
+    for (const { window } of entries) {
+      window.hide();
+      this.setSpaceBehavior(window, false);
+      // The renderer drops the pick it showed, so a stale frame never flashes on the next one.
+      window.webContents.send(IPC_CHANNELS.screenshotOverlayReset);
+    }
+    this.spares = { key: this.spareQueries(session!.displays).join("|"), entries };
+    this.hiddenWait?.finish();
+    session!.settle?.({ kind: "cancelled" });
+  }
+
+  /** Destroy every window of the pick and schedule new spares: the pick cannot be reused. */
   destroyAll(): void {
-    const entries = this.entries;
-    this.entries = [];
-    const session = this.session;
-    this.session = null;
-    this.counting = false;
-    if (session) this.lastIntent = this.intent;
-    this.hoverDisplayId = null;
-    this.frameDisplayId = null;
-    this.focusDisplayId = null;
-    this.windows = null;
-    if (session?.watchdog) clearTimeout(session.watchdog);
+    const { entries, session } = this.closeSession();
     for (const { window } of entries) {
       if (!window.isDestroyed()) window.destroy();
     }
@@ -694,6 +690,23 @@ export class CaptureOverlayWindows implements OverlayPort {
     session?.settle?.({ kind: "cancelled" });
     // The next pick's windows load once this one's shot or take is under way.
     this.scheduleWarm(this.deps.warmDelayMs);
+  }
+
+  /** Clear everything the open pick owned except its windows, which the caller disposes of. */
+  private closeSession(): { entries: OverlayEntry[]; session: PickSession | null } {
+    const entries = this.entries;
+    this.entries = [];
+    const session = this.session;
+    this.session = null;
+    this.counting = false;
+    this.keptStale = false;
+    if (session) this.lastIntent = this.intent;
+    this.hoverDisplayId = null;
+    this.frameDisplayId = null;
+    this.focusDisplayId = null;
+    this.windows = null;
+    if (session?.watchdog) clearTimeout(session.watchdog);
+    return { entries, session };
   }
 
   /** One overlay window for `display`, loading `query`; shown once it paints and a pick is open. */
@@ -825,6 +838,7 @@ export class CaptureOverlayWindows implements OverlayPort {
 
   private sendState(window: OverlayWindow): void {
     const state: OverlayState = {
+      session: this.session?.id ?? 0,
       mode: this.mode,
       intent: this.intent,
       hoverDisplayId: this.hoverDisplayId,
@@ -892,6 +906,9 @@ export class CaptureOverlayWindows implements OverlayPort {
 
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayAnswer, (event, payload) => {
       if (!this.session?.settle || !this.ownsSender(event)) return;
+      // A window kept from the previous pick may still be answering it: drop that.
+      const from = (payload as { session?: unknown } | undefined)?.session;
+      if (from !== undefined && from !== this.session.id) return;
       const answer = parseAnswer(payload, this.session.displayIds, this.windows);
       if (answer) this.answer(answer);
     });

@@ -567,6 +567,8 @@ export const IPC_CHANNELS = {
   // A spare learns its mode and intent only from state, and one sent before its listener
   // was attached (a spare still loading when its pick opened) is lost.
   screenshotOverlayStateRequest: "screenshot:overlay-state-request",
+  /** Main → a window kept for the next pick: forget the pick it showed and paint nothing. */
+  screenshotOverlayReset: "screenshot:overlay-reset",
   // Capture toast (main/screenshots/capture-toast-window.ts), shown after a quiet capture.
   // Main → toast: `CaptureToastPayload` to render; sent again with `saved` after Save.
   screenshotToastShow: "screenshot:toast-show",

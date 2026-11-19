@@ -17,7 +17,7 @@ import {
 const overlay: OverlayPort = {
   pick: async () => ({ kind: "cancelled" }),
   hideAll: async () => {},
-  destroyAll: () => {},
+  endPick: () => {},
 };
 
 // Copying manual by default, so a Capture touches the clipboard only when a test asks.

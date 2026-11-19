@@ -146,7 +146,7 @@ const overlay: OverlayPort = {
     return answer;
   },
   hideAll: async () => overlayWindows?.hideAll(),
-  destroyAll: () => overlayWindows?.destroyAll(),
+  endPick: () => overlayWindows?.endPick(),
 };
 
 /** Whether the capture selector is up waiting for the user to pick. */

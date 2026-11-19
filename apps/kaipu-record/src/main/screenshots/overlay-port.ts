@@ -15,11 +15,14 @@ export interface OverlayPort {
   /**
    * Hide every overlay and resolve once they are off screen: hidden, one tick, and one
    * renderer animation frame (or a short cap). The backend captures only after this
-   * resolves, so no overlay ends up in the shot. `pick` never hides or destroys on its own.
+   * resolves, so no overlay ends up in the shot. `pick` never hides or ends the session on its own.
    */
   hideAll(): Promise<void>;
-  /** Destroy every overlay and end the pick session. Safe to call more than once. */
-  destroyAll(): void;
+  /**
+   * End the pick session. The overlays leave the screen and are kept hidden for the next pick
+   * when they still fit the displays (destroyed otherwise). Safe to call more than once.
+   */
+  endPick(): void;
 }
 
 /**

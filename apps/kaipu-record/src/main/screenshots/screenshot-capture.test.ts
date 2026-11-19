@@ -21,7 +21,7 @@ const MODES: CaptureMode[] = ["frame", "window", "screen"];
 const overlay: OverlayPort = {
   pick: vi.fn(async () => ({ kind: "cancelled" as const })),
   hideAll: vi.fn(async () => {}),
-  destroyAll: vi.fn(),
+  endPick: vi.fn(),
 };
 
 describe("MacProvider", () => {
@@ -64,8 +64,8 @@ describe("MacProvider", () => {
         hideAll: vi.fn(async () => {
           log.push("hideAll");
         }),
-        destroyAll: vi.fn(() => {
-          log.push("destroyAll");
+        endPick: vi.fn(() => {
+          log.push("endPick");
         }),
       };
       runCli = vi.fn(async (_cmd, args) => {
@@ -101,7 +101,7 @@ describe("MacProvider", () => {
           "settle",
           "hideAll",
           "runCli:-R -1920,0,1920,1080 -x /tmp/x.png",
-          "destroyAll",
+          "endPick",
         ]);
       });
 
@@ -165,7 +165,7 @@ describe("MacProvider", () => {
         });
         expect(fake.pick).not.toHaveBeenCalled();
         expect(fake.hideAll).not.toHaveBeenCalled();
-        expect(fake.destroyAll).not.toHaveBeenCalled();
+        expect(fake.endPick).not.toHaveBeenCalled();
         expect(runCli).toHaveBeenCalledWith("screencapture", ["-R", region, "-x", "/tmp/x.png"]);
         expect(out).toMatchObject({ kind: "captured", mode, action: "capture" });
       },
@@ -201,7 +201,7 @@ describe("MacProvider", () => {
         "hideAll",
         "settle",
         "runCli:-R 0,0,1440,900 -x /tmp/x.png",
-        "destroyAll",
+        "endPick",
       ]);
       expect(out).toEqual({ kind: "captured", png: PNG, mode: "screen", action: "capture" });
     });
@@ -211,7 +211,7 @@ describe("MacProvider", () => {
       const out = await macProvider().capture({ mode: "screen", overlay: fake });
       expect(out).toEqual({ kind: "cancelled" });
       expect(runCli).not.toHaveBeenCalled();
-      expect(log).toEqual(["pick:screen", "destroyAll"]);
+      expect(log).toEqual(["pick:screen", "endPick"]);
     });
 
     it("one display waits for the settle delay after the answer before running screencapture", async () => {
@@ -235,7 +235,7 @@ describe("MacProvider", () => {
         "hideAll",
         "settle",
         "runCli:-R -1920,0,1920,1080 -x /tmp/x.png",
-        "destroyAll",
+        "endPick",
       ]);
       expect(out.kind).toBe("captured");
     });
@@ -251,7 +251,7 @@ describe("MacProvider", () => {
         answer = { kind: "rect", mode: "frame", action, displayId: 2, rect };
         const out = await macProvider().capture({ mode: "frame", overlay: fake, intent: "record" });
         expect(fake.pick).toHaveBeenCalledWith("frame", displays, "record");
-        expect(log).toEqual(["pick:frame", "destroyAll"]);
+        expect(log).toEqual(["pick:frame", "endPick"]);
         expect(out).toEqual({ kind: "record", start, displayId: 2, rect });
       },
     );
@@ -317,12 +317,7 @@ describe("MacProvider", () => {
       const out = await macProvider().capture({ mode: "screen", overlay: fake, intent: "instant" });
       expect(fake.pick).not.toHaveBeenCalled();
       expect(out).toEqual({ kind: "captured", png: PNG, mode: "screen", action: "capture" });
-      expect(log).toEqual([
-        "settle",
-        "hideAll",
-        "runCli:-R 0,0,1440,900 -x /tmp/x.png",
-        "destroyAll",
-      ]);
+      expect(log).toEqual(["settle", "hideAll", "runCli:-R 0,0,1440,900 -x /tmp/x.png", "endPick"]);
     });
 
     it("frame converts the display-relative rect to global DIP", async () => {
@@ -340,7 +335,7 @@ describe("MacProvider", () => {
         "hideAll",
         "settle",
         "runCli:-R -1820,50,640,360 -x /tmp/x.png",
-        "destroyAll",
+        "endPick",
       ]);
       expect(out).toEqual({ kind: "captured", png: PNG, mode: "frame", action: "capture" });
     });
@@ -362,7 +357,7 @@ describe("MacProvider", () => {
       expect(await macProvider().capture({ mode: "screen", overlay: fake })).toEqual({
         kind: "cancelled",
       });
-      expect(log).toEqual(["pick:screen", "destroyAll"]);
+      expect(log).toEqual(["pick:screen", "endPick"]);
     });
 
     it("a missing file after screencapture answers cancelled", async () => {
@@ -370,7 +365,7 @@ describe("MacProvider", () => {
       expect(await macProvider().capture({ mode: "screen", overlay: fake })).toEqual({
         kind: "cancelled",
       });
-      expect(log.at(-1)).toBe("destroyAll");
+      expect(log.at(-1)).toBe("endPick");
     });
 
     describe("capturing by the overlay's answer, not the requested mode", () => {
@@ -426,7 +421,7 @@ describe("MacProvider", () => {
             "hideAll",
             "settle",
             "runCli:-l 77 -o -x /tmp/x.png",
-            "destroyAll",
+            "endPick",
           ]);
           expect(out).toEqual({ kind: "captured", png: PNG, mode: "window", action: "capture" });
         });
@@ -455,7 +450,7 @@ describe("MacProvider", () => {
             "-R 1540,50,640,360 -x /tmp/x.png",
           ]);
           expect(out).toEqual({ kind: "captured", png: PNG, mode: "window", action: "capture" });
-          expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+          expect(fake.endPick).toHaveBeenCalledTimes(1);
         });
 
         it("a -l grab that exits 0 without a file also retries with -R", async () => {
@@ -476,7 +471,7 @@ describe("MacProvider", () => {
           const out = await macProvider().capture({ mode: "window", overlay: fake });
           expect(out).toEqual({ kind: "cancelled" });
           expect(runCli).toHaveBeenCalledTimes(2);
-          expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+          expect(fake.endPick).toHaveBeenCalledTimes(1);
         });
       });
 
@@ -497,7 +492,7 @@ describe("MacProvider", () => {
       await expect(macProvider().capture({ mode: "screen", overlay: fake })).rejects.toThrow(
         "boom",
       );
-      expect(log).toEqual(["pick:screen", "hideAll", "settle", "runCli", "destroyAll"]);
+      expect(log).toEqual(["pick:screen", "hideAll", "settle", "runCli", "endPick"]);
     });
 
     it("destroys the overlay when pick itself throws", async () => {
@@ -506,7 +501,7 @@ describe("MacProvider", () => {
         throw new Error("renderer crashed");
       });
       await expect(macProvider().capture({ mode: "frame", overlay: fake })).rejects.toThrow();
-      expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+      expect(fake.endPick).toHaveBeenCalledTimes(1);
     });
 
     it("waits for the settle delay after hideAll before running screencapture", async () => {
@@ -534,7 +529,7 @@ describe("MacProvider", () => {
         kind: "cancelled",
       });
       expect(runCli).not.toHaveBeenCalled();
-      expect(log.at(-1)).toBe("destroyAll");
+      expect(log.at(-1)).toBe("endPick");
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("display 2"));
     });
   });
@@ -597,8 +592,8 @@ describe("WindowsProvider", () => {
       hideAll: vi.fn(async () => {
         log.push("hideAll");
       }),
-      destroyAll: vi.fn(() => {
-        log.push("destroyAll");
+      endPick: vi.fn(() => {
+        log.push("endPick");
       }),
     };
   });
@@ -640,7 +635,7 @@ describe("WindowsProvider", () => {
     const out = await provider().capture({ mode: "screen", overlay: fake, intent: "instant" });
     expect(fake.pick).not.toHaveBeenCalled();
     expect(out).toEqual({ kind: "captured", png: PNG("one"), mode: "screen", action: "capture" });
-    expect(log).toEqual(["settle", "hideAll", "getSources", "destroyAll"]);
+    expect(log).toEqual(["settle", "hideAll", "getSources", "endPick"]);
   });
 
   it("frame: pick, hide, capture, destroy, in that order, cropped in physical pixels", async () => {
@@ -652,7 +647,7 @@ describe("WindowsProvider", () => {
       rect: { x: 100, y: 50, width: 640, height: 360 },
     };
     const out = await provider().capture({ mode: "frame", overlay: fake });
-    expect(log).toEqual(["pick:frame", "hideAll", "settle", "getSources", "destroyAll"]);
+    expect(log).toEqual(["pick:frame", "hideAll", "settle", "getSources", "endPick"]);
     expect(crops).toEqual([{ x: 100, y: 50, width: 640, height: 360 }]);
     expect(out).toEqual({
       kind: "captured",
@@ -766,7 +761,7 @@ describe("WindowsProvider", () => {
       sources = [];
       const out = await windowsProvider().capture({ mode: "window", overlay: fake });
       expect(out).toEqual({ kind: "cancelled" });
-      expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+      expect(fake.endPick).toHaveBeenCalledTimes(1);
     });
 
     it("a window spanning two displays: by-id returns the whole thumbnail untouched", async () => {
@@ -865,7 +860,7 @@ describe("WindowsProvider", () => {
     answer = { kind: "display", mode: "screen", action: "capture", displayId: 1 };
     const out = await provider().capture({ mode: "screen", overlay: fake });
     expect(fake.pick).toHaveBeenCalledWith("screen", [primary]);
-    expect(log).toEqual(["pick:screen", "hideAll", "settle", "getSources", "destroyAll"]);
+    expect(log).toEqual(["pick:screen", "hideAll", "settle", "getSources", "endPick"]);
     expect(out).toEqual({ kind: "captured", png: PNG("one"), mode: "screen", action: "capture" });
   });
 
@@ -891,7 +886,7 @@ describe("WindowsProvider", () => {
     expect(await provider().capture({ mode: "screen", overlay: fake })).toEqual({
       kind: "cancelled",
     });
-    expect(log).toEqual(["pick:screen", "hideAll", "settle", "destroyAll"]);
+    expect(log).toEqual(["pick:screen", "hideAll", "settle", "endPick"]);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("display 2"));
   });
 
@@ -903,7 +898,7 @@ describe("WindowsProvider", () => {
       kind: "cancelled",
     });
     expect(warn).toHaveBeenCalled();
-    expect(log.at(-1)).toBe("destroyAll");
+    expect(log.at(-1)).toBe("endPick");
   });
 
   it("an empty thumbnail is not a match: cancelled with a warning, nothing cropped", async () => {
@@ -915,7 +910,7 @@ describe("WindowsProvider", () => {
     });
     expect(warn).toHaveBeenCalled();
     expect(crops).toEqual([]);
-    expect(log.at(-1)).toBe("destroyAll");
+    expect(log.at(-1)).toBe("endPick");
   });
 
   it("an image reporting isEmpty() is not a match even with a size", async () => {
@@ -935,7 +930,7 @@ describe("WindowsProvider", () => {
     expect(await provider().capture({ mode: "frame", overlay: fake })).toEqual({
       kind: "cancelled",
     });
-    expect(log).toEqual(["pick:frame", "destroyAll"]);
+    expect(log).toEqual(["pick:frame", "endPick"]);
   });
 
   it("destroys the overlay and rethrows when getSources throws", async () => {
@@ -948,7 +943,7 @@ describe("WindowsProvider", () => {
       settle,
     });
     await expect(throwing.capture({ mode: "screen", overlay: fake })).rejects.toThrow("boom");
-    expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+    expect(fake.endPick).toHaveBeenCalledTimes(1);
   });
 });
 
