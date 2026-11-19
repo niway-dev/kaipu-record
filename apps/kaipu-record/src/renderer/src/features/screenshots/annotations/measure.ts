@@ -4,6 +4,7 @@
  */
 import { baseFullRect, type BasePlacement, type MeasureAnnotation } from "./scene";
 import { stepInk } from "./tools";
+import { RULER_HALO_PX, RULER_STROKE_PX, RULER_TICK_PX } from "../ruler-line";
 
 export interface NormPt {
   x: number;
@@ -92,9 +93,10 @@ export function moveMeasure(
 /** Base label font and tick geometry, in display px; the export multiplies them by its scale. */
 export const MEASURE_FONT_PX = 12;
 export const MEASURE_FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-export const MEASURE_TICK_PX = 6;
-/** Line and end-cap stroke, in display px: a width indicator is a hairline, not a drawing stroke. */
-export const MEASURE_STROKE_PX = 1.5;
+/** The pinned measure draws exactly the Inspect hover line: same caps, stroke and outline. */
+export const MEASURE_TICK_PX = RULER_TICK_PX;
+export const MEASURE_STROKE_PX = RULER_STROKE_PX;
+export const MEASURE_HALO_PX = RULER_HALO_PX;
 const PILL_PAD_X = 6;
 const PILL_PAD_Y = 3;
 const PILL_GAP = 4;

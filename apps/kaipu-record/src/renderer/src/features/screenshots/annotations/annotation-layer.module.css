@@ -125,14 +125,8 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
-/* Selected measure: a flat white bar across each end with a 1 px border in the measure's color
-   (set inline) and a faint dark ring; the halo sits under every measure on screen. */
-.measureCap {
-  fill: var(--ie-ink-light);
-  stroke-width: 1;
-  paint-order: stroke;
-}
-
+/* A selected measure's end: an invisible grab target over the ruler cap; the halo under the
+   line is Inspect's soft white outline (widths come from ruler-line.ts). */
 .measureCapHit {
   fill: transparent;
   stroke: none;

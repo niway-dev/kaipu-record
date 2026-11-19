@@ -3,6 +3,7 @@ import { intersectFrame, worldToFrame } from "./canvas-geometry";
 import { assertExportSize, buildSvg, compositeSceneAt, frameWindow, type Geom } from "./compositor";
 import { MAX_EXPORT_SIDE } from "./canvas-geometry";
 import { TEXT_SIZES } from "./tools";
+import { RULER_HALO_PX, RULER_STROKE_PX, RULER_TICK_PX } from "../ruler-line";
 import type { Annotation, Scene } from "./scene";
 
 const geom: Geom = {
@@ -661,6 +662,34 @@ describe("compositor buildSvg - measure (NIW2-702)", () => {
     expect(svg).toContain(">40 px</text>");
     // Font 12 px scaled by geom.scale (2).
     expect(svg).toMatch(/font-size="24"/);
+  });
+
+  it("draws Inspect's line at the export scale: stroke, outline and caps, never a hairline", () => {
+    const svg = buildSvg(
+      scene([
+        {
+          id: "m",
+          kind: "measure",
+          axis: "x",
+          from: 100,
+          to: 140,
+          at: 299,
+          imageW: 1000,
+          imageH: 600,
+          color: "#ff0000",
+        },
+      ]),
+      geom,
+    );
+    const k = geom.scale;
+    expect(k).toBe(2);
+    expect(svg).toContain(`stroke="#ff0000" stroke-width="${RULER_STROKE_PX * k}"`);
+    expect(svg).toContain(`stroke-width="${RULER_HALO_PX * k}" data-measure-halo=""`);
+    // The vertical caps are 2 * RULER_TICK_PX * scale long, at both ends.
+    const t = RULER_TICK_PX * k;
+    expect(svg).toContain(`x1="100" y1="${299.5 - t}" x2="100" y2="${299.5 + t}"`);
+    expect(svg).toContain(`x1="140" y1="${299.5 - t}" x2="140" y2="${299.5 + t}"`);
+    expect(svg).not.toContain("stroke-linecap");
   });
 });
 

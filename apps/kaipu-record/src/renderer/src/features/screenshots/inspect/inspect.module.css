@@ -297,14 +297,12 @@
 /* The white halo under the accent line, so it reads on light and dark pixels alike. */
 .rulerHalo {
   stroke: var(--ie-ink-light);
-  stroke-opacity: 0.9;
-  stroke-width: 3.5;
+  stroke-opacity: 0.9; /* widths are attributes from ruler-line.ts */
   shape-rendering: crispEdges;
 }
 
 .rulerLine {
   stroke: var(--ie-accent);
-  stroke-width: 1.5;
   shape-rendering: crispEdges;
 }
 

@@ -26,8 +26,8 @@ import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import {
   MEASURE_FONT,
+  MEASURE_HALO_PX,
   MEASURE_STROKE_PX,
-  MEASURE_TICK_PX,
   measureEndpoints,
   measureLabel,
   measureShape,
@@ -112,11 +112,6 @@ type Drag =
 
 /** How far from a word, in display px, a press still starts a selection on it. */
 const TEXT_HIT_PX = 6;
-
-/** A selected measure's end cap: a flat bar across the line, as long as the I-beam ticks plus a
- *  pixel each side, and this thick along it. */
-const MEASURE_CAP_LEN = MEASURE_TICK_PX * 2 + 2;
-const MEASURE_CAP_THICK = 3;
 
 /** Side of a resize handle in px, and the click tolerance around it. */
 const HANDLE_PX = 10;
@@ -1354,33 +1349,22 @@ function Handles({
 }): React.JSX.Element {
   const { w: W, h: H } = size;
   if (a.kind === "measure") {
-    // Flat bars across the line (like the I-beam ticks) in the measure's own color, white
-    // inside. The invisible square keeps the grab target as large as the old dot's; the hit
-    // test itself is geometric.
-    const horizontal = a.axis === "x";
-    const capW = horizontal ? MEASURE_CAP_THICK : MEASURE_CAP_LEN;
-    const capH = horizontal ? MEASURE_CAP_LEN : MEASURE_CAP_THICK;
+    // The visible ends are the ruler's own caps, always drawn by the line (the same caps as
+    // Inspect's hover). Selected, each end only adds an invisible square as large as the old
+    // dot, so the grab target stays easy to hit; the hit test itself is geometric.
     return (
       <g>
         {handlesFor(a, size, placement).map((h) => (
-          <g key={h.id} style={{ cursor: handleCursor(h.id) }}>
-            <rect
-              className={styles.measureCapHit}
-              x={h.x * W - HANDLE_HIT_PX / 2}
-              y={h.y * H - HANDLE_HIT_PX / 2}
-              width={HANDLE_HIT_PX}
-              height={HANDLE_HIT_PX}
-            />
-            <rect
-              data-testid="resize-handle"
-              className={styles.measureCap}
-              x={h.x * W - capW / 2}
-              y={h.y * H - capH / 2}
-              width={capW}
-              height={capH}
-              stroke={a.color}
-            />
-          </g>
+          <rect
+            key={h.id}
+            data-testid="resize-handle"
+            className={styles.measureCapHit}
+            style={{ cursor: handleCursor(h.id) }}
+            x={h.x * W - HANDLE_HIT_PX / 2}
+            y={h.y * H - HANDLE_HIT_PX / 2}
+            width={HANDLE_HIT_PX}
+            height={HANDLE_HIT_PX}
+          />
         ))}
       </g>
     );
@@ -1615,20 +1599,20 @@ const Shape = React.memo(function Shape({
         data-measure-length={a.to - a.from}
         data-selected={selected ? "true" : undefined}
       >
-        {/* On-screen only: a white halo under the line keeps it readable on any image. The export
+        {/* On-screen only: the soft white outline under the line, exactly Inspect's. The export
             draws its own measures (compositor), so it never sees this. */}
         <g
           data-measure-halo=""
           className={styles.measureHalo}
-          strokeWidth={sw + 2}
-          strokeLinecap="round"
+          strokeWidth={MEASURE_HALO_PX}
+          shapeRendering="crispEdges"
         >
           <line x1={s.p1.x} y1={s.p1.y} x2={s.p2.x} y2={s.p2.y} />
           {s.ticks.map((t, i) => (
             <line key={i} x1={t[0]} y1={t[1]} x2={t[2]} y2={t[3]} />
           ))}
         </g>
-        <g stroke={a.color} strokeWidth={sw} strokeLinecap="round">
+        <g stroke={a.color} strokeWidth={sw} shapeRendering="crispEdges">
           <line x1={s.p1.x} y1={s.p1.y} x2={s.p2.x} y2={s.p2.y} />
           {s.ticks.map((t, i) => (
             <line key={i} x1={t[0]} y1={t[1]} x2={t[2]} y2={t[3]} />

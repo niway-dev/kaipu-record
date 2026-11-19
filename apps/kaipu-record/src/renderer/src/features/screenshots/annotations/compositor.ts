@@ -3,6 +3,7 @@ import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import {
   MEASURE_FONT,
+  MEASURE_HALO_PX,
   MEASURE_STROKE_PX,
   measureLabel,
   measureShape,
@@ -661,17 +662,19 @@ function annotationSvg(
   }
   if (a.kind === "measure") {
     const s = measureShape(a, W, H, scale, placement);
+    // The same look as Inspect's hover line, in output px: its stroke, caps and white outline,
+    // multiplied by the export scale so a 2x capture keeps the on-screen proportions.
     const sw = MEASURE_STROKE_PX * scale;
-    const ticks = s.ticks
-      .map(
-        (t) =>
-          `<line x1="${t[0]}" y1="${t[1]}" x2="${t[2]}" y2="${t[3]}" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round"/>`,
-      )
-      .join("");
+    const hw = MEASURE_HALO_PX * scale;
+    const segs: [number, number, number, number][] = [[s.p1.x, s.p1.y, s.p2.x, s.p2.y], ...s.ticks];
+    const draw = (attrs: string): string =>
+      segs
+        .map(([x1, y1, x2, y2]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${attrs}/>`)
+        .join("");
     return (
       `<g data-kind="measure">` +
-      `<line x1="${s.p1.x}" y1="${s.p1.y}" x2="${s.p2.x}" y2="${s.p2.y}" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round"/>` +
-      ticks +
+      draw(`stroke="#fff" stroke-opacity="0.9" stroke-width="${hw}" data-measure-halo=""`) +
+      draw(`stroke="${a.color}" stroke-width="${sw}"`) +
       `<rect x="${s.pill.x}" y="${s.pill.y}" width="${s.pill.w}" height="${s.pill.h}" rx="${s.pill.rx}" fill="${a.color}"/>` +
       `<text x="${s.text.x}" y="${s.text.y}" fill="${measureTextColor(a.color)}" font-family="${MEASURE_FONT}" font-size="${s.text.fontSize}" font-weight="600" text-anchor="middle" dominant-baseline="central">${escapeXml(measureLabel(a))}</text>` +
       `</g>`
