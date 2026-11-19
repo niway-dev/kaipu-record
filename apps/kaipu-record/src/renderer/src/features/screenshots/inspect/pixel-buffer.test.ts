@@ -219,6 +219,17 @@ describe("the visible pixel window of a cropped base (NIW2-876, AC2)", () => {
     });
   });
 
+  it("a partly visible pixel counts at both edges, so a pointer on its sliver reads it", () => {
+    // 10 px wide, crop 2.4 .. 7.4: pixel 2 shows 60% and pixel 7 shows 40%.
+    const buf = wide();
+    const crop = { x: 0.24, y: 0, w: 0.5, h: 1 };
+    expect(visiblePixelWindow(buf, crop)).toMatchObject({ x0: 2, x1: 8 });
+    const anchor = { left: 0, top: 0, width: 100, height: 40 };
+    // Display x 26 is on the visible sliver of pixel 2 (it starts at 24).
+    expect(clientToBasePixel(26, 5, anchor, buf, { baseCrop: crop })).toEqual({ x: 2, y: 0 });
+    expect(clientToBasePixel(15, 5, anchor, buf, { baseCrop: crop })).toBeNull();
+  });
+
   it("sampleAt reads nothing outside the window", () => {
     const buf = wide();
     const win = visiblePixelWindow(buf, { x: 0.2, y: 0, w: 0.5, h: 1 });

@@ -29,8 +29,8 @@ const WINDOW_EDGE_EPS = 1e-6;
 
 /**
  * The window of `buf` that the base's `baseCrop` shows (0-1 of the asset): the whole image
- * without a crop. A pixel shows when its left and top edges are inside the crop, as in
- * `clientToBasePixel`. A crop that is not a real window gives an empty window, so nothing is
+ * without a crop. A pixel shows when any part of it is inside the crop: the rendered and exported
+ * base draws a partly covered edge pixel too, and `clientToBasePixel` reads it. A crop that is not a real window gives an empty window, so nothing is
  * read from an image whose visible part cannot be told.
  */
 export function visiblePixelWindow(
@@ -41,14 +41,19 @@ export function visiblePixelWindow(
   if (![crop.x, crop.y, crop.w, crop.h].every(Number.isFinite) || crop.w <= 0 || crop.h <= 0) {
     return { x0: 0, y0: 0, x1: 0, y1: 0 };
   }
-  // `ceil` of an edge that float noise put a hair past a pixel boundary must not skip a pixel.
-  const edge = (fraction: number, side: number): number =>
-    Math.min(side, Math.max(0, Math.ceil(fraction * side - WINDOW_EDGE_EPS)));
+  // A pixel the crop only partly covers still shows, at either edge, so the window rounds the
+  // start down and the end up. An edge that float noise put a hair past a pixel boundary must
+  // not take in or skip a pixel.
+  const clamp = (v: number, side: number): number => Math.min(side, Math.max(0, v));
+  const start = (fraction: number, side: number): number =>
+    clamp(Math.floor(fraction * side + WINDOW_EDGE_EPS), side);
+  const end = (fraction: number, side: number): number =>
+    clamp(Math.ceil(fraction * side - WINDOW_EDGE_EPS), side);
   return {
-    x0: edge(crop.x, buf.width),
-    y0: edge(crop.y, buf.height),
-    x1: edge(crop.x + crop.w, buf.width),
-    y1: edge(crop.y + crop.h, buf.height),
+    x0: start(crop.x, buf.width),
+    y0: start(crop.y, buf.height),
+    x1: end(crop.x + crop.w, buf.width),
+    y1: end(crop.y + crop.h, buf.height),
   };
 }
 
