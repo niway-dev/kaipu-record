@@ -508,12 +508,16 @@ export const UI_MAP = {
         gatedBy: [{ flag: "image-canvas" }],
       },
       // Per-image crop mode (NIW2-853): the whole asset dimmed, and the crop window with its
-      // white L corners, edge bars and thirds grid (NIW2-876), entered by a double-click on the
-      // image's own pixels or by Crop in the action bar.
+      // pink L corners, edge bars and thirds grid (NIW2-876), entered by a double-click on the
+      // image's own pixels or by choosing Crop in the action bar.
       imageCropMode: { states: ["active"], gatedBy: [{ flag: "image-canvas" }] },
-      // The floating bar over a selected image, base or added (NIW2-876): Crop, Corners and
-      // Reset. `cropped` is an image with a crop, where Reset is enabled.
-      imageActionBar: { states: ["shown", "cropped"], gatedBy: [{ flag: "image-canvas" }] },
+      // The floating bar over a selected image, base or added (NIW2-876): the Move | Crop mode
+      // control, Corners and Reset. `cropped` is an image with a crop, where Reset is enabled.
+      // `cropMode` is the bar while crop mode is open: Crop is the checked mode, and Move leaves.
+      imageActionBar: {
+        states: ["shown", "cropped", "cropMode"],
+        gatedBy: [{ flag: "image-canvas" }],
+      },
       redactionLock: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       redactionNotice: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       // Inspect mode (NIW2-699): the toolbar button, the floating bar and the loupe chip.

@@ -917,13 +917,23 @@ function AnnotationLayerImpl({
     return gapMeasures(world(selectedImage), others);
   }, [selectedImage, natural, shown, baseCrop, basePlacement]);
 
-  // The floating action bar (NIW2-876): Crop, Corners and Reset over the selected image. It
-  // needs the crop handlers (absent in Inspect, where the image is read, not edited), and it
-  // steps out of the way while the image is pressed, moved or resized and in crop mode.
-  const actionState =
-    selectedImage && onEnterCrop && onResetCrop && onImageRadius && !gesturing && !cropping
-      ? imageActionState(selectedImage.id, scene.annotations, base, natural)
+  // The floating action bar (NIW2-876): Move | Crop, Corners and Reset over the selected image.
+  // It needs the crop handlers (absent in Inspect, where the image is read, not edited), and it
+  // steps out of the way while the image is pressed, moved or resized. In crop mode it stays,
+  // over the crop window, with Crop checked: Move is how the bar leaves crop mode.
+  const barId = cropping ? cropping.id : selectedImage && !gesturing ? selectedImage.id : null;
+  const barState =
+    barId && onEnterCrop && onResetCrop && onImageRadius && (!cropping || onCropDone)
+      ? imageActionState(barId, scene.annotations, base, natural)
       : null;
+  const actionState = barState
+    ? // In crop mode the page knows whether a crop can be removed: this layer's `base` drops the
+      // base's committed crop while it is edited.
+      cropping
+      ? { ...barState, hasCrop: canResetCrop }
+      : barState
+    : null;
+  const barRect = cropping ? cropping.win : selectedImage;
 
   return (
     <div
@@ -1095,21 +1105,23 @@ function AnnotationLayerImpl({
           unit={natural && natural.w > 0 ? size.w / natural.w : 1}
         />
       )}
-      {selectedImage && actionState && onEnterCrop && onResetCrop && onImageRadius && (
+      {barRect && actionState && onEnterCrop && onResetCrop && onImageRadius && (
         <ImageActionBar
           rect={{
-            x: selectedImage.x * size.w,
-            y: selectedImage.y * size.h,
-            w: selectedImage.w * size.w,
-            h: selectedImage.h * size.h,
+            x: barRect.x * size.w,
+            y: barRect.y * size.h,
+            w: barRect.w * size.w,
+            h: barRect.h * size.h,
           }}
           actions={{
             imageId: actionState.id,
             hasCrop: actionState.hasCrop,
+            cropping: cropping !== null,
             ...(actionState.radius !== undefined ? { radius: actionState.radius } : {}),
             followRadius: followRadiusSource(radius, naturalW, size.w),
             maxRadius: actionState.maxRadius,
             onCrop: () => onEnterCrop(actionState.id),
+            onMove: () => onCropDone?.(),
             onResetCrop: () => onResetCrop(actionState.id),
             onRadius: (r) => onImageRadius(actionState.id, r),
           }}
@@ -1125,27 +1137,29 @@ function AnnotationLayerImpl({
             top: (cropping.win.y + cropping.win.h) * size.h,
           }}
         >
-          {onResetCrop && (
+          <div className={styles.cropActionsRow}>
+            {onResetCrop && (
+              <button
+                type="button"
+                className={styles.cropReset}
+                title={t("imageActionResetTitle")}
+                disabled={!canResetCrop}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => onResetCrop(cropping.id)}
+              >
+                {t("imageActionReset")}
+              </button>
+            )}
             <button
               type="button"
-              className={styles.cropReset}
-              title={t("imageActionResetTitle")}
-              disabled={!canResetCrop}
+              className={styles.cropDone}
+              title={t("cropDoneTitle")}
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => onResetCrop(cropping.id)}
+              onClick={onCropDone}
             >
-              {t("imageActionReset")}
+              {t("cropDone")}
             </button>
-          )}
-          <button
-            type="button"
-            className={styles.cropDone}
-            title={t("cropDoneTitle")}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={onCropDone}
-          >
-            {t("cropDone")}
-          </button>
+          </div>
         </div>
       )}
       {selectedLocked && (

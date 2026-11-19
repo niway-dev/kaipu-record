@@ -246,16 +246,18 @@ describe("ToolPanel", () => {
       followRadius: 8,
       maxRadius: 100,
       onCrop: vi.fn(),
+      onMove: vi.fn(),
       onResetCrop: vi.fn(),
       onRadius: vi.fn(),
     });
 
-    it("show Crop, Corners and Reset, the same controls as the floating bar", () => {
+    it("show Move | Crop, Corners and Reset, the same controls as the floating bar", () => {
       const a = actions();
       render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode imageActions={a} />);
       expect(state()).toHaveAttribute("data-state", "imageOptions");
       expect(screen.queryByTestId("tool-panel-empty")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Crop" }));
+      expect(screen.getByRole("radio", { name: "Move" })).toHaveAttribute("aria-checked", "true");
+      fireEvent.click(screen.getByRole("radio", { name: "Crop" }));
       expect(a.onCrop).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByRole("button", { name: "Reset" }));
       expect(a.onResetCrop).toHaveBeenCalledTimes(1);
@@ -283,14 +285,14 @@ describe("ToolPanel", () => {
         />,
       );
       expect(state()).toHaveAttribute("data-state", "imageOptions");
-      expect(screen.getByRole("button", { name: "Crop" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "Crop" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
 
     it("are not shown when the prop is absent", () => {
       render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode />);
       expect(state()).toHaveAttribute("data-state", "empty");
-      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+      expect(screen.queryByRole("radio", { name: "Crop" })).toBeNull();
     });
 
     it("are not shown in Inspect, which reads the image: the Inspect bar wins", () => {
@@ -305,7 +307,7 @@ describe("ToolPanel", () => {
       );
       expect(state()).toHaveAttribute("data-state", "inspect");
       expect(screen.getByTestId("inspect-bar-stub")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+      expect(screen.queryByRole("radio", { name: "Crop" })).toBeNull();
     });
 
     it("are not shown with the Export frame tool: its card wins", () => {
@@ -319,20 +321,16 @@ describe("ToolPanel", () => {
         />,
       );
       expect(state()).toHaveAttribute("data-state", "crop");
-      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+      expect(screen.queryByRole("radio", { name: "Crop" })).toBeNull();
     });
 
-    it("show Crop pressed while crop mode is open on the image", () => {
-      render(
-        <ToolPanel
-          tools={makeTools()}
-          scene={makeScene()}
-          canvasMode
-          imageActions={{ ...actions(), cropping: true }}
-        />,
-      );
+    it("show Crop checked while crop mode is open on the image, and Move leaves it", () => {
+      const a = { ...actions(), cropping: true };
+      render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode imageActions={a} />);
       expect(state()).toHaveAttribute("data-state", "imageOptions");
-      expect(screen.getByRole("button", { name: "Crop" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("radio", { name: "Crop" })).toHaveAttribute("aria-checked", "true");
+      fireEvent.click(screen.getByRole("radio", { name: "Move" }));
+      expect(a.onMove).toHaveBeenCalledTimes(1);
     });
   });
 });

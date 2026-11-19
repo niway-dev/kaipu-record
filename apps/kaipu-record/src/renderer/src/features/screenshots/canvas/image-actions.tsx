@@ -1,5 +1,5 @@
-import React, { useEffect, useId, useState } from "react";
-import { Crop, RotateCcw, SquareRoundCorner } from "lucide-react";
+import React, { useEffect, useId, useRef, useState } from "react";
+import { Crop, Move, RotateCcw, SquareRoundCorner } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import styles from "./image-actions.module.css";
 
@@ -11,7 +11,7 @@ export interface ImageActionsProps {
   imageId: string;
   /** There is a crop to remove: Reset is disabled without one. */
   hasCrop: boolean;
-  /** Crop mode is open on this image: Crop is shown pressed (the Tool tab keeps the actions). */
+  /** Crop mode is open on this image: Crop is the checked mode (the Tool tab keeps the actions). */
   cropping?: boolean;
   /** This image's own corner radius in SOURCE px; absent = it follows the Beautify slider. */
   radius?: number;
@@ -19,8 +19,10 @@ export interface ImageActionsProps {
   followRadius: number;
   /** The largest useful radius, in source px: half the shorter visible side. */
   maxRadius: number;
-  /** Crop: the same crop mode a double-click on the image opens. */
+  /** The Crop mode: the same crop mode a double-click on the image opens. */
   onCrop(): void;
+  /** The Move mode: leave crop mode, exactly like its Done button. */
+  onMove(): void;
   /** Reset: remove this image's crop (one undo step). */
   onResetCrop(): void;
   /** Corners: set this image's own radius, or `undefined` to follow the slider again. */
@@ -28,8 +30,13 @@ export interface ImageActionsProps {
 }
 
 /**
- * Crop, Corners and Reset for one selected image, the base or an added one (NIW2-876). One
- * component, two homes: the floating bar over the image and the Tool tab (spec "Interaction").
+ * Move | Crop, Corners and Reset for one selected image, the base or an added one (NIW2-876).
+ * One component, two homes: the floating bar over the image and the Tool tab (spec
+ * "Interaction").
+ *
+ * Move | Crop is a two-option mode control (a radio group), Move by default: the active mode is
+ * the one segment in the accent, so Crop never reads as "you are cropping" while you are not.
+ * Choosing Crop enters crop mode, choosing Move leaves it, like Done.
  *
  * Corners opens a small control under the buttons (inline in the Tool tab): a slider and a
  * number field in source px, and "Follow slider" to give the image back to the Beautify
@@ -49,12 +56,33 @@ function ImageActionsBody({
   followRadius,
   maxRadius,
   onCrop,
+  onMove,
   onResetCrop,
   onRadius,
 }: ImageActionsProps): React.JSX.Element {
   const t = useTranslations("screenshots");
   const [cornersOpen, setCornersOpen] = useState(false);
   const panelId = useId();
+  const moveRef = useRef<HTMLButtonElement>(null);
+  const cropRef = useRef<HTMLButtonElement>(null);
+  // Choosing the mode that is already active does nothing: Move is "leave crop mode", and with
+  // no crop mode open there is nothing to leave.
+  const choose = (mode: "move" | "crop") => (): void => {
+    if (mode === "crop" && !cropping) onCrop();
+    else if (mode === "move" && cropping) onMove();
+  };
+  // A radio group is one tab stop; the arrow keys move the choice, as the native radios do.
+  const onModeKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      choose("crop")();
+      cropRef.current?.focus();
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      choose("move")();
+      moveRef.current?.focus();
+    }
+  };
   return (
     <div
       className={`${styles.actions} ${variant === "bar" ? styles.bar : styles.panel}`}
@@ -63,16 +91,39 @@ function ImageActionsBody({
       {...(variant === "panel" ? { "data-keeps-crop-mode": "" } : {})}
     >
       <div className={styles.row} role="group" aria-label={t("imageActionsAria")}>
-        <button
-          type="button"
-          className={`${styles.button} ${styles.primary}`}
-          title={t("imageActionCropTitle")}
-          aria-pressed={cropping}
-          onClick={onCrop}
+        <div
+          className={styles.modes}
+          role="radiogroup"
+          aria-label={t("imageActionModeAria")}
+          onKeyDown={onModeKey}
         >
-          <Crop size={13} aria-hidden />
-          {t("imageActionCrop")}
-        </button>
+          <button
+            type="button"
+            ref={moveRef}
+            role="radio"
+            className={styles.segment}
+            title={t("imageActionMoveTitle")}
+            aria-checked={!cropping}
+            tabIndex={cropping ? -1 : 0}
+            onClick={choose("move")}
+          >
+            <Move size={13} aria-hidden />
+            {t("imageActionMove")}
+          </button>
+          <button
+            type="button"
+            ref={cropRef}
+            role="radio"
+            className={styles.segment}
+            title={t("imageActionCropTitle")}
+            aria-checked={cropping}
+            tabIndex={cropping ? 0 : -1}
+            onClick={choose("crop")}
+          >
+            <Crop size={13} aria-hidden />
+            {t("imageActionCrop")}
+          </button>
+        </div>
         <button
           type="button"
           className={styles.button}

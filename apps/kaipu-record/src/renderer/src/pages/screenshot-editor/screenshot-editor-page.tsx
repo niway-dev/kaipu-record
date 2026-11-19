@@ -1896,6 +1896,8 @@ function ScreenshotEditorBody({
               ),
               maxRadius: selectedImageState.maxRadius,
               onCrop: () => onEnterCrop(selectedImageState.id),
+              // Move leaves crop mode exactly like Done: the window is committed in one step.
+              onMove: finishCrop,
               onResetCrop: () => onResetCrop(selectedImageState.id),
               onRadius: (r: number | undefined) => onImageRadius(selectedImageState.id, r),
             },

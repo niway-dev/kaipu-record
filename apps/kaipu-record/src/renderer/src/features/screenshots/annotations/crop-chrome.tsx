@@ -9,8 +9,8 @@ const CORNERS: ReadonlySet<HandleId> = new Set(["nw", "ne", "se", "sw"]);
 
 /**
  * What crop mode wears over the window (NIW2-876), drawn so it cannot be mistaken for a
- * selection: thick white L brackets at the corners, short bars at the middle of each edge and a
- * rule-of-thirds grid inside. A selected image keeps its thin accent frame and small square
+ * selection: thick accent-pink L brackets at the corners, short bars at the middle of each edge
+ * and a rule-of-thirds grid inside. A selected image keeps its thin accent frame and small square
  * handles; only cropping gets these.
  *
  * It is HTML over the layer, not SVG in it, so the brackets stay one size on screen at any zoom

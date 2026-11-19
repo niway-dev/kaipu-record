@@ -12,9 +12,10 @@ const BAR_GAP_PX = 8;
 const STAGE_SELECTOR = '[data-ui-area="editorImage.canvas"]';
 
 /**
- * The floating action bar of a selected image (NIW2-876): Crop, Corners and Reset, centred
- * above the image at a fixed size on screen (the layer is scaled by the canvas zoom, so the
- * bar undoes it through `--canvas-zoom`, like the handles and the size tag).
+ * The floating action bar of a selected image (NIW2-876): Move | Crop, Corners and Reset, centred
+ * above the image (above the crop window in crop mode, where Crop is the checked mode) at a fixed
+ * size on screen (the layer is scaled by the canvas zoom, so the bar undoes it through
+ * `--canvas-zoom`, like the handles and the size tag).
  *
  * It sits above the image. With no room above (the image touches or leaves the top of the
  * stage) it moves inside the image's top edge instead, so the stage never clips it. Which of
