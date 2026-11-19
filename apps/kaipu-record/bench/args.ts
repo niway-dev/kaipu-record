@@ -17,7 +17,7 @@ Samples the dev app you already started with \`bun run dev\`. Never launches Ele
 Type a label and press Enter to add a phase mark. Ctrl+C writes the run folder.
 
   --machine <label>       series label, e.g. owner-M5 (default: local)
-  --watch-file <glob|dir> growing export file; sizes only (default: ~/Movies/Kaipu Record/.kaipu/tmp)
+  --watch-file <glob|dir> growing export file; sizes only (default: ~/Movies/Kaipu Record/.kaipu/tmp/*.mp4.part)
   --no-watch              do not watch any file
   --match <substring>     Electron path must contain it (default: this repo's root)
   --out <dir>             run folder parent (default: apps/kaipu-record/bench/runs)
@@ -27,7 +27,7 @@ Type a label and press Enter to add a phase mark. Ctrl+C writes the run folder.
 export function parseAttachArgs(argv: string[], home: string): AttachArgs | { error: string } {
   const a: AttachArgs = {
     machine: "local",
-    watch: `${home}/Movies/Kaipu Record/.kaipu/tmp`,
+    watch: `${home}/Movies/Kaipu Record/.kaipu/tmp/*.mp4.part`,
     duration: null,
     match: null,
     out: null,

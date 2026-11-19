@@ -6,7 +6,7 @@ describe("parseAttachArgs", () => {
     const a = parseAttachArgs([], "/home/u");
     expect(a).toMatchObject({
       machine: "local",
-      watch: "/home/u/Movies/Kaipu Record/.kaipu/tmp",
+      watch: "/home/u/Movies/Kaipu Record/.kaipu/tmp/*.mp4.part",
       duration: null,
     });
   });
