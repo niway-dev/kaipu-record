@@ -52,6 +52,19 @@ describe("RunRecorder", () => {
     expect(out.sampleRows[0]).toContain("start");
   });
 
+  it("quotes and doubles special characters in a free-text phase label", () => {
+    const r = new RunRecorder({
+      machine: "owner-M5",
+      ref: "abc1234",
+      watched: true,
+      maxStallMs: 30_000,
+      phaseAt: () => 'a,"b"',
+    });
+    const out = r.addTick(tick(0, [proc(1, "main", 100, 120)], 28));
+    expect(out.sampleRows[0]!.startsWith('0,"a,""b""",1,')).toBe(true);
+    expect(out.systemRow.startsWith('0,"a,""b""",')).toBe(true);
+  });
+
   it("keeps the last lifetime peak of a process that exited, and marks it exited", () => {
     const r = recorder();
     r.addTick(tick(0, [proc(1, "main", 100, 120), proc(2, "renderer", 50, 900)], 28));
