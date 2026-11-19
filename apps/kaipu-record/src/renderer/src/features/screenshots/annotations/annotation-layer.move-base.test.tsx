@@ -327,6 +327,26 @@ describe("what does not move the base", () => {
     expect(onLiveBase).not.toHaveBeenCalled();
   });
 
+  it("Inspect's selected base does not advertise a drag it will not do", () => {
+    mount(sceneOf([], BASE_IMAGE_ID), {
+      onEnterCrop: undefined,
+      onResetCrop: undefined,
+      onImageRadius: undefined,
+    });
+    const tag = screen.getByTestId("image-tag");
+    expect(tag.textContent).not.toContain("Drag to move");
+    expect(tag.textContent).toContain("200 × 200 px");
+  });
+
+  it("an added image's tag still says Drag to move in Inspect: it can be moved there", () => {
+    mount(sceneOf([image], "i1"), {
+      onEnterCrop: undefined,
+      onResetCrop: undefined,
+      onImageRadius: undefined,
+    });
+    expect(screen.getByTestId("image-tag").textContent).toContain("Drag to move");
+  });
+
   it("a crop session does not: the window moves, never the base", () => {
     const scene = sceneOf([]);
     const { layer, onLiveBase } = mount(scene, {

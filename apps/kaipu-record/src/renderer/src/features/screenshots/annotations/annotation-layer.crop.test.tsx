@@ -185,7 +185,8 @@ describe("selecting and resizing the base", () => {
   });
 
   it("the base's tag shows its size and 'Drag to move', like an added image's", () => {
-    const base = mount(sceneOf([], BASE_IMAGE_ID));
+    // The base is dragged where the layer has crop handlers (everywhere but Inspect).
+    const base = mount(sceneOf([], BASE_IMAGE_ID), { onEnterCrop: vi.fn() });
     expect(screen.getByTestId("image-tag").textContent).toContain("200 × 200 px");
     expect(screen.getByText("Drag to move")).not.toBeNull();
     base.unmount();

@@ -61,6 +61,7 @@ export function ImageSelection({
   gaps,
   unit,
   justAdded = false,
+  movable = true,
 }: {
   rect: LayerRect;
   pixelWidth: number;
@@ -71,6 +72,12 @@ export function ImageSelection({
   unit: number;
   /** Just added and not yet moved: the tag reads "just added" and drops the pixel size. */
   justAdded?: boolean;
+  /**
+   * False when a press on the image does not drag it (the base in Inspect, where the image is
+   * read, not edited): the tag then omits "drag to move" instead of advertising a drag that
+   * does nothing.
+   */
+  movable?: boolean;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const visible = visibleSourceSize(pixelWidth, pixelHeight, crop);
@@ -101,7 +108,7 @@ export function ImageSelection({
             <span className={styles.tagLabel}>{t("justAddedDragToPlace")}</span>
           ) : (
             <>
-              <span className={styles.tagLabel}>{t("dragToMove")}</span>
+              {movable && <span className={styles.tagLabel}>{t("dragToMove")}</span>}
               {crop ? (
                 <span>
                   {t("imageSizeShowing", {

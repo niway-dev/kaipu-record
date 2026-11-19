@@ -1089,6 +1089,8 @@ function AnnotationLayerImpl({
           pixelHeight={selectedImage.pixelHeight}
           crop={selectedImage.crop}
           justAdded={justAddedId != null && justAddedId === selectedImage.id}
+          // The base only moves where the layer has crop handlers (not in Inspect, which reads it).
+          movable={selectedImage.id !== BASE_IMAGE_ID || onEnterCrop !== undefined}
           gaps={gaps}
           unit={natural && natural.w > 0 ? size.w / natural.w : 1}
         />
