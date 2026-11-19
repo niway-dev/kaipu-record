@@ -86,7 +86,7 @@ export class RunRecorder {
   private readonly costs: number[] = [];
   private peakSwap = 0;
   private peakCompressed = 0;
-  private worst: RunJson["system"]["worstPressure"] = "normal";
+  private worst: RunJson["system"]["worstPressure"] | null = null;
   private loadAtStart: [number, number, number] | null = null;
   private lastPresent = new Set<number>();
 
@@ -94,12 +94,13 @@ export class RunRecorder {
 
   addTick(t: Tick): { sampleRows: string[]; systemRow: string } {
     const phase = this.opts.phaseAt(t.tMs);
-    this.costs.push(t.costMs);
+    if (t.costMs > 0) this.costs.push(t.costMs); // the final read passes 0: it is not a tick cost
     this.loadAtStart ??= t.system.loadAvg;
     this.peakSwap = Math.max(this.peakSwap, t.system.swapUsedBytes);
     this.peakCompressed = Math.max(this.peakCompressed, t.system.compressedBytes);
-    const rank = { normal: 0, unknown: 0, warn: 1, critical: 2 } as const;
-    if (rank[t.system.pressure] > rank[this.worst]) this.worst = t.system.pressure;
+    const rank = { unknown: 0, normal: 1, warn: 2, critical: 3 } as const;
+    if (this.worst === null || rank[t.system.pressure] > rank[this.worst])
+      this.worst = t.system.pressure;
     this.out.push({ tMs: t.tMs, bytes: t.outputBytes });
     this.fileTicks.push({
       tMs: t.tMs,
@@ -208,7 +209,7 @@ export class RunRecorder {
       system: {
         peakSwapUsedBytes: this.peakSwap,
         peakCompressedBytes: this.peakCompressed,
-        worstPressure: this.worst,
+        worstPressure: this.worst ?? "unknown",
         loadAvgAtStart: this.loadAtStart ?? [0, 0, 0],
       },
       output: {

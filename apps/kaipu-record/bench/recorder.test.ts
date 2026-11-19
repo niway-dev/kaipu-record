@@ -77,6 +77,25 @@ describe("RunRecorder", () => {
     expect(run.processes[0]!.exited).toBe(true);
   });
 
+  it("reports unknown pressure when it was never readable, and keeps the worst otherwise", () => {
+    const mk = (pressure: "normal" | "warn" | "unknown") => ({
+      ...tick(0, [], null),
+      system: { ...system, pressure },
+    });
+    const a = recorder();
+    a.addTick(mk("unknown"));
+    expect(
+      a.finish({ startedAt: "a", endedAt: "b", durationMs: 0, phases: [] }).system.worstPressure,
+    ).toBe("unknown");
+    const b = recorder();
+    b.addTick(mk("unknown"));
+    b.addTick(mk("warn"));
+    b.addTick(mk("normal"));
+    expect(
+      b.finish({ startedAt: "a", endedAt: "b", durationMs: 0, phases: [] }).system.worstPressure,
+    ).toBe("warn");
+  });
+
   it("falls back to the sampled max when no lifetime peak was read", () => {
     const r = recorder();
     r.addTick(tick(0, [proc(1, "main", 100, null)], null));
