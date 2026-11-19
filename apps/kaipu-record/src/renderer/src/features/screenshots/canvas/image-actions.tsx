@@ -110,7 +110,9 @@ function CornersControl({
   "radius" | "followRadius" | "maxRadius" | "onRadius"
 >): React.JSX.Element {
   const t = useTranslations("screenshots");
-  const shown = radius ?? followRadius;
+  // Bounded like a commit, so a follow radius above the visible area's limit does not read as a
+  // change when the field is merely left.
+  const shown = clampRadius(radius ?? followRadius, maxRadius);
   // What the controls show while they are being edited; the scene hears it on commit.
   const [draft, setDraft] = useState(String(shown));
   useEffect(() => setDraft(String(shown)), [shown]);

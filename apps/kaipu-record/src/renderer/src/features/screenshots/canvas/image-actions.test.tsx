@@ -87,6 +87,15 @@ describe("Corners", () => {
     expect(p.onRadius).toHaveBeenCalledWith(undefined);
   });
 
+  it("leaving the field alone keeps following even when the slider's radius exceeds the limit", () => {
+    const p = mount({ followRadius: 80, maxRadius: 50 });
+    fireEvent.click(screen.getByRole("button", { name: "Corners" }));
+    const input = screen.getByRole("spinbutton") as HTMLInputElement;
+    expect(input.value).toBe("50");
+    fireEvent.blur(input);
+    expect(p.onRadius).not.toHaveBeenCalled();
+  });
+
   it("leaving the field unchanged commits nothing", () => {
     const p = mount({ radius: 30 });
     fireEvent.click(screen.getByRole("button", { name: "Corners" }));
