@@ -131,6 +131,46 @@ describe("settings store", () => {
     expect(getSettingsSnapshot()?.showInDock).toBe(false);
   });
 
+  it("a read that was out when the store was reset cannot publish into the next one", async () => {
+    installSettingsIpc(withLocale("es"));
+    const reads: Array<(settings: AppSettings) => void> = [];
+    window.electronAPI.getSettings = vi.fn(
+      () => new Promise<AppSettings>((resolve) => reads.push(resolve)),
+    );
+    subscribeSettings(() => {});
+    resetSettingsStoreForTests();
+    const heard = vi.fn();
+    subscribeSettings(heard);
+    expect(reads).toHaveLength(2);
+
+    // The old window's read lands while the new one's is still out: it belongs to a store that
+    // no longer exists, and must neither publish nor make the new read look stale.
+    reads[0]!(withLocale("es"));
+    await Promise.resolve();
+    expect(getSettingsSnapshot()).toBeNull();
+    expect(heard).not.toHaveBeenCalled();
+
+    reads[1]!(withLocale("en"));
+    await loadSettings();
+    expect(getSettingsSnapshot()?.locale).toBe("en");
+    expect(heard).toHaveBeenCalledExactlyOnceWith(withLocale("en"));
+  });
+
+  it("an answer to updateSettings that was out when the store was reset is not published", async () => {
+    installSettingsIpc(withLocale("es"));
+    let answer: (settings: AppSettings) => void = () => {};
+    window.electronAPI.updateSettings = vi.fn(
+      () => new Promise<AppSettings>((resolve) => (answer = resolve)),
+    );
+    const pending = updateSettings({ locale: "en" });
+    resetSettingsStoreForTests();
+
+    answer(withLocale("en"));
+    await pending;
+
+    expect(getSettingsSnapshot()).toBeNull();
+  });
+
   it("watchSettings applies the held value at once, or the first read when there is none yet", async () => {
     const ipc = installSettingsIpc(withLocale("es"), { deferRead: true });
     const early = vi.fn();

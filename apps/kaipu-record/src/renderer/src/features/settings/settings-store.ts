@@ -177,13 +177,18 @@ export function settingsSubscriberCount(): number {
   return listeners.size;
 }
 
-/** For tests: the window forgets its value, its consumers and its listener, as a fresh load. */
+/**
+ * For tests: the window forgets its value, its consumers and its listener, as a fresh load.
+ * The revision moves forward instead of back to 0: a read or an update answer that was out
+ * when this ran carries the old revision, so it is dropped instead of publishing into the next
+ * test's store, where a restarted count could match it.
+ */
 export function resetSettingsStoreForTests(): void {
   ipcOff?.();
   ipcOff = null;
   ipcOpen = false;
   firstRead = null;
   current = null;
-  revision = 0;
+  revision += 1;
   listeners.clear();
 }
