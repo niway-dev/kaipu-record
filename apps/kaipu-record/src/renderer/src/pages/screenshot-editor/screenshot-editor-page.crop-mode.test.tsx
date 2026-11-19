@@ -587,6 +587,11 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
 
   describe("in crop mode", () => {
     const doneRow = () => within(screen.getByTestId("crop-actions"));
+    /** A real press: pointerdown first (the click-away listens to it), then the click. */
+    const press = (el: HTMLElement): void => {
+      fireEvent.pointerDown(el, { button: 0 });
+      fireEvent.click(el);
+    };
 
     it("Reset is next to Done and disabled while there is no crop", async () => {
       await open({});
@@ -615,7 +620,7 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
       await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
       fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
       await screen.findByTestId("crop-window");
-      fireEvent.click(doneRow().getByRole("button", { name: "Reset" }));
+      press(doneRow().getByRole("button", { name: "Reset" }));
       await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
       expect(screen.getByTestId("crop-window")).toBeInTheDocument();
       expect(doneRow().getByRole("button", { name: "Reset" })).toBeDisabled();
@@ -637,15 +642,52 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
       await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
       fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
       await screen.findByTestId("crop-window");
-      fireEvent.click(within(toolPanel() as HTMLElement).getByRole("button", { name: "Reset" }));
+      press(within(toolPanel() as HTMLElement).getByRole("button", { name: "Reset" }));
       await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+    });
+
+    it("a committed crop keeps Reset enabled in both places even after the window is dragged back out", async () => {
+      await open({ baseCrop: { x: 0, y: 0, w: 0.5, h: 0.5 } });
+      await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+      fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
+      await screen.findByTestId("crop-window");
+      // The window is the 100 px quarter of the 200 px layer: its se corner is (100, 100).
+      drag([100, 100], [200, 200]);
+      await waitFor(() =>
+        expect(screen.getByTestId("crop-window").getAttribute("width")).toBe("200"),
+      );
+      expect(doneRow().getByRole("button", { name: "Reset" })).toBeEnabled();
+      expect(
+        within(toolPanel() as HTMLElement).getByRole("button", { name: "Reset" }),
+      ).toBeEnabled();
+    });
+
+    it("pressing the Tool tab's Crop, Reset or Corners does not end crop mode", async () => {
+      await open({ baseCrop: { x: 0, y: 0, w: 0.5, h: 0.5 } });
+      await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+      fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
+      await screen.findByTestId("crop-window");
+      const panel = () => within(toolPanel() as HTMLElement);
+      press(panel().getByRole("button", { name: "Crop" }));
+      press(panel().getByRole("button", { name: "Corners" }));
+      expect(screen.getByTestId("crop-window")).toBeInTheDocument();
+      press(panel().getByRole("button", { name: "Reset" }));
+      expect(screen.getByTestId("crop-window")).toBeInTheDocument();
+    });
+
+    it("a press elsewhere in the side panel still ends crop mode", async () => {
+      await open({});
+      fireEvent.doubleClick(surface(), { clientX: 100, clientY: 100 });
+      await screen.findByTestId("crop-window");
+      fireEvent.pointerDown(screen.getByRole("tab", { name: "Beautify" }), { button: 0 });
+      await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
     });
 
     it("Corners still sets the base's radius in one undo step", async () => {
       await open({});
       fireEvent.doubleClick(surface(), { clientX: 100, clientY: 100 });
       await screen.findByTestId("crop-window");
-      fireEvent.click(within(toolPanel() as HTMLElement).getByRole("button", { name: "Corners" }));
+      press(within(toolPanel() as HTMLElement).getByRole("button", { name: "Corners" }));
       const field = screen.getByRole("spinbutton");
       fireEvent.change(field, { target: { value: "24" } });
       fireEvent.blur(field);

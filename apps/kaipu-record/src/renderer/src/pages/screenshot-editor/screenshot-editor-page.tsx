@@ -438,7 +438,7 @@ function ScreenshotEditorBody({
     [setCropSession],
   );
   // The image actions (NIW2-876), shared by the floating bar and the Tool tab. Both write
-  // through the scene, so each is one undo step, and neither runs inside a crop session.
+  // through the scene, so each is one undo step.
   // In crop mode, Reset also puts the window back to the whole asset. The crop that was already
   // committed goes in the same single commit as outside crop mode; a window only dragged has
   // nothing committed, so nothing is written for it.
@@ -1853,6 +1853,22 @@ function ScreenshotEditorBody({
           { w: metrics.naturalW, h: metrics.naturalH },
         )
       : null;
+  // Reset in crop mode: a crop to remove is a window dragged in, or one the image already
+  // carries (read from the scene: the layer's base drops its crop while it is being cropped).
+  const cropCanReset =
+    cropSession !== null &&
+    (!sameWindow(cropSession.win, cropSession.full) ||
+      (metrics !== null &&
+        imageActionState(
+          cropSession.id,
+          scene.annotations,
+          {
+            baseCrop: scene.baseCrop,
+            baseRadius: scene.baseRadius,
+            basePlacement: scene.basePlacement,
+          },
+          { w: metrics.naturalW, h: metrics.naturalH },
+        )?.hasCrop === true));
   const toolPanel = (
     <ToolPanel
       tools={tools}
@@ -1865,11 +1881,10 @@ function ScreenshotEditorBody({
         ? {
             imageActions: {
               hasCrop:
-                selectedImageState.hasCrop ||
-                (cropSession !== null &&
-                  cropSession.id === selectedImageState.id &&
-                  !sameWindow(cropSession.win, cropSession.full)),
-              cropping: cropSession !== null && cropSession.id === selectedImageState.id,
+                cropSession?.id === selectedImageState.id
+                  ? cropCanReset
+                  : selectedImageState.hasCrop,
+              cropping: cropSession?.id === selectedImageState.id,
               ...(selectedImageState.radius !== undefined
                 ? { radius: selectedImageState.radius }
                 : {}),
@@ -1975,6 +1990,8 @@ function ScreenshotEditorBody({
     const onDown = (e: PointerEvent): void => {
       const canvasEl = canvasRef.current;
       if (canvasEl && e.target instanceof Node && canvasEl.contains(e.target)) return;
+      // The Tool tab's image actions (Crop, Corners, Reset) stay usable inside the session.
+      if (e.target instanceof Element && e.target.closest("[data-keeps-crop-mode]")) return;
       finishCrop();
     };
     window.addEventListener("keydown", onKey, true);
@@ -2226,6 +2243,7 @@ function ScreenshotEditorBody({
                           cropping: cropSession,
                           onCropWindow,
                           onCropDone: finishCrop,
+                          canResetCrop: cropCanReset,
                           onResetCrop,
                           onImageRadius,
                           onLiveBase: setLiveBase,

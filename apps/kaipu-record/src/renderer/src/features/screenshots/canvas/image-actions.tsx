@@ -52,6 +52,8 @@ export function ImageActions({
     <div
       className={`${styles.actions} ${variant === "bar" ? styles.bar : styles.panel}`}
       data-variant={variant}
+      // The Tool tab's copy is usable in crop mode: the page's click-away leaves it alone.
+      {...(variant === "panel" ? { "data-keeps-crop-mode": "" } : {})}
     >
       <div className={styles.row} role="group" aria-label={t("imageActionsAria")}>
         <button

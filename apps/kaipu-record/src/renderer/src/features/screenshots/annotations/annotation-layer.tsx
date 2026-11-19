@@ -49,7 +49,6 @@ import {
   baseAsImage,
   resizeBasePlacement,
   resizeCropWindow,
-  sameWindow,
   wholeImage,
   type BaseFields,
   type CropTarget,
@@ -177,6 +176,11 @@ interface LayerProps {
   /** The "Done" button of crop mode. */
   onCropDone?: () => void;
   /**
+   * Crop mode's Reset is enabled: the page knows whether the image carries a committed crop
+   * (this layer's `base` drops it while the base is being cropped) or the window was dragged in.
+   */
+  canResetCrop?: boolean;
+  /**
    * The action bar's Reset (NIW2-876): remove the selected image's crop, in one commit. Absent
    * with `onEnterCrop` (Inspect on): the bar is not shown at all.
    */
@@ -218,6 +222,7 @@ function AnnotationLayerImpl({
   onEnterCrop,
   onCropWindow,
   onCropDone,
+  canResetCrop = false,
   onResetCrop,
   onImageRadius,
   onLiveBase,
@@ -890,15 +895,6 @@ function AnnotationLayerImpl({
       ? imageActionState(selectedImage.id, scene.annotations, base, natural)
       : null;
 
-  // Reset in crop mode: there is a crop to remove when the window is smaller than the asset
-  // (not yet committed) or the image already carries one.
-  const cropResetEnabled =
-    cropping !== null &&
-    cropping !== undefined &&
-    (!sameWindow(cropping.win, cropping.full) ||
-      (natural !== undefined &&
-        imageActionState(cropping.id, scene.annotations, base, natural)?.hasCrop === true));
-
   return (
     <div
       ref={ref}
@@ -1102,7 +1098,7 @@ function AnnotationLayerImpl({
               type="button"
               className={styles.cropReset}
               title={t("imageActionResetTitle")}
-              disabled={!cropResetEnabled}
+              disabled={!canResetCrop}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => onResetCrop(cropping.id)}
             >
@@ -1221,6 +1217,7 @@ function sameLayerProps(p: LayerProps, n: LayerProps): boolean {
     p.onEnterCrop === n.onEnterCrop &&
     p.onCropWindow === n.onCropWindow &&
     p.onCropDone === n.onCropDone &&
+    p.canResetCrop === n.canResetCrop &&
     p.onResetCrop === n.onResetCrop &&
     p.onImageRadius === n.onImageRadius &&
     p.onLiveBase === n.onLiveBase

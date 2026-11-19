@@ -328,7 +328,7 @@ describe("crop mode's look (AC6)", () => {
     const cropActions = () => screen.getByTestId("crop-actions");
     const reset = () => within(cropActions()).getByRole("button", { name: "Reset" });
 
-    it("sits next to Done, disabled while the window is the whole asset and nothing is cropped", () => {
+    it("sits next to Done, disabled unless the page says there is a crop to remove", () => {
       mount(sceneOf([]), {
         ...handlers(),
         cropping: { ...session, win: { x: 0, y: 0, w: 1, h: 1 } },
@@ -337,22 +337,13 @@ describe("crop mode's look (AC6)", () => {
       expect(reset()).toBeDisabled();
     });
 
-    it("is enabled when the window is smaller than the asset, and asks to reset that image", () => {
+    it("is enabled when the page says so, and asks to reset that image", () => {
       const h = handlers();
-      mount(sceneOf([]), { ...h, cropping: session });
+      mount(sceneOf([]), { ...h, cropping: session, canResetCrop: true });
       expect(reset()).toBeEnabled();
       fireEvent.click(reset());
       expect(h.onResetCrop).toHaveBeenCalledTimes(1);
       expect(h.onResetCrop).toHaveBeenCalledWith(BASE_IMAGE_ID);
-    });
-
-    it("is enabled by a committed crop even when the window is back at the whole asset", () => {
-      mount(sceneOf([]), {
-        ...handlers(),
-        base: { baseCrop: { x: 0, y: 0, w: 0.5, h: 1 } },
-        cropping: { ...session, win: { x: 0, y: 0, w: 1, h: 1 } },
-      });
-      expect(reset()).toBeEnabled();
     });
 
     it("does not start a gesture on the layer", () => {
