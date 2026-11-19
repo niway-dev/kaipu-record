@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { dirnameOf } from "../../test/source-tree";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RecordingActivity, RecordingSettings } from "@shared/types";
@@ -568,7 +569,7 @@ describe("CameraBubble — the Camera toggle", () => {
  * border or outline, and the accent outline exists only under the hover-chrome selector.
  */
 describe("camera bubble stylesheet", () => {
-  const dir = path.dirname(new URL(import.meta.url).pathname);
+  const dir = dirnameOf(import.meta.url);
   const css = readFileSync(path.join(dir, "camera-bubble.module.css"), "utf8").replace(
     /\/\*[\s\S]*?\*\//g,
     "",

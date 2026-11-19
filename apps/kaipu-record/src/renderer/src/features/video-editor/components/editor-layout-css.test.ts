@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { dirnameOf } from "../../../test/source-tree";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -7,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * the rail width and where the picture sits. jsdom has no layout engine, so these read
  * the real stylesheets; the harness screenshots are the visual proof.
  */
-const dir = path.dirname(new URL(import.meta.url).pathname);
+const dir = dirnameOf(import.meta.url);
 const css = (file: string): string => readFileSync(path.join(dir, file), "utf8");
 
 /** Declarations of one top-level rule, comments stripped (they quote old values). */
