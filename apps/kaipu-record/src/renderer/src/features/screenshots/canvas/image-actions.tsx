@@ -7,8 +7,10 @@ import styles from "./image-actions.module.css";
 export interface ImageActionsProps {
   /** `bar` floats over the image (dark pill); `panel` sits in the Tool tab. */
   variant: "bar" | "panel";
-  /** The image has a crop to remove: Reset is disabled without one. */
+  /** There is a crop to remove: Reset is disabled without one. */
   hasCrop: boolean;
+  /** Crop mode is open on this image: Crop is shown pressed (the Tool tab keeps the actions). */
+  cropping?: boolean;
   /** This image's own corner radius in SOURCE px; absent = it follows the Beautify slider. */
   radius?: number;
   /** What the Beautify slider gives this image, in source px: shown while it follows. */
@@ -35,6 +37,7 @@ export interface ImageActionsProps {
 export function ImageActions({
   variant,
   hasCrop,
+  cropping = false,
   radius,
   followRadius,
   maxRadius,
@@ -55,6 +58,7 @@ export function ImageActions({
           type="button"
           className={`${styles.button} ${styles.primary}`}
           title={t("imageActionCropTitle")}
+          aria-pressed={cropping}
           onClick={onCrop}
         >
           <Crop size={13} aria-hidden />

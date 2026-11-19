@@ -320,5 +320,18 @@ describe("ToolPanel", () => {
       expect(state()).toHaveAttribute("data-state", "crop");
       expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
     });
+
+    it("show Crop pressed while crop mode is open on the image", () => {
+      render(
+        <ToolPanel
+          tools={makeTools()}
+          scene={makeScene()}
+          canvasMode
+          imageActions={{ ...actions(), cropping: true }}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "imageOptions");
+      expect(screen.getByRole("button", { name: "Crop" })).toHaveAttribute("aria-pressed", "true");
+    });
   });
 });

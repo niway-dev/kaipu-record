@@ -542,7 +542,7 @@ export const UI_MAP = {
       // status and its actions (`image-text`); `selection` is a selected annotation with only
       // Delete to offer (an added image); `inspect` is the Inspect controls (`image-inspect`);
       // `imageOptions` is a selected image, the base or an added one, with the same Crop,
-      // Corners and Reset as the floating bar (NIW2-876).
+      // Corners and Reset as the floating bar (NIW2-876); in crop mode it stays, Crop shown pressed.
       toolPanel: {
         states: [
           "empty",

@@ -59,6 +59,11 @@
   background: var(--accent-primary-hover);
 }
 
+/* Crop mode is open on this image: the pressed state is a ring, since Crop is already accent. */
+.primary[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
 /* The floating bar: a dark pill, like the size tag's chrome. */
 .bar {
   position: relative;

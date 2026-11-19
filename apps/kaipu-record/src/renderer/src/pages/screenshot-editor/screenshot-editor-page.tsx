@@ -439,17 +439,24 @@ function ScreenshotEditorBody({
   );
   // The image actions (NIW2-876), shared by the floating bar and the Tool tab. Both write
   // through the scene, so each is one undo step, and neither runs inside a crop session.
-  const onResetCrop = useCallback((id: string): void => {
-    if (cropSessionRef.current) return;
-    const sc = sceneLatest.current;
-    resetImageCrop(
-      sc,
-      { baseCrop: sc.baseCrop, baseRadius: sc.baseRadius, basePlacement: sc.basePlacement },
-      id,
-    );
-  }, []);
+  // In crop mode, Reset also puts the window back to the whole asset. The crop that was already
+  // committed goes in the same single commit as outside crop mode; a window only dragged has
+  // nothing committed, so nothing is written for it.
+  const onResetCrop = useCallback(
+    (id: string): void => {
+      const s = cropSessionRef.current;
+      if (s && s.id !== id) return;
+      const sc = sceneLatest.current;
+      resetImageCrop(
+        sc,
+        { baseCrop: sc.baseCrop, baseRadius: sc.baseRadius, basePlacement: sc.basePlacement },
+        id,
+      );
+      if (s) setCropSession({ ...s, win: s.full, start: s.full });
+    },
+    [setCropSession],
+  );
   const onImageRadius = useCallback((id: string, radius: number | undefined): void => {
-    if (cropSessionRef.current) return;
     setImageRadius(sceneLatest.current, id, radius);
   }, []);
   // The base mid-resize, from the layer: the frame and the page lay out from it while it drags.
@@ -1827,11 +1834,10 @@ function ScreenshotEditorBody({
     <BeautifyPanel beautify={scene.beautify} canvasMode={canvasMode} embedded />
   );
   // The Tool tab's Crop / Corners / Reset: with the Select tool and an image selected, outside
-  // Inspect (it reads the image) and crop mode (which has its own Done).
+  // Inspect (it reads the image). Crop mode keeps them, Crop shown pressed, next to its own Done.
   const selectedImageState =
     canvasMode &&
     tools.tool === "select" &&
-    !croppingId &&
     !(inspectEnabled && inspect.active) &&
     metrics &&
     metrics.naturalW > 0 &&
@@ -1858,7 +1864,12 @@ function ScreenshotEditorBody({
       {...(selectedImageState && metrics
         ? {
             imageActions: {
-              hasCrop: selectedImageState.hasCrop,
+              hasCrop:
+                selectedImageState.hasCrop ||
+                (cropSession !== null &&
+                  cropSession.id === selectedImageState.id &&
+                  !sameWindow(cropSession.win, cropSession.full)),
+              cropping: cropSession !== null && cropSession.id === selectedImageState.id,
               ...(selectedImageState.radius !== undefined
                 ? { radius: selectedImageState.radius }
                 : {}),

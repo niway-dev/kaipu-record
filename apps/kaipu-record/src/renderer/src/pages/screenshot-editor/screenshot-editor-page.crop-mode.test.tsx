@@ -571,7 +571,86 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
     const panel = within(toolPanel() as HTMLElement);
     fireEvent.click(panel.getByRole("button", { name: "Crop" }));
     expect(await screen.findByTestId("crop-window")).toBeInTheDocument();
-    // In crop mode the panel no longer offers them.
-    await waitFor(() => expect(toolPanel()?.getAttribute("data-state")).not.toBe("imageOptions"));
+    // In crop mode the panel keeps them, with Crop shown pressed (the approved mock).
+    expect(toolPanel()?.getAttribute("data-state")).toBe("imageOptions");
+    const crop = within(toolPanel() as HTMLElement).getByRole("button", { name: "Crop" });
+    expect(crop).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("outside crop mode Crop is not shown pressed", async () => {
+    await open({});
+    selectBase();
+    await waitFor(() => expect(toolPanel()?.getAttribute("data-state")).toBe("imageOptions"));
+    const crop = within(toolPanel() as HTMLElement).getByRole("button", { name: "Crop" });
+    expect(crop).toHaveAttribute("aria-pressed", "false");
+  });
+
+  describe("in crop mode", () => {
+    const doneRow = () => within(screen.getByTestId("crop-actions"));
+
+    it("Reset is next to Done and disabled while there is no crop", async () => {
+      await open({});
+      fireEvent.doubleClick(surface(), { clientX: 100, clientY: 100 });
+      await screen.findByTestId("crop-window");
+      expect(doneRow().getByRole("button", { name: "Reset" })).toBeDisabled();
+      expect(doneRow().getByRole("button", { name: "Done" })).toBeInTheDocument();
+    });
+
+    it("dragging the window enables Reset, and Reset puts the window back to the whole asset with nothing committed", async () => {
+      await open({});
+      await cropBaseToTopLeftQuarter();
+      const reset = doneRow().getByRole("button", { name: "Reset" });
+      expect(reset).toBeEnabled();
+      fireEvent.click(reset);
+      await waitFor(() =>
+        expect(screen.getByTestId("crop-window").getAttribute("width")).toBe("200"),
+      );
+      expect(doneRow().getByRole("button", { name: "Reset" })).toBeDisabled();
+      // Nothing was committed: the history is still empty.
+      expect(undoButton()).toBeDisabled();
+    });
+
+    it("Reset removes a committed crop in one undo step, and stays in crop mode", async () => {
+      await open({ baseCrop: { x: 0, y: 0, w: 0.5, h: 0.5 } });
+      await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+      fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
+      await screen.findByTestId("crop-window");
+      fireEvent.click(doneRow().getByRole("button", { name: "Reset" }));
+      await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+      expect(screen.getByTestId("crop-window")).toBeInTheDocument();
+      expect(doneRow().getByRole("button", { name: "Reset" })).toBeDisabled();
+      // The Tool tab's Reset agrees.
+      expect(
+        within(toolPanel() as HTMLElement).getByRole("button", { name: "Reset" }),
+      ).toBeDisabled();
+      // Leaving commits nothing more; one undo brings the crop back, a second has nothing left.
+      fireEvent.click(doneRow().getByRole("button", { name: "Done" }));
+      await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
+      undoKey();
+      await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+      undoKey();
+      await waitFor(() => expect(undoButton()).toBeDisabled());
+    });
+
+    it("the Tool tab's Reset does the same as the one beside Done", async () => {
+      await open({ baseCrop: { x: 0, y: 0, w: 0.5, h: 0.5 } });
+      await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+      fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
+      await screen.findByTestId("crop-window");
+      fireEvent.click(within(toolPanel() as HTMLElement).getByRole("button", { name: "Reset" }));
+      await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+    });
+
+    it("Corners still sets the base's radius in one undo step", async () => {
+      await open({});
+      fireEvent.doubleClick(surface(), { clientX: 100, clientY: 100 });
+      await screen.findByTestId("crop-window");
+      fireEvent.click(within(toolPanel() as HTMLElement).getByRole("button", { name: "Corners" }));
+      const field = screen.getByRole("spinbutton");
+      fireEvent.change(field, { target: { value: "24" } });
+      fireEvent.blur(field);
+      await waitFor(() => expect(undoButton()).toBeEnabled());
+      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("24");
+    });
   });
 });

@@ -49,6 +49,7 @@ import {
   baseAsImage,
   resizeBasePlacement,
   resizeCropWindow,
+  sameWindow,
   wholeImage,
   type BaseFields,
   type CropTarget,
@@ -512,9 +513,9 @@ function AnnotationLayerImpl({
       // editing to select it" is unchanged.
       const editingThis = editing?.id !== undefined && hit?.id === editing.id;
       if (hit && !editingThis) {
-        drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         // The action bar steps aside on the first move, not on the press: a plain click on the
         // selected image must not unmount the bar and drop an open Corners panel's value.
+        drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         (e.target as Element).setPointerCapture?.(e.pointerId);
       }
       return;
@@ -616,8 +617,8 @@ function AnnotationLayerImpl({
       return;
     }
     if (d.mode === "move") {
-      setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
       setGesturing(true);
+      setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
       return;
     }
     if (d.mode === "resize") {
@@ -889,6 +890,15 @@ function AnnotationLayerImpl({
       ? imageActionState(selectedImage.id, scene.annotations, base, natural)
       : null;
 
+  // Reset in crop mode: there is a crop to remove when the window is smaller than the asset
+  // (not yet committed) or the image already carries one.
+  const cropResetEnabled =
+    cropping !== null &&
+    cropping !== undefined &&
+    (!sameWindow(cropping.win, cropping.full) ||
+      (natural !== undefined &&
+        imageActionState(cropping.id, scene.annotations, base, natural)?.hasCrop === true));
+
   return (
     <div
       ref={ref}
@@ -1079,19 +1089,36 @@ function AnnotationLayerImpl({
       )}
       {cropping && <CropChrome win={cropping.win} size={size} />}
       {cropping && (
-        <button
-          type="button"
-          className={styles.cropDone}
-          title={t("cropDoneTitle")}
+        <div
+          className={styles.cropActions}
+          data-testid="crop-actions"
           style={{
             left: (cropping.win.x + cropping.win.w) * size.w,
             top: (cropping.win.y + cropping.win.h) * size.h,
           }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={onCropDone}
         >
-          {t("cropDone")}
-        </button>
+          {onResetCrop && (
+            <button
+              type="button"
+              className={styles.cropReset}
+              title={t("imageActionResetTitle")}
+              disabled={!cropResetEnabled}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => onResetCrop(cropping.id)}
+            >
+              {t("imageActionReset")}
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.cropDone}
+            title={t("cropDoneTitle")}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onCropDone}
+          >
+            {t("cropDone")}
+          </button>
+        </div>
       )}
       {selectedLocked && (
         <RedactionLockTag

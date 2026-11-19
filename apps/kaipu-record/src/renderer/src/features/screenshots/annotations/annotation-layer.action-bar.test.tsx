@@ -324,6 +324,45 @@ describe("crop mode's look (AC6)", () => {
     expect(screen.getByTestId("crop-scrim")).not.toBeNull();
   });
 
+  describe("Reset beside Done", () => {
+    const cropActions = () => screen.getByTestId("crop-actions");
+    const reset = () => within(cropActions()).getByRole("button", { name: "Reset" });
+
+    it("sits next to Done, disabled while the window is the whole asset and nothing is cropped", () => {
+      mount(sceneOf([]), {
+        ...handlers(),
+        cropping: { ...session, win: { x: 0, y: 0, w: 1, h: 1 } },
+      });
+      within(cropActions()).getByRole("button", { name: "Done" });
+      expect(reset()).toBeDisabled();
+    });
+
+    it("is enabled when the window is smaller than the asset, and asks to reset that image", () => {
+      const h = handlers();
+      mount(sceneOf([]), { ...h, cropping: session });
+      expect(reset()).toBeEnabled();
+      fireEvent.click(reset());
+      expect(h.onResetCrop).toHaveBeenCalledTimes(1);
+      expect(h.onResetCrop).toHaveBeenCalledWith(BASE_IMAGE_ID);
+    });
+
+    it("is enabled by a committed crop even when the window is back at the whole asset", () => {
+      mount(sceneOf([]), {
+        ...handlers(),
+        base: { baseCrop: { x: 0, y: 0, w: 0.5, h: 1 } },
+        cropping: { ...session, win: { x: 0, y: 0, w: 1, h: 1 } },
+      });
+      expect(reset()).toBeEnabled();
+    });
+
+    it("does not start a gesture on the layer", () => {
+      const scene = sceneOf([]);
+      mount(scene, { ...handlers(), cropping: session });
+      fireEvent.pointerDown(reset(), { clientX: 75, clientY: 80 });
+      expect(scene.select).not.toHaveBeenCalled();
+    });
+  });
+
   it("keeps Done, and no action bar", () => {
     mount(sceneOf([]), { ...handlers(), cropping: session });
     expect(screen.getByRole("button", { name: "Done" })).not.toBeNull();

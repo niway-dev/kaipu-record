@@ -754,13 +754,13 @@ export const editorImage = catalog(
     },
     "canvas-crop-mode": {
       profile: "image-canvas",
-      how: "With the flag forced on, open “Settings page” and double-click the image's own pixels: crop mode starts, the whole image shows dimmed with a thin white window outline, thick white L corners, a short bar at the middle of each edge and a rule-of-thirds grid, and a Done button sits at the window's corner (NIW2-876).",
+      how: "With the flag forced on, open “Settings page” and double-click the image's own pixels: crop mode starts, the whole image shows dimmed with a thin white window outline, thick white L corners, a short bar at the middle of each edge and a rule-of-thirds grid, and Reset (disabled: nothing is cropped) and Done sit side by side at the window's corner; the Tool tab keeps Crop (shown pressed), Corners and Reset (NIW2-876).",
       steps: [
         open(ASSETS.settingsShot),
         { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true },
         { waitFor: { area: "editorImage.imageCropMode" } },
       ],
-      demonstrates: ["editorImage.imageCropMode:active"],
+      demonstrates: ["editorImage.imageCropMode:active", "editorImage.toolPanel:imageOptions"],
       gates: [{ flag: "image-canvas", side: "on" }],
     },
     "canvas-zoomed-out": {
