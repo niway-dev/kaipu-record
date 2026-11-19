@@ -70,7 +70,7 @@ export interface ProcessReading {
   found: FoundProcess[];
   processes: ProcessSample[];
   system: SystemSample;
-  /** Set when processes were found but `footprint` gave nothing for them. */
+  /** Set when `ps` gave no rows, or processes were found but `footprint` gave nothing for them. */
   error: string | null;
 }
 
@@ -81,6 +81,15 @@ export async function readTick(rootContains: string): Promise<ProcessReading> {
     out("ps", ["-axM"]),
     readSystem(),
   ]);
+  if (table.length === 0) {
+    // A failed or empty `ps` is not "every process exited": report it as a read error.
+    return {
+      found: [],
+      processes: [],
+      system,
+      error: "ps returned no rows",
+    };
+  }
   const found = discoverProcesses(table, { rootContains });
   const fp = await readFootprints(found.map((f) => f.pid));
   const footprints = new Map(fp.rows.map((f) => [f.pid, f]));

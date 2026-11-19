@@ -76,6 +76,8 @@ async function main(): Promise<number> {
     } else {
       lastError = null;
     }
+    // A failed read says nothing about the app; recording it would mark every process exited.
+    if (reading.error && attached) return;
     if (reading.processes.length === 0 && !attached) {
       if (!reading.error && !warnedEmpty) {
         console.log("  no dev Electron found yet; waiting (start `bun run dev`)");
