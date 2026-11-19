@@ -32,7 +32,9 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 const TYPE_ONLY_IMPORT = /import\s+type\s[^;]*?from\s+["'][^"']+["'];?/gs;
-const STORE_IMPORT = /["'][^"']*(?:settings-store|use-app-settings)["']/;
+// The module name starts at a path segment, so `export-settings-store` (the export dialog's own
+// store, not the window's settings) is not mistaken for `settings-store`.
+const STORE_IMPORT = /["'](?:[^"']*\/)?(?:settings-store|use-app-settings)["']/;
 
 /** Whether `source` takes a value from the store or from `useAppSettings`. */
 function importsSettingsStore(source: string): boolean {
@@ -68,6 +70,9 @@ describe("the settings consumers map matches the renderer", () => {
       ),
     ).toBe(false);
     expect(importsSettingsStore('import { x } from "./other";')).toBe(false);
+    expect(
+      importsSettingsStore('import { x } from "@renderer/features/export/export-settings-store";'),
+    ).toBe(false);
   });
 
   it("every consumer in the renderer is in the map", () => {
