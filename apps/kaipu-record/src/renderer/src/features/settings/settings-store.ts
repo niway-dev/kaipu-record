@@ -30,6 +30,12 @@ type SettingsListener = (settings: AppSettings) => void;
 let current: AppSettings | null = null;
 /** Counts every value the store took (a broadcast, a read, a write's answer). */
 let revision = 0;
+/**
+ * Counts the resets and nothing else. A rejected update compares it to learn whether the store
+ * it started in still exists. Not `revision`: a broadcast may land before main fails without
+ * broadcasting, and the re-read must still run then.
+ */
+let generation = 0;
 let ipcOff: (() => void) | null = null;
 let ipcOpen = false;
 let firstRead: Promise<AppSettings> | null = null;
@@ -142,6 +148,7 @@ export function watchSettings(listener: SettingsListener): () => void {
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   start();
   const revisionAtRequest = revision;
+  const generationAtRequest = generation;
   try {
     const saved = await window.electronAPI.updateSettings(patch);
     if (revision === revisionAtRequest) publish(saved);
@@ -150,7 +157,9 @@ export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSe
     // Main merges the patch before it persists, applies side effects and broadcasts, so a
     // rejection can leave it holding the new value without having told any window. Ask what it
     // holds, so a control such as the diagnostics switch never reads differently from main.
-    await resyncFromMain();
+    // Not when the store was reset meanwhile: that store is gone, and the question would
+    // publish into the next one.
+    if (generation === generationAtRequest) await resyncFromMain();
     throw error;
   }
 }
@@ -216,7 +225,8 @@ export function settingsSubscriberCount(): number {
  * For tests: the window forgets its value, its consumers and its listener, as a fresh load.
  * The revision moves forward instead of back to 0: a read or an update answer that was out
  * when this ran carries the old revision, so it is dropped instead of publishing into the next
- * test's store, where a restarted count could match it.
+ * test's store, where a restarted count could match it. A rejected update that settles after
+ * this ran skips its re-read of main, which the revision cannot tell apart from a broadcast.
  */
 export function resetSettingsStoreForTests(): void {
   ipcOff?.();
@@ -226,4 +236,5 @@ export function resetSettingsStoreForTests(): void {
   current = null;
   revision += 1;
   listeners.clear();
+  generation += 1;
 }

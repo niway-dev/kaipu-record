@@ -184,6 +184,67 @@ describe("settings store", () => {
     expect(getSettingsSnapshot()?.diagnosticsEnabled).toBe(true);
   });
 
+  it("a rejection that settles after the store was reset does not re-read into the next store", async () => {
+    const ipc = installSettingsIpc({ ...BASE, diagnosticsEnabled: true });
+    await loadSettings();
+    let fail: (error: Error) => void = () => {};
+    window.electronAPI.updateSettings = vi.fn(
+      () => new Promise<AppSettings>((_resolve, reject) => (fail = reject)),
+    );
+    const failed = updateSettings({ diagnosticsEnabled: false });
+    resetSettingsStoreForTests();
+    ipc.getSettings.mockClear();
+
+    fail(new Error("update failed"));
+
+    await expect(failed).rejects.toThrow("update failed");
+    expect(ipc.getSettings).not.toHaveBeenCalled();
+    expect(getSettingsSnapshot()).toBeNull();
+  });
+
+  it("a re-read that was out when the store was reset is not published", async () => {
+    const ipc = installSettingsIpc({ ...BASE, diagnosticsEnabled: true });
+    await loadSettings();
+    window.electronAPI.updateSettings = vi.fn(async () => {
+      throw new Error("update failed");
+    });
+    let answerRead: (settings: AppSettings) => void = () => {};
+    ipc.getSettings.mockImplementationOnce(
+      () => new Promise<AppSettings>((resolve) => (answerRead = resolve)),
+    );
+    const failed = updateSettings({ diagnosticsEnabled: false });
+    await vi.waitFor(() => expect(ipc.getSettings).toHaveBeenCalledTimes(2));
+    resetSettingsStoreForTests();
+
+    answerRead({ ...BASE, diagnosticsEnabled: false });
+
+    await expect(failed).rejects.toThrow("update failed");
+    expect(getSettingsSnapshot()).toBeNull();
+  });
+
+  it("a rejection that settles after an earlier publication, with no reset, still re-reads main", async () => {
+    const ipc = installSettingsIpc({ ...BASE, diagnosticsEnabled: true });
+    await loadSettings();
+    let fail: (error: Error) => void = () => {};
+    window.electronAPI.updateSettings = vi.fn(
+      () => new Promise<AppSettings>((_resolve, reject) => (fail = reject)),
+    );
+    const failed = updateSettings({ diagnosticsEnabled: false });
+    // Main broadcast something else, then threw without broadcasting the rejected write.
+    ipc.broadcast({ ...BASE, diagnosticsEnabled: true, showInDock: false });
+    ipc.getSettings.mockImplementationOnce(async () => ({
+      ...BASE,
+      diagnosticsEnabled: false,
+      showInDock: false,
+    }));
+
+    fail(new Error("update failed"));
+
+    await expect(failed).rejects.toThrow("update failed");
+    expect(ipc.getSettings).toHaveBeenCalledTimes(2);
+    expect(getSettingsSnapshot()?.diagnosticsEnabled).toBe(false);
+  });
+
   it("a read that was out when the store was reset cannot publish into the next one", async () => {
     installSettingsIpc(withLocale("es"));
     const reads: Array<(settings: AppSettings) => void> = [];
