@@ -1,15 +1,60 @@
 import type { ShortcutAction } from "@shared/types";
+import type { TranscriptionModelInfo, TranscriptionStatus } from "@shared/types/transcription";
 
 /**
  * The onboarding's navigation rules, free of React so they are unit-tested on their own.
  * One rule shapes all of them: only Permissions blocks (screen + microphone).
  */
 
-export type StepId = "welcome" | "permissions" | "shortcuts" | "privacy" | "done";
+export type StepId = "welcome" | "permissions" | "shortcuts" | "transcription" | "privacy" | "done";
 
-export const STEPS: readonly StepId[] = ["welcome", "permissions", "shortcuts", "privacy", "done"];
+export interface StepsOptions {
+  /** Whether the local transcription model is on offer (see `transcriptionOfferModel`). */
+  offerTranscription: boolean;
+}
 
-const PERMISSIONS_INDEX = STEPS.indexOf("permissions");
+/**
+ * The steps in order. Transcription sits between Shortcuts and Privacy and exists only when the
+ * model is on offer; without it the flow is exactly the five steps it had before.
+ */
+export function stepsFor({ offerTranscription }: StepsOptions): readonly StepId[] {
+  return offerTranscription
+    ? ["welcome", "permissions", "shortcuts", "transcription", "privacy", "done"]
+    : ["welcome", "permissions", "shortcuts", "privacy", "done"];
+}
+
+/** Permissions is the second step whichever steps are on offer: only later ones come and go. */
+export const PERMISSIONS_INDEX = stepsFor({ offerTranscription: false }).indexOf("permissions");
+
+/**
+ * Where `current` sits in `steps`. When it left the list (the offer went away while the user was
+ * on Transcription) the flow lands on the next step that is still there, so Privacy is not skipped.
+ */
+export function stepIndexFor(steps: readonly StepId[], current: StepId): number {
+  const at = steps.indexOf(current);
+  if (at !== -1) return at;
+  const order = stepsFor({ offerTranscription: true });
+  for (const id of order.slice(order.indexOf(current) + 1)) {
+    const next = steps.indexOf(id);
+    if (next !== -1) return next;
+  }
+  return steps.length - 1;
+}
+
+/**
+ * The model the Transcription step offers, or `null` when there is nothing to offer: the
+ * engine cannot run here, the default model is missing from the catalog, or it is already
+ * installed or downloading. Only `missing` and `failed` (a download that did not finish) are
+ * offered. The `transcription` flag is checked by the caller.
+ */
+export function transcriptionOfferModel(
+  status: TranscriptionStatus | null,
+): TranscriptionModelInfo | null {
+  if (!status || status.availability.status !== "available") return null;
+  const model = status.models.find((m) => m.id === status.defaultModelId);
+  if (!model) return null;
+  return model.status.state === "missing" || model.status.state === "failed" ? model : null;
+}
 
 /** The four shortcuts the Shortcuts step teaches, in card order. Window capture is not one. */
 export const ONBOARDING_SHORTCUTS: readonly ShortcutAction[] = [

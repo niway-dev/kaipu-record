@@ -26,6 +26,13 @@ const toPrivacy: Step[] = [
   { waitFor: { area: "onboarding.privacyStep" } },
 ];
 
+/** From Welcome to Transcription, which exists only while the speech model is on offer. */
+const toTranscription: Step[] = [
+  ...toShortcuts,
+  continueStep,
+  { waitFor: { area: "onboarding.transcriptionStep" } },
+];
+
 /**
  * One state per demo: its card on Welcome, then the demo frozen by reduced motion. The runner
  * emulates `prefers-reduced-motion: reduce` for it (`reducedMotion`) and shoots it with
@@ -49,97 +56,115 @@ const demo = (
  * Only the demo states run in reduced motion; the others keep the catalog's default of
  * animations disabled in the shot.
  */
-export const onboarding = catalog("onboarding", {
-  welcome: {
-    profile: "onboarding",
-    how: "First launch of a fresh profile.",
-    demonstrates: ["onboarding.root:welcome", "onboarding.welcomeStep:default"],
-  },
-  "demo-record": demo("record", "Record"),
-  "demo-capture": demo("capture", "Capture"),
-  "demo-share": demo("share", "Edit and share"),
-  "demo-editor": demo("editor", "The video editor"),
-  "demo-workspaces": demo("workspaces", "Workspaces"),
-  permissions: {
-    profile: "onboarding",
-    steps: [getStarted],
-    demonstrates: ["onboarding.root:permissions", "onboarding.permissionsStep:all"],
-    ready: { area: "onboarding.permissionsStep" },
-    gates: [
-      { permission: "screen", side: "granted" },
-      { permission: "microphone", side: "granted" },
-      { permission: "camera", side: "granted" },
-      { permission: "accessibility", side: "granted" },
-    ],
-    requires: { screen: true, microphone: true, camera: true, accessibility: true },
-  },
-  "permissions-none": {
-    profile: "onboarding",
-    steps: [getStarted],
-    demonstrates: ["onboarding.permissionsStep:none"],
-    ready: { area: "onboarding.permissionsStep" },
-    gates: [
-      { permission: "screen", side: "denied" },
-      { permission: "microphone", side: "denied" },
-      { permission: "camera", side: "denied" },
-      { permission: "accessibility", side: "denied" },
-    ],
-    requires: { screen: false, microphone: false, camera: false, accessibility: false },
-  },
-  shortcuts: {
-    profile: "onboarding",
-    steps: toShortcuts,
-    demonstrates: ["onboarding.root:shortcuts", "onboarding.shortcutsStep:none"],
-    ready: { area: "onboarding.shortcutsStep" },
-    requires: { screen: true, microphone: true },
-  },
-  "shortcuts-tried": {
-    profile: "onboarding",
-    how: "Shortcuts step, then press ⇧⌘1 and ⇧⌘2 (reported without running them).",
-    steps: [
-      ...toShortcuts,
-      { action: "reportShortcutsTried" },
-      { waitFor: { area: "onboarding.shortcutsStep", part: { text: "2 OF 4 TRIED" } } },
-    ],
-    demonstrates: ["onboarding.shortcutsStep:someTried"],
-    ready: { area: "onboarding.shortcutsStep" },
-    requires: { screen: true, microphone: true },
-  },
-  privacy: {
-    profile: "onboarding",
-    how: "Shortcuts step, Continue. The share-usage toggle is on, as it is for a new user.",
-    steps: toPrivacy,
-    demonstrates: ["onboarding.root:privacy", "onboarding.privacyStep:on"],
-    ready: { area: "onboarding.privacyStep" },
-    requires: { screen: true, microphone: true },
-  },
-  "privacy-off": {
-    profile: "onboarding",
-    how: "Privacy step, then switch Share usage and crash reports off.",
-    steps: [
-      ...toPrivacy,
-      {
-        click: {
-          area: "onboarding.privacyStep",
-          part: { role: "switch", name: "Share usage and crash reports" },
+export const onboarding = catalog(
+  "onboarding",
+  {
+    welcome: {
+      profile: "onboarding",
+      how: "First launch of a fresh profile.",
+      demonstrates: ["onboarding.root:welcome", "onboarding.welcomeStep:default"],
+    },
+    "demo-record": demo("record", "Record"),
+    "demo-capture": demo("capture", "Capture"),
+    "demo-share": demo("share", "Edit and share"),
+    "demo-editor": demo("editor", "The video editor"),
+    "demo-workspaces": demo("workspaces", "Workspaces"),
+    permissions: {
+      profile: "onboarding",
+      steps: [getStarted],
+      demonstrates: ["onboarding.root:permissions", "onboarding.permissionsStep:all"],
+      ready: { area: "onboarding.permissionsStep" },
+      gates: [
+        { permission: "screen", side: "granted" },
+        { permission: "microphone", side: "granted" },
+        { permission: "camera", side: "granted" },
+        { permission: "accessibility", side: "granted" },
+      ],
+      requires: { screen: true, microphone: true, camera: true, accessibility: true },
+    },
+    "permissions-none": {
+      profile: "onboarding",
+      steps: [getStarted],
+      demonstrates: ["onboarding.permissionsStep:none"],
+      ready: { area: "onboarding.permissionsStep" },
+      gates: [
+        { permission: "screen", side: "denied" },
+        { permission: "microphone", side: "denied" },
+        { permission: "camera", side: "denied" },
+        { permission: "accessibility", side: "denied" },
+      ],
+      requires: { screen: false, microphone: false, camera: false, accessibility: false },
+    },
+    shortcuts: {
+      profile: "onboarding",
+      steps: toShortcuts,
+      demonstrates: ["onboarding.root:shortcuts", "onboarding.shortcutsStep:none"],
+      ready: { area: "onboarding.shortcutsStep" },
+      requires: { screen: true, microphone: true },
+    },
+    "shortcuts-tried": {
+      profile: "onboarding",
+      how: "Shortcuts step, then press ⇧⌘1 and ⇧⌘2 (reported without running them).",
+      steps: [
+        ...toShortcuts,
+        { action: "reportShortcutsTried" },
+        { waitFor: { area: "onboarding.shortcutsStep", part: { text: "2 OF 4 TRIED" } } },
+      ],
+      demonstrates: ["onboarding.shortcutsStep:someTried"],
+      ready: { area: "onboarding.shortcutsStep" },
+      requires: { screen: true, microphone: true },
+    },
+    transcription: {
+      profile: "onboarding-transcription-missing",
+      how: "Shortcuts, Continue: the offer to download the speech model (flag on, model not installed).",
+      steps: toTranscription,
+      demonstrates: ["onboarding.root:transcription", "onboarding.transcriptionStep:offer"],
+      ready: { area: "onboarding.transcriptionStep" },
+      gates: [{ flag: "transcription", side: "on" }],
+      requires: { screen: true, microphone: true },
+    },
+    privacy: {
+      profile: "onboarding",
+      how: "Shortcuts step, Continue. The share-usage toggle is on, as it is for a new user.",
+      steps: toPrivacy,
+      demonstrates: ["onboarding.root:privacy", "onboarding.privacyStep:on"],
+      ready: { area: "onboarding.privacyStep" },
+      requires: { screen: true, microphone: true },
+    },
+    "privacy-off": {
+      profile: "onboarding",
+      how: "Privacy step, then switch Share usage and crash reports off.",
+      steps: [
+        ...toPrivacy,
+        {
+          click: {
+            area: "onboarding.privacyStep",
+            part: { role: "switch", name: "Share usage and crash reports" },
+          },
         },
-      },
-    ],
-    demonstrates: ["onboarding.privacyStep:off"],
-    ready: { area: "onboarding.privacyStep" },
-    requires: { screen: true, microphone: true },
+      ],
+      demonstrates: ["onboarding.privacyStep:off"],
+      ready: { area: "onboarding.privacyStep" },
+      requires: { screen: true, microphone: true },
+    },
+    "privacy-notice": {
+      profile: "privacy-notice",
+      how: "A Mac that finished onboarding before the step existed, on its next launch.",
+      demonstrates: ["onboarding.privacyNotice:default"],
+      ready: { area: "onboarding.privacyNotice" },
+    },
+    done: {
+      profile: "onboarding",
+      steps: [...toPrivacy, continueStep],
+      demonstrates: ["onboarding.root:done", "onboarding.doneStep:default"],
+      ready: { area: "onboarding.doneStep" },
+      requires: { screen: true, microphone: true },
+    },
   },
-  "privacy-notice": {
-    profile: "privacy-notice",
-    how: "A Mac that finished onboarding before the step existed, on its next launch.",
-    demonstrates: ["onboarding.privacyNotice:default"],
-    ready: { area: "onboarding.privacyNotice" },
+  {
+    oneSided: {
+      "onboarding.transcriptionStep":
+        "with the flag off, or no model to offer, the step is not in the flow, so it has no look of its own",
+    },
   },
-  done: {
-    profile: "onboarding",
-    steps: [...toPrivacy, continueStep],
-    demonstrates: ["onboarding.root:done", "onboarding.doneStep:default"],
-    ready: { area: "onboarding.doneStep" },
-    requires: { screen: true, microphone: true },
-  },
-});
+);

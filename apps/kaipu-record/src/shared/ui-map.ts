@@ -796,7 +796,9 @@ export const UI_MAP = {
   onboarding: {
     kind: "overlay",
     areas: {
-      root: { states: ["welcome", "permissions", "shortcuts", "privacy", "done"] },
+      root: {
+        states: ["welcome", "permissions", "shortcuts", "transcription", "privacy", "done"],
+      },
       welcomeStep: { states: ["default"] },
       demo: { states: ["record", "capture", "share", "editor", "workspaces"] },
       permissionsStep: {
@@ -809,6 +811,9 @@ export const UI_MAP = {
         ],
       },
       shortcutsStep: { states: ["none", "someTried"] },
+      // The offer to install the speech model. The step exists only with the `transcription`
+      // flag on, an engine that runs here and the default model not installed.
+      transcriptionStep: { states: ["offer"], gatedBy: [{ flag: "transcription" }] },
       // The step for new users, and the same content as a one-time notice over the app for
       // people who finished before it existed (NIW2-849). Off is the one thing that differs.
       privacyStep: { states: ["on", "off"] },
