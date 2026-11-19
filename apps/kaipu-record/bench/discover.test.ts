@@ -92,5 +92,7 @@ describe("rootMatch and sibling checkouts", () => {
     expect(roleOf("/bin/tool /Users/me/My Video.mp4")).toBe("native:tool");
     expect(roleOf("/bin/tool fd 3 secret=x")).toBe("native:tool");
     expect(roleOf("/bin/we ird$name --x")).toBe("native:we");
+    expect(roleOf("node scripts/foo.js")).toBe("native:node");
+    expect(roleOf("sh -c a/b c")).toBe("native:sh");
   });
 });

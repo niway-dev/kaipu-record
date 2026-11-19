@@ -15,11 +15,13 @@ function chromiumType(command: string): string | null {
 
 /**
  * Executable name for a native helper. Cuts the command at the first flag or path
- * argument so no argument or file name can reach the role, then keeps a safe token.
+ * argument, takes the first word (the executable) and then its basename, so no argument
+ * or file name can reach the role.
  */
 function exeBasename(command: string): string {
   const head = command.split(/ --| \//)[0]!.trim();
-  const token = (head.split("/").pop() ?? "").split(/\s+/)[0] ?? "";
+  const first = head.split(/\s+/)[0] ?? "";
+  const token = first.split("/").pop() ?? "";
   const safe = token.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 40);
   return safe || "unknown";
 }
