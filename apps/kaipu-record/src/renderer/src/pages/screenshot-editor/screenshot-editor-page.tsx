@@ -871,6 +871,7 @@ function ScreenshotEditorBody({
       m.naturalW / m.w,
       undefined,
       visibleBaseBounds(geomBaseRef.current, m.naturalW, m.naturalH),
+      geomBaseRef.current.basePlacement,
     );
     setLiveExtents((prev) =>
       prev &&
@@ -894,6 +895,7 @@ function ScreenshotEditorBody({
         metrics.naturalW / metrics.w,
         undefined,
         visibleBaseBounds(geomBase, metrics.naturalW, metrics.naturalH),
+        geomBase.basePlacement,
       )
     );
   }, [canvasMode, metrics, geomAnnotations, liveExtents, geomBase]);
@@ -1181,6 +1183,7 @@ function ScreenshotEditorBody({
       scale,
       undefined,
       visible,
+      placedBase.basePlacement,
     );
     const assetId = newImageAssetId();
     assetsRef.current = { ...assetsRef.current, [assetId]: png };

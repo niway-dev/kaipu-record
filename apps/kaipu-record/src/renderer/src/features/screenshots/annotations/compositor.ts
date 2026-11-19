@@ -43,6 +43,7 @@ import {
   baseVisibleRect,
   stepNumbers,
   type Annotation,
+  type BasePlacement,
   type BlurAnnotation,
   fullRect,
   type ImageAnnotation,
@@ -209,7 +210,15 @@ export function canvasExportGeometry(
     scale,
     pad: Math.round(scene.beautify.padding * scale),
     radius: Math.round(scene.beautify.radius * scale),
-    extents: contentExtents(scene.annotations, naturalW, naturalH, scale, undefined, base),
+    extents: contentExtents(
+      scene.annotations,
+      naturalW,
+      naturalH,
+      scale,
+      undefined,
+      base,
+      scene.basePlacement,
+    ),
     base,
   };
 }
@@ -440,7 +449,7 @@ export function buildSvg(scene: Scene, g: Geom): string {
     .map((a, i) => {
       if (a.kind === "image") return imageSvg(a, g, sv > 0);
       if (a.kind === "blur" && ext) return bakedBlurSvg(a, scene.annotations.slice(0, i), g, scene);
-      const drawn = annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps);
+      const drawn = annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps, scene.basePlacement);
       if (!ext) return drawn;
       // Redrawing the baked images over a later redaction hides this annotation only where
       // those pixels are opaque. A base with transparency lets it show through, so the
@@ -590,6 +599,7 @@ function annotationSvg(
   H: number,
   scale: number,
   steps: Map<string, number>,
+  placement?: BasePlacement,
 ): string {
   if (a.kind === "step") {
     const d = stepDiameterPx(a.size);
@@ -650,7 +660,7 @@ function annotationSvg(
     return `<path d="${d}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
   if (a.kind === "measure") {
-    const s = measureShape(a, W, H, scale);
+    const s = measureShape(a, W, H, scale, placement);
     const sw = MEASURE_STROKE_PX * scale;
     const ticks = s.ticks
       .map(

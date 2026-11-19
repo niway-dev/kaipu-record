@@ -2,7 +2,7 @@
  * Geometry of a pinned `measure` annotation (NIW2-702), shared by the live layer, the handles
  * and the export compositor so all three draw the same line. Pure.
  */
-import type { MeasureAnnotation } from "./scene";
+import { baseFullRect, type BasePlacement, type MeasureAnnotation } from "./scene";
 import { stepInk } from "./tools";
 
 export interface NormPt {
@@ -20,17 +20,26 @@ export function measureLabel(a: Pick<MeasureAnnotation, "from" | "to">): string 
 }
 
 /**
- * The two ends of the line in the layer's normalized (0–1 of the image) space. The line runs
- * through the middle of the measured row or column, from the first pixel's outer edge to the
- * last pixel's outer edge.
+ * The two ends of the line in the layer's normalized world space (base-normalized, like every
+ * annotation). The line runs through the middle of the measured row or column, from the first
+ * pixel's outer edge to the last pixel's outer edge. The measure is stored in the base ASSET's
+ * pixels, so it is mapped through the rect the whole asset covers NOW (`baseFullRect`): it
+ * follows the base when that is moved or resized, and with no placement it is `px / image`
+ * exactly as before (ADR 0053). The crop never enters: the placement is the whole asset's rect.
  */
-export function measureEndpoints(a: MeasureAnnotation): { p1: NormPt; p2: NormPt } {
+export function measureEndpoints(
+  a: MeasureAnnotation,
+  placement?: BasePlacement,
+): { p1: NormPt; p2: NormPt } {
+  const f = baseFullRect({ basePlacement: placement });
+  const wx = (px: number): number => f.x + (px / a.imageW) * f.w;
+  const wy = (px: number): number => f.y + (px / a.imageH) * f.h;
   if (a.axis === "x") {
-    const y = (a.at + 0.5) / a.imageH;
-    return { p1: { x: a.from / a.imageW, y }, p2: { x: a.to / a.imageW, y } };
+    const y = wy(a.at + 0.5);
+    return { p1: { x: wx(a.from), y }, p2: { x: wx(a.to), y } };
   }
-  const x = (a.at + 0.5) / a.imageW;
-  return { p1: { x, y: a.from / a.imageH }, p2: { x, y: a.to / a.imageH } };
+  const x = wx(a.at + 0.5);
+  return { p1: { x, y: wy(a.from) }, p2: { x, y: wy(a.to) } };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -46,9 +55,12 @@ export function dragMeasureEnd(
   a: MeasureAnnotation,
   end: "from" | "to",
   p: NormPt,
+  placement?: BasePlacement,
 ): Pick<MeasureAnnotation, "from" | "to"> {
   const size = a.axis === "x" ? a.imageW : a.imageH;
-  const edge = Math.round((a.axis === "x" ? p.x : p.y) * size);
+  const f = baseFullRect({ basePlacement: placement });
+  // The inverse of `measureEndpoints`: world point -> asset px along the axis.
+  const edge = Math.round(a.axis === "x" ? ((p.x - f.x) / f.w) * size : ((p.y - f.y) / f.h) * size);
   if (end === "from") return { from: clamp(edge, 0, a.to - 1), to: a.to };
   return { from: a.from, to: clamp(edge, a.from + 1, size) };
 }
@@ -61,11 +73,14 @@ export function moveMeasure(
   a: MeasureAnnotation,
   dx: number,
   dy: number,
+  placement?: BasePlacement,
 ): Pick<MeasureAnnotation, "from" | "to" | "at"> {
   const along = a.axis === "x" ? a.imageW : a.imageH;
   const across = a.axis === "x" ? a.imageH : a.imageW;
-  const dAlong = Math.round((a.axis === "x" ? dx : dy) * along);
-  const dAcross = Math.round((a.axis === "x" ? dy : dx) * across);
+  // A world delta covers `scale` of the asset per unit, so divide it back out.
+  const { w: k } = baseFullRect({ basePlacement: placement });
+  const dAlong = Math.round(((a.axis === "x" ? dx : dy) / k) * along);
+  const dAcross = Math.round(((a.axis === "x" ? dy : dx) / k) * across);
   const shift = clamp(dAlong, -a.from, along - a.to);
   return {
     from: a.from + shift,
@@ -99,8 +114,14 @@ export interface MeasureShape {
  * export's natural size) with sizes multiplied by `scale`. One source for the live layer and
  * the export so both draw the same line.
  */
-export function measureShape(a: MeasureAnnotation, W: number, H: number, scale = 1): MeasureShape {
-  const { p1: n1, p2: n2 } = measureEndpoints(a);
+export function measureShape(
+  a: MeasureAnnotation,
+  W: number,
+  H: number,
+  scale = 1,
+  placement?: BasePlacement,
+): MeasureShape {
+  const { p1: n1, p2: n2 } = measureEndpoints(a, placement);
   const p1 = { x: n1.x * W, y: n1.y * H };
   const p2 = { x: n2.x * W, y: n2.y * H };
   const t = MEASURE_TICK_PX * scale;

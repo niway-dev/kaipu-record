@@ -41,6 +41,7 @@ import {
   nextAnnotationId,
   stepNumbers,
   type Annotation,
+  type BasePlacement,
   type BlurAnnotation,
   type ImageAnnotation,
   type NormalizedRect,
@@ -424,7 +425,7 @@ function AnnotationLayerImpl({
     }
     if (tools.tool !== "select") return;
     const p = toNorm(e);
-    const hit = hitTest(scene.annotations, p, size, canvasMode);
+    const hit = hitTest(scene.annotations, p, size, canvasMode, basePlacement);
     // A double-click on an annotation is the annotation's (a label reopens); only one on the
     // bare image reaches the frame's "double-click to edit the crop" (NIW2-759).
     if (hit) e.stopPropagation();
@@ -500,7 +501,7 @@ function AnnotationLayerImpl({
         : (scene.annotations.find((a) => a.id === scene.selectedId) ?? selectedBase);
       if (sel) {
         const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
-        const handle = hitHandle(handlesFor(sel, size), p, tol);
+        const handle = hitHandle(handlesFor(sel, size, basePlacement), p, tol);
         if (handle) {
           drag.current =
             sel.id === BASE_IMAGE_ID
@@ -514,7 +515,7 @@ function AnnotationLayerImpl({
           return;
         }
       }
-      const hit = hitTest(scene.annotations, p, size, canvasMode);
+      const hit = hitTest(scene.annotations, p, size, canvasMode, basePlacement);
       // With nothing on the shapes layer under the press, the base image answers on the rect it
       // shows (NIW2-853); padding and background clear the selection as before.
       const onBase = !hit && canvas && natural && inRect(p, baseVisibleRect(base));
@@ -657,12 +658,18 @@ function AnnotationLayerImpl({
     }
     if (d.mode === "move") {
       setGesturing(true);
-      setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
+      setLiveBoth({
+        id: d.id,
+        patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y, basePlacement),
+      });
       return;
     }
     if (d.mode === "resize") {
       // Resize from the ORIGINAL geometry each frame (fixed edges stay put, no drift).
-      setLiveBoth({ id: d.id, patch: resizeAnnotation(d.orig, d.handle, p, size, canvas) });
+      setLiveBoth({
+        id: d.id,
+        patch: resizeAnnotation(d.orig, d.handle, p, size, canvas, basePlacement),
+      });
       return;
     }
     if (d.mode === "draw-pen") {
@@ -1031,7 +1038,7 @@ function AnnotationLayerImpl({
         )}
         {/* An added image's handles are drawn by `ImageSelection` (mock A4), not here. */}
         {selectedAnnotation && selectedAnnotation.kind !== "image" && (
-          <Handles a={selectedAnnotation} size={size} />
+          <Handles a={selectedAnnotation} size={size} placement={basePlacement} />
         )}
         {cropping && <CropWindow target={cropping} size={size} />}
         {activeText && recognizedLines.length > 0 && (
@@ -1336,7 +1343,15 @@ function CropWindow({ target, size }: { target: CropTarget; size: Size }): React
 
 /** Resize handles drawn over the selected shape. Hit-testing is geometric (in the
  *  layer's onPointerDown), so these are purely visual + carry the resize cursor. */
-function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element {
+function Handles({
+  a,
+  size,
+  placement,
+}: {
+  a: Annotation;
+  size: Size;
+  placement?: BasePlacement;
+}): React.JSX.Element {
   const { w: W, h: H } = size;
   if (a.kind === "measure") {
     // Flat bars across the line (like the I-beam ticks) in the measure's own color, white
@@ -1347,7 +1362,7 @@ function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element 
     const capH = horizontal ? MEASURE_CAP_LEN : MEASURE_CAP_THICK;
     return (
       <g>
-        {handlesFor(a, size).map((h) => (
+        {handlesFor(a, size, placement).map((h) => (
           <g key={h.id} style={{ cursor: handleCursor(h.id) }}>
             <rect
               className={styles.measureCapHit}
@@ -1372,7 +1387,7 @@ function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element 
   }
   return (
     <g>
-      {handlesFor(a, size).map((h) => (
+      {handlesFor(a, size, placement).map((h) => (
         <rect
           key={h.id}
           data-testid="resize-handle"
@@ -1590,7 +1605,7 @@ const Shape = React.memo(function Shape({
   }
 
   if (a.kind === "measure") {
-    const s = measureShape(a, W, H);
+    const s = measureShape(a, W, H, 1, base.basePlacement);
     const sw = MEASURE_STROKE_PX;
     return (
       <g
@@ -2051,7 +2066,12 @@ function isBigEnough(a: Annotation): boolean {
   return true; // text and step are placed by a click, never dragged out
 }
 
-function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
+function moveBy(
+  a: Annotation,
+  dx: number,
+  dy: number,
+  placement?: BasePlacement,
+): Partial<Annotation> {
   if (a.kind === "arrow") {
     return { x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy } as Partial<Annotation>;
   }
@@ -2060,7 +2080,7 @@ function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
       points: a.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy })),
     } as Partial<Annotation>;
   }
-  if (a.kind === "measure") return moveMeasure(a, dx, dy);
+  if (a.kind === "measure") return moveMeasure(a, dx, dy, placement);
   return { x: a.x + dx, y: a.y + dy } as Partial<Annotation>;
 }
 
@@ -2069,6 +2089,7 @@ function hitTest(
   p: Pt,
   size: Size,
   canvasMode = false,
+  placement?: BasePlacement,
 ): Annotation | null {
   for (let i = annotations.length - 1; i >= 0; i -= 1) {
     const a = annotations[i];
@@ -2111,10 +2132,10 @@ function hitTest(
         if (distToSegment(p, a.points[j], a.points[j + 1]) < 0.02) return a;
       }
     } else if (a.kind === "measure") {
-      const { p1, p2 } = measureEndpoints(a);
+      const { p1, p2 } = measureEndpoints(a, placement);
       if (distToSegment(p, p1, p2) < 0.02) return a;
       // The label pill sits off the line and is what the eye goes to: it grabs the measure too.
-      const { pill } = measureShape(a, size.w, size.h);
+      const { pill } = measureShape(a, size.w, size.h, 1, placement);
       const px = p.x * size.w;
       const py = p.y * size.h;
       if (px >= pill.x && px <= pill.x + pill.w && py >= pill.y && py <= pill.y + pill.h) {

@@ -663,3 +663,26 @@ describe("compositor buildSvg - measure (NIW2-702)", () => {
     expect(svg).toMatch(/font-size="24"/);
   });
 });
+
+describe("compositor buildSvg - measure on a placed base (NIW2-876)", () => {
+  const m: Annotation = {
+    id: "m",
+    kind: "measure",
+    axis: "x",
+    from: 100,
+    to: 140,
+    at: 299,
+    imageW: 1000,
+    imageH: 600,
+    color: "#ff0000",
+  };
+  it("draws at the placed position, and the same with an identity placement", () => {
+    const placed = { ...scene([m]), basePlacement: { x: 0.5, y: 0.25, scale: 0.5 } };
+    const svg = buildSvg(placed, geom);
+    // x: (0.5 + 0.1 * 0.5) * 1000 = 550 ... 570; y: (0.25 + (299.5 / 600) * 0.5) * 600 = 299.5.
+    expect(svg).toContain(`x1="${(0.5 + 0.05) * geom.naturalW}"`);
+    expect(svg).toContain(`x2="${(0.5 + 0.07) * geom.naturalW}"`);
+    const identity = buildSvg({ ...scene([m]), basePlacement: { x: 0, y: 0, scale: 1 } }, geom);
+    expect(identity).toBe(buildSvg(scene([m]), geom));
+  });
+});
