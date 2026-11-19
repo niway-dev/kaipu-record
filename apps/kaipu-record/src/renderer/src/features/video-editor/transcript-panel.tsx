@@ -52,7 +52,7 @@ export interface TranscriptPanelProps {
 }
 
 /**
- * The editor's right column while Transcript is open (NIW2-818, ADR 0063): the words of the
+ * The editor's right column while Transcript is open (NIW2-818, ADR 0065): the words of the
  * EDITED video, in paragraphs with their start time. A click on a word or a time moves the
  * playhead; the word that is playing is highlighted without re-rendering the list (the
  * highlight is an attribute set on one element from the playhead's clock), and a 60-minute

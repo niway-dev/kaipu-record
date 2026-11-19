@@ -1,5 +1,5 @@
 /**
- * Transcript projection (NIW2-818, ADR 0063 point 4): maps the stored words of ONE recording
+ * Transcript projection (NIW2-818, ADR 0065 point 4): maps the stored words of ONE recording
  * to every place they play in the edited timeline. The transcript panel and the SRT/VTT/TXT
  * exports read only the `WordOccurrence`s this returns, so they cannot disagree.
  *

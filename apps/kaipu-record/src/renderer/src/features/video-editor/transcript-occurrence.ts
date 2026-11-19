@@ -1,5 +1,5 @@
 /**
- * One place a transcribed word plays in the edited timeline (NIW2-818, ADR 0063). The projection
+ * One place a transcribed word plays in the edited timeline (NIW2-818, ADR 0065). The projection
  * module produces these from the stored words and the edit; the panel and the SRT/VTT/TXT
  * exports only ever read them, so both show the same words at the same times.
  */
