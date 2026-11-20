@@ -11,6 +11,7 @@ import type { TranscriptApi } from "@renderer/features/transcription/use-transcr
 import type { LayoutEntry } from "./timeline";
 import { uiArea } from "@renderer/lib/ui-area";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { resetAutoRetranscribe } from "@renderer/features/transcription/use-auto-retranscribe";
 import { TranscriptPanel, type TranscriptPanelProps } from "./transcript-panel";
 
 const analytics = vi.hoisted(() => ({ reportError: vi.fn() }));
@@ -60,16 +61,24 @@ function doc(over: Partial<TranscriptDocument> = {}): TranscriptDocument {
   };
 }
 
-const READY = (over: Partial<TranscriptDocument> = {}, stale = false): TranscriptApi => ({
+const READY = (
+  over: Partial<TranscriptDocument> = {},
+  stale = false,
+  autoRetranscribe = false,
+): TranscriptApi => ({
   state: "ready",
   transcript: doc(over),
   stale,
+  freshness: stale ? "stale" : "fresh",
+  autoRetranscribe,
   refresh: vi.fn(async () => {}),
 });
 const NO_TRANSCRIPT: TranscriptApi = {
   state: "none",
   transcript: null,
   stale: false,
+  freshness: "fresh",
+  autoRetranscribe: false,
   refresh: vi.fn(async () => {}),
 };
 
@@ -153,6 +162,7 @@ function setup(over: Partial<TranscriptPanelProps> = {}): TranscriptPanelProps {
 const panel = (): HTMLElement => screen.getByTestId("transcript-panel");
 
 beforeEach(() => {
+  resetAutoRetranscribe();
   hooks.transcript.mockReturnValue(READY());
   control({ kind: "done" });
   modelStatus({ state: "missing" });
@@ -322,6 +332,62 @@ describe("TranscriptPanel — states", () => {
       "The transcription engine stopped before it finished.",
     );
     expect(screen.getByTestId("transcript-list")).toBeInTheDocument();
+  });
+
+  it("stale and allowed to run by itself: starts one automatic job, once", () => {
+    hooks.transcript.mockReturnValue(READY({}, true, true));
+    control({ kind: "idle" });
+    const props = baseProps();
+    const { rerender } = render(<TranscriptPanel {...props} />);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith({ automatic: true });
+    rerender(<TranscriptPanel {...props} />);
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it("stale but main did not allow an automatic run: waits for the button", () => {
+    hooks.transcript.mockReturnValue(READY({}, true, false));
+    control({ kind: "idle" });
+    setup();
+    expect(start).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Transcribe again" })).toBeEnabled();
+  });
+
+  it.each([
+    [
+      "a job is already running",
+      { kind: "running", phase: "starting", segmentsDone: 0, segmentsTotal: 0 },
+    ],
+    ["another video is being transcribed", { kind: "busy-elsewhere" }],
+    ["the model is missing", { kind: "needs-model" }],
+  ] as [string, TranscribeControlState][])(
+    "stale and allowed, but %s: does not start",
+    (_name, state) => {
+      hooks.transcript.mockReturnValue(READY({}, true, true));
+      control(state);
+      setup();
+      expect(start).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stale and allowed, but the video has no audio: does not start", () => {
+    hooks.transcript.mockReturnValue(READY({}, true, true));
+    control({ kind: "idle" });
+    setup({ hasAudio: false });
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("re-transcribing an out-of-date transcript: old words stay, progress and Cancel sit in the banner", () => {
+    hooks.transcript.mockReturnValue(READY({}, true, true));
+    control({ kind: "running", phase: "transcribing", segmentsDone: 2, segmentsTotal: 5 });
+    setup();
+    expect(panel()).toHaveAttribute("data-state", "stale");
+    expect(screen.getByTestId("transcript-list")).toHaveTextContent("Hello brave new world.");
+    const banner = screen.getByTestId("transcript-stale");
+    expect(within(banner).getByTestId("transcript-progress")).toHaveAttribute("aria-valuenow", "2");
+    expect(within(banner).queryByRole("button", { name: "Transcribe again" })).toBeNull();
+    fireEvent.click(within(banner).getByRole("button", { name: "Cancel" }));
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("failed: the reason and Try again", () => {
