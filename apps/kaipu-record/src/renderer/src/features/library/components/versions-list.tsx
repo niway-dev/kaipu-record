@@ -37,7 +37,7 @@ interface VersionsListProps {
 
 /**
  * "Copies" tab: the original (never changes), every exported copy, and the copy being made right
- * now. The row of the item on screen carries a "Viewing" pill; every other row opens its own
+ * now. The row of the item on screen is marked "Viewing" (in place of its kind) and outlined; every other row opens its own
  * page. The page shows the tab only when there is a copy or an export running.
  */
 export function VersionsList({
@@ -239,7 +239,7 @@ function Row({
       <span className={styles.text}>
         <span className={styles.name}>{name}</span>
         <span className={styles.facts}>
-          {kind} · {facts}
+          {current ? viewingLabel : kind} · {facts}
         </span>
       </span>
     </>
@@ -269,7 +269,6 @@ function Row({
     return (
       <li className={styles.row} data-state="viewing" aria-current="true">
         <div className={styles.inner}>{body}</div>
-        <span className={styles.pill}>{viewingLabel}</span>
         {drag}
       </li>
     );

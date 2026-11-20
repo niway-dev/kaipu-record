@@ -84,9 +84,10 @@ describe("VersionsList", () => {
     const region = renderList(master, [master, yt, gh]);
     const rows = within(region).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
-    expect(within(rows[0]!).getByText("Viewing")).toBeTruthy();
-    expect(within(rows[0]!).getByText("Original")).toBeTruthy();
-    expect(within(rows[0]!).getByRole("img", { name: "Never changes" })).toBeTruthy();
+    // The row on screen says "Viewing" where its kind would be; the others keep theirs.
+    expect(rows[0]).toHaveAttribute("aria-current", "true");
+    expect(rows[0]!.textContent).toMatch(/Viewing · /);
+    expect(rows[0]!.textContent).not.toContain("Original");
     expect(within(rows[1]!).getByText("YouTube 1440p")).toBeTruthy();
     expect(within(rows[1]!).getByRole("link").getAttribute("href")).toBe("/library/yt");
     expect(rows[1]!.textContent).toContain("Exported copy");
@@ -106,7 +107,8 @@ describe("VersionsList", () => {
     const region = renderList(yt, [master, yt, gh]);
     const source = within(region).getByRole("link", { name: /My master/ });
     expect(source.getAttribute("href")).toBe("/library/master");
-    const viewing = within(region).getByText("Viewing").closest("li")!;
+    const viewing = region.querySelector('li[aria-current="true"]') as HTMLElement;
+    expect(viewing.textContent).toMatch(/Viewing · /);
     expect(within(viewing).getByText("YouTube 1440p")).toBeTruthy();
     expect(within(region).queryByRole("link", { name: /YouTube/ })).toBeNull();
   });
@@ -126,15 +128,15 @@ describe("VersionsList", () => {
   it("says the source was deleted when a copy lost it", () => {
     const region = renderList(yt, [yt]);
     expect(within(region).getByText("Source recording was deleted")).toBeTruthy();
-    expect(within(region).getByText("Viewing")).toBeTruthy();
+    expect(region.querySelector('li[aria-current="true"]')!.textContent).toMatch(/Viewing · /);
   });
 
   it("shows each row's name and its kind with facts on one muted line", () => {
     const region = renderList(master, [master, yt]);
     const rows = within(region).getAllByRole("listitem");
     expect(within(rows[0]!).getByText("My master")).toBeTruthy();
-    expect(rows[0]!.textContent).toMatch(/Original · .*3:02.* · /);
-    expect(within(rows[0]!).getByText("Viewing")).toBeTruthy();
+    expect(rows[0]!.textContent).toMatch(/Viewing · .*3:02.* · /);
+    expect(within(rows[1]!).queryByText(/Viewing/)).toBeNull();
     expect(within(rows[1]!).getByText("YouTube 1440p")).toBeTruthy();
     expect(rows[1]!.textContent).toMatch(/Exported copy · .*3:02/);
   });
@@ -160,7 +162,7 @@ describe("VersionsList", () => {
       const region = renderList(opened, all);
       const rows = within(region).getAllByRole("listitem");
       expect(rows).toHaveLength(3);
-      expect(within(rows[0]!).getByText("Original")).toBeTruthy();
+      expect(rows[0]!.textContent).toMatch(opened === a ? /Viewing · / : /Original · /);
       expect(within(rows[0]!).getByText("Root A")).toBeTruthy();
       expect(rows[1]!.textContent).toContain("Copy B");
       expect(rows[2]!.textContent).toContain("Copy C");
@@ -272,7 +274,9 @@ describe("VersionsList", () => {
 
   it("the copy on screen keeps its drag handle", () => {
     const region = renderList(yt, [master, yt, gh]);
-    const viewing = within(region).getByText("Viewing").closest("li")!;
+    const viewing = region.querySelector('li[aria-current="true"]') as HTMLElement;
+    expect(viewing.textContent).toMatch(/Viewing · /);
+    expect(viewing.querySelector("li > span")).toBeNull();
     expect(within(viewing).getByRole("button", { name: /^Drag YouTube 1440p/ })).toBeTruthy();
     // The original is not an exported copy: no handle on its row.
     const original = within(region)
