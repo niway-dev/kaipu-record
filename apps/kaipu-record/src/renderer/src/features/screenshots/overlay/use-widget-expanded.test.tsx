@@ -103,7 +103,8 @@ describe("useWidgetExpanded", () => {
 
   it("going back to the stored value keeps the claim until the first save's echo has passed", async () => {
     const ipc = installSettingsIpc(BASE);
-    const { result } = renderHook(() => useWidgetExpanded(api(), "capture"));
+    const bridge = api();
+    const { result } = renderHook(() => useWidgetExpanded(bridge, "capture"));
     await loaded();
 
     // Open, then closed again: the second tap asks for the value the store still holds.
@@ -112,6 +113,8 @@ describe("useWidgetExpanded", () => {
       result.current.toggle();
     });
     expect(result.current.expanded).toBe(false);
+    // Main can only echo a save it was sent.
+    await waitFor(() => expect(bridge.updateSettings).toHaveBeenCalledTimes(2));
 
     // Main echoes the first save: the toolbar must not open for the moment before the second
     // save's echo arrives.
@@ -127,7 +130,8 @@ describe("useWidgetExpanded", () => {
 
   it("open, closed, open: the first echo does not end the claim of the third tap", async () => {
     const ipc = installSettingsIpc(BASE);
-    const { result } = renderHook(() => useWidgetExpanded(api(), "capture"));
+    const bridge = api();
+    const { result } = renderHook(() => useWidgetExpanded(bridge, "capture"));
     await loaded();
 
     act(() => {
@@ -136,6 +140,7 @@ describe("useWidgetExpanded", () => {
       result.current.toggle();
     });
     expect(result.current.expanded).toBe(true);
+    await waitFor(() => expect(bridge.updateSettings).toHaveBeenCalledTimes(3));
 
     // Main echoes the three saves in order. The toolbar shows the newest tap all along.
     for (const value of [true, false, true]) {
@@ -145,6 +150,40 @@ describe("useWidgetExpanded", () => {
     // All three are echoed: the store decides again.
     act(() => ipc.broadcast(withWidget({ screenshotExpanded: false, recordingExpanded: false })));
     expect(result.current.expanded).toBe(false);
+  });
+
+  it("another window's broadcasts of the same values do not end the claims before this window's saves are echoed", async () => {
+    const ipc = installSettingsIpc(BASE);
+    let finishFirst: (settings: AppSettings) => void = () => {};
+    const updateSettings = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+      .mockImplementation(async () => BASE);
+    const { result } = renderHook(() => useWidgetExpanded({ updateSettings }, "capture"));
+    await loaded();
+
+    // Open, then closed again here. Before either save is sent, another display's overlay makes
+    // the same two changes: its broadcasts must not count as the echoes of this window's saves.
+    act(() => {
+      result.current.toggle();
+      result.current.toggle();
+      ipc.broadcast(withWidget({ screenshotExpanded: true, recordingExpanded: false }));
+      ipc.broadcast(withWidget({ screenshotExpanded: false, recordingExpanded: false }));
+    });
+    expect(result.current.expanded).toBe(false);
+
+    // The first local save is sent and echoed: it still must not open the toolbar.
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    act(() => ipc.broadcast(withWidget({ screenshotExpanded: true, recordingExpanded: false })));
+    expect(result.current.expanded).toBe(false);
+    await act(async () => finishFirst(BASE));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
+    act(() => ipc.broadcast(withWidget({ screenshotExpanded: false, recordingExpanded: false })));
+    expect(result.current.expanded).toBe(false);
+    // Both echoes are in: the store decides again.
+    act(() => ipc.broadcast(withWidget({ screenshotExpanded: true, recordingExpanded: false })));
+    expect(result.current.expanded).toBe(true);
   });
 
   it("a failed save shows the stored value again instead of sticking", async () => {
@@ -237,11 +276,13 @@ describe("useWidgetExpanded", () => {
 
   it("an older broadcast still in flight does not flip a fresh toggle back", async () => {
     const ipc = installSettingsIpc(BASE);
-    const { result } = renderHook(() => useWidgetExpanded(api(), "capture"));
+    const bridge = api();
+    const { result } = renderHook(() => useWidgetExpanded(bridge, "capture"));
     await loaded();
     expect(result.current.expanded).toBe(false);
 
     act(() => result.current.toggle());
+    await waitFor(() => expect(bridge.updateSettings).toHaveBeenCalledTimes(1));
     // A broadcast of the value from before the toggle arrives late.
     act(() => ipc.broadcast(withWidget({ screenshotExpanded: false, recordingExpanded: false })));
     expect(result.current.expanded).toBe(true);

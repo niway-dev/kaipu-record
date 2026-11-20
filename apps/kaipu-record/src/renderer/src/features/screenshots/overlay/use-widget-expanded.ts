@@ -22,6 +22,13 @@ const sameWidget = (a: CaptureWidgetSettings, b: CaptureWidgetSettings): boolean
 
 type WidgetKey = keyof CaptureWidgetSettings;
 
+/** A toggle's save: its value, and whether it has been sent to main yet. */
+interface SaveClaim {
+  id: number;
+  value: boolean;
+  sent: boolean;
+}
+
 /** Screenshots and recordings each remember their own mode (NIW2-883). */
 const keyFor = (intent: CaptureIntent): WidgetKey =>
   intent === "record" ? "recordingExpanded" : "screenshotExpanded";
@@ -42,9 +49,11 @@ export function useWidgetExpanded(
   const stored = useSettings(pickWidget, sameWidget);
   const [pending, setPendingState] = useState<Partial<CaptureWidgetSettings>>({});
   // The saves of each type that main has not echoed yet, oldest first. A type's claim is its
-  // newest save's value, and it ends only when the last of them is echoed. Kept in a ref so a
-  // second toggle that comes before React renders sees the first one's value, not the store's.
-  const saving = useRef<Partial<Record<WidgetKey, { id: number; value: boolean }[]>>>({});
+  // newest save's value, and it ends only when the last of them is echoed. Only a save that has
+  // been sent can be echoed, so a broadcast made before that (another window's, say) never ends
+  // a claim. Kept in a ref so a second toggle that comes before React renders sees the first
+  // one's value, not the store's.
+  const saving = useRef<Partial<Record<WidgetKey, SaveClaim[]>>>({});
   const lastId = useRef(0);
   const publishClaims = useCallback((): void => {
     const next: Partial<CaptureWidgetSettings> = {};
@@ -69,7 +78,11 @@ export function useWidgetExpanded(
         let changed = false;
         for (const name of Object.keys(saving.current) as WidgetKey[]) {
           const queue = saving.current[name];
-          if (queue?.length && queue[0].value === published.captureWidget?.[name]) {
+          if (
+            queue?.length &&
+            queue[0].sent &&
+            queue[0].value === published.captureWidget?.[name]
+          ) {
             queue.shift();
             changed = true;
           }
@@ -85,7 +98,8 @@ export function useWidgetExpanded(
     // Updated here too, so two taps before a render still flip twice.
     latest.current = { key: current, expanded: next };
     const mine = ++lastId.current;
-    (saving.current[current] ??= []).push({ id: mine, value: next });
+    const claim: SaveClaim = { id: mine, value: next, sent: false };
+    (saving.current[current] ??= []).push(claim);
     publishClaims();
     // The whole object is written back: the other capture type's value must stay.
     writes.current = writes.current
@@ -102,6 +116,9 @@ export function useWidgetExpanded(
             if (save.id < mine) others[name] = save.value;
           }
         }
+        // Saves run one at a time, so from here until it settles this is the one save whose
+        // echo can arrive.
+        claim.sent = true;
         return api.updateSettings({
           captureWidget: { ...app.captureWidget, ...others, [current]: next },
         });
