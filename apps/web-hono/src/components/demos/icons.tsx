@@ -133,15 +133,3 @@ export function Icon({
     </svg>
   );
 }
-
-const make = (name: IconName) =>
-  function DemoIcon(props: IconProps): ReactElement {
-    return <Icon name={name} {...props} />;
-  };
-
-/** The icon of each onboarding card. */
-export const RecordIcon = make("video");
-export const CaptureIcon = make("camera");
-export const ShareIcon = make("upload");
-export const EditorIcon = make("film");
-export const WorkspacesIcon = make("folder");
