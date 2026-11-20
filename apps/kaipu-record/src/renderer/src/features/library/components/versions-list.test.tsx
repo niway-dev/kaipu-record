@@ -86,8 +86,8 @@ describe("VersionsList", () => {
     expect(rows).toHaveLength(3);
     // The row on screen says "Viewing" where its kind would be; the others keep theirs.
     expect(rows[0]).toHaveAttribute("aria-current", "true");
-    expect(rows[0]!.textContent).toMatch(/Viewing · /);
-    expect(rows[0]!.textContent).not.toContain("Original");
+    expect(rows[0]!.textContent).toMatch(/^My masterViewing · Original · /);
+    expect(within(rows[0]!).getByRole("img", { name: "Never changes" })).toBeTruthy();
     expect(within(rows[1]!).getByText("YouTube 1440p")).toBeTruthy();
     expect(within(rows[1]!).getByRole("link").getAttribute("href")).toBe("/library/yt");
     expect(rows[1]!.textContent).toContain("Exported copy");
@@ -135,7 +135,7 @@ describe("VersionsList", () => {
     const region = renderList(master, [master, yt]);
     const rows = within(region).getAllByRole("listitem");
     expect(within(rows[0]!).getByText("My master")).toBeTruthy();
-    expect(rows[0]!.textContent).toMatch(/Viewing · .*3:02.* · /);
+    expect(rows[0]!.textContent).toMatch(/Viewing · Original · .*3:02.* · /);
     expect(within(rows[1]!).queryByText(/Viewing/)).toBeNull();
     expect(within(rows[1]!).getByText("YouTube 1440p")).toBeTruthy();
     expect(rows[1]!.textContent).toMatch(/Exported copy · .*3:02/);
@@ -162,7 +162,7 @@ describe("VersionsList", () => {
       const region = renderList(opened, all);
       const rows = within(region).getAllByRole("listitem");
       expect(rows).toHaveLength(3);
-      expect(rows[0]!.textContent).toMatch(opened === a ? /Viewing · / : /Original · /);
+      expect(rows[0]!.textContent).toMatch(opened === a ? /Viewing · Original · / : /Original · /);
       expect(within(rows[0]!).getByText("Root A")).toBeTruthy();
       expect(rows[1]!.textContent).toContain("Copy B");
       expect(rows[2]!.textContent).toContain("Copy C");

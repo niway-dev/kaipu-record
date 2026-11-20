@@ -118,6 +118,7 @@ export function VersionsList({
             current={viewing(master.assetId)}
             order={order}
             viewingLabel={tPrepare("versionsViewing")}
+            keepKind
             icon={<Thumb video={master} />}
             name={master.title}
             kind={
@@ -215,6 +216,7 @@ function Row({
   dragLabel,
   dragText,
   viewingLabel,
+  keepKind = false,
   icon,
   name,
   kind,
@@ -228,6 +230,8 @@ function Row({
   dragLabel?: string;
   dragText?: string;
   viewingLabel: string;
+  /** The viewing row keeps its kind after "Viewing" (the original: the list names it). */
+  keepKind?: boolean;
   icon: ReactNode;
   name: string;
   kind: ReactNode;
@@ -239,7 +243,15 @@ function Row({
       <span className={styles.text}>
         <span className={styles.name}>{name}</span>
         <span className={styles.facts}>
-          {current ? viewingLabel : kind} · {facts}
+          {current ? (
+            <>
+              {viewingLabel} · {keepKind && kind}
+              {keepKind && " · "}
+            </>
+          ) : (
+            <>{kind} · </>
+          )}
+          {facts}
         </span>
       </span>
     </>
