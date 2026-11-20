@@ -216,10 +216,14 @@
   gap: 12px;
 }
 
+/* Under the capture widget (z-index 2) and below its docked edge: the widget is docked 16 DIP
+   above the work area's bottom edge, and a wide toolbar reaches this corner. */
 .displayLabel {
   position: fixed;
   left: 10px;
-  bottom: 8px;
+  bottom: 4px;
+  z-index: 1;
+  line-height: 1;
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.1em;

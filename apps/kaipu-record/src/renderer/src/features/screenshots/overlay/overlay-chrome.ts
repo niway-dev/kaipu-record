@@ -38,6 +38,13 @@ export interface OverlayChrome {
   countdown: number | null;
   /** The configured countdown length, printed on the Record button; 0 means no countdown. */
   countdownSeconds: number;
+  /**
+   * The toolbar shows labels, switches and the size readout (expanded) instead of icons and key
+   * badges (compact), remembered per intent in `AppSettings.captureWidget`.
+   */
+  expanded: boolean;
+  /** Flip compact and expanded: the Control key alone, or a click on the Control badge. */
+  onToggleExpanded(): void;
   /** Cancel the overlay and open the Record settings in the main window ("More settings"). */
   onMoreSettings(): void;
 }

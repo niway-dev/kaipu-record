@@ -120,6 +120,7 @@ describe("mergeSettings", () => {
       },
       microphone: { deviceId: "yeti", label: "Yeti Nano" },
       editor: { hiddenTracks: [] },
+      captureWidget: { screenshotExpanded: false, recordingExpanded: false },
     });
   });
 
@@ -808,5 +809,24 @@ describe("migrateLegacyShortcuts", () => {
     expect(migrateLegacyShortcuts(undefined)).toEqual({ shortcuts: undefined, migrated: false });
     expect(migrateLegacyShortcuts("x")).toEqual({ shortcuts: "x", migrated: false });
     expect(migrateLegacyShortcuts([1])).toEqual({ shortcuts: [1], migrated: false });
+  });
+});
+
+describe("mergeSettings — captureWidget", () => {
+  it("starts compact for screenshots and recordings", () => {
+    expect(mergeSettings(null).captureWidget).toEqual({
+      screenshotExpanded: false,
+      recordingExpanded: false,
+    });
+  });
+
+  it("keeps each capture type's stored choice apart and survives a wrong shape", () => {
+    expect(
+      mergeSettings({ captureWidget: { recordingExpanded: true } } as never).captureWidget,
+    ).toEqual({ screenshotExpanded: false, recordingExpanded: true });
+    expect(mergeSettings({ captureWidget: "open" } as never).captureWidget).toEqual({
+      screenshotExpanded: false,
+      recordingExpanded: false,
+    });
   });
 });

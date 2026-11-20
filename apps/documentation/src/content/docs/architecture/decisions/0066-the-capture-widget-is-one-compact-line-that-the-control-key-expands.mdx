@@ -1,0 +1,85 @@
+---
+title: "ADR 0066: The capture widget is one compact line that the Control key expands"
+description: The capture toolbar opens as one row of icon chips with key badges. A Control tap toggles the expanded toolbar, remembered per capture type, and the expanded row degrades by display width so it never wraps. It supersedes ADR 0056's rejection of a compact bar.
+---
+
+# ADR 0066: The capture widget is one compact line that the Control key expands
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted, 2026-11-19, by the owner's decision on [NIW2-883](https://linear.app/niway/issue/NIW2-883). Built in the same PR.                                                                                                                 |
+| Date          | 2026-11-19                                                                                                                                                                                                                                  |
+| Relates to    | 0046 (the typed UI map), 0056 (the capture widget docks to the work area)                                                                                                                                                                   |
+| Supersedes    | In part, [ADR 0056](/architecture/decisions/0056-the-capture-widget-docks-to-the-work-area-not-to-the-selection/): its rejection of "direction C, a compact bar", its three-row structure, and its non-goal "a compact or collapsed widget" |
+| Superseded by | —                                                                                                                                                                                                                                           |
+
+## Context
+
+ADR 0056 put one toolbar at the bottom of the work area, with three rows: capture-as, area and
+ratio; the inputs and the confirm button; key hints. It rejected a compact bar and listed a
+compact mode as a non-goal, and it said it would reopen "when a compact mode is requested".
+
+The owner then used it and found it too tall and too busy. The hints row cost a whole line to
+teach keys that the controls can show themselves. On 2026-11-19 the owner asked for one compact
+line, a way to expand it with the keyboard, a remembered choice, and a bounce on entry. The
+reopen condition of 0056 is met.
+
+## Decision
+
+1. **One compact line by default.** Icon chips, each with its key badge, in one row. There is no
+   hints row: the badge is the hint.
+2. **A Control tap, alone, toggles the expanded toolbar.** Expanded shows the labels, the On/Off
+   words, the device menus and the size readout. The toggle fires on the key release, and only
+   when no other key was pressed in between, so Ctrl+C (Copy off macOS) is not a toggle.
+3. **The choice is remembered per capture type**, Screenshot and Recording separately
+   (`captureWidget.screenshotExpanded` and `recordingExpanded` in the settings), so switching
+   between them does not move the toolbar under the user's hand. The default is compact.
+4. **Frame shows a ratio menu; Screen shows a read-only display chip.** The area is chosen on
+   the canvas, so the toolbar only carries what the canvas cannot.
+5. **The entrance follows the dock edge.** A docked-at-bottom toolbar rises from below with a
+   slight bounce; a docked-at-top one drops from above. The toolbar jumps, without replaying the
+   entrance, when the jump rule of 0056 moves it to the other edge. Reduced motion turns the
+   animation off.
+6. **Expanded is always one row, and it degrades by width.** When the display is narrower than
+   the full row, the toolbar steps through levels until the measured row fits the work area:
+   the disabled Window chip, then the size readout (and the display kind in Screen), then long
+   names shortened ("Microphone" to "Mic", "System audio" to "Audio", "More settings" to "More",
+   "Copy to clipboard" to "Copy"; the Camera name is already short), then the On/Off words beside
+   the switches, and last the compact look. The saved choice stays
+   "expanded"; only what is drawn changes, and a wider display gets the full row back. Placement
+   (docking, jump rule, countdown inside the widget) is unchanged from 0056.
+
+## Alternatives rejected
+
+- **Keep the three-row toolbar of 0056.** The owner tested it and asked for less.
+- **A toggle button only.** A button costs a chip and a pointer trip; Control is the fastest way
+  and the button stays as the discoverable path.
+- **One remembered choice for both capture types.** Recording needs the input labels and
+  switches more often than a screenshot does; one shared choice made the toolbar move on every
+  switch.
+- **Letting the expanded row wrap.** On a 1920 px display the Record button fell to a second row
+  and the Control badge followed. A wrapped primary action is worse than a dropped label.
+- **Scaling the row to fit.** Text and hit targets shrink below what can be read or clicked.
+
+## Consequences
+
+- The toolbar's look depends on the display: the width of the row at each level is measured
+  after render and the widest level that fits wins. The pure part (which level, given the
+  measured widths) is unit-tested with stated widths; the real widths are not pinned by a test.
+- Two settings are added to the settings store, with a migration default of compact.
+- A new "expanded" state of the toolbar exists in the UI map and the UI catalog (0046). The
+  catalog cannot resize the overlay, which fills the real display, so a narrow-display state
+  cannot be drawn there.
+
+## Non-goals
+
+Window mode (stays disabled, "soon"), editable W × H and size presets, user-reorderable chips,
+and a separate toolbar for touch input.
+
+## Reopen when
+
+A display the app supports cannot fit the compact row either, the owner wants the choice shared
+between capture types, or the Control tap collides with a platform shortcut that cannot be
+worked around.

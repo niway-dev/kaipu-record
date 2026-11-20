@@ -112,6 +112,9 @@ export function ScreenCard({
         ratio="free"
         size={pixels}
         canRecord
+        // The display this widget sits on; Screen mode has no display switching, the pointer
+        // picks the display and each display's overlay shows its own chip.
+        display={{ name: t("overlay.displayLabel", { index }), resolution: size, kind }}
         onAction={(action) => answer(action)}
         devices={chrome.devices}
       />

@@ -794,9 +794,22 @@ export const UI_MAP = {
     areas: {
       frameBox: { states: ["screenshot", "record"] },
       // One toolbar docked to the work area replaces the action bar, the record widget, the
-      // ratio bar and the hint pill (ADR 0056). Screen mode shows one per display.
+      // ratio bar and the hint pill (ADR 0056). Screen mode shows one per display. It is one
+      // compact row by default; Control alone expands it (NIW2-883). `screenshot`, `record` and
+      // `screen` are the compact look, docked at the bottom; `boxAtBottom` is the compact row
+      // docked at the top; the `*Expanded` states add the labels, switches and size readout.
       captureWidget: {
-        states: ["screenshot", "record", "boxAtBottom", "screen", "keyToast", "counting"],
+        states: [
+          "screenshot",
+          "record",
+          "boxAtBottom",
+          "screen",
+          "keyToast",
+          "counting",
+          "screenshotExpanded",
+          "recordExpanded",
+          "screenExpanded",
+        ],
         gatedBy: [
           { recordingSetting: "isMicrophoneEnabled" },
           { recordingSetting: "isSystemAudioEnabled" },

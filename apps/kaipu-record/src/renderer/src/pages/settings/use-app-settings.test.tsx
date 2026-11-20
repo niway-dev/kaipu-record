@@ -44,6 +44,7 @@ const SETTINGS: AppSettings = {
   },
   microphone: null,
   editor: { hiddenTracks: [] },
+  captureWidget: { screenshotExpanded: false, recordingExpanded: false },
 };
 
 describe("useAppSettings", () => {

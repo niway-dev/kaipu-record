@@ -14,9 +14,14 @@ export interface WidgetPlacement {
   width: number;
 }
 
-/** The widget's width on `area`: the design width, or the area minus a margin on each side. */
+/** The widest the widget may be on `area`: the area minus a margin on each side. */
+export function widgetFitWidth(area: CaptureRect): number {
+  return Math.max(0, area.width - 2 * WIDGET_EDGE_GAP_DIP);
+}
+
+/** The widget's width on `area` before it is measured: the design width, or the area minus a margin on each side. */
 export function widgetWidth(area: CaptureRect): number {
-  return Math.max(0, Math.min(WIDGET_MAX_WIDTH_DIP, area.width - 2 * WIDGET_EDGE_GAP_DIP));
+  return Math.min(WIDGET_MAX_WIDTH_DIP, widgetFitWidth(area));
 }
 
 function intersects(a: CaptureRect, b: CaptureRect): boolean {
@@ -27,15 +32,21 @@ function intersects(a: CaptureRect, b: CaptureRect): boolean {
  * Where the capture widget goes (ADR 0056): centred at the bottom of the work area, 16 DIP above
  * its edge; at the top, 16 DIP below its edge, when the selection reaches the bottom band and
  * the top band is free; at the bottom (covering that strip) when neither is free. `selection`
- * null is Screen mode, which covers the whole work area. `height` is the widget's measured height.
- * Everything is window-local DIP; `area` is the work area in window coordinates.
+ * null is Screen mode, which covers the whole work area. `height` is the widget's measured height;
+ * `measuredWidth` its measured width (compact is narrower than expanded), which the design width
+ * stands in for until it is known. Everything is window-local DIP; `area` is the work area in
+ * window coordinates.
  */
 export function widgetPlacement(
   selection: CaptureRect | null,
   area: CaptureRect,
   height: number,
+  measuredWidth?: number,
 ): WidgetPlacement {
-  const width = widgetWidth(area);
+  const width =
+    measuredWidth && measuredWidth > 0
+      ? Math.min(measuredWidth, widgetFitWidth(area))
+      : widgetWidth(area);
   const left = area.x + (area.width - width) / 2;
   const bottomTop = area.y + area.height - WIDGET_EDGE_GAP_DIP - height;
   const topTop = area.y + WIDGET_EDGE_GAP_DIP;
