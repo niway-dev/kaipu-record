@@ -79,6 +79,24 @@ const openWholeVideo = (): void => {
 };
 
 describe("the Camera panel's tabs", () => {
+  it("opens on Whole video when there is no part, and on This part when there is one", () => {
+    const { unmount } = render(<WebcamPanel {...panelProps({ segment: null, range: null })} />);
+    expect(screen.getByRole("tab", { name: "Whole video" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByText(/No change at/)).toBeNull();
+    unmount();
+    render(<WebcamPanel {...panelProps()} />);
+    expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("still lets the user open This part with no part, and shows the empty sentence", () => {
+    render(<WebcamPanel {...panelProps({ segment: null, range: null, playhead: 0 })} />);
+    fireEvent.click(screen.getByRole("tab", { name: "This part" }));
+    expect(screen.getByText(/No change at 0:00/)).toBeInTheDocument();
+  });
+
   it("opens on This part and switches to Whole video and back", () => {
     renderPanel();
     expect(screen.getByRole("heading", { name: "Camera" })).toBeInTheDocument();
@@ -407,6 +425,8 @@ describe("a part saved with its own look", () => {
       const segment = webcam.segments[0] ?? null;
       return (
         <WebcamPanel
+          // The page keys the panel by the selection; so does this harness.
+          key={segment?.id ?? "none"}
           webcam={webcam}
           segment={segment}
           range={segment ? { from: segment.start, to: segment.end } : null}
@@ -440,6 +460,7 @@ describe("a part saved with its own look", () => {
 describe("This part, with no part there", () => {
   it("says there is no change at the playhead and offers no button", () => {
     renderPanel({ segment: null, range: null, playhead: 4 });
+    fireEvent.click(screen.getByRole("tab", { name: "This part" }));
     expect(screen.getByText("No change at 0:04")).toBeInTheDocument();
     expect(screen.getByText(/Drag the bubble and Kaipu asks/)).toBeInTheDocument();
     const body = screen.getByRole("tabpanel");

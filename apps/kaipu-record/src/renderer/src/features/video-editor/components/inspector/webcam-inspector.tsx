@@ -1,5 +1,6 @@
 /**
- * The Camera panel of the inspector (camera parts, drag-first). Two tabs:
+ * The Camera panel of the inspector (camera parts, drag-first). Two tabs; it opens on "This
+ * part" when there is a part under the playhead or selected, else on "Whole video":
  *
  * - "This part": the part under the playhead or selected on the Camera lane (its range, where
  *   the camera comes from and goes to, how it arrives, when it ends, "Remove this part"), or,
@@ -533,7 +534,7 @@ export interface WebcamPanelProps {
 
 /**
  * The panel. The page keys it by the selection, so picking another part on the lane opens it on
- * "This part" again; the tab the user chose stays while the playhead crosses parts.
+ * "This part" again (and a selection with no part opens "Whole video"); the tab the user chose stays while the playhead crosses parts.
  */
 export function WebcamPanel({
   webcam,
@@ -546,7 +547,10 @@ export function WebcamPanel({
   onRemoved,
 }: WebcamPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  const [tab, setTab] = useState<Tab>("part");
+  // "This part" opens only when it has content: a part under the playhead or selected. With
+  // none it would only say "No change at 0:00", so the panel opens on "Whole video". The page
+  // keys the panel by the selection, so a new selection evaluates this again.
+  const [tab, setTab] = useState<Tab>(segment && range ? "part" : "whole");
   const tabButtons = useRef<Record<Tab, HTMLButtonElement | null>>({ part: null, whole: null });
   if (segment?.mode === "hidden" && range) {
     return <HiddenRangePanel segment={segment} range={range} edits={edits} onRemoved={onRemoved} />;
