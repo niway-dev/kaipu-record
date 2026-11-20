@@ -102,6 +102,7 @@ export function SetupCard({
         type="button"
         className={styles.device}
         aria-label={deviceText ? `${chevronLabel}: ${deviceText}` : chevronLabel}
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? controlsId : undefined}
         title={deviceText || undefined}
