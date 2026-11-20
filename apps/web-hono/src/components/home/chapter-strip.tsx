@@ -1,12 +1,9 @@
-import { Crop, Scissors, Search, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 
-import { NUMBERED } from "./chapters";
+import { numbered, type Chapters } from "./chapters";
 import { useActiveChapter } from "./use-active-chapter";
 import { cssVars } from "./css-vars";
 import styles from "./chapter-strip.module.css";
-
-const ICONS = [Video, Crop, Scissors, Search];
 
 /**
  * The mobile counterpart of the rail: the same four chapters, laid out
@@ -19,14 +16,14 @@ const ICONS = [Video, Crop, Scissors, Search];
  * removes an element from the accessibility tree, so exactly one exists at any
  * viewport — and it should be called the same thing either way.
  */
-export function ChapterStrip() {
+export function ChapterStrip({ chapters }: { chapters: Chapters }) {
   const t = useTranslations("landing");
-  const active = useActiveChapter();
+  const active = useActiveChapter(chapters);
 
   return (
     <nav className={`${styles.strip} kl-glass`} aria-label={t("homeEyebrow")}>
-      {NUMBERED.map((chapter, i) => {
-        const Icon = ICONS[i]!;
+      {numbered(chapters).map((chapter) => {
+        const Icon = chapter.icon;
         const isActive = chapter.id === active;
         return (
           <a
@@ -41,7 +38,7 @@ export function ChapterStrip() {
             })}
           >
             <span className={styles.dot} aria-hidden>
-              <Icon size={14} />
+              {Icon && <Icon size={14} />}
             </span>
             {t(chapter.labelKey)}
           </a>

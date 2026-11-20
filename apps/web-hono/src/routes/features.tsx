@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { LazyHydrate } from "@/components/lazy-hydrate";
+import { FEATURES_CHAPTERS } from "@/components/home/chapters";
 import { HomeShell } from "@/components/home/home-shell";
 import { Files } from "@/components/home/files";
 import { Closing } from "@/components/home/closing";
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/features")({
 
 function FeaturesPage() {
   return (
-    <HomeShell page="features">
+    <HomeShell page="features" chapters={FEATURES_CHAPTERS}>
       <FeaturesHero />
       {FEATURE_CHAPTERS.map((chapter) => (
         <LazyHydrate key={chapter.id}>
