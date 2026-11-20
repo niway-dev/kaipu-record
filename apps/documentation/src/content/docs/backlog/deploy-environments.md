@@ -29,7 +29,8 @@ production at all.
   constraint that makes environments a real decision: any new environment must resolve which
   API its web half talks to, or a staging front end writes to the production database.
 - **The release path is plain wrangler, and now it is the only one.** `release-web.yml` builds
-  and runs `cloudflare/wrangler-action@v3.14.1` with `command: deploy`. An unused second
+  and runs `scripts/deploy-worker.sh` (pinned wrangler, `wrangler deploy --secrets-file`); it
+  used `cloudflare/wrangler-action` when this page was written. An unused second
   mechanism (`alchemy.run.ts` plus `deploy`/`destroy`/`alchemy:dev` scripts) sat beside it,
   called by no workflow, and was removed — it was already making readers believe the app
   deployed through Alchemy.
@@ -124,7 +125,11 @@ to write the full spec and `ADR 0001`:
 - a second person testing before a release, so an ephemeral per-branch URL is no longer enough;
 - the Lighthouse series needing a **fixed address** measured over months rather than per PR;
 - user count passing the point where a bad release costs more than the environment does;
-- the API needing its own pre-production target, which brings the Service Binding problem back.
+- the API needing its own pre-production target, which brings the Service Binding problem back;
+- a **nightly build** of `main` to a persistent environment. Wrangler `env.nightly` with its own
+  `services` binding covers the Service Binding half; both Workers still need a non-production
+  `DATABASE_URL`. Whether Alchemy should replace wrangler for that, and why not yet, is in
+  [Alchemy as the deploy tool](/backlog/alchemy-deploy-evaluation/).
 
 ## Not yet done
 
