@@ -41,6 +41,24 @@ describe("useAutoRetranscribe", () => {
     expect(start).toHaveBeenCalledTimes(1);
   });
 
+  it("claims per item and content: new content starts again, the same content does not", async () => {
+    const start = vi.fn(started);
+    const { rerender } = renderHook(({ key }) => useAutoRetranscribe(key, true, start), {
+      initialProps: { key: "a:hash-1" },
+    });
+    await Promise.resolve();
+    expect(start).toHaveBeenCalledTimes(1);
+    // The same content again (a re-render, a second mount): no second start.
+    rerender({ key: "a:hash-1" });
+    renderHook(() => useAutoRetranscribe("a:hash-1", true, start));
+    await Promise.resolve();
+    expect(start).toHaveBeenCalledTimes(1);
+    // The recording changed again after the first re-transcribe: a new attempt.
+    rerender({ key: "a:hash-2" });
+    await Promise.resolve();
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
   it("tracks each item on its own", () => {
     const start = vi.fn(started);
     renderHook(() => useAutoRetranscribe("a", true, start));

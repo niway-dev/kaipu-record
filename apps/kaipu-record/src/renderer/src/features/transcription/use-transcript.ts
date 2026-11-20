@@ -22,6 +22,8 @@ export interface TranscriptApi {
   freshness: "fresh" | "stale" | "checking" | "unknown";
   /** The check found it stale and no automatic re-transcribe was made for this content yet. */
   autoRetranscribe: boolean;
+  /** The media content the stale verdict was made for; null until the check lands. */
+  mediaContentSha256?: string | null;
   refresh(): Promise<void>;
 }
 
@@ -91,6 +93,7 @@ export function useTranscript(itemId: string | null): TranscriptApi {
     stale: freshness === "stale" || freshness === "unknown",
     freshness,
     autoRetranscribe: verdict?.autoRetranscribe ?? false,
+    mediaContentSha256: verdict?.mediaContentSha256 ?? null,
     refresh: read,
   };
 }

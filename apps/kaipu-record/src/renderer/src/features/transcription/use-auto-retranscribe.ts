@@ -2,9 +2,10 @@ import { useEffect, useRef } from "react";
 import type { StartOutcome } from "./transcription-job-store";
 
 /**
- * Items the app has already tried to re-transcribe on its own in this session. Module-level so two
- * mounted hooks for one item (the panel and the Library detail can both be on screen) share one
- * trigger. Main keeps the durable guard, one automatic attempt per media content, across restarts.
+ * Claims (item plus media content) the app has already tried to re-transcribe on its own in this
+ * session. Module-level so two mounted hooks for one item (the panel and the Library detail can
+ * both be on screen) share one trigger. Main keeps the durable guard, one automatic attempt per
+ * media content, across restarts.
  */
 const claimed = new Set<string>();
 
@@ -14,12 +15,12 @@ export function resetAutoRetranscribe(): void {
 }
 
 /**
- * Starts a transcription job by itself the first time `armed` is true for an item, and never again
- * from the renderer: a cancel or a failure must not make the app retry in a loop. The claim is
+ * Starts a transcription job by itself the first time `armed` is true for a claim key (the item
+ * plus the media content that armed it), and never again for that key from the renderer: a cancel or a failure must not make the app retry in a loop. The claim is
  * given back only when nothing started (`null` or a refusal), so a later moment can try again.
  */
 export function useAutoRetranscribe(
-  itemId: string,
+  claimKey: string,
   armed: boolean,
   start: () => Promise<StartOutcome | null>,
 ): void {
@@ -27,10 +28,10 @@ export function useAutoRetranscribe(
   latest.current = start;
 
   useEffect(() => {
-    if (!armed || claimed.has(itemId)) return;
-    claimed.add(itemId);
+    if (!armed || claimed.has(claimKey)) return;
+    claimed.add(claimKey);
     const release = (): void => {
-      claimed.delete(itemId);
+      claimed.delete(claimKey);
     };
     latest
       .current()
@@ -38,5 +39,5 @@ export function useAutoRetranscribe(
         if (outcome === null || outcome.status === "refused") release();
       })
       .catch(release);
-  }, [armed, itemId]);
+  }, [armed, claimKey]);
 }

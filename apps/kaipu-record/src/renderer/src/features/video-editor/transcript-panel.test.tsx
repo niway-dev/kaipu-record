@@ -65,12 +65,14 @@ const READY = (
   over: Partial<TranscriptDocument> = {},
   stale = false,
   autoRetranscribe = false,
+  mediaContentSha256: string | null = null,
 ): TranscriptApi => ({
   state: "ready",
   transcript: doc(over),
   stale,
   freshness: stale ? "stale" : "fresh",
   autoRetranscribe,
+  mediaContentSha256,
   refresh: vi.fn(async () => {}),
 });
 const NO_TRANSCRIPT: TranscriptApi = {
@@ -163,6 +165,7 @@ const panel = (): HTMLElement => screen.getByTestId("transcript-panel");
 
 beforeEach(() => {
   resetAutoRetranscribe();
+  start.mockResolvedValue(null as never);
   hooks.transcript.mockReturnValue(READY());
   control({ kind: "done" });
   modelStatus({ state: "missing" });
@@ -334,15 +337,32 @@ describe("TranscriptPanel — states", () => {
     expect(screen.getByTestId("transcript-list")).toBeInTheDocument();
   });
 
-  it("stale and allowed to run by itself: starts one automatic job, once", () => {
-    hooks.transcript.mockReturnValue(READY({}, true, true));
+  it("stale and allowed to run by itself: starts one automatic job, once", async () => {
+    // A started job (not null or a refusal), so the claim is kept.
+    start.mockResolvedValue({ status: "done" } as never);
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-1"));
+    control({ kind: "idle" });
+    const props = baseProps();
+    // Two panels for the same item (the editor and an embedded one) both see the same state.
+    const first = render(<TranscriptPanel {...props} />);
+    render(<TranscriptPanel {...props} />);
+    await act(async () => {});
+    first.rerender(<TranscriptPanel {...props} />);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith({ automatic: true });
+  });
+
+  it("starts again for the same item when the recording changed to new content", async () => {
+    start.mockResolvedValue({ status: "done" } as never);
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-1"));
     control({ kind: "idle" });
     const props = baseProps();
     const { rerender } = render(<TranscriptPanel {...props} />);
-    expect(start).toHaveBeenCalledTimes(1);
-    expect(start).toHaveBeenCalledWith({ automatic: true });
+    await act(async () => {});
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-2"));
     rerender(<TranscriptPanel {...props} />);
-    expect(start).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    expect(start).toHaveBeenCalledTimes(2);
   });
 
   it("stale but main did not allow an automatic run: waits for the button", () => {

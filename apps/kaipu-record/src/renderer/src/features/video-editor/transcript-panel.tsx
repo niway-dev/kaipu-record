@@ -102,7 +102,7 @@ export function TranscriptPanel({
   // Main decided this out-of-date transcript may be redone on its own (no attempt yet for this
   // media content, no job queued); the control must be free to start, and the video must have audio.
   useAutoRetranscribe(
-    itemId,
+    `${itemId}:${transcript.mediaContentSha256 ?? ""}`,
     transcript.state === "ready" &&
       transcript.stale &&
       transcript.autoRetranscribe &&

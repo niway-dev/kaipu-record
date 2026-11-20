@@ -186,6 +186,11 @@ export interface TranscriptFreshnessResult {
    * the renderer may start a job by itself. False otherwise: the manual button stays.
    */
   autoRetranscribe: boolean;
+  /**
+   * The media's content hash, set when the verdict is `stale`. It identifies the content that
+   * armed an automatic attempt, so the renderer claims one attempt per content, as main does.
+   */
+  mediaContentSha256?: string;
 }
 
 export type TranscriptReadResult =
