@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   WIDGET_EDGE_GAP_DIP,
   WIDGET_MAX_WIDTH_DIP,
+  widgetFitWidth,
   widgetPlacement,
   widgetWidth,
 } from "./widget-placement";
@@ -88,5 +89,31 @@ describe("widgetPlacement", () => {
     const second = { x: 1920, y: 0, width: 1440, height: 900 };
     const placed = widgetPlacement({ x: 2000, y: 100, width: 400, height: 300 }, second, HEIGHT);
     expect(placed.left).toBe(1920 + (1440 - WIDGET_MAX_WIDTH_DIP) / 2);
+  });
+});
+
+describe("widgetPlacement with a measured width", () => {
+  const box = { x: 400, y: 200, width: 600, height: 400 };
+
+  it("centres a compact widget by its own width, not the design width", () => {
+    const placed = widgetPlacement(box, AREA, HEIGHT, 640);
+    expect(placed.width).toBe(640);
+    expect(placed.left).toBe((AREA.width - 640) / 2);
+  });
+
+  it("lets an expanded widget grow past the design width up to the work area minus margins", () => {
+    expect(widgetFitWidth(AREA)).toBe(AREA.width - 2 * WIDGET_EDGE_GAP_DIP);
+    const placed = widgetPlacement(box, AREA, HEIGHT, 1300);
+    expect(placed.width).toBe(1300);
+    // And never past it: a 1440 wide display fits 1408.
+    const small = { x: 0, y: 0, width: 1440, height: 900 };
+    expect(widgetPlacement(box, small, HEIGHT, 2000).width).toBe(1440 - 2 * WIDGET_EDGE_GAP_DIP);
+  });
+
+  it("checks the band by the measured width: a box beside a compact widget does not push it up", () => {
+    // Compact is 640 wide, x 640..1280; a box at x 0..600 is beside it.
+    const beside = { x: 0, y: 700, width: 600, height: 380 };
+    expect(widgetPlacement(beside, AREA, HEIGHT, 640).edge).toBe("bottom");
+    expect(widgetPlacement(beside, AREA, HEIGHT).edge).toBe("top");
   });
 });

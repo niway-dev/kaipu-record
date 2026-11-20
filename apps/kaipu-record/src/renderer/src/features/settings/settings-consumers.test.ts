@@ -32,7 +32,8 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 const TYPE_ONLY_IMPORT = /import\s+type\s[^;]*?from\s+["'][^"']+["'];?/gs;
-const STORE_IMPORT = /["'][^"']*(?:settings-store|use-app-settings)["']/;
+// A path segment, not a suffix: `export-settings-store` is another module with its own store.
+const STORE_IMPORT = /["'][^"']*\/(?:settings-store|use-app-settings)["']/;
 
 /** Whether `source` takes a value from the store or from `useAppSettings`. */
 function importsSettingsStore(source: string): boolean {

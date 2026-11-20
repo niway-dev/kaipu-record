@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   actionForKey,
+  controlKeyLabel,
   copyKeyLabel,
+  createControlTap,
   detectKeyPlatform,
   recordKeyLabel,
   toggleForKey,
@@ -141,5 +143,74 @@ describe("toggleForKey", () => {
     for (const name of ["Enter", "r", "p", "v", "1", "2", "c"]) {
       expect(toggleForKey(key({ key: name }), "record")).toBeNull();
     }
+  });
+});
+
+describe("controlKeyLabel", () => {
+  it("is the Control glyph on macOS and Ctrl elsewhere", () => {
+    expect(controlKeyLabel("mac")).toBe("⌃");
+    expect(controlKeyLabel("other")).toBe("Ctrl");
+  });
+});
+
+describe("createControlTap", () => {
+  const down = (key: string, init: KeyboardEventInit = {}): KeyboardEvent =>
+    new KeyboardEvent("keydown", { key, ...init });
+  const up = (key: string, init: KeyboardEventInit = {}): KeyboardEvent =>
+    new KeyboardEvent("keyup", { key, ...init });
+
+  it("fires once when Control goes down and up with nothing between", () => {
+    const onTap = vi.fn();
+    const tap = createControlTap(onTap);
+    tap.keyDown(down("Control", { ctrlKey: true }));
+    expect(onTap).not.toHaveBeenCalled();
+    tap.keyUp(up("Control"));
+    expect(onTap).toHaveBeenCalledOnce();
+    // A second release with no press in front of it does nothing.
+    tap.keyUp(up("Control"));
+    expect(onTap).toHaveBeenCalledOnce();
+  });
+
+  it("ignores a held key's repeats and still fires on release", () => {
+    const onTap = vi.fn();
+    const tap = createControlTap(onTap);
+    tap.keyDown(down("Control", { ctrlKey: true }));
+    tap.keyDown(down("Control", { ctrlKey: true, repeat: true }));
+    tap.keyUp(up("Control"));
+    expect(onTap).toHaveBeenCalledOnce();
+  });
+
+  it("does not fire when another key is pressed in between (Ctrl+Cmd+X, Ctrl+C)", () => {
+    const onTap = vi.fn();
+    const tap = createControlTap(onTap);
+    tap.keyDown(down("Control", { ctrlKey: true }));
+    tap.keyDown(down("Meta", { ctrlKey: true, metaKey: true }));
+    tap.keyDown(down("x", { ctrlKey: true, metaKey: true }));
+    tap.keyUp(up("x"));
+    tap.keyUp(up("Meta"));
+    tap.keyUp(up("Control"));
+    expect(onTap).not.toHaveBeenCalled();
+  });
+
+  it("does not fire when Control is pressed while another modifier is already held", () => {
+    const onTap = vi.fn();
+    const tap = createControlTap(onTap);
+    tap.keyDown(down("Control", { ctrlKey: true, metaKey: true }));
+    tap.keyUp(up("Control", { metaKey: true }));
+    expect(onTap).not.toHaveBeenCalled();
+  });
+
+  it("does not fire after a pointer press or a window blur (Ctrl+click)", () => {
+    const onTap = vi.fn();
+    const tap = createControlTap(onTap);
+    tap.keyDown(down("Control", { ctrlKey: true }));
+    tap.cancel();
+    tap.keyUp(up("Control"));
+    expect(onTap).not.toHaveBeenCalled();
+
+    // The next clean tap works again.
+    tap.keyDown(down("Control", { ctrlKey: true }));
+    tap.keyUp(up("Control"));
+    expect(onTap).toHaveBeenCalledOnce();
   });
 });

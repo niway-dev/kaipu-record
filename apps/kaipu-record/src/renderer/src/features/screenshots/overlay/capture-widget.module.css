@@ -1,7 +1,8 @@
 /*
  * The capture widget (ADR 0056): one toolbar docked to the work area. It always floats over
  * arbitrary screen content, so it keeps the dark Kaipu Black surface whatever the app theme.
- * Sizes follow direction A of the commissioned mock: segments 34 tall, the confirm button 44.
+ * One row: compact by default (icon chips, each with its key badge), expanded with the Control
+ * key (labels, switches, the size readout). Chips are 34 tall, the confirm button 40.
  */
 
 .widget {
@@ -28,10 +29,10 @@
 
   position: absolute;
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 10px;
+  /* As wide as its row; the component caps it at the work area minus its margins, and the row
+     wraps when expanded does not fit. */
+  width: max-content;
+  padding: 8px 10px;
   border: 1px solid var(--widget-line);
   border-radius: 14px;
   background: var(--widget-surface);
@@ -47,23 +48,17 @@
 
 .row {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--widget-text-4);
+.divider {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  background: var(--widget-divider);
 }
 
 .segments {
@@ -76,13 +71,16 @@
 .chip,
 .copy,
 .cancel,
+.more,
+.expandToggle,
 .inputName,
-.inputToggle {
+.inputToggle,
+.inputChevron {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   height: 34px;
-  padding: 0 11px;
+  padding: 0 9px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: var(--widget-fill);
@@ -101,8 +99,11 @@
 .chip:hover:not(:disabled),
 .copy:hover,
 .cancel:hover,
+.more:hover,
+.expandToggle:hover,
 .inputName:hover,
-.inputToggle:hover {
+.inputToggle:hover,
+.inputChevron:hover {
   background: var(--widget-fill-hover);
 }
 
@@ -121,9 +122,44 @@
 }
 
 .chip {
-  padding: 0 12px;
+  gap: 5px;
+  padding: 0 10px;
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+/* The expanded toolbar has room for the words. */
+.widget[data-expanded] .segment,
+.widget[data-expanded] .copy,
+.widget[data-expanded] .more {
+  padding: 0 11px;
+}
+
+/* The contextual slot after Area: the ratio menu in Frame, the display chip in Screen. */
+.slot {
+  position: relative;
+  display: inline-flex;
+}
+
+.display {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--widget-line);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.displaySize {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--widget-text-3);
 }
 
 .soon {
@@ -171,18 +207,16 @@
   line-height: 1;
 }
 
-/* ── Row 2: inputs ────────────────────────────────────────────── */
+/* ── Inputs ───────────────────────────────────────────────────── */
 
 .input {
   position: relative;
-  display: flex;
-  flex: 1 1 0;
+  display: inline-flex;
+  flex: none;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  min-width: 0;
-  height: 40px;
-  padding: 0 4px 0 2px;
+  gap: 2px;
+  height: 36px;
+  padding: 0 3px 0 2px;
   border: 1px solid var(--widget-line);
   border-radius: 10px;
   background: var(--widget-fill);
@@ -215,6 +249,19 @@ span.inputName {
   gap: 8px;
   padding: 0 6px;
   background: transparent;
+}
+
+/* Compact: an icon chip with its badge, and a chevron for the device menu. */
+.input[data-compact] .inputToggle {
+  gap: 6px;
+}
+
+.input[data-compact] .inputChevron {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+  background: transparent;
+  color: var(--widget-text-3);
 }
 
 .inputToggle[aria-disabled="true"] {
@@ -264,6 +311,10 @@ span.inputName {
 .input[data-on="true"] .switch::after {
   background: #fff;
   transform: translateX(11px);
+}
+
+.menuNarrow {
+  min-width: 120px;
 }
 
 .menu {
@@ -323,24 +374,39 @@ span.inputName {
   color: var(--widget-text-3);
 }
 
-/* ── Row 2: actions ───────────────────────────────────────────── */
+/* ── Actions ──────────────────────────────────────────────────── */
 
 .copy {
-  flex: 1 1 0;
-  height: 44px;
-  justify-content: flex-start;
+  flex: none;
+}
+
+.more {
+  flex: none;
+}
+
+/* Expanded wraps its secondary groups first: the actions stay together at the end of a line. */
+.cancel {
+  height: 40px;
+  padding: 0 12px;
+  margin-left: auto;
+  border-color: var(--widget-line);
+  background: transparent;
+}
+
+.widget[data-expanded] .cancel {
   padding: 0 14px;
 }
 
-.copy .kbd {
-  margin-left: auto;
-}
-
-.cancel {
-  height: 44px;
-  padding: 0 16px;
+.expandToggle {
+  gap: 4px;
+  padding: 0 8px;
   border-color: var(--widget-line);
   background: transparent;
+  color: var(--widget-text-3);
+}
+
+.expandToggle[aria-expanded="true"] {
+  color: var(--widget-text);
 }
 
 .confirm {
@@ -349,18 +415,23 @@ span.inputName {
   align-items: center;
   justify-content: center;
   gap: 1px;
-  min-width: 200px;
-  height: 44px;
-  padding: 0 18px;
+  height: 40px;
+  padding: 0 16px;
   border: 1px solid var(--accent-primary);
   border-radius: 10px;
   background: var(--accent-primary);
   box-shadow: 0 10px 24px -10px var(--widget-accent-ring);
   color: #fff;
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.widget[data-expanded] .confirm {
+  min-width: 180px;
+  height: 46px;
 }
 
 .confirm:hover:not(:disabled) {
@@ -393,37 +464,6 @@ span.inputName {
   background: #fff;
 }
 
-/* ── Row 3: hints ─────────────────────────────────────────────── */
-
-.hints {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  padding-top: 8px;
-  border-top: 1px solid var(--widget-divider);
-  color: var(--widget-text-3);
-  font-size: 11.5px;
-}
-
-.hintGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.more {
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--widget-text-2);
-  font: inherit;
-  font-size: 11.5px;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 /* ── Toast and countdown ──────────────────────────────────────── */
 
 .toast {
@@ -453,8 +493,7 @@ span.inputName {
 }
 
 /* While counting, everything dims to about 35 % except Cancel and the confirm button. */
-.widget[data-counting="true"] .row > *:not([data-keep]),
-.widget[data-counting="true"] .hints {
+.widget[data-counting="true"] .row > *:not([data-keep]) {
   opacity: 0.35;
   pointer-events: none;
 }
@@ -482,4 +521,76 @@ span.inputName {
   font-variant-numeric: tabular-nums;
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+/* ── Entrance ─────────────────────────────────────────────────── */
+
+/*
+ * The widget enters from the edge it is docked to (`data-enter`, set once when it first
+ * appears): docked at the bottom it slides up from below, docked at the top it slides down
+ * from above, with a short overshoot. A later move to the other edge does not replay it.
+ */
+@keyframes enterFromBottom {
+  0% {
+    opacity: 0;
+    transform: translateY(48px);
+  }
+  40% {
+    opacity: 1;
+  }
+  55% {
+    transform: translateY(-6px);
+  }
+  78% {
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes enterFromTop {
+  0% {
+    opacity: 0;
+    transform: translateY(-48px);
+  }
+  40% {
+    opacity: 1;
+  }
+  55% {
+    transform: translateY(6px);
+  }
+  78% {
+    transform: translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes enterFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.widget[data-enter="bottom"] {
+  animation: enterFromBottom 350ms cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+.widget[data-enter="top"] {
+  animation: enterFromTop 350ms cubic-bezier(0.22, 0.9, 0.3, 1) backwards;
+}
+
+/* No travel and no bounce: a plain short fade. */
+@media (prefers-reduced-motion: reduce) {
+  .widget[data-enter="bottom"],
+  .widget[data-enter="top"] {
+    animation: enterFade 120ms ease-out backwards;
+  }
 }

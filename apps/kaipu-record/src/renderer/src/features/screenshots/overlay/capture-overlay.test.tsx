@@ -74,6 +74,11 @@ const SCREEN: OverlayState = {
   windows: null,
 };
 
+/** The toolbar's remembered mode when a test needs the labels, switches and readout. */
+const EXPANDED: Partial<AppSettings> = {
+  captureWidget: { screenshotExpanded: true, recordingExpanded: true },
+};
+
 function fakeApi(
   frames: Record<string, CaptureRect> = {},
   initialState: OverlayState | null = FRAME_ON_42,
@@ -173,6 +178,18 @@ function fakeApi(
     requestHiddenAck: () => ackListener?.(),
   };
 }
+
+/** A clean tap of the Control key: down, then up, with nothing in between. */
+const tapControl = (init: KeyboardEventInit = {}): void => {
+  fireEvent.keyDown(window, { key: "Control", ctrlKey: true, ...init });
+  fireEvent.keyUp(window, { key: "Control", ...init, ctrlKey: false });
+};
+
+/** Opens the Frame widget's ratio menu and picks `name` ("Free", "16:9", "9:16" or "1:1"). */
+const chooseRatio = (name: string): void => {
+  fireEvent.click(screen.getByTestId("ratio-menu"));
+  fireEvent.click(screen.getByRole("menuitemradio", { name }));
+};
 
 const press = (key: string, init: KeyboardEventInit = {}): void => {
   fireEvent.keyDown(window, { key, ...init });
@@ -506,7 +523,7 @@ describe("ScreenCard", () => {
 });
 
 describe("FrameBox", () => {
-  it("shows one widget in screenshot intent: Capture as, Area, Ratio, then Copy, Cancel, Capture", async () => {
+  it("shows one compact widget in screenshot intent: Capture as, Area, Ratio, then Copy, Cancel, Capture", async () => {
     const { api } = fakeApi({ "42": { x: 400, y: 120, width: 400, height: 300 } });
     render(
       <CaptureOverlay
@@ -520,23 +537,20 @@ describe("FrameBox", () => {
     const widget = screen.getByRole("toolbar", { name: "Capture options" });
     expect(screen.getAllByTestId("capture-widget")).toHaveLength(1);
     expect(widget).toHaveAttribute("data-intent", "capture");
+    expect(widget).not.toHaveAttribute("data-expanded");
     const buttons = within(widget).getAllByRole("button");
-    // Buttons without an aria-label read their text, which ends with the key badge.
-    expect(
-      buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent),
-    ).toEqual([
-      "ScreenshotP",
-      "RecordingV",
+    // Every control reads through its aria-label; the key badge is decoration (aria-hidden).
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Screenshot",
+      "Recording",
       "Frame (1)",
       "Window (2)",
       "Screen (3)",
-      "Free",
-      "16:9",
-      "9:16",
-      "1:1",
-      "Copy to clipboard⌘C",
-      "CancelEsc",
+      "Aspect ratio: Free",
+      "Copy to clipboard",
+      "Cancel",
       "Capture",
+      "Expand the toolbar (Control)",
     ]);
     expect(within(widget).getByRole("button", { name: "Frame (1)" })).toHaveAttribute(
       "aria-pressed",
@@ -572,8 +586,13 @@ describe("FrameBox", () => {
     expect(screen.getByTestId("capture-widget")).toHaveAttribute("data-edge", "top");
   });
 
-  it("reads the box's size in device pixels in the size readout", async () => {
-    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+  it("reads the box's size in device pixels in the size readout, once expanded", async () => {
+    const { api } = fakeApi(
+      { "42": { x: 100, y: 120, width: 400, height: 300 } },
+      FRAME_ON_42,
+      {},
+      EXPANDED,
+    );
     render(
       <CaptureOverlay
         enabledModes={CAPTURE_MODES}
@@ -706,7 +725,6 @@ describe("FrameBox (chrome and keys)", () => {
 
     await screen.findByTestId("capture-frame");
     expect(frameGeometry()).toEqual(remembered);
-    expect(screen.getByTestId("size-readout")).toHaveTextContent("400 × 300");
 
     press("Enter");
     await waitFor(() =>
@@ -1013,8 +1031,11 @@ describe("Frame on several displays", () => {
 describe("FrameBox drawing on the dim sheet", () => {
   const REMEMBERED = { x: 100, y: 120, width: 400, height: 300 };
 
-  async function setup(frames: Record<string, CaptureRect> = { "42": REMEMBERED }) {
-    const fake = fakeApi(frames);
+  async function setup(
+    frames: Record<string, CaptureRect> = { "42": REMEMBERED },
+    extra: Partial<AppSettings> = {},
+  ) {
+    const fake = fakeApi(frames, FRAME_ON_42, {}, extra);
     const { container } = render(
       <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={fake.api} />,
     );
@@ -1023,7 +1044,7 @@ describe("FrameBox drawing on the dim sheet", () => {
   }
 
   it("a drag that starts outside the box draws a new one, and the release keeps it", async () => {
-    const { sheet } = await setup();
+    const { sheet } = await setup(undefined, EXPANDED);
 
     fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
     fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
@@ -1285,8 +1306,12 @@ describe("switching mode inside the overlay", () => {
   });
 });
 
-describe("widget hints (successor of the hint pill)", () => {
-  it("Frame: the hints line names the box, the switches and the go keys; nothing is pinned elsewhere", async () => {
+/** The key badges on a widget, in DOM order. */
+const badges = (widget: HTMLElement): string[] =>
+  Array.from(widget.querySelectorAll("kbd")).map((kbd) => kbd.textContent ?? "");
+
+describe("widget key badges (the hints row is gone)", () => {
+  it("is one row, and every shortcut-bound control shows its key in compact", async () => {
     const { api } = fakeApi();
     render(
       <CaptureOverlay
@@ -1297,18 +1322,52 @@ describe("widget hints (successor of the hint pill)", () => {
       />,
     );
     await screen.findByTestId("capture-frame");
-    const hints = screen.getByTestId("widget-hints");
-    // The badges (kbd) sit flush against their words in the text content.
-    expect(hints).toHaveTextContent(/Box\s*drag the box or its handles/);
-    expect(hints).toHaveTextContent(/Switch\s*123\s*area\s*PV\s*intent/);
-    expect(hints).toHaveTextContent(/Go\s*↵\s*start\s*Esc\s*cancel/);
-    // The old pill is gone, and a screenshot overlay has no R or "More settings".
+    const widget = screen.getByTestId("capture-widget");
+    // The old hints row and pill are gone: the widget is its one row and nothing else.
+    expect(screen.queryByTestId("widget-hints")).toBeNull();
     expect(screen.queryByTestId("hint-pill")).toBeNull();
-    expect(hints).not.toHaveTextContent(/record/);
-    expect(within(hints).queryByRole("button", { name: "More settings" })).toBeNull();
+    expect(widget.children).toHaveLength(1);
+    expect(within(widget.firstElementChild as HTMLElement).getAllByRole("button")).toHaveLength(
+      within(widget).getAllByRole("button").length,
+    );
+    // Intent P V, area 1 2 3, then Copy, Cancel, Capture, and the Control badge at the end.
+    expect(badges(widget)).toEqual(["P", "V", "1", "2", "3", "⌘C", "Esc", "↵", "⌃"]);
   });
 
-  it("Screen: no box hint, and Copy to clipboard prints Ctrl+C off macOS", () => {
+  it("keeps every key badge once expanded, and adds the words", async () => {
+    const { api } = fakeApi({}, FRAME_ON_42, {}, EXPANDED);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame")}
+        api={api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    const widget = screen.getByTestId("capture-widget");
+    expect(widget).toHaveAttribute("data-expanded", "true");
+    expect(badges(widget)).toEqual(["P", "V", "1", "2", "3", "⌘C", "Esc", "↵", "⌃"]);
+    expect(widget).toHaveTextContent("Screenshot");
+    expect(widget).toHaveTextContent("Frame");
+  });
+
+  it("the recording row carries the three input keys and no R hint", async () => {
+    const { api } = fakeApi();
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record" })}
+        api={api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    const widget = screen.getByTestId("capture-widget");
+    expect(badges(widget)).toEqual(["P", "V", "1", "2", "3", "M", "A", "W", "Esc", "↵", "⌃"]);
+  });
+
+  it("Screen: Copy to clipboard prints Ctrl+C off macOS", () => {
     const { api } = fakeApi({}, SCREEN);
     render(
       <CaptureOverlay
@@ -1318,7 +1377,7 @@ describe("widget hints (successor of the hint pill)", () => {
         platform="other"
       />,
     );
-    expect(screen.getByTestId("widget-hints")).not.toHaveTextContent("drag the box");
+    expect(screen.queryByTestId("widget-hints")).toBeNull();
     expect(screen.getByRole("button", { name: "Copy to clipboard" })).toHaveTextContent("Ctrl+C");
   });
 
@@ -1584,8 +1643,27 @@ describe("WindowPicker", () => {
 });
 
 describe("Window mode disabled (the flag as shipped)", () => {
-  it("offers Frame and Screen as keys 1 and 2, and a disabled Window segment marked soon", async () => {
+  it("offers Frame and Screen as keys 1 and 2 in compact, with no Window chip", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    const widget = screen.getByTestId("capture-widget");
+    const area = within(widget).getByRole("group", { name: "Capture mode" });
+    expect(
+      within(area)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Frame (1)", "Screen (2)"]);
+    expect(within(widget).queryByTestId("window-soon")).toBeNull();
+  });
+
+  it("expanded adds a disabled Window segment marked soon", async () => {
+    const { api } = fakeApi(
+      { "42": { x: 100, y: 120, width: 400, height: 300 } },
+      FRAME_ON_42,
+      {},
+      EXPANDED,
+    );
     render(<CaptureOverlay query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     const widget = screen.getByTestId("capture-widget");
@@ -1602,19 +1680,24 @@ describe("Window mode disabled (the flag as shipped)", () => {
   });
 
   it("clicking the Window segment does nothing", async () => {
-    const { api, setMode } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    const { api, setMode } = fakeApi(
+      { "42": { x: 100, y: 120, width: 400, height: 300 } },
+      FRAME_ON_42,
+      {},
+      EXPANDED,
+    );
     render(<CaptureOverlay query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     fireEvent.click(screen.getByTestId("window-soon"));
     expect(setMode).not.toHaveBeenCalled();
   });
 
-  it("offers Frame and Screen, and the soon Window, on the Screen mode's widget too", () => {
-    const { api } = fakeApi({}, SCREEN);
+  it("offers Frame and Screen, and the soon Window once expanded, on the Screen mode's widget too", async () => {
+    const { api } = fakeApi({}, SCREEN, {}, EXPANDED);
     render(<CaptureOverlay query={query("screen")} api={api} />);
-    const row = screen.getByRole("group", { name: "Capture mode" });
+    const row = await screen.findByRole("group", { name: "Capture mode" });
     // Frame, Screen and the disabled Window placeholder.
-    expect(within(row).getAllByRole("button")).toHaveLength(3);
+    await waitFor(() => expect(within(row).getAllByRole("button")).toHaveLength(3));
     expect(within(row).queryByRole("button", { name: "Window (2)" })).not.toBeInTheDocument();
     expect(within(row).getByTestId("window-soon")).toBeDisabled();
   });
@@ -1626,13 +1709,20 @@ describe("Window mode disabled (the flag as shipped)", () => {
     expect(screen.getByRole("button", { name: "Window (2)" })).toBeEnabled();
   });
 
-  it("says 1 2 switch the area in the hints, and 3 is not a key", async () => {
+  it("badges 1 and 2 on the area chips, and 3 is not a key", async () => {
     const { api } = fakeApi();
     render(<CaptureOverlay query={query("frame")} api={api} platform="mac" />);
     await screen.findByTestId("capture-frame");
-    expect(screen.getByTestId("widget-hints")).toHaveTextContent(
-      /Switch\s*12\s*area\s*PV\s*intent/,
-    );
+    expect(badges(screen.getByTestId("capture-widget"))).toEqual([
+      "P",
+      "V",
+      "1",
+      "2",
+      "⌘C",
+      "Esc",
+      "↵",
+      "⌃",
+    ]);
   });
 
   it("switches with keys 1 and 2, and key 3 does nothing", () => {
@@ -1717,7 +1807,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     expect(within(widget).getByRole("button", { name: "Record" })).toBeEnabled();
     expect(within(widget).queryByRole("button", { name: "Capture" })).toBeNull();
     expect(within(widget).queryByRole("button", { name: "Copy to clipboard" })).toBeNull();
-    expect(screen.getByTestId("ratio-chips")).toBeInTheDocument();
+    expect(screen.getByTestId("ratio-menu")).toBeInTheDocument();
 
     press("r");
     await waitFor(() =>
@@ -1843,8 +1933,9 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
   function renderRecord(
     areas: Record<string, CaptureRect & { ratio?: string }> = { "42": area },
     overrides: Partial<OverlayQuery> = {},
+    extra: Partial<AppSettings> = {},
   ) {
-    const fake = fakeApi({}, FRAME_ON_42, areas as Record<string, CaptureRect>);
+    const fake = fakeApi({}, FRAME_ON_42, areas as Record<string, CaptureRect>, extra);
     render(
       <CaptureOverlay
         enabledModes={CAPTURE_MODES}
@@ -1856,26 +1947,37 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     return fake;
   }
 
-  it("prints the box's size in device pixels next to the ratio chips", async () => {
-    renderRecord();
+  it("prints the box's size in device pixels once expanded", async () => {
+    renderRecord(undefined, undefined, EXPANDED);
     await screen.findByTestId("capture-frame");
     expect(screen.getByTestId("size-readout")).toHaveTextContent("1280 × 720");
-    const chips = screen.getByTestId("ratio-chips");
-    expect(
-      within(chips)
-        .getAllByRole("button")
-        .map((chip) => chip.textContent),
-    ).toEqual(["Free", "16:9", "9:16", "1:1"]);
-    expect(within(chips).getByRole("button", { name: "Free" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
   });
 
-  it("a ratio chip reshapes the box around its centre and is remembered with the area", async () => {
+  it("the ratio menu offers Free, 16:9, 9:16 and 1:1, and marks the current one", async () => {
+    renderRecord();
+    await screen.findByTestId("capture-frame");
+    const trigger = screen.getByTestId("ratio-menu");
+    expect(trigger).toHaveTextContent("Free");
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(trigger);
+    const items = within(screen.getByRole("menu")).getAllByRole("menuitemradio");
+    expect(items.map((item) => item.textContent)).toEqual(["Free", "16:9", "9:16", "1:1"]);
+    expect(items[0]).toHaveAttribute("aria-checked", "true");
+    expect(items[1]).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("choosing a ratio closes the menu and the chip names it", async () => {
+    renderRecord();
+    await screen.findByTestId("capture-frame");
+    chooseRatio("16:9");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByTestId("ratio-menu")).toHaveTextContent("16:9");
+  });
+
+  it("a ratio pick reshapes the box around its centre and is remembered with the area", async () => {
     const { answer, api } = renderRecord({ "42": { ...area, height: 300 } });
     await screen.findByTestId("capture-frame");
-    fireEvent.click(screen.getByRole("button", { name: "1:1" }));
+    chooseRatio("1:1");
     const box = frameGeometry();
     expect(box.width).toBe(box.height);
     expect(box.x + box.width / 2).toBe(420);
@@ -1894,7 +1996,7 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
   it("opens with the remembered ratio locked, and a corner drag keeps it", async () => {
     renderRecord({ "42": { ...area, ratio: "16:9" } });
     await screen.findByTestId("capture-frame");
-    expect(screen.getByRole("button", { name: "16:9" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("ratio-menu")).toHaveTextContent("16:9");
     const sheet = screen.getByTestId("capture-frame").parentElement!;
     // Grab the bottom-right corner (740, 480) and pull it right.
     fireEvent.pointerDown(sheet, { button: 0, clientX: 740, clientY: 480, pointerId: 1 });
@@ -1910,7 +2012,7 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     const ratioOf = (box: CaptureRect): number => box.width / box.height;
 
     press("p");
-    expect(screen.getByRole("button", { name: "16:9" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("ratio-menu")).toHaveTextContent("16:9");
     fireEvent.pointerDown(sheet, { button: 0, clientX: 740, clientY: 480, pointerId: 1 });
     fireEvent.pointerMove(sheet, { clientX: 1060, clientY: 900, pointerId: 1 });
     fireEvent.pointerUp(sheet, { pointerId: 1 });
@@ -1920,7 +2022,7 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     expect(shot.width).not.toBe(960);
 
     press("v");
-    expect(screen.getByRole("button", { name: "16:9" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("ratio-menu")).toHaveTextContent("16:9");
     fireEvent.pointerDown(sheet, {
       button: 0,
       clientX: shot.x + shot.width,
@@ -1932,32 +2034,30 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     expect(Math.abs(ratioOf(frameGeometry()) - 16 / 9)).toBeLessThan(0.01);
   });
 
-  it("the widget offers intent, modes and ratios, then the three inputs, then Cancel and Record", async () => {
+  it("the compact widget offers intent, modes and the ratio menu, then the three inputs, then Cancel and Record", async () => {
     const { api } = renderRecord();
     await screen.findByTestId("capture-frame");
     const widget = screen.getByTestId("capture-widget");
     expect(widget).toHaveAttribute("data-edge", "bottom");
     const labels = within(widget)
       .getAllByRole("button")
-      .map((button) => button.getAttribute("aria-label") ?? button.textContent);
+      .map((button) => button.getAttribute("aria-label"));
     expect(labels).toEqual([
-      "ScreenshotP",
-      "RecordingV",
+      "Screenshot",
+      "Recording",
       "Frame (1)",
       "Window (2)",
       "Screen (3)",
-      "Free",
-      "16:9",
-      "9:16",
-      "1:1",
-      "Choose Microphone device",
+      "Aspect ratio: Free",
       "Microphone",
+      "Choose Microphone device",
       "System audio",
-      "Choose Camera device",
       "Camera",
-      "CancelEsc",
-      "Record",
+      "Choose Camera device",
       "More settings",
+      "Cancel",
+      "Record",
+      "Expand the toolbar (Control)",
     ]);
     // Main's settings: the microphone is on, system audio is off.
     await waitFor(() =>
@@ -2038,13 +2138,14 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
   });
 
-  it("the hints name the record keys and offer More settings", async () => {
-    renderRecord();
+  it("offers More settings on the toolbar, where the hints row used to", async () => {
+    const { openRecordSettings } = renderRecord();
     await screen.findByTestId("capture-frame");
-    const hints = screen.getByTestId("widget-hints");
-    expect(hints).toHaveTextContent(/Box\s*drag the box or its handles/);
-    expect(hints).toHaveTextContent(/Go\s*↵\s*start\s*Esc\s*cancel\s*R\s*record/);
-    expect(within(hints).getByRole("button", { name: "More settings" })).toBeInTheDocument();
+    expect(screen.queryByTestId("widget-hints")).toBeNull();
+    fireEvent.click(
+      within(screen.getByTestId("capture-widget")).getByRole("button", { name: "More settings" }),
+    );
+    expect(openRecordSettings).toHaveBeenCalledOnce();
   });
 });
 
@@ -2241,13 +2342,17 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     seconds: number | null = 3,
     ui: "frame" | "screen" = "frame",
     overrides: Partial<OverlayQuery> = {},
+    expanded = false,
   ) {
     const fake = fakeApi(
       {},
       ui === "frame" ? FRAME_ON_42 : SCREEN,
       { "42": area },
       // `fakeApi` seeds 0 before `extra`, so the absent case sets the key to undefined.
-      { recordingCountdownSeconds: seconds === null ? undefined : (seconds as 0 | 3 | 5) },
+      {
+        recordingCountdownSeconds: seconds === null ? undefined : (seconds as 0 | 3 | 5),
+        ...(expanded ? EXPANDED : {}),
+      },
     );
     render(
       <CaptureOverlay
@@ -2264,9 +2369,10 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
   }
   const disc = (): HTMLElement | null => screen.queryByTestId("countdown-disc");
 
-  it("prints the configured length on Record, or 'starts at once' for 0", async () => {
+  it("prints the configured length on Record, or 'starts at once' for 0, on its tooltip in compact", async () => {
     const three = await renderCounting(3);
-    expect(screen.getByTestId("start-recording")).toHaveTextContent("3 s countdown");
+    expect(screen.getByTestId("start-recording")).toHaveAttribute("title", "3 s countdown");
+    expect(screen.getByTestId("start-recording")).not.toHaveTextContent("3 s countdown");
     expect(three.setCounting).not.toHaveBeenCalled();
     cleanup();
     // The second overlay is another window: it has its own settings store.
@@ -2274,6 +2380,17 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     vi.useRealTimers();
 
     await renderCounting(0);
+    expect(screen.getByTestId("start-recording")).toHaveAttribute("title", "starts at once");
+  });
+
+  it("prints the configured length under Record once expanded", async () => {
+    await renderCounting(3, "frame", {}, true);
+    expect(screen.getByTestId("start-recording")).toHaveTextContent("3 s countdown");
+    cleanup();
+    resetSettingsStoreForTests();
+    vi.useRealTimers();
+
+    await renderCounting(0, "frame", {}, true);
     expect(screen.getByTestId("start-recording")).toHaveTextContent("starts at once");
   });
 
@@ -2408,7 +2525,7 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
 
     // One window, one startup read: the window's settings store serves all three consumers.
     expect(fake.getSettings).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("start-recording")).toHaveTextContent("5 s countdown");
+    expect(screen.getByTestId("start-recording")).toHaveAttribute("title", "5 s countdown");
   });
 
   it("a Record pressed before the settings read finishes waits for it, then counts the saved 5 s", async () => {
@@ -2653,12 +2770,20 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
 
     press("Enter");
 
-    // Capture as, Area, Ratio, the three inputs and the hints.
-    expect(locked()).toHaveLength(7);
+    // Capture as, its divider, Area, the ratio menu, the second divider, the three inputs,
+    // More settings and the expand toggle: everything in the row but Cancel and Record.
+    expect(locked()).toHaveLength(10);
     expect(screen.getByRole("button", { name: "Cancel" }).closest("[inert]")).toBeNull();
     expect(screen.getByTestId("start-recording").closest("[inert]")).toBeNull();
     expect(screen.getByRole("button", { name: "Screenshot" }).closest("[inert]")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "16:9" }).closest("[inert]")).not.toBeNull();
+    expect(screen.getByTestId("ratio-menu").closest("[inert]")).not.toBeNull();
+  });
+
+  it("Control does not expand the toolbar while it counts", async () => {
+    await renderCounting(3);
+    press("Enter");
+    tapControl();
+    expect(screen.getByTestId("capture-widget")).not.toHaveAttribute("data-expanded");
   });
 
   it("More settings during the count stops it, opens the settings and answers nothing", async () => {
@@ -2673,24 +2798,17 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
   });
 });
 
-describe("CaptureOverlay — the ratio chips work in both intents, in Frame only", () => {
+describe("CaptureOverlay — the ratio menu works in both intents, in Frame only", () => {
   const area = { x: 100, y: 120, width: 640, height: 360 };
 
-  it("in the screenshot intent a chip reshapes the box, and the answer and the remembered frame carry no ratio", async () => {
+  it("in the screenshot intent a pick reshapes the box, and the answer and the remembered frame carry no ratio", async () => {
     const { api, answer } = fakeApi({ "42": area });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
-    const chips = screen.getByTestId("ratio-chips");
-    expect(within(chips).getByRole("button", { name: "Free" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByTestId("ratio-menu")).toHaveTextContent("Free");
 
-    fireEvent.click(within(chips).getByRole("button", { name: "1:1" }));
-    expect(within(chips).getByRole("button", { name: "1:1" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    chooseRatio("1:1");
+    expect(screen.getByTestId("ratio-menu")).toHaveTextContent("1:1");
     const box = frameGeometry();
     expect(box.width).toBe(box.height);
 
@@ -2706,7 +2824,7 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
     expect(api.updateSettings).toHaveBeenCalledWith({ screenshotFrame: { "42": box } });
   });
 
-  it("in the record intent the same chip is carried by the answer and the recording area", async () => {
+  it("in the record intent the same pick is carried by the answer and the recording area", async () => {
     const { api, answer } = fakeApi({}, FRAME_ON_42, { "42": area });
     render(
       <CaptureOverlay
@@ -2717,9 +2835,7 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
     );
     await screen.findByTestId("capture-frame");
     await flush();
-    fireEvent.click(
-      within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "16:9" }),
-    );
+    chooseRatio("16:9");
     const box = frameGeometry();
 
     press("Enter");
@@ -2732,12 +2848,13 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
     });
   });
 
-  it("every chip is enabled in Frame and disabled in Screen and Window", async () => {
+  it("every ratio is enabled in the Frame menu, and Screen and Window offer no ratio at all", async () => {
     const frame = fakeApi({ "42": area });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={frame.api} />);
     await screen.findByTestId("capture-frame");
-    for (const chip of within(screen.getByTestId("ratio-chips")).getAllByRole("button")) {
-      expect(chip).toBeEnabled();
+    fireEvent.click(screen.getByTestId("ratio-menu"));
+    for (const item of within(screen.getByRole("menu")).getAllByRole("menuitemradio")) {
+      expect(item).toBeEnabled();
     }
     cleanup();
 
@@ -2745,21 +2862,31 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
     render(
       <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={display.api} />,
     );
-    const onScreen = within(screen.getByTestId("ratio-chips")).getAllByRole("button");
-    expect(onScreen).toHaveLength(4);
-    for (const chip of onScreen) {
-      expect(chip).toBeDisabled();
-      expect(chip).toHaveAttribute("aria-pressed", "false");
-    }
+    // Nothing is shown disabled: the control is simply not there.
+    expect(screen.getByTestId("display-chip")).toBeInTheDocument();
+    expect(screen.queryByTestId("ratio-menu")).toBeNull();
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
     cleanup();
 
     const picker = fakeApi({}, { ...SCREEN, mode: "window", windows: [] });
     render(
       <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("window")} api={picker.api} />,
     );
-    for (const chip of within(screen.getByTestId("ratio-chips")).getAllByRole("button")) {
-      expect(chip).toBeDisabled();
-    }
+    expect(screen.queryByTestId("ratio-menu")).toBeNull();
+  });
+
+  it("closes the menu on a press outside it, and Enter on an item does not start the capture", async () => {
+    const { api, answer } = fakeApi({ "42": area });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(screen.getByTestId("ratio-menu"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("ratio-menu"));
+    fireEvent.keyDown(screen.getByRole("menuitemradio", { name: "9:16" }), { key: "Enter" });
+    expect(answer).not.toHaveBeenCalled();
   });
 });
 
@@ -3254,5 +3381,258 @@ describe("CaptureOverlay — one widget per display in Screen mode", () => {
       expect.objectContaining({ kind: "display", displayId: 42 }),
     );
     expect(first.answer).not.toHaveBeenCalled();
+  });
+});
+
+describe("CaptureOverlay — Control expands and collapses the toolbar (NIW2-883)", () => {
+  const frameOf = { "42": { x: 100, y: 120, width: 400, height: 300 } };
+  const widgetNow = (): HTMLElement => screen.getByTestId("capture-widget");
+
+  async function renderFrame(
+    intent: "capture" | "record" = "capture",
+    extra: Partial<AppSettings> = {},
+    platform: "mac" | "other" = "mac",
+  ) {
+    const fake = fakeApi(frameOf, FRAME_ON_42, frameOf, extra);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent })}
+        api={fake.api}
+        platform={platform}
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    return fake;
+  }
+
+  it("Control alone toggles compact and expanded, on the key release", async () => {
+    await renderFrame();
+    expect(widgetNow()).not.toHaveAttribute("data-expanded");
+
+    fireEvent.keyDown(window, { key: "Control", ctrlKey: true });
+    expect(widgetNow()).not.toHaveAttribute("data-expanded");
+    fireEvent.keyUp(window, { key: "Control" });
+    expect(widgetNow()).toHaveAttribute("data-expanded", "true");
+
+    tapControl();
+    expect(widgetNow()).not.toHaveAttribute("data-expanded");
+  });
+
+  // NIW2-557: the overlay's listeners were passive effects, so a key pressed the moment the first
+  // `findBy*` resolved went to nobody. The Control toggle is a layout-effect listener too.
+  it("the Control toggle is live right after the first findBy resolves", async () => {
+    await renderFrame();
+    tapControl();
+    expect(widgetNow()).toHaveAttribute("data-expanded", "true");
+  });
+
+  it("Control with another key does not toggle", async () => {
+    await renderFrame("capture", {}, "other");
+    // Ctrl+C is Copy off macOS: the tap is spent on it.
+    fireEvent.keyDown(window, { key: "Control", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    fireEvent.keyUp(window, { key: "c", ctrlKey: true });
+    fireEvent.keyUp(window, { key: "Control" });
+    expect(widgetNow()).not.toHaveAttribute("data-expanded");
+
+    // Control with Shift, Alt or Meta held first is a chord, not a tap.
+    for (const modifier of ["shiftKey", "altKey", "metaKey"] as const) {
+      tapControl({ [modifier]: true });
+      expect(widgetNow()).not.toHaveAttribute("data-expanded");
+    }
+  });
+
+  it("a Ctrl+click does not toggle", async () => {
+    await renderFrame();
+    fireEvent.keyDown(window, { key: "Control", ctrlKey: true });
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Frame (1)" }), { ctrlKey: true });
+    fireEvent.keyUp(window, { key: "Control" });
+    expect(widgetNow()).not.toHaveAttribute("data-expanded");
+  });
+
+  it("losing the window's focus while Control is down drops the tap", async () => {
+    await renderFrame();
+    fireEvent.keyDown(window, { key: "Control", ctrlKey: true });
+    fireEvent.blur(window);
+    fireEvent.keyUp(window, { key: "Control" });
+    expect(widgetNow()).not.toHaveAttribute("data-expanded");
+  });
+
+  it("a held Control does not toggle again on auto-repeat", async () => {
+    await renderFrame();
+    fireEvent.keyDown(window, { key: "Control", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "Control", ctrlKey: true, repeat: true });
+    fireEvent.keyUp(window, { key: "Control" });
+    expect(widgetNow()).toHaveAttribute("data-expanded", "true");
+  });
+
+  it("the badge at the end of the row is a button that does the same", async () => {
+    await renderFrame();
+    const toggle = screen.getByTestId("widget-expand");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("⌃");
+    fireEvent.click(toggle);
+    expect(widgetNow()).toHaveAttribute("data-expanded", "true");
+    expect(screen.getByTestId("widget-expand")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("names the key as Ctrl off macOS", async () => {
+    await renderFrame("capture", {}, "other");
+    expect(screen.getByTestId("widget-expand")).toHaveTextContent("Ctrl");
+  });
+
+  it("expanded stays one row and adds the labels, the readout and the soon Window chip", async () => {
+    const fake = fakeApi(frameOf);
+    render(<CaptureOverlay query={query("frame")} api={fake.api} platform="mac" />);
+    await screen.findByTestId("capture-frame");
+    tapControl();
+    const widget = widgetNow();
+    expect(widget.children).toHaveLength(1);
+    expect(within(widget).getByTestId("size-readout")).toHaveTextContent("400 × 300");
+    expect(within(widget).getByTestId("window-soon")).toBeDisabled();
+    expect(widget).toHaveTextContent("Frame");
+  });
+
+  describe("remembered per capture type", () => {
+    it("a screenshot toggle is saved under screenshotExpanded, keeping the recording value", async () => {
+      const { api } = await renderFrame("capture", {
+        captureWidget: { screenshotExpanded: false, recordingExpanded: true },
+      });
+      tapControl();
+      await waitFor(() =>
+        expect(api.updateSettings).toHaveBeenCalledWith({
+          captureWidget: { screenshotExpanded: true, recordingExpanded: true },
+        }),
+      );
+    });
+
+    it("a recording toggle is saved under recordingExpanded", async () => {
+      const { api } = await renderFrame("record");
+      tapControl();
+      await waitFor(() =>
+        expect(api.updateSettings).toHaveBeenCalledWith({
+          captureWidget: { screenshotExpanded: false, recordingExpanded: true },
+        }),
+      );
+    });
+
+    it("opens in the mode its capture type remembered", async () => {
+      await renderFrame("capture", {
+        captureWidget: { screenshotExpanded: true, recordingExpanded: false },
+      });
+      expect(widgetNow()).toHaveAttribute("data-expanded", "true");
+      cleanup();
+      resetSettingsStoreForTests();
+
+      await renderFrame("record", {
+        captureWidget: { screenshotExpanded: true, recordingExpanded: false },
+      });
+      expect(widgetNow()).not.toHaveAttribute("data-expanded");
+    });
+
+    it("P and V swap to the other type's mode on the same widget", async () => {
+      const { pushState } = await renderFrame("capture", {
+        captureWidget: { screenshotExpanded: true, recordingExpanded: false },
+      });
+      await waitFor(() => expect(widgetNow()).toHaveAttribute("data-expanded", "true"));
+      pushState({ intent: "record" });
+      await waitFor(() => expect(widgetNow()).not.toHaveAttribute("data-expanded"));
+      pushState({ intent: "capture" });
+      await waitFor(() => expect(widgetNow()).toHaveAttribute("data-expanded", "true"));
+    });
+
+    it("both compact is the default", async () => {
+      await renderFrame("capture");
+      expect(widgetNow()).not.toHaveAttribute("data-expanded");
+      cleanup();
+      resetSettingsStoreForTests();
+      await renderFrame("record");
+      expect(widgetNow()).not.toHaveAttribute("data-expanded");
+    });
+  });
+});
+
+describe("CaptureOverlay — the Screen widget's display chip", () => {
+  it("shows the display in the contextual slot, read-only, and no ratio control", async () => {
+    const { api } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
+    const chip = await screen.findByTestId("display-chip");
+    expect(chip).toHaveTextContent("Display 2");
+    expect(chip).toHaveTextContent("1600 × 1000");
+    // Read-only: a plain label, not a control, since no display switching exists.
+    expect(within(chip).queryByRole("button")).toBeNull();
+    expect(chip.tagName).not.toBe("BUTTON");
+    expect(screen.queryByTestId("ratio-menu")).toBeNull();
+  });
+
+  it("Frame shows the ratio menu and no display chip", async () => {
+    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    expect(screen.getByTestId("ratio-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("display-chip")).toBeNull();
+  });
+});
+
+describe("CaptureOverlay — the toolbar enters from the edge it is docked to", () => {
+  const css = readFileSync(
+    "src/renderer/src/features/screenshots/overlay/capture-widget.module.css",
+    "utf8",
+  );
+
+  it("data-enter is the dock: bottom for a mid-screen box, top for one reaching the bottom band", async () => {
+    const mid = fakeApi({ "42": { x: 400, y: 120, width: 400, height: 300 } });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={mid.api} />);
+    await screen.findByTestId("capture-frame");
+    expect(screen.getByTestId("capture-widget")).toHaveAttribute("data-enter", "bottom");
+    cleanup();
+    resetSettingsStoreForTests();
+
+    const low = fakeApi({ "42": { x: 400, y: 600, width: 400, height: 380 } });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={low.api} />);
+    await screen.findByTestId("capture-frame");
+    expect(screen.getByTestId("capture-widget")).toHaveAttribute("data-enter", "top");
+  });
+
+  it("does not replay the entrance when the box moves the dock to the other edge", async () => {
+    const { api } = fakeApi({ "42": { x: 400, y: 120, width: 400, height: 300 } });
+    const { container } = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />,
+    );
+    await screen.findByTestId("capture-frame");
+    const widget = screen.getByTestId("capture-widget");
+    expect(widget).toHaveAttribute("data-edge", "bottom");
+    expect(widget).toHaveAttribute("data-enter", "bottom");
+
+    // Drag the box down to the bottom of the work area.
+    const sheet = container.firstElementChild as HTMLElement;
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 600, clientY: 270 });
+    fireEvent.pointerMove(sheet, { clientX: 600, clientY: 900 });
+    fireEvent.pointerUp(sheet, { clientX: 600, clientY: 900 });
+
+    expect(screen.getByTestId("capture-widget")).toHaveAttribute("data-edge", "top");
+    // Same element, same entrance: the animation is tied to data-enter, which did not change.
+    expect(screen.getByTestId("capture-widget")).toHaveAttribute("data-enter", "bottom");
+  });
+
+  it("has an overshooting keyframe for each direction", () => {
+    for (const name of ["enterFromBottom", "enterFromTop"]) {
+      const keyframes =
+        css.match(new RegExp(`@keyframes ${name} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? "";
+      // More than a start and an end: a middle stop that passes the rest position and returns.
+      expect(keyframes.match(/^\s{2}\d+% \{/gm)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    }
+    expect(css).toMatch(/\.widget\[data-enter="bottom"\] \{\s*animation: enterFromBottom 350ms/);
+    expect(css).toMatch(/\.widget\[data-enter="top"\] \{\s*animation: enterFromTop 350ms/);
+  });
+
+  it("falls back to a plain 120 ms fade under prefers-reduced-motion", () => {
+    const reduced =
+      css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(reduced).toContain('.widget[data-enter="bottom"]');
+    expect(reduced).toContain('.widget[data-enter="top"]');
+    expect(reduced).toMatch(/animation: enterFade 120ms/);
+    expect(reduced).not.toContain("translate");
   });
 });

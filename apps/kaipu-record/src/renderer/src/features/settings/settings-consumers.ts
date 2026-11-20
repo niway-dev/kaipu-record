@@ -193,6 +193,17 @@ export const SETTINGS_CONSUMERS: readonly SettingsConsumer[] = [
     },
   },
   {
+    file: "features/screenshots/overlay/use-widget-expanded.ts",
+    windows: ["capture-overlay"],
+    keys: ["captureWidget"],
+    follows: "live",
+    why: "Whether the capture toolbar is compact or expanded, per capture type; one overlay per display follows a toggle made in another.",
+    behaviour: {
+      coveredIn: "features/screenshots/overlay/use-widget-expanded.test.tsx",
+      mentions: ["captureWidget", "broadcast"],
+    },
+  },
+  {
     file: "features/screenshots/overlay/capture-overlay.tsx",
     windows: ["capture-overlay"],
     keys: ["recordingCountdownSeconds", "recordingArea", "screenshotFrame"],

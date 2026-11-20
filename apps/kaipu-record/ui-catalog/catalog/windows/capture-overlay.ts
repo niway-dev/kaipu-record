@@ -3,9 +3,22 @@ import { nc } from "../not-capturable";
 
 // Every pick here ends with Escape (cancelled). The capture widget (ADR 0056) is one toolbar
 // docked to the work area; the states below show it per intent, with the box low, in Screen
-// mode, after a key toggle and while it counts down.
+// mode, after a key toggle and while it counts down. It opens compact (one row of icon chips
+// with their keys); Control alone expands it and the choice is remembered per capture type, so
+// the expanded states press Control and put the setting back afterwards.
 
 const cancel: Step = { action: "cancelPick" };
+// Control alone toggles the toolbar and saves it; the states that expand it end by collapsing it.
+const expand: Step = { press: "Control", on: "capture-overlay" };
+const collapseSaved: Step = {
+  call: "updateSettings",
+  args: [{ captureWidget: { screenshotExpanded: false, recordingExpanded: false } }],
+  on: "main",
+};
+// The size readout exists only in the expanded toolbar.
+const expandedShown: Step = {
+  waitFor: { area: "captureOverlay.captureWidget", part: { css: '[data-testid="size-readout"]' } },
+};
 // The countdown state needs a count long enough to be seen, and puts the setting back.
 const COUNTDOWN_SECONDS = 5;
 const record = (mode: string): Step => ({
@@ -88,8 +101,18 @@ export const captureOverlay = catalog(
       steps: [
         record("frame"),
         { waitFor: { window: "capture-overlay" } },
+        // The ratio is a menu: open it, then pick; the chip reads the pick and the box is locked.
         {
-          click: { area: "captureOverlay.captureWidget", part: { text: "16:9", exact: true } },
+          click: {
+            area: "captureOverlay.captureWidget",
+            part: { role: "button", name: "Aspect ratio" },
+          },
+        },
+        {
+          click: {
+            area: "captureOverlay.captureWidget",
+            part: { role: "menuitemradio", name: "16:9", exact: true },
+          },
         },
       ],
       demonstrates: ["captureOverlay.captureWidget:record"],
@@ -152,6 +175,53 @@ export const captureOverlay = catalog(
         cancel,
         { call: "updateSettings", args: [{ recordingCountdownSeconds: 3 }], on: "main" },
       ],
+    },
+    "screenshot-frame-expanded": {
+      profile: "recording",
+      how: "Open the overlay on a frame and press Control: the toolbar shows its labels and the size readout.",
+      steps: [
+        screenshot("frame"),
+        { waitFor: { window: "capture-overlay" } },
+        { waitMs: 500 },
+        expand,
+        expandedShown,
+      ],
+      demonstrates: ["captureOverlay.captureWidget:screenshotExpanded"],
+      ready: { area: "captureOverlay.captureWidget" },
+      after: [cancel, collapseSaved],
+    },
+    "record-frame-expanded": {
+      profile: "recording",
+      how: "Open the overlay to record and press Control: the inputs show their names, On/Off words and switches.",
+      steps: [
+        record("frame"),
+        { waitFor: { window: "capture-overlay" } },
+        { waitMs: 500 },
+        expand,
+        expandedShown,
+      ],
+      demonstrates: ["captureOverlay.captureWidget:recordExpanded"],
+      ready: { area: "captureOverlay.captureWidget" },
+      gates: [
+        { recordingSetting: "isMicrophoneEnabled", side: "on" },
+        { recordingSetting: "isSystemAudioEnabled", side: "off" },
+        { recordingSetting: "isCameraEnabled", side: "off" },
+      ],
+      after: [cancel, collapseSaved],
+    },
+    "screen-mode-expanded": {
+      profile: "recording",
+      how: "Open the overlay on Screen and press Control: the display chip adds its kind and the toolbar its labels.",
+      steps: [
+        screenshot("screen"),
+        { waitFor: { window: "capture-overlay" } },
+        { waitMs: 500 },
+        expand,
+        expandedShown,
+      ],
+      demonstrates: ["captureOverlay.captureWidget:screenExpanded"],
+      ready: { area: "captureOverlay.captureWidget" },
+      after: [cancel, collapseSaved],
     },
     "screen-mode": {
       profile: "recording",

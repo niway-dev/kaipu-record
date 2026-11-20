@@ -49,6 +49,45 @@ export function modeForKey(
   return index < 0 ? null : (enabledModes[index] ?? null);
 }
 
+/** The Control key as the toolbar's expand badge prints it: ⌃ on macOS, Ctrl elsewhere. */
+export function controlKeyLabel(platform: KeyPlatform): string {
+  return platform === "mac" ? "⌃" : "Ctrl";
+}
+
+/**
+ * Control pressed and released on its own: a tap. Feed it every keydown and keyup, and
+ * `cancel()` on a pointer press or a window blur. Any other key between the two (a combo such as
+ * Ctrl+Cmd+X, Ctrl+C), a modifier already held when Control went down, or a Ctrl+click all
+ * disarm the tap, so only a bare Control toggles the toolbar.
+ */
+export function createControlTap(onTap: () => void): {
+  keyDown(event: KeyboardEvent): void;
+  keyUp(event: KeyboardEvent): void;
+  cancel(): void;
+} {
+  let armed = false;
+  return {
+    keyDown(event) {
+      if (event.key !== "Control") {
+        armed = false;
+        return;
+      }
+      // A held key repeats keydown; the first one already decided.
+      if (event.repeat) return;
+      armed = !event.metaKey && !event.altKey && !event.shiftKey;
+    },
+    keyUp(event) {
+      if (event.key !== "Control") return;
+      const tapped = armed;
+      armed = false;
+      if (tapped) onTap();
+    },
+    cancel() {
+      armed = false;
+    },
+  };
+}
+
 /** The Record shortcut as the action bar and the hint pill print it: the same everywhere. */
 export function recordKeyLabel(_platform: KeyPlatform): string {
   return "R";

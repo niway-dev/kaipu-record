@@ -15,6 +15,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { sanitizeCountdownSeconds } from "@shared/types/ipc";
 import { FrameBox } from "./frame-box";
 import {
+  createControlTap,
   detectKeyPlatform,
   intentForKey,
   modeForKey,
@@ -29,6 +30,7 @@ import { TOAST_MS } from "./capture-widget";
 import { loadSettings } from "@renderer/features/settings/settings-store";
 import { useOverlayToggles } from "./use-overlay-toggles";
 import { useWidgetDevices } from "./use-widget-devices";
+import { useWidgetExpanded } from "./use-widget-expanded";
 import { WindowPicker } from "./window-picker";
 import styles from "./capture-overlay.module.css";
 
@@ -253,6 +255,8 @@ export function CaptureOverlay({
   const recording = intent === "record";
   const toggles = useOverlayToggles(api, recording);
   const devices = useWidgetDevices(api, recording);
+  // Compact or expanded, remembered for screenshots and recordings apart.
+  const { expanded: widgetExpanded, toggle: toggleWidgetExpanded } = useWidgetExpanded(api, intent);
 
   // The configured countdown, read when the overlay is (or becomes) a recording one. Until
   // that read settles (a value or the fallback after a failure) the length is unknown, so a
@@ -378,6 +382,8 @@ export function CaptureOverlay({
       toast,
       countdown,
       countdownSeconds,
+      expanded: widgetExpanded,
+      onToggleExpanded: toggleWidgetExpanded,
       onMoreSettings: moreSettings,
     }),
     [
@@ -394,13 +400,29 @@ export function CaptureOverlay({
       toast,
       countdown,
       countdownSeconds,
+      widgetExpanded,
+      toggleWidgetExpanded,
       moreSettings,
     ],
   );
 
-  // Layout effect: Esc and the mode keys work from the first paint (see FrameBox).
+  // Control pressed and released alone flips the toolbar between compact and expanded. Not
+  // while the countdown runs (the widget is committed) or after the answer went out.
+  const controlTap = useMemo(
+    () =>
+      createControlTap(() => {
+        if (answered.current || counting.current) return;
+        toggleWidgetExpanded();
+      }),
+    [toggleWidgetExpanded],
+  );
+
+  // Layout effect: Esc, the mode keys and the Control tap work from the first paint (see
+  // FrameBox, and NIW2-557: a passive effect attaches one task after the commit, and a key
+  // pressed the moment the widget is in the DOM would be lost).
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      controlTap.keyDown(event);
       if (event.key === "Escape") {
         event.preventDefault();
         cancelOrStopCount();
@@ -427,9 +449,29 @@ export function CaptureOverlay({
       event.preventDefault();
       switchMode(next);
     };
+    const onKeyUp = (event: KeyboardEvent): void => controlTap.keyUp(event);
+    // A Ctrl+click is not a tap, and a window that lost focus never hears the release.
+    const onPointerDown = (): void => controlTap.cancel();
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancelOrStopCount, switchMode, enabledModes, setIntent, intent, toggles, showToast]);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("blur", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("blur", onPointerDown);
+    };
+  }, [
+    cancelOrStopCount,
+    switchMode,
+    enabledModes,
+    setIntent,
+    intent,
+    toggles,
+    showToast,
+    controlTap,
+  ]);
 
   if (!received) return null;
 
