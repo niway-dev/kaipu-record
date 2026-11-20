@@ -86,8 +86,14 @@ const NO_TRANSCRIPT: TranscriptApi = {
 
 const start = vi.fn(async () => null);
 const cancel = vi.fn();
-function control(state: TranscribeControlState): void {
-  hooks.control.mockReturnValue({ state, start, cancel });
+function control(state: TranscribeControlState, canStartAutomatically?: boolean): void {
+  hooks.control.mockReturnValue({
+    state,
+    start,
+    cancel,
+    canStartAutomatically:
+      canStartAutomatically ?? (state.kind === "idle" || state.kind === "done"),
+  });
 }
 
 const MODEL: TranscriptionModelInfo = {

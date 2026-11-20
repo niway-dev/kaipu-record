@@ -245,6 +245,36 @@ describe("useTranscribeControl", () => {
     expect(run.mock.calls[1]![0].automatic).toBe(true);
   });
 
+  it("an automatic start waits while another item's job runs, even when this item shows done", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const job = controlledJob();
+    const { result } = renderHook(() => useTranscribeControl({ ...ITEM, hasTranscript: true }));
+    await waitFor(() => expect(result.current.state.kind).toBe("done"));
+    expect(result.current.canStartAutomatically).toBe(true);
+
+    let other: Promise<unknown> = Promise.resolve();
+    act(() => {
+      other = startTranscription({
+        itemId: "b",
+        assetId: "x",
+        modelId: MODEL_ID,
+        mediaUrl: "u",
+        durationMs: 1,
+      });
+    });
+    // `done` still shows, but a new job could not run.
+    expect(result.current.state.kind).toBe("done");
+    expect(result.current.canStartAutomatically).toBe(false);
+    await expect(result.current.start({ automatic: true })).resolves.toBeNull();
+    expect(run).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      job.finish(progress("b", "cancelled"));
+      await other;
+    });
+    expect(result.current.canStartAutomatically).toBe(true);
+  });
+
   it("start is a no-op when a transcript already exists", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
     const { result } = renderHook(() => useTranscribeControl({ ...ITEM, transcribedAt: 123 }));
