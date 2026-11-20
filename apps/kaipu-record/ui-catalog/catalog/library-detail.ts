@@ -3,7 +3,7 @@ import { catalog, type Part, type Step } from "../types";
 import { nc } from "./not-capturable";
 
 const detail = (assetId: string) => ({ navigate: `/library/${assetId}` }) as const;
-/** Clicks a tab of the item panel by its English name ("Versions", "Details"). */
+/** Clicks a tab of the item panel by its English name ("Copies", "Details"). */
 const tab = (name: string): Step => ({
   click: { area: "libraryDetail.tabs", part: { role: "tab", name } },
 });
@@ -36,7 +36,7 @@ export const libraryDetail = catalog(
   {
     recording: {
       profile: "default",
-      how: "Open “Walkthrough 1”, a recording with copies made from it: the Versions tab leads.",
+      how: "Open “Walkthrough 1”, a recording with copies made from it: the Copies tab leads.",
       steps: [detail(ASSETS.walkthrough)],
       demonstrates: [
         "libraryDetail.page:recording",
@@ -193,23 +193,9 @@ export const libraryDetail = catalog(
     },
     "recording-no-copies": {
       profile: "default",
-      how: "Open “Onboarding flow”, a recording with no copies yet: “Where is it going?” leads.",
+      how: "Open “Onboarding flow”, a recording with no copies yet: the Export tab leads.",
       steps: [detail(ASSETS.onboardingFlow)],
       demonstrates: ["libraryDetail.tabs:destinations", "libraryDetail.destinations:ready"],
-      ready: { video: "paused-at-start" },
-    },
-    "versions-original": {
-      profile: "default",
-      how: "Open “Onboarding flow” and click the Versions tab: only the original, no copy yet.",
-      steps: [detail(ASSETS.onboardingFlow), tab("Versions")],
-      demonstrates: ["libraryDetail.tabs:versions", "libraryDetail.versions:original"],
-      ready: { video: "paused-at-start" },
-    },
-    "versions-edited": {
-      profile: "default",
-      how: "Open “Team notes” and click the Versions tab: the original and its saved edit session.",
-      steps: [detail(ASSETS.teamNotes), tab("Versions")],
-      demonstrates: ["libraryDetail.versions:edited"],
       ready: { video: "paused-at-start" },
     },
     edited: {
