@@ -103,6 +103,10 @@ describe("seedTranscripts", () => {
     await mkdir(meta, { recursive: true });
     for (const { stem } of SEEDED_TRANSCRIPTS) {
       await writeFile(path.join(vault, `${stem}.mp4`), `media of ${stem}`);
+      await writeFile(
+        path.join(meta, `${stem}.json`),
+        JSON.stringify({ sidecarVersion: 2, assetId: `asset-${stem}` }),
+      );
     }
 
     await seedTranscripts(vault, meta);
@@ -120,6 +124,35 @@ describe("seedTranscripts", () => {
       // Only the stale one disagrees with its recording.
       expect(parsed.transcript.media.contentHash === mediaHash).toBe(kind !== "stale");
       expect(parsed.transcript.media.durationMs % 1_000).toBe(0);
+    }
+  });
+
+  it("marks the stale recording as already re-transcribed, so a shot of it never starts a job", async () => {
+    const vault = await mkdtemp(path.join(tmpdir(), "seed-transcripts-"));
+    const meta = path.join(vault, ".kaipu");
+    await mkdir(meta, { recursive: true });
+    for (const { stem } of SEEDED_TRANSCRIPTS) {
+      await writeFile(path.join(vault, `${stem}.mp4`), `media of ${stem}`);
+      await writeFile(
+        path.join(meta, `${stem}.json`),
+        JSON.stringify({ sidecarVersion: 2, assetId: `asset-${stem}` }),
+      );
+    }
+
+    await seedTranscripts(vault, meta);
+
+    for (const { stem, kind } of SEEDED_TRANSCRIPTS) {
+      const sidecar = JSON.parse(await readFile(path.join(meta, `${stem}.json`), "utf8"));
+      expect(sidecar.assetId).toBe(`asset-${stem}`);
+      if (kind === "stale") {
+        // The loop guard names the media's own hash: the panel's check says "stale" and
+        // "do not start automatically", so the idle banner stays put.
+        expect(sidecar.autoRetranscribedSha256).toBe(
+          await sha256FileBase64(path.join(vault, `${stem}.mp4`)),
+        );
+      } else {
+        expect(sidecar.autoRetranscribedSha256).toBeUndefined();
+      }
     }
   });
 });
