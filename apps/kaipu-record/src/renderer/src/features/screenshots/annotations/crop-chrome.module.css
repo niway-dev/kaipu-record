@@ -1,0 +1,126 @@
+/*
+ * Crop mode's window chrome (NIW2-876): accent-pink L brackets, edge bars and a thirds grid, all
+ * in screen px whatever the zoom (`--canvas-zoom` undoes the layer's scale). White chrome was
+ * invisible on a white screenshot, so it is the accent, with a hairline of dark around it that
+ * keeps it readable on white and on dark pictures. The whole asset is dimmed behind by the crop
+ * scrim, and the window's 1 px outline is drawn by the layer's SVG; none of this takes pointer
+ * input except the handles' cursor.
+ */
+.window {
+  position: absolute;
+  pointer-events: none;
+  /* A hairline of dark so the pink reads on a white picture and on a dark one. */
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+}
+
+.line {
+  position: absolute;
+  background: color-mix(in srgb, var(--ie-accent) 60%, transparent);
+}
+
+.lineV {
+  top: 0;
+  bottom: 0;
+  width: calc(1px / var(--canvas-zoom, 1));
+  transform: translateX(-50%);
+}
+
+.lineH {
+  left: 0;
+  right: 0;
+  height: calc(1px / var(--canvas-zoom, 1));
+  transform: translateY(-50%);
+}
+
+.handle {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+/* A target larger than the mark, so the resize cursor shows near it. */
+.handle::before {
+  content: "";
+  position: absolute;
+  inset: calc(-6px / var(--canvas-zoom, 1));
+}
+
+/* A corner: a 16 px L, 4 px thick, inside the window's corner. Never longer than 40% of the
+   side, so a small window does not become four overlapping Ls. */
+.corner {
+  width: min(calc(16px / var(--canvas-zoom, 1)), 40%);
+  height: min(calc(16px / var(--canvas-zoom, 1)), 40%);
+  --thick: calc(4px / var(--canvas-zoom, 1));
+}
+
+.nw {
+  left: 0;
+  top: 0;
+  border-top: var(--thick) solid var(--ie-accent);
+  border-left: var(--thick) solid var(--ie-accent);
+}
+
+.ne {
+  right: 0;
+  top: 0;
+  border-top: var(--thick) solid var(--ie-accent);
+  border-right: var(--thick) solid var(--ie-accent);
+}
+
+.se {
+  right: 0;
+  bottom: 0;
+  border-bottom: var(--thick) solid var(--ie-accent);
+  border-right: var(--thick) solid var(--ie-accent);
+}
+
+.sw {
+  left: 0;
+  bottom: 0;
+  border-bottom: var(--thick) solid var(--ie-accent);
+  border-left: var(--thick) solid var(--ie-accent);
+}
+
+/* An edge bar: 22 x 4 px at the middle of its edge, inside the window. */
+.edge {
+  background: var(--ie-accent);
+  --long: min(calc(22px / var(--canvas-zoom, 1)), 30%);
+  --thick: calc(4px / var(--canvas-zoom, 1));
+}
+
+.n,
+.s {
+  left: 50%;
+  width: var(--long);
+  height: var(--thick);
+  transform: translateX(-50%);
+}
+
+.e,
+.w {
+  top: 50%;
+  height: var(--long);
+  width: var(--thick);
+  transform: translateY(-50%);
+}
+
+.n {
+  top: 0;
+}
+
+.s {
+  bottom: 0;
+}
+
+.e {
+  right: 0;
+}
+
+.w {
+  left: 0;
+}

@@ -7,10 +7,11 @@ import {
 
 /**
  * Everything a capture overlay window needs to draw, read from its URL query (built by
- * `overlayQuery` in `main/screenshots/capture-overlay-windows.ts`):
+ * `overlaySpareQuery` in `main/screenshots/capture-overlay-windows.ts`; every window loads it,
+ * and the mode, intent and frame display arrive as `OverlayState`, see `spare` below):
  *
- *   ?window=capture-overlay&display=<id>&ui=<mode>&index=<1-based>&count=<n>
- *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…[&frame=<id>][&internal=1]
+ *   ?window=capture-overlay&display=<id>&ui=frame&index=<1-based>&count=<n>
+ *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…[&internal=1]&scale=<n>&spare=1
  *
  * `bounds` and `work` are the display's bounds and work area in DIP, absolute in screen
  * coordinates (x can be negative). The window covers `bounds`, so window-local (0,0) is
@@ -27,14 +28,17 @@ export interface OverlayQuery {
   work: CaptureRect;
   /** Every picked display's id in order: digit N on any overlay picks `ids[N - 1]`. */
   ids: number[];
-  /** Frame only: the display that starts with the frame; null when absent or malformed. */
+  /** Never written by main (the frame display arrives as state); null when absent or malformed. */
   frame: number | null;
   /** True for the built-in display (a laptop's panel), false for an external one. */
   internal: boolean;
-  /** Why the overlay opened: `record` only when main wrote it; anything else is a screenshot. */
+  /**
+   * Why the overlay opened. Main never writes it (the intent arrives as state, `spare` below);
+   * `record` is read when present, and anything else is a screenshot.
+   */
   intent: CaptureIntent;
   /**
-   * The display's scale factor (`&scale=`, written only for the record intent): the Frame
+   * The display's scale factor (`&scale=`, always written by main): the Frame
    * box's size readout prints device pixels. Absent or malformed reads as 1.
    */
   scaleFactor?: number;

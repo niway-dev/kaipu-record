@@ -1,10 +1,11 @@
 import type { RecognizedWord } from "@kaipu/domain/schemas";
+import type { BasePlacement } from "../annotations/scene";
 import { wordBoxNorm, type PixelRect, type PixelSize } from "./geometry";
 
 /** One recognized line: its reading-order index and the union box of its words. */
 export interface LineBox {
   line: number;
-  /** In normalized (0–1) coordinates of the base image, like `wordBoxNorm`. */
+  /** In the editor's world (base-normalized), like `wordBoxNorm`. */
   box: PixelRect;
 }
 
@@ -14,10 +15,14 @@ export function distinctLineCount(words: readonly RecognizedWord[]): number {
 }
 
 /** The union box of each line's words, in line order. */
-export function lineBoxesNorm(words: readonly RecognizedWord[], natural: PixelSize): LineBox[] {
+export function lineBoxesNorm(
+  words: readonly RecognizedWord[],
+  natural: PixelSize,
+  basePlacement?: BasePlacement,
+): LineBox[] {
   const byLine = new Map<number, { x0: number; y0: number; x1: number; y1: number }>();
   for (const word of words) {
-    const b = wordBoxNorm(word, natural);
+    const b = wordBoxNorm(word, natural, basePlacement);
     const prev = byLine.get(word.line);
     byLine.set(word.line, {
       x0: Math.min(prev?.x0 ?? b.x, b.x),

@@ -4,6 +4,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
 import { MAX_TOLERANCE, MIN_TOLERANCE } from "./pixel-run";
 import { LOUPE_RADIUS, type InspectController, type InspectRun } from "./use-inspect";
+import { RULER_HALO_PX, RULER_STROKE_PX, RULER_TICK_PX } from "../ruler-line";
 import styles from "./inspect.module.css";
 
 /** Gap between the pointer and the HUD, per axis, in CSS px. */
@@ -12,8 +13,8 @@ const HUD_OFFSET = 22;
 const HUD_WIDTH = 200;
 const HUD_HEIGHT = 190;
 const LOUPE_SIDE = LOUPE_RADIUS * 2 + 1;
-/** Half-length of the ticks across each end of the ruler, in CSS px. */
-const TICK = 5;
+/** Half-length of the ticks across each end of the ruler, in CSS px (shared with a pinned measure). */
+const TICK = RULER_TICK_PX;
 /** A press that moves less than this, in CSS px, is a click (pins the run), not a drag. */
 const CLICK_SLOP = 4;
 const TOLERANCE_CARD_WIDTH = 150;
@@ -51,10 +52,26 @@ function Ruler({
     <>
       <svg className={styles.ruler} data-testid="inspect-ruler" aria-hidden="true">
         {segments.map(([ax, ay, bx, by], i) => (
-          <line key={`h${i}`} className={styles.rulerHalo} x1={ax} y1={ay} x2={bx} y2={by} />
+          <line
+            key={`h${i}`}
+            className={styles.rulerHalo}
+            strokeWidth={RULER_HALO_PX}
+            x1={ax}
+            y1={ay}
+            x2={bx}
+            y2={by}
+          />
         ))}
         {segments.map(([ax, ay, bx, by], i) => (
-          <line key={i} className={styles.rulerLine} x1={ax} y1={ay} x2={bx} y2={by} />
+          <line
+            key={i}
+            className={styles.rulerLine}
+            strokeWidth={RULER_STROKE_PX}
+            x1={ax}
+            y1={ay}
+            x2={bx}
+            y2={by}
+          />
         ))}
       </svg>
       <span

@@ -74,6 +74,7 @@ describe("mergeSettings", () => {
         showRecordingSavedCard: false,
         screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
         recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
+        lastFrameDisplay: { capture: 1, record: 2 },
         recordingMode: "window",
         screenshotMode: "frame",
         trayHintShown: true,
@@ -98,6 +99,7 @@ describe("mergeSettings", () => {
       showRecordingSavedCard: false,
       screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
       recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
+      lastFrameDisplay: { capture: 1, record: 2 },
       recordingMode: "window",
       screenshotMode: "frame",
       trayHintShown: true,
@@ -181,6 +183,24 @@ describe("mergeSettings", () => {
         },
       }).screenshotFrame,
     ).toEqual({ "1": { x: -5, y: 0, width: 640, height: 480 } });
+  });
+
+  it("remembers no last-used display by default and keeps one per intent (NIW2-878)", () => {
+    expect(DEFAULT_SETTINGS.lastFrameDisplay).toEqual({});
+    expect(mergeSettings({}).lastFrameDisplay).toEqual({});
+    expect(mergeSettings({ lastFrameDisplay: "nope" as never }).lastFrameDisplay).toEqual({});
+    expect(mergeSettings({ lastFrameDisplay: { capture: 2, record: 5 } }).lastFrameDisplay).toEqual(
+      { capture: 2, record: 5 },
+    );
+    // Anything that is not a display id is dropped, and unknown intents are not kept.
+    expect(
+      mergeSettings({
+        lastFrameDisplay: { capture: "2", record: Number.NaN, instant: 3 } as never,
+      }).lastFrameDisplay,
+    ).toEqual({});
+    expect(mergeSettings({ lastFrameDisplay: { record: 7 } }).lastFrameDisplay).toEqual({
+      record: 7,
+    });
   });
 
   it("defaults the current screenshot mode to Frame", () => {

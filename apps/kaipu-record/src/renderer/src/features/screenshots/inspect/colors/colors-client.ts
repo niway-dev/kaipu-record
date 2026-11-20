@@ -1,4 +1,4 @@
-import type { PixelBuffer } from "../pixel-buffer";
+import type { PixelBuffer, PixelWindow } from "../pixel-buffer";
 import type { ColorsRequest, ColorsResponse } from "./colors-messages";
 import {
   analyzeColors,
@@ -26,6 +26,8 @@ export type LocatedImage = {
 export interface ColorsAnalyzer {
   /** The buffer this analyzer counted; a new buffer needs a new analyzer. */
   buffer: PixelBuffer;
+  /** The part of it that was counted (a cropped base); a different window needs a new analyzer. */
+  window?: PixelWindow;
   analysis: Promise<ColorAnalysis>;
   locate(target: LocateTarget): Promise<LocatedImage>;
   /** Stops the worker and frees its copy of the pixels. Pending calls reject. */
@@ -45,6 +47,34 @@ function newColorsWorker(): Worker {
 }
 
 /**
+ * A copy of `buffer`'s pixels in which everything outside `win` is fully transparent. The
+ * analysis counts only pixels with alpha above 0 and the locate mask never lights one, so a
+ * cropped base's hidden pixels take no part, while the overlay keeps the whole asset's size
+ * and so lines up with the image as before. Without `win` it is a plain copy.
+ */
+function visibleCopy(buffer: PixelBuffer, win?: PixelWindow): Uint8ClampedArray {
+  const copy = buffer.data.slice();
+  if (!win) return copy;
+  const { width, height } = buffer;
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 4;
+    if (y < win.y0 || y >= win.y1) {
+      for (let i = row + 3; i < row + width * 4; i += 4) copy[i] = 0;
+      continue;
+    }
+    for (let x = 0; x < Math.min(win.x0, width); x++) copy[row + x * 4 + 3] = 0;
+    for (let x = Math.max(win.x1, 0); x < width; x++) copy[row + x * 4 + 3] = 0;
+  }
+  return copy;
+}
+
+/** Whether two windows hold the same pixels (both absent counts). */
+export function sameWindow(a?: PixelWindow, b?: PixelWindow): boolean {
+  if (!a || !b) return a === b;
+  return a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
+}
+
+/**
  * Count `buffer`'s colors in a worker, starting now. The worker gets a copy of the pixels
  * (Inspect keeps reading the original for the loupe): copying 59 MiB at 5K costs a few
  * milliseconds on the main thread, and the copy is transferred, not cloned. Without `Worker`
@@ -54,8 +84,10 @@ export function createColorsAnalyzer(
   buffer: PixelBuffer,
   /** Counting progress, 0..1, about 20 calls. */
   onProgress?: (done: number) => void,
+  /** Count only this part of the buffer (the visible part of a cropped base). */
+  win?: PixelWindow,
 ): ColorsAnalyzer {
-  if (typeof Worker === "undefined") return inlineAnalyzer(buffer, onProgress);
+  if (typeof Worker === "undefined") return inlineAnalyzer(buffer, onProgress, win);
 
   const worker = newColorsWorker();
   const pending = new Map<
@@ -99,7 +131,7 @@ export function createColorsAnalyzer(
     });
   };
 
-  const copy = buffer.data.slice();
+  const copy = visibleCopy(buffer, win);
   const analysis = send(
     {
       type: "analyze",
@@ -118,6 +150,7 @@ export function createColorsAnalyzer(
 
   return {
     buffer,
+    window: win,
     analysis,
     async locate(target) {
       const reply = await send({ type: "locate", id: nextId++, target });
@@ -149,10 +182,15 @@ export function createColorsAnalyzer(
   };
 }
 
-function inlineAnalyzer(buffer: PixelBuffer, onProgress?: (done: number) => void): ColorsAnalyzer {
+function inlineAnalyzer(
+  buffer: PixelBuffer,
+  onProgress?: (done: number) => void,
+  win?: PixelWindow,
+): ColorsAnalyzer {
   let disposed = false;
+  const data = win ? visibleCopy(buffer, win) : buffer.data;
   const index = Promise.resolve().then(() =>
-    analyzeColors(buffer.data, buffer.width, buffer.height, onProgress),
+    analyzeColors(data, buffer.width, buffer.height, onProgress),
   );
   const analysis = index.then((i) => {
     if (disposed) throw new AnalyzerDisposed();
@@ -161,11 +199,12 @@ function inlineAnalyzer(buffer: PixelBuffer, onProgress?: (done: number) => void
   analysis.catch(() => {});
   return {
     buffer,
+    window: win,
     analysis,
     async locate(target) {
       const { groupOfBin } = await index;
       if (disposed) throw new AnalyzerDisposed();
-      const { mask, matched } = locateMask(buffer.data, groupOfBin, target);
+      const { mask, matched } = locateMask(data, groupOfBin, target);
       const { width, height } = buffer;
       const { areas, bounds } = regionsOf((i) => mask[i * 4 + 3] === 0, width, height);
       return { matched, areas, bounds, width, height, pixels: mask };

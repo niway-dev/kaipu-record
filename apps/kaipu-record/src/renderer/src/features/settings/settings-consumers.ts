@@ -206,9 +206,9 @@ export const SETTINGS_CONSUMERS: readonly SettingsConsumer[] = [
   {
     file: "features/screenshots/overlay/capture-overlay.tsx",
     windows: ["capture-overlay"],
-    keys: ["recordingCountdownSeconds", "recordingArea", "screenshotFrame"],
+    keys: ["recordingCountdownSeconds", "recordingArea", "screenshotFrame", "lastFrameDisplay"],
     follows: "once",
-    why: "The countdown length and the remembered area, read once when the overlay opens; a save merges into the window's copy.",
+    why: "The countdown length and the remembered area, read each time a pick mounts (a kept window remounts per pick, NIW2-878); a confirm merges the area and the display it was confirmed on into the window's copy.",
     behaviour: {
       coveredIn: "features/screenshots/overlay/capture-overlay.test.tsx",
       mentions: ["recordingCountdownSeconds", "recordingArea"],

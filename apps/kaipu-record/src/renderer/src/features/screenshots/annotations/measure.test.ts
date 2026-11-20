@@ -102,3 +102,52 @@ describe("measureTextColor", () => {
     expect(measureTextColor("#f6055c")).toBe("#ffffff");
   });
 });
+
+describe("a placed base (NIW2-876)", () => {
+  // The whole asset covers (0.5, 0.2) to (1.0, 0.7) of the world: half size, moved.
+  const placement = { x: 0.5, y: 0.2, scale: 0.5 };
+
+  it("maps asset pixels through the placement, and not at all without one", () => {
+    expect(measureEndpoints(H, placement)).toEqual({
+      p1: { x: 0.55, y: 0.2 + 0.095 * 0.5 },
+      p2: { x: 0.65, y: 0.2 + 0.095 * 0.5 },
+    });
+    expect(measureEndpoints(V, placement).p1.x).toBeCloseTo(0.5 + 0.2475 * 0.5);
+    expect(measureEndpoints(H, { x: 0, y: 0, scale: 1 })).toEqual(measureEndpoints(H));
+  });
+  it("follows the base: another placement moves the same measure", () => {
+    const moved = measureEndpoints(H, { ...placement, x: 0.1 });
+    expect(moved.p1.x).toBeCloseTo(0.15);
+    expect(measureLabel(H)).toBe("40 px");
+  });
+  it("draws the shape from the placed endpoints", () => {
+    const s = measureShape(H, 1000, 500, 1, placement);
+    expect(s.p1.x).toBeCloseTo(550);
+    expect(s.p2.x).toBeCloseTo(650);
+  });
+  it("drags an end back to asset pixels", () => {
+    // World x 0.6 is (0.6 - 0.5) / 0.5 = 0.2 of the asset = 40 px of 200.
+    expect(dragMeasureEnd(H, "from", { x: 0.6, y: 0 }, placement)).toEqual({ from: 40, to: 60 });
+    expect(dragMeasureEnd(V, "to", { x: 0, y: 0.3 }, placement)).toEqual({ from: 10, to: 20 });
+  });
+  it("keeps the label on the line when the placed asset is far from the world origin", () => {
+    // World 200 wide, asset covers x 400..500 (placement x 2, scale 0.5): the line sits at
+    // 440..460, so the pill must stay centred on it, not be clamped into 0..200.
+    const s = measureShape({ ...H, from: 80, to: 120 }, 200, 100, 1, { x: 2, y: 0.2, scale: 0.5 });
+    expect(s.p1.x).toBeCloseTo(440);
+    expect(s.p2.x).toBeCloseTo(460);
+    expect(s.pill.x + s.pill.w / 2).toBeCloseTo(450);
+    expect(s.pill.x).toBeGreaterThanOrEqual(400);
+    expect(s.pill.x + s.pill.w).toBeLessThanOrEqual(500);
+  });
+  it("clamps the label inside the placed asset rect on both axes", () => {
+    const s = measureShape({ ...H, at: 0 }, 1000, 500, 1, placement);
+    // The line is at the asset's top edge (y 100): the pill flips below it, inside 100..350.
+    expect(s.pill.y).toBeGreaterThanOrEqual(100);
+    expect(s.pill.y + s.pill.h).toBeLessThanOrEqual(350);
+  });
+  it("moves by a world delta divided by the scale", () => {
+    // 0.05 world = 0.1 of the asset = 20 px of 200; 0.1 world = 0.2 of 100 = 20 px.
+    expect(moveMeasure(H, 0.05, 0.1, placement)).toEqual({ from: 40, to: 80, at: 29 });
+  });
+});

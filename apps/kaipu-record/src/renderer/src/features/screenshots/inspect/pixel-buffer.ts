@@ -12,25 +12,81 @@ export interface PixelBuffer {
   data: Uint8ClampedArray;
 }
 
-export function sampleAt(buf: PixelBuffer, x: number, y: number): Rgba | null {
+/**
+ * The pixels of a decoded asset that show: `[x0, x1) x [y0, y1)`, in whole asset pixels. A
+ * cropped base keeps the whole asset in memory, so everything that reads pixels (the readout,
+ * the loupe, the ruler, the colors) takes this window and treats the rest as not there.
+ */
+export interface PixelWindow {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Far above float error at any image size, far below a pixel. */
+const WINDOW_EDGE_EPS = 1e-6;
+
+/**
+ * The window of `buf` that the base's `baseCrop` shows (0-1 of the asset): the whole image
+ * without a crop. A pixel shows when any part of it is inside the crop: the rendered and exported
+ * base draws a partly covered edge pixel too, and `clientToBasePixel` reads it. A crop that is not a real window gives an empty window, so nothing is
+ * read from an image whose visible part cannot be told.
+ */
+export function visiblePixelWindow(
+  buf: { width: number; height: number },
+  crop?: { x: number; y: number; w: number; h: number },
+): PixelWindow {
+  if (!crop) return { x0: 0, y0: 0, x1: buf.width, y1: buf.height };
+  if (![crop.x, crop.y, crop.w, crop.h].every(Number.isFinite) || crop.w <= 0 || crop.h <= 0) {
+    return { x0: 0, y0: 0, x1: 0, y1: 0 };
+  }
+  // A pixel the crop only partly covers still shows, at either edge, so the window rounds the
+  // start down and the end up. An edge that float noise put a hair past a pixel boundary must
+  // not take in or skip a pixel.
+  const clamp = (v: number, side: number): number => Math.min(side, Math.max(0, v));
+  const start = (fraction: number, side: number): number =>
+    clamp(Math.floor(fraction * side + WINDOW_EDGE_EPS), side);
+  const end = (fraction: number, side: number): number =>
+    clamp(Math.ceil(fraction * side - WINDOW_EDGE_EPS), side);
+  return {
+    x0: start(crop.x, buf.width),
+    y0: start(crop.y, buf.height),
+    x1: end(crop.x + crop.w, buf.width),
+    y1: end(crop.y + crop.h, buf.height),
+  };
+}
+
+export function sampleAt(
+  buf: PixelBuffer,
+  x: number,
+  y: number,
+  /** Pixels outside it read as null; absent = the whole image. */
+  win?: PixelWindow,
+): Rgba | null {
   if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
   if (x < 0 || y < 0 || x >= buf.width || y >= buf.height) return null;
+  if (win && (x < win.x0 || y < win.y0 || x >= win.x1 || y >= win.y1)) return null;
   const i = (y * buf.width + x) * 4;
   return { r: buf.data[i], g: buf.data[i + 1], b: buf.data[i + 2], a: buf.data[i + 3] };
 }
 
-/** (2r+1)^2 RGBA pixels around (cx, cy); pixels outside the image stay fully transparent. */
+/**
+ * (2r+1)^2 RGBA pixels around (cx, cy); pixels outside the image, or outside `win` (a cropped
+ * base's hidden part), stay fully transparent.
+ */
 export function loupePixels(
   buf: PixelBuffer,
   cx: number,
   cy: number,
   radius: number,
+  win?: PixelWindow,
 ): Uint8ClampedArray {
   const side = radius * 2 + 1;
   const out = new Uint8ClampedArray(side * side * 4);
   for (let row = 0; row < side; row++) {
     for (let col = 0; col < side; col++) {
-      const px = sampleAt(buf, cx - radius + col, cy - radius + row);
+      const px = sampleAt(buf, cx - radius + col, cy - radius + row, win);
       if (!px) continue;
       const o = (row * side + col) * 4;
       out[o] = px.r;
@@ -96,11 +152,9 @@ export function clientToBasePixel(
   view: BaseView,
 ): { x: number; y: number } | null {
   const px = clientToImagePixel(clientX, clientY, assetClientRect(anchor, view), buf);
-  const c = view.baseCrop;
-  if (!px || !c) return px;
-  const fx = px.x / buf.width;
-  const fy = px.y / buf.height;
-  return fx < c.x || fy < c.y || fx >= c.x + c.w || fy >= c.y + c.h ? null : px;
+  if (!px || !view.baseCrop) return px;
+  const win = visiblePixelWindow(buf, view.baseCrop);
+  return px.x < win.x0 || px.y < win.y0 || px.x >= win.x1 || px.y >= win.y1 ? null : px;
 }
 
 /**

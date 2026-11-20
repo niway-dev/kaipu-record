@@ -1,7 +1,14 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
-import { MEASURE_FONT, measureLabel, measureShape, measureTextColor } from "./measure";
+import {
+  MEASURE_FONT,
+  MEASURE_HALO_PX,
+  MEASURE_STROKE_PX,
+  measureLabel,
+  measureShape,
+  measureTextColor,
+} from "./measure";
 import {
   BLUR_STD,
   HAND_FONT,
@@ -37,6 +44,7 @@ import {
   baseVisibleRect,
   stepNumbers,
   type Annotation,
+  type BasePlacement,
   type BlurAnnotation,
   fullRect,
   type ImageAnnotation,
@@ -203,7 +211,15 @@ export function canvasExportGeometry(
     scale,
     pad: Math.round(scene.beautify.padding * scale),
     radius: Math.round(scene.beautify.radius * scale),
-    extents: contentExtents(scene.annotations, naturalW, naturalH, scale, undefined, base),
+    extents: contentExtents(
+      scene.annotations,
+      naturalW,
+      naturalH,
+      scale,
+      undefined,
+      base,
+      scene.basePlacement,
+    ),
     base,
   };
 }
@@ -434,7 +450,7 @@ export function buildSvg(scene: Scene, g: Geom): string {
     .map((a, i) => {
       if (a.kind === "image") return imageSvg(a, g, sv > 0);
       if (a.kind === "blur" && ext) return bakedBlurSvg(a, scene.annotations.slice(0, i), g, scene);
-      const drawn = annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps);
+      const drawn = annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps, scene.basePlacement);
       if (!ext) return drawn;
       // Redrawing the baked images over a later redaction hides this annotation only where
       // those pixels are opaque. A base with transparency lets it show through, so the
@@ -584,6 +600,7 @@ function annotationSvg(
   H: number,
   scale: number,
   steps: Map<string, number>,
+  placement?: BasePlacement,
 ): string {
   if (a.kind === "step") {
     const d = stepDiameterPx(a.size);
@@ -644,18 +661,20 @@ function annotationSvg(
     return `<path d="${d}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
   if (a.kind === "measure") {
-    const s = measureShape(a, W, H, scale);
-    const sw = STROKE_WIDTHS[1] * scale;
-    const ticks = s.ticks
-      .map(
-        (t) =>
-          `<line x1="${t[0]}" y1="${t[1]}" x2="${t[2]}" y2="${t[3]}" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round"/>`,
-      )
-      .join("");
+    const s = measureShape(a, W, H, scale, placement);
+    // The same look as Inspect's hover line, in output px: its stroke, caps and white outline,
+    // multiplied by the export scale so a 2x capture keeps the on-screen proportions.
+    const sw = MEASURE_STROKE_PX * scale;
+    const hw = MEASURE_HALO_PX * scale;
+    const segs: [number, number, number, number][] = [[s.p1.x, s.p1.y, s.p2.x, s.p2.y], ...s.ticks];
+    const draw = (attrs: string): string =>
+      segs
+        .map(([x1, y1, x2, y2]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${attrs}/>`)
+        .join("");
     return (
       `<g data-kind="measure">` +
-      `<line x1="${s.p1.x}" y1="${s.p1.y}" x2="${s.p2.x}" y2="${s.p2.y}" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round"/>` +
-      ticks +
+      draw(`stroke="#fff" stroke-opacity="0.9" stroke-width="${hw}" data-measure-halo=""`) +
+      draw(`stroke="${a.color}" stroke-width="${sw}"`) +
       `<rect x="${s.pill.x}" y="${s.pill.y}" width="${s.pill.w}" height="${s.pill.h}" rx="${s.pill.rx}" fill="${a.color}"/>` +
       `<text x="${s.text.x}" y="${s.text.y}" fill="${measureTextColor(a.color)}" font-family="${MEASURE_FONT}" font-size="${s.text.fontSize}" font-weight="600" text-anchor="middle" dominant-baseline="central">${escapeXml(measureLabel(a))}</text>` +
       `</g>`

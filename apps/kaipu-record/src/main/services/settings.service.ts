@@ -254,6 +254,17 @@ export function mergeRecordingAreas(stored: unknown): Record<string, RememberedA
   return result;
 }
 
+/** The display last used per intent: only whole, finite display ids for the two known intents. */
+export function mergeLastFrameDisplay(stored: unknown): AppSettings["lastFrameDisplay"] {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  const { capture, record } = stored as Record<string, unknown>;
+  const valid = (id: unknown): id is number => typeof id === "number" && Number.isInteger(id);
+  return {
+    ...(valid(capture) ? { capture } : {}),
+    ...(valid(record) ? { record } : {}),
+  };
+}
+
 /**
  * Merge persisted (possibly partial or untrusted) settings on top of the
  * defaults, dropping any invalid fields.
@@ -297,6 +308,7 @@ export function mergeSettings(
         : DEFAULT_SETTINGS.showRecordingSavedCard,
     screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
     recordingArea: mergeRecordingAreas(safe.recordingArea),
+    lastFrameDisplay: mergeLastFrameDisplay(safe.lastFrameDisplay),
     // Every mode is valid here, Window included: it records through the thumbnail picker.
     recordingMode: isCaptureMode(safe.recordingMode)
       ? safe.recordingMode

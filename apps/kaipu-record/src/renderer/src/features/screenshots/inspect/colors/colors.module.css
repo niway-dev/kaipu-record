@@ -444,6 +444,19 @@
   pointer-events: none;
 }
 
+/* A cropped, resized or moved base: the window that shows, in the same box the frame draws the
+   base in, clipping the whole-asset canvas laid out inside it. */
+.locateView {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.locateAsset {
+  position: absolute;
+  pointer-events: none;
+}
+
 /* The tag under the largest area of the located color (mock F3): chrome over the image. */
 .locateTag {
   position: absolute;

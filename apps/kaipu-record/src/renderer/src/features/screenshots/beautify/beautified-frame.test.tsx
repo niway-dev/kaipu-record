@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { dirnameOf } from "../../../test/source-tree";
 import { BeautifiedFrame } from "./beautified-frame";
 import type { BeautifyState } from "./backgrounds";
 
@@ -242,5 +245,90 @@ describe("BeautifiedFrame — a cropped or resized base (NIW2-853)", () => {
       Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
       Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
     }
+  });
+});
+
+// jsdom does not lay anything out, so the height bound's value is pinned here and its effect (the
+// frame wrapping a tall shot, the aspect ratio kept) was measured in the browser harness.
+describe("BeautifiedFrame — a tall shot (NIW2-880)", () => {
+  const css = readFileSync(join(dirnameOf(import.meta.url), "beautified-frame.module.css"), "utf8");
+  const rule = (selector: string): string => {
+    const match = css.match(new RegExp(`(?:^|\\n)${selector}\\s*\\{([^}]*)\\}`));
+    if (!match) throw new Error(`no ${selector} rule`);
+    return match[1] ?? "";
+  };
+  const shotMaxH = (): string => frameOf().style.getPropertyValue("--shot-max-h");
+
+  it("bounds the shot's height by the stage height minus the padding on both sides", () => {
+    render(<BeautifiedFrame src="x" beautify={beautify({ padding: 20 })} />);
+    expect(shotMaxH()).toBe("calc(var(--stage-h, 100%) - 40px)");
+  });
+
+  it("the bound follows the padding slider", () => {
+    const { rerender } = render(<BeautifiedFrame src="x" beautify={beautify({ padding: 20 })} />);
+    rerender(<BeautifiedFrame src="x" beautify={beautify({ padding: 0 })} />);
+    expect(shotMaxH()).toBe("calc(var(--stage-h, 100%) - 0px)");
+  });
+
+  it("extents and a base do not move the bound: the frame outgrows the stage by exactly them", () => {
+    const base = {
+      visible: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+      shot: { w: 200, h: 100 },
+    };
+    render(
+      <BeautifiedFrame
+        src="x"
+        beautify={beautify({ padding: 20 })}
+        extents={{ left: 5, top: 10, right: 15, bottom: 30 }}
+        base={base}
+      />,
+    );
+    expect(shotMaxH()).toBe("calc(var(--stage-h, 100%) - 40px)");
+  });
+
+  it("a windowed frame bounds the shot by its constant size, whatever the padding is now", () => {
+    // Measured at padding 20: a 140 x 190 frame, so the shot is 100 x 150.
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get: () => 140,
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get: () => 190,
+    });
+    try {
+      const crop = { x: 0, y: 0, w: 0.5, h: 0.5 };
+      const { rerender } = render(
+        <BeautifiedFrame src="x" beautify={beautify({ padding: 20 })} crop={crop} />,
+      );
+      expect(shotMaxH()).toBe("150px");
+      // The slider grows the padding: the frame grows, the shot must not shrink.
+      rerender(<BeautifiedFrame src="x" beautify={beautify({ padding: 40 })} crop={crop} />);
+      expect(shotMaxH()).toBe("150px");
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+      Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+    }
+  });
+
+  it("the shot reads the bound, falling back to the old percent without a frame", () => {
+    expect(rule("\\.shot")).toMatch(/max-height:\s*var\(--shot-max-h,\s*100%\)/);
+  });
+
+  it("the editor stage hands the frame its height, measured against a size container", () => {
+    const page = readFileSync(
+      join(
+        dirnameOf(import.meta.url),
+        "../../../pages/screenshot-editor/screenshot-editor-page.module.css",
+      ),
+      "utf8",
+    );
+    const block = (selector: string): string =>
+      page.match(new RegExp(`(?:^|\\n)${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+    // `.canvasArea` (not the scrolling `.canvas`) is the container: layout containment would make
+    // a scroll container the containing block of the Inspect layer, which would scroll with it.
+    expect(block("\\.canvasArea")).toMatch(/container-type:\s*size/);
+    expect(block("\\.canvas")).not.toMatch(/container-type/);
+    expect(block("\\.canvas")).toMatch(/--stage-h:\s*calc\(100cqh - 2 \* var\(--space-xl\)\)/);
   });
 });

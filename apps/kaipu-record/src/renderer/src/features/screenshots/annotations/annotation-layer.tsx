@@ -26,6 +26,8 @@ import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import {
   MEASURE_FONT,
+  MEASURE_HALO_PX,
+  MEASURE_STROKE_PX,
   measureEndpoints,
   measureLabel,
   measureShape,
@@ -39,15 +41,14 @@ import {
   nextAnnotationId,
   stepNumbers,
   type Annotation,
+  type BasePlacement,
   type BlurAnnotation,
   type ImageAnnotation,
   type NormalizedRect,
 } from "./scene";
 import {
   BASE_IMAGE_ID,
-  CROP_HANDLES,
   cropHandleAt,
-  cropHandlePoint,
   baseAsImage,
   resizeBasePlacement,
   resizeCropWindow,
@@ -55,12 +56,14 @@ import {
   type BaseFields,
   type CropTarget,
 } from "./image-crop";
+import { followRadiusSource, imageActionState } from "./image-actions";
 import { useRedactionTile } from "./redaction-preview";
 import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import type { RecognizedWord } from "@kaipu/domain/schemas";
 import {
+  assetRectToWorld,
   blockRedactionRect,
   lineBoxesNorm,
   nearestBlock,
@@ -73,6 +76,8 @@ import {
 } from "../text-selection";
 import { gapMeasures, type WorldRect } from "../canvas/image-gap";
 import { ImageSelection } from "../canvas/image-selection";
+import { ImageActionBar } from "../canvas/image-action-bar";
+import { CropChrome } from "./crop-chrome";
 import { RedactionLockTag } from "../canvas/redaction-lock-tag";
 import styles from "./annotation-layer.module.css";
 
@@ -95,6 +100,11 @@ type Drag =
   | { mode: "resize"; id: string; handle: HandleId; orig: Annotation }
   /** A corner drag on the selected base image: a proportional resize, written as `basePlacement`. */
   | { mode: "resize-base"; handle: HandleId; orig: BaseFields }
+  /**
+   * A drag on the base's own pixels: it moves alone, like a pasted image, written as
+   * `basePlacement` (the world origin and every annotation stay where they are).
+   */
+  | { mode: "move-base"; start: Pt; orig: BaseFields }
   /** A crop-mode drag of one handle of the crop window, from the window as the drag began. */
   | { mode: "crop-window"; handle: HandleId; orig: NormalizedRect }
   /** A text selection drag (the "Select text" tool); the range runs from `anchor`. */
@@ -102,9 +112,6 @@ type Drag =
 
 /** How far from a word, in display px, a press still starts a selection on it. */
 const TEXT_HIT_PX = 6;
-
-/** Radius of a selected measure's end dot: 10 px across (mock C9). */
-const MEASURE_DOT_R = 5;
 
 /** Side of a resize handle in px, and the click tolerance around it. */
 const HANDLE_PX = 10;
@@ -174,6 +181,18 @@ interface LayerProps {
   /** The "Done" button of crop mode. */
   onCropDone?: () => void;
   /**
+   * Crop mode's Reset is enabled: the page knows whether the image carries a committed crop
+   * (this layer's `base` drops it while the base is being cropped) or the window was dragged in.
+   */
+  canResetCrop?: boolean;
+  /**
+   * The action bar's Reset (NIW2-876): remove the selected image's crop, in one commit. Absent
+   * with `onEnterCrop` (Inspect on): the bar is not shown at all.
+   */
+  onResetCrop?: (id: string) => void;
+  /** The action bar's Corners: the selected image's own radius in source px; undefined = follow the slider. */
+  onImageRadius?: (id: string, radius: number | undefined) => void;
+  /**
    * A base resize in flight: the base's fields with the drag applied, null once it ends. The
    * editor lays the frame out from them so the page follows the drag. Must be stable.
    */
@@ -208,6 +227,9 @@ function AnnotationLayerImpl({
   onEnterCrop,
   onCropWindow,
   onCropDone,
+  canResetCrop = false,
+  onResetCrop,
+  onImageRadius,
   onLiveBase,
 }: LayerProps): React.JSX.Element {
   const t = useTranslations("screenshots");
@@ -236,12 +258,15 @@ function AnnotationLayerImpl({
   const hoverBlock = redactText ? (blocks.find((b) => b.line === hoverHideLine) ?? null) : null;
   const blockAt = (p: Pt): TextBlock | null => {
     if (!redactText) return null;
-    const hit = nearestBlock(blocks, p, redactText.natural, size);
+    const hit = nearestBlock(blocks, p, redactText.natural, size, redactText.basePlacement);
     return hit && hit.distPx <= TEXT_HIT_PX ? blocks[hit.index] : null;
   };
   // One underline per line, under the words' union box. Cheap, and only for the active tool.
   const recognizedLines = useMemo(
-    () => (activeText ? lineBoxesNorm(activeText.words, activeText.natural) : []),
+    () =>
+      activeText
+        ? lineBoxesNorm(activeText.words, activeText.natural, activeText.basePlacement)
+        : [],
     [activeText],
   );
   const hoverTag = recognizedLines.find((l) => l.line === hoverLine)?.box ?? null;
@@ -274,6 +299,8 @@ function AnnotationLayerImpl({
     fontPx?: number;
   } | null>(null);
   const drag = useRef<Drag | null>(null);
+  // An image is being pressed, moved or resized: the action bar steps out of the way (NIW2-876).
+  const [gesturing, setGesturing] = useState(false);
   // The selected base image, as an image annotation, so it wears the image chrome and resizes
   // through the same machinery. Never in the scene (the base is not an annotation).
   const baseCrop = base.baseCrop;
@@ -393,7 +420,7 @@ function AnnotationLayerImpl({
     }
     if (tools.tool !== "select") return;
     const p = toNorm(e);
-    const hit = hitTest(scene.annotations, p, size, canvasMode);
+    const hit = hitTest(scene.annotations, p, size, canvasMode, basePlacement);
     // A double-click on an annotation is the annotation's (a label reopens); only one on the
     // bare image reaches the frame's "double-click to edit the crop" (NIW2-759).
     if (hit) e.stopPropagation();
@@ -441,7 +468,13 @@ function AnnotationLayerImpl({
     if (tools.tool === "selectText") {
       // A press on or near a word starts a selection there; one on empty space clears it.
       if (!activeText) return;
-      const hit = nearestWord(activeText.words, p, activeText.natural, size);
+      const hit = nearestWord(
+        activeText.words,
+        p,
+        activeText.natural,
+        size,
+        activeText.basePlacement,
+      );
       if (hit && hit.distPx <= TEXT_HIT_PX) {
         const anchor = activeText.words[hit.index];
         drag.current = { mode: "select-text", anchor };
@@ -463,12 +496,13 @@ function AnnotationLayerImpl({
         : (scene.annotations.find((a) => a.id === scene.selectedId) ?? selectedBase);
       if (sel) {
         const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
-        const handle = hitHandle(handlesFor(sel, size), p, tol);
+        const handle = hitHandle(handlesFor(sel, size, basePlacement), p, tol);
         if (handle) {
           drag.current =
             sel.id === BASE_IMAGE_ID
               ? { mode: "resize-base", handle, orig: base }
               : { mode: "resize", id: sel.id, handle, orig: sel };
+          setGesturing(true);
           // A base drag owns the history until it ends: undo mid-drag would remove the crop the
           // release then computes its placement from.
           if (sel.id === BASE_IMAGE_ID) scene.beginInteract();
@@ -476,11 +510,23 @@ function AnnotationLayerImpl({
           return;
         }
       }
-      const hit = hitTest(scene.annotations, p, size, canvasMode);
+      const hit = hitTest(scene.annotations, p, size, canvasMode, basePlacement);
       // With nothing on the shapes layer under the press, the base image answers on the rect it
       // shows (NIW2-853); padding and background clear the selection as before.
       const onBase = !hit && canvas && natural && inRect(p, baseVisibleRect(base));
       scene.select(hit?.id ?? (onBase ? BASE_IMAGE_ID : null));
+      // The base's own pixels drag it, like a pasted image's (NIW2-876). Not while the inline
+      // text editor is open (its blur commits a label mid-drag), and not where the image is
+      // read, not edited (Inspect passes no crop handlers). Primary button only: a right-click
+      // must not move the base, as it does not place a badge or hide a block.
+      if (onBase && e.button === 0 && !editing && onEnterCrop) {
+        drag.current = { mode: "move-base", start: p, orig: base };
+        setGesturing(true);
+        // A base drag owns the history until it ends, as a corner drag does.
+        scene.beginInteract();
+        ref.current?.setPointerCapture(e.pointerId);
+        return;
+      }
       // The label whose inline editor is open belongs to that editor. The hit-test
       // keeps an 8px margin around it, and the textarea only covers the box itself,
       // so a press in that ring would drag the label out from under its own caret.
@@ -489,6 +535,8 @@ function AnnotationLayerImpl({
       // editing to select it" is unchanged.
       const editingThis = editing?.id !== undefined && hit?.id === editing.id;
       if (hit && !editingThis) {
+        // The action bar steps aside on the first move, not on the press: a plain click on the
+        // selected image must not unmount the bar and drop an open Corners panel's value.
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         (e.target as Element).setPointerCapture?.(e.pointerId);
       }
@@ -555,7 +603,13 @@ function AnnotationLayerImpl({
         setHoverLockedId(locked?.id ?? null);
       }
       if (activeText) {
-        const hit = nearestWord(activeText.words, toNorm(e), activeText.natural, size);
+        const hit = nearestWord(
+          activeText.words,
+          toNorm(e),
+          activeText.natural,
+          size,
+          activeText.basePlacement,
+        );
         setHoverLine(
           hit !== null && hit.distPx <= TEXT_HIT_PX ? activeText.words[hit.index].line : null,
         );
@@ -566,7 +620,9 @@ function AnnotationLayerImpl({
     const p = toNorm(e);
     if (d.mode === "select-text") {
       // The word under the pointer, or the nearest one when it is between words.
-      const hit = activeText ? nearestWord(activeText.words, p, activeText.natural, size) : null;
+      const hit = activeText
+        ? nearestWord(activeText.words, p, activeText.natural, size, activeText.basePlacement)
+        : null;
       if (activeText && hit) activeText.select(d.anchor, activeText.words[hit.index]);
       return;
     }
@@ -582,13 +638,33 @@ function AnnotationLayerImpl({
       onLiveBase?.({ ...d.orig, basePlacement: placement });
       return;
     }
+    if (d.mode === "move-base") {
+      // From the ORIGINAL placement each frame: the pointer's travel since the press, in the
+      // same base-normalized units as the placement (the layer is the world anchor).
+      const from = d.orig.basePlacement ?? { x: 0, y: 0, scale: 1 };
+      const x = from.x + (p.x - d.start.x);
+      const y = from.y + (p.y - d.start.y);
+      // Back where it began: nothing to commit, and the preview shows the stored base.
+      const moved = x !== from.x || y !== from.y;
+      const placement = { ...from, x, y };
+      baseLiveRef.current = moved ? placement : null;
+      onLiveBase?.({ ...d.orig, basePlacement: placement });
+      return;
+    }
     if (d.mode === "move") {
-      setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
+      setGesturing(true);
+      setLiveBoth({
+        id: d.id,
+        patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y, basePlacement),
+      });
       return;
     }
     if (d.mode === "resize") {
       // Resize from the ORIGINAL geometry each frame (fixed edges stay put, no drift).
-      setLiveBoth({ id: d.id, patch: resizeAnnotation(d.orig, d.handle, p, size, canvas) });
+      setLiveBoth({
+        id: d.id,
+        patch: resizeAnnotation(d.orig, d.handle, p, size, canvas, basePlacement),
+      });
       return;
     }
     if (d.mode === "draw-pen") {
@@ -653,7 +729,8 @@ function AnnotationLayerImpl({
     if (l) scene.commitAnnotation(l.id, l.patch);
   };
 
-  // Ends a base resize: one `basePlacement` commit (one undo step) with the last placement shown.
+  // Ends a base resize or move: one `basePlacement` commit (one undo step) with the last placement
+  // shown, or none when the pointer came back to where it began; the preview is dropped either way.
   const baseLiveRef = useRef<NonNullable<BaseFields["basePlacement"]> | null>(null);
   const commitBaseLive = (): void => {
     // Close the interaction first: the scene did not change during it (undo and redo were
@@ -661,16 +738,16 @@ function AnnotationLayerImpl({
     scene.endInteract();
     const placement = baseLiveRef.current;
     baseLiveRef.current = null;
-    if (!placement) return;
-    scene.commitBase({ basePlacement: placement });
+    if (placement) scene.commitBase({ basePlacement: placement });
     onLiveBase?.(null);
   };
 
   const onPointerUp = (): void => {
     const d = drag.current;
     drag.current = null;
+    setGesturing(false);
     if (!d || d.mode === "select-text" || d.mode === "crop-window") return;
-    if (d.mode === "resize-base") {
+    if (d.mode === "resize-base" || d.mode === "move-base") {
       commitBaseLive();
       return;
     }
@@ -704,14 +781,14 @@ function AnnotationLayerImpl({
   // the next line is one more click; the hidden words leave `text.words` at once, so the
   // block stops being a target.
   const hideBlock = (block: TextBlock, model: TextLayerModel): void => {
-    const { natural } = model;
-    const r = blockRedactionRect(block, model.words, natural);
+    const { natural, basePlacement: placement } = model;
+    const r = blockRedactionRect(block, model.marginWords ?? model.words, natural);
     if (r.w <= 0 || r.h <= 0) return;
     const { id } = nextAnnotationId();
     scene.addAnnotation({
       id,
       kind: "blur",
-      ...pixelRectToNorm(r, natural),
+      ...pixelRectToNorm(r, natural, placement),
       ...(tools.redactionStyle === "solid" ? { style: "solid" as const } : {}),
     });
     scene.select(null);
@@ -723,8 +800,9 @@ function AnnotationLayerImpl({
   const onPointerAbort = (): void => {
     const d = drag.current;
     drag.current = null;
+    setGesturing(false);
     if (d?.mode === "move" || d?.mode === "resize") commitLive();
-    if (d?.mode === "resize-base") commitBaseLive();
+    if (d?.mode === "resize-base" || d?.mode === "move-base") commitBaseLive();
     setDraft(null);
   };
 
@@ -837,11 +915,31 @@ function AnnotationLayerImpl({
       w: a.w * natural.w,
       h: a.h * natural.h,
     });
-    const others: WorldRect[] = [{ x: 0, y: 0, w: natural.w, h: natural.h }];
+    // The base as the picture shows it: its visible window at its placement, not the unplaced
+    // natural size, so a resized, moved or cropped base measures its real edge (NIW2-876).
+    const others: WorldRect[] = [world(baseVisibleRect({ baseCrop, basePlacement }))];
     for (const a of shown)
       if (a.kind === "image" && a.id !== selectedImage.id) others.push(world(a));
     return gapMeasures(world(selectedImage), others);
-  }, [selectedImage, natural, shown]);
+  }, [selectedImage, natural, shown, baseCrop, basePlacement]);
+
+  // The floating action bar (NIW2-876): Move | Crop, Corners and Reset over the selected image.
+  // It needs the crop handlers (absent in Inspect, where the image is read, not edited), and it
+  // steps out of the way while the image is pressed, moved or resized. In crop mode it stays,
+  // over the crop window, with Crop checked: Move is how the bar leaves crop mode.
+  const barId = cropping ? cropping.id : selectedImage && !gesturing ? selectedImage.id : null;
+  const barState =
+    barId && onEnterCrop && onResetCrop && onImageRadius && (!cropping || onCropDone)
+      ? imageActionState(barId, scene.annotations, base, natural)
+      : null;
+  const actionState = barState
+    ? // In crop mode the page knows whether a crop can be removed: this layer's `base` drops the
+      // base's committed crop while it is edited.
+      cropping
+      ? { ...barState, hasCrop: canResetCrop }
+      : barState
+    : null;
+  const barRect = cropping ? cropping.win : selectedImage;
 
   return (
     <div
@@ -935,7 +1033,7 @@ function AnnotationLayerImpl({
         )}
         {/* An added image's handles are drawn by `ImageSelection` (mock A4), not here. */}
         {selectedAnnotation && selectedAnnotation.kind !== "image" && (
-          <Handles a={selectedAnnotation} size={size} />
+          <Handles a={selectedAnnotation} size={size} placement={basePlacement} />
         )}
         {cropping && <CropWindow target={cropping} size={size} />}
         {activeText && recognizedLines.length > 0 && (
@@ -971,7 +1069,7 @@ function AnnotationLayerImpl({
             {activeText.words
               .filter((w) => activeText.selected.has(w))
               .map((w, i) => {
-                const b = wordBoxNorm(w, activeText.natural);
+                const b = wordBoxNorm(w, activeText.natural, activeText.basePlacement);
                 return (
                   <rect
                     key={i}
@@ -1005,26 +1103,70 @@ function AnnotationLayerImpl({
           }}
           pixelWidth={selectedImage.pixelWidth}
           pixelHeight={selectedImage.pixelHeight}
+          crop={selectedImage.crop}
           justAdded={justAddedId != null && justAddedId === selectedImage.id}
-          movable={selectedImage.id !== BASE_IMAGE_ID}
+          // The base only moves where the layer has crop handlers (not in Inspect, which reads it).
+          movable={selectedImage.id !== BASE_IMAGE_ID || onEnterCrop !== undefined}
           gaps={gaps}
           unit={natural && natural.w > 0 ? size.w / natural.w : 1}
         />
       )}
+      {barRect && actionState && onEnterCrop && onResetCrop && onImageRadius && (
+        <ImageActionBar
+          rect={{
+            x: barRect.x * size.w,
+            y: barRect.y * size.h,
+            w: barRect.w * size.w,
+            h: barRect.h * size.h,
+          }}
+          actions={{
+            imageId: actionState.id,
+            hasCrop: actionState.hasCrop,
+            cropping: cropping !== null,
+            ...(actionState.radius !== undefined ? { radius: actionState.radius } : {}),
+            followRadius: followRadiusSource(radius, naturalW, size.w),
+            maxRadius: actionState.maxRadius,
+            onCrop: () => onEnterCrop(actionState.id),
+            onMove: () => onCropDone?.(),
+            onResetCrop: () => onResetCrop(actionState.id),
+            onRadius: (r) => onImageRadius(actionState.id, r),
+          }}
+        />
+      )}
+      {cropping && <CropChrome win={cropping.win} size={size} />}
       {cropping && (
-        <button
-          type="button"
-          className={styles.cropDone}
-          title={t("cropDoneTitle")}
+        <div
+          className={styles.cropActions}
+          data-testid="crop-actions"
           style={{
             left: (cropping.win.x + cropping.win.w) * size.w,
             top: (cropping.win.y + cropping.win.h) * size.h,
           }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={onCropDone}
         >
-          {t("cropDone")}
-        </button>
+          <div className={styles.cropActionsRow}>
+            {onResetCrop && (
+              <button
+                type="button"
+                className={styles.cropReset}
+                title={t("imageActionResetTitle")}
+                disabled={!canResetCrop}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => onResetCrop(cropping.id)}
+              >
+                {t("imageActionReset")}
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.cropDone}
+              title={t("cropDoneTitle")}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={onCropDone}
+            >
+              {t("cropDone")}
+            </button>
+          </div>
+        </div>
       )}
       {selectedLocked && (
         <RedactionLockTag
@@ -1127,6 +1269,9 @@ function sameLayerProps(p: LayerProps, n: LayerProps): boolean {
     p.onEnterCrop === n.onEnterCrop &&
     p.onCropWindow === n.onCropWindow &&
     p.onCropDone === n.onCropDone &&
+    p.canResetCrop === n.canResetCrop &&
+    p.onResetCrop === n.onResetCrop &&
+    p.onImageRadius === n.onImageRadius &&
     p.onLiveBase === n.onLiveBase
   );
 }
@@ -1146,12 +1291,15 @@ function TextTarget({
   model: TextLayerModel;
   size: Size;
 }): React.JSX.Element {
-  const r = blockRedactionRect(block, model.words, model.natural);
-  const sx = size.w / model.natural.w;
-  const sy = size.h / model.natural.h;
+  const { natural, basePlacement } = model;
+  const r = assetRectToWorld(
+    blockRedactionRect(block, model.marginWords ?? model.words, natural),
+    natural,
+    basePlacement,
+  );
   return (
     <g data-testid="text-target" className={styles.textTarget}>
-      <rect x={r.x * sx} y={r.y * sy} width={r.w * sx} height={r.h * sy} rx={3} />
+      <rect x={r.x * size.w} y={r.y * size.h} width={r.w * size.w} height={r.h * size.h} rx={3} />
     </g>
   );
 }
@@ -1170,71 +1318,60 @@ function CropScrim({ target, size }: { target: CropTarget; size: Size }): React.
   );
 }
 
-/** The crop window's outline and its eight handles. Presses are hit-tested by the layer. */
+/**
+ * The crop window's outline: 1 px white on screen, not the accent frame a selection wears. Its
+ * handles, grid and the area root are `CropChrome`, drawn in HTML over the layer.
+ */
 function CropWindow({ target, size }: { target: CropTarget; size: Size }): React.JSX.Element {
   const { win } = target;
   return (
-    <g {...uiArea("editorImage.imageCropMode")}>
-      <rect
-        data-testid="crop-window"
-        className={`${styles.selOutline} ${styles.imageFrame}`}
-        x={win.x * size.w}
-        y={win.y * size.h}
-        width={win.w * size.w}
-        height={win.h * size.h}
-      />
-      {CROP_HANDLES.map((h) => {
-        const pt = cropHandlePoint(win, h);
-        return (
-          <rect
-            key={h}
-            data-testid="crop-handle"
-            className={styles.handle}
-            x={pt.x * size.w - HANDLE_PX / 2}
-            y={pt.y * size.h - HANDLE_PX / 2}
-            width={HANDLE_PX}
-            height={HANDLE_PX}
-            rx={2}
-            style={{ cursor: handleCursor(h) }}
-          />
-        );
-      })}
-    </g>
+    <rect
+      data-testid="crop-window"
+      className={styles.cropWindow}
+      x={win.x * size.w}
+      y={win.y * size.h}
+      width={win.w * size.w}
+      height={win.h * size.h}
+    />
   );
 }
 
 /** Resize handles drawn over the selected shape. Hit-testing is geometric (in the
  *  layer's onPointerDown), so these are purely visual + carry the resize cursor. */
-function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element {
+function Handles({
+  a,
+  size,
+  placement,
+}: {
+  a: Annotation;
+  size: Size;
+  placement?: BasePlacement;
+}): React.JSX.Element {
   const { w: W, h: H } = size;
   if (a.kind === "measure") {
-    // Mock C9: round end dots in the measure's own color (same grab targets, same hit-testing).
+    // The visible ends are the ruler's own caps, always drawn by the line (the same caps as
+    // Inspect's hover). Selected, each end only adds an invisible square as large as the old
+    // dot, so the grab target stays easy to hit; the hit test itself is geometric.
     return (
       <g>
-        {handlesFor(a, size).map((h) => (
-          <g key={h.id} style={{ cursor: handleCursor(h.id) }}>
-            <circle
-              className={styles.measureDotRing}
-              cx={h.x * W}
-              cy={h.y * H}
-              r={MEASURE_DOT_R + 1}
-            />
-            <circle
-              data-testid="resize-handle"
-              className={styles.measureDot}
-              cx={h.x * W}
-              cy={h.y * H}
-              r={MEASURE_DOT_R}
-              stroke={a.color}
-            />
-          </g>
+        {handlesFor(a, size, placement).map((h) => (
+          <rect
+            key={h.id}
+            data-testid="resize-handle"
+            className={styles.measureCapHit}
+            style={{ cursor: handleCursor(h.id) }}
+            x={h.x * W - HANDLE_HIT_PX / 2}
+            y={h.y * H - HANDLE_HIT_PX / 2}
+            width={HANDLE_HIT_PX}
+            height={HANDLE_HIT_PX}
+          />
         ))}
       </g>
     );
   }
   return (
     <g>
-      {handlesFor(a, size).map((h) => (
+      {handlesFor(a, size, placement).map((h) => (
         <rect
           key={h.id}
           data-testid="resize-handle"
@@ -1452,8 +1589,8 @@ const Shape = React.memo(function Shape({
   }
 
   if (a.kind === "measure") {
-    const s = measureShape(a, W, H);
-    const sw = STROKE_WIDTHS[1];
+    const s = measureShape(a, W, H, 1, base.basePlacement);
+    const sw = MEASURE_STROKE_PX;
     return (
       <g
         {...uiArea("editorImage.measure")}
@@ -1462,20 +1599,20 @@ const Shape = React.memo(function Shape({
         data-measure-length={a.to - a.from}
         data-selected={selected ? "true" : undefined}
       >
-        {/* On-screen only: a white halo under the line keeps it readable on any image. The export
+        {/* On-screen only: the soft white outline under the line, exactly Inspect's. The export
             draws its own measures (compositor), so it never sees this. */}
         <g
           data-measure-halo=""
           className={styles.measureHalo}
-          strokeWidth={sw + 2}
-          strokeLinecap="round"
+          strokeWidth={MEASURE_HALO_PX}
+          shapeRendering="crispEdges"
         >
           <line x1={s.p1.x} y1={s.p1.y} x2={s.p2.x} y2={s.p2.y} />
           {s.ticks.map((t, i) => (
             <line key={i} x1={t[0]} y1={t[1]} x2={t[2]} y2={t[3]} />
           ))}
         </g>
-        <g stroke={a.color} strokeWidth={sw} strokeLinecap="round">
+        <g stroke={a.color} strokeWidth={sw} shapeRendering="crispEdges">
           <line x1={s.p1.x} y1={s.p1.y} x2={s.p2.x} y2={s.p2.y} />
           {s.ticks.map((t, i) => (
             <line key={i} x1={t[0]} y1={t[1]} x2={t[2]} y2={t[3]} />
@@ -1913,7 +2050,12 @@ function isBigEnough(a: Annotation): boolean {
   return true; // text and step are placed by a click, never dragged out
 }
 
-function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
+function moveBy(
+  a: Annotation,
+  dx: number,
+  dy: number,
+  placement?: BasePlacement,
+): Partial<Annotation> {
   if (a.kind === "arrow") {
     return { x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy } as Partial<Annotation>;
   }
@@ -1922,7 +2064,7 @@ function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
       points: a.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy })),
     } as Partial<Annotation>;
   }
-  if (a.kind === "measure") return moveMeasure(a, dx, dy);
+  if (a.kind === "measure") return moveMeasure(a, dx, dy, placement);
   return { x: a.x + dx, y: a.y + dy } as Partial<Annotation>;
 }
 
@@ -1931,6 +2073,7 @@ function hitTest(
   p: Pt,
   size: Size,
   canvasMode = false,
+  placement?: BasePlacement,
 ): Annotation | null {
   for (let i = annotations.length - 1; i >= 0; i -= 1) {
     const a = annotations[i];
@@ -1973,10 +2116,10 @@ function hitTest(
         if (distToSegment(p, a.points[j], a.points[j + 1]) < 0.02) return a;
       }
     } else if (a.kind === "measure") {
-      const { p1, p2 } = measureEndpoints(a);
+      const { p1, p2 } = measureEndpoints(a, placement);
       if (distToSegment(p, p1, p2) < 0.02) return a;
       // The label pill sits off the line and is what the eye goes to: it grabs the measure too.
-      const { pill } = measureShape(a, size.w, size.h);
+      const { pill } = measureShape(a, size.w, size.h, 1, placement);
       const px = p.x * size.w;
       const py = p.y * size.h;
       if (px >= pill.x && px <= pill.x + pill.w && py >= pill.y && py <= pill.y + pill.h) {

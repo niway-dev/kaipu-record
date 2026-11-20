@@ -5,7 +5,10 @@
  * gap below the image (looked like padding at the bottom even at relleno 0).
  * Flex items have no baseline gap, and `max-width/height: 100%` resolve against
  * the flex canvas (a definite size), so the shot fits without overflow/scroll
- * and keeps its aspect ratio.
+ * and keeps its aspect ratio. Only the frame's own max sizes work that way: the shot's
+ * height has no definite parent to resolve against, so `--shot-max-h` (set on the frame)
+ * bounds it. `--stage-h`, set by the editor stage, is the height of the box the frame's own
+ * `max-height: 100%` resolves against.
  */
 .frame {
   position: relative; /* anchors the frame-level crop overlay (inset:0 → whole frame) */
@@ -39,7 +42,12 @@
 .shot {
   display: block;
   max-width: 100%;
-  max-height: 100%;
+  /* Percent heights do not resolve here: the frame (and so `.shotWrap`) has an auto height, so
+     `100%` would be "none" and a tall shot kept its natural height while the frame, clamped by
+     its own max-height, ended up shorter than the shot it should wrap. The frame hands the
+     bound over as a length (the stage height minus the padding), so a tall shot shrinks with
+     its aspect ratio kept, the way a wide one does through its width. */
+  max-height: var(--shot-max-h, 100%);
   object-fit: contain;
   transition:
     border-radius 0.12s ease,
