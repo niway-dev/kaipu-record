@@ -356,7 +356,7 @@ window.electronAPI = {
   onTranscriptionJobProgress: () => () => {},
   readTranscript: async () => ({ status: "none" as const }),
   checkTranscriptFreshness: async () => ({
-    verdict: "unknown" as const,
+    verdict: "fresh" as const,
     autoRetranscribe: false,
   }),
   saveTextFile: async () => ({ status: "cancelled" as const }),

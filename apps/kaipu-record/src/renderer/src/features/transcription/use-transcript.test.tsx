@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   TranscriptDocument,
+  TranscriptFreshnessResult,
   TranscriptReadResult,
   TranscriptionJobProgress,
 } from "@shared/types/transcription";
@@ -28,7 +29,12 @@ const DOC: TranscriptDocument = {
   words: [],
 };
 
-const READY: TranscriptReadResult = { status: "ready", transcript: DOC, stale: false };
+const READY: TranscriptReadResult = {
+  status: "ready",
+  transcript: DOC,
+  stale: false,
+  freshness: "fresh",
+};
 
 beforeEach(() => {
   resetTranscriptionJobStore();
@@ -67,12 +73,141 @@ describe("useTranscript", () => {
   });
 
   it("exposes the stale flag and keeps the words readable", async () => {
-    stubApi({ readTranscript: async () => ({ status: "ready", transcript: DOC, stale: true }) });
+    stubApi({
+      readTranscript: async () => ({
+        status: "ready",
+        transcript: DOC,
+        stale: true,
+        freshness: "stale",
+      }),
+      checkTranscriptFreshness: async () => ({ verdict: "stale", autoRetranscribe: false }),
+    });
     const { result } = renderHook(() => useTranscript("a"));
 
     await waitFor(() => expect(result.current.state).toBe("ready"));
     expect(result.current.stale).toBe(true);
     expect(result.current.transcript).toBe(DOC);
+  });
+
+  describe("freshness check", () => {
+    const COLD: TranscriptReadResult = {
+      status: "ready",
+      transcript: DOC,
+      stale: false,
+      freshness: "checking",
+    };
+
+    it("shows the words at once while the check is out, then applies the verdict", async () => {
+      let settle!: (result: TranscriptFreshnessResult) => void;
+      stubApi({
+        readTranscript: async () => COLD,
+        checkTranscriptFreshness: () => new Promise((resolve) => (settle = resolve)),
+      });
+      const { result } = renderHook(() => useTranscript("a"));
+
+      await waitFor(() => expect(result.current.state).toBe("ready"));
+      expect(result.current.transcript).toBe(DOC);
+      expect(result.current.freshness).toBe("checking");
+      expect(result.current.stale).toBe(false);
+
+      await act(async () => settle({ verdict: "fresh", autoRetranscribe: false }));
+      expect(result.current.freshness).toBe("fresh");
+      expect(result.current.stale).toBe(false);
+      expect(result.current.autoRetranscribe).toBe(false);
+    });
+
+    it("marks the words stale and passes on whether an automatic re-transcribe is allowed", async () => {
+      stubApi({
+        readTranscript: async () => COLD,
+        checkTranscriptFreshness: async () => ({ verdict: "stale", autoRetranscribe: true }),
+      });
+      const { result } = renderHook(() => useTranscript("a"));
+
+      await waitFor(() => expect(result.current.freshness).toBe("stale"));
+      expect(result.current.stale).toBe(true);
+      expect(result.current.autoRetranscribe).toBe(true);
+      expect(result.current.transcript).toBe(DOC);
+    });
+
+    it("shows an unverifiable recording as out of date, with no automatic attempt", async () => {
+      stubApi({
+        readTranscript: async () => COLD,
+        checkTranscriptFreshness: async () => ({ verdict: "unknown", autoRetranscribe: false }),
+      });
+      const { result } = renderHook(() => useTranscript("a"));
+
+      await waitFor(() => expect(result.current.freshness).toBe("unknown"));
+      expect(result.current.stale).toBe(true);
+      expect(result.current.autoRetranscribe).toBe(false);
+    });
+
+    it("does not check a warm, fresh read", async () => {
+      const check = vi.fn(
+        async (): Promise<TranscriptFreshnessResult> => ({
+          verdict: "fresh",
+          autoRetranscribe: false,
+        }),
+      );
+      stubApi({ readTranscript: async () => READY, checkTranscriptFreshness: check });
+      const { result } = renderHook(() => useTranscript("a"));
+
+      await waitFor(() => expect(result.current.state).toBe("ready"));
+      await act(async () => {});
+      expect(check).not.toHaveBeenCalled();
+    });
+
+    it("checks a warm stale read too, because only the check says if a retry is allowed", async () => {
+      const check = vi.fn(
+        async (): Promise<TranscriptFreshnessResult> => ({
+          verdict: "stale",
+          autoRetranscribe: true,
+        }),
+      );
+      stubApi({
+        readTranscript: async () => ({
+          status: "ready",
+          transcript: DOC,
+          stale: true,
+          freshness: "stale",
+        }),
+        checkTranscriptFreshness: check,
+      });
+      const { result } = renderHook(() => useTranscript("a"));
+
+      await waitFor(() => expect(result.current.autoRetranscribe).toBe(true));
+      expect(check).toHaveBeenCalledWith("a");
+      expect(result.current.stale).toBe(true);
+    });
+
+    it("treats a failed check as unknown", async () => {
+      stubApi({
+        readTranscript: async () => COLD,
+        checkTranscriptFreshness: async () => {
+          throw new Error("ipc down");
+        },
+      });
+      const { result } = renderHook(() => useTranscript("a"));
+
+      await waitFor(() => expect(result.current.freshness).toBe("unknown"));
+    });
+
+    it("drops a verdict that lands after the id changed", async () => {
+      const verdicts = new Map<string, (result: TranscriptFreshnessResult) => void>();
+      stubApi({
+        readTranscript: async () => COLD,
+        checkTranscriptFreshness: (id) => new Promise((resolve) => verdicts.set(id, resolve)),
+      });
+      const { result, rerender } = renderHook(({ id }) => useTranscript(id), {
+        initialProps: { id: "a" },
+      });
+      await waitFor(() => expect(verdicts.has("a")).toBe(true));
+      rerender({ id: "b" });
+      await waitFor(() => expect(verdicts.has("b")).toBe(true));
+
+      await act(async () => verdicts.get("a")!({ verdict: "stale", autoRetranscribe: true }));
+      expect(result.current.freshness).toBe("checking");
+      expect(result.current.autoRetranscribe).toBe(false);
+    });
   });
 
   it("treats a rejected read as none", async () => {
