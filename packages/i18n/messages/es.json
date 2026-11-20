@@ -1900,6 +1900,7 @@
     "webcamShapeRectangle": "Rectangular",
     "webcamCorners": "Esquinas",
     "webcamSize": "Tamaño",
+    "webcamSizeSlider": "Tamaño de la cámara",
     "webcamSizeS": "Cámara pequeña",
     "webcamSizeM": "Cámara mediana",
     "webcamSizeL": "Cámara grande",

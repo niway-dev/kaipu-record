@@ -6,7 +6,7 @@
  *   the camera comes from and goes to, how it arrives, when it ends, "Remove this part"), or,
  *   with no part there, a sentence and no button: a part is made by dragging the bubble.
  * - "Whole video": the original position and the look every stretch shares (shape, corners,
- *   size as S, M or L, mirror, shadow, shrink during a zoom).
+ *   size as S, M or L plus a slider, mirror, shadow, shrink during a zoom).
  *
  * A selected hidden range has no tabs: what it is, and "Show the camera again".
  *
@@ -247,7 +247,8 @@ function WholeVideoControls({
           onCommit={(cornerRadius) => commit({ cornerRadius })}
         />
       )}
-      {/* A size saved outside the three keeps playing and shows no button pressed. */}
+      {/* A size saved outside the three keeps playing and shows no button pressed; the slider
+          below shows and edits it. */}
       <Choices
         label={t("webcamSize")}
         options={WEBCAM_SIZE_PRESET_IDS.map((id) => ({
@@ -257,6 +258,18 @@ function WholeVideoControls({
         }))}
         current={webcamSizePreset(layout.size)}
         onPick={(id) => commit({ size: WEBCAM_SIZE_PRESETS[id] })}
+      />
+      <HistorySlider
+        label={t("webcamSizeSlider")}
+        value={layout.size}
+        min={WEBCAM_LIMITS.minSize}
+        max={WEBCAM_LIMITS.maxSize}
+        step={0.01}
+        format={(v) => `${Math.round(v * 100)}%`}
+        onBegin={edits.begin}
+        onLive={(size) => live({ size })}
+        onEnd={edits.end}
+        onCommit={(size) => commit({ size })}
       />
       <label className={webcamStyles.toggle}>
         <input

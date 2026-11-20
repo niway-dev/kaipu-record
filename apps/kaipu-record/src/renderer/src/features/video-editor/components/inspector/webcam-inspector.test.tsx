@@ -471,6 +471,39 @@ describe("This part, with no part there", () => {
 });
 
 describe("Whole video", () => {
+  it("has a continuous Size slider next to S, M and L that follows the presets", () => {
+    const edits = makeEdits();
+    const { unmount } = render(
+      <WebcamPanel {...panelProps({ edits, segment: null, range: null })} />,
+    );
+    openWholeVideo();
+    const slider = screen.getByRole("slider", { name: "Camera size" });
+    expect(slider).toHaveAttribute("min", "0.12");
+    expect(slider).toHaveAttribute("max", "0.9");
+    expect(slider).toHaveValue(String(WEBCAM_DEFAULTS.size));
+    expect(screen.getByRole("button", { name: "M" })).toHaveAttribute("aria-pressed", "true");
+    // A keyboard step is one commit; a drag is one gesture.
+    fireEvent.change(slider, { target: { value: "0.4" } });
+    expect(edits.commitLayout).toHaveBeenCalledWith({ size: 0.4 }, null);
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.5" } });
+    fireEvent.pointerUp(slider);
+    expect(edits.begin).toHaveBeenCalledOnce();
+    expect(edits.liveLayout).toHaveBeenCalledWith({ size: 0.5 }, null);
+    expect(edits.end).toHaveBeenCalledOnce();
+    // S commits the preset size.
+    fireEvent.click(screen.getByRole("button", { name: "S" }));
+    expect(edits.commitLayout).toHaveBeenLastCalledWith({ size: 0.15 }, null);
+    unmount();
+    // A size between presets: the slider shows it and no button is pressed.
+    renderPanel({ webcam: sceneOf({ size: 0.27 }), segment: null, range: null });
+    openWholeVideo();
+    expect(screen.getByRole("slider", { name: "Camera size" })).toHaveValue("0.27");
+    for (const id of ["S", "M", "L"]) {
+      expect(screen.getByRole("button", { name: id })).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
   it("sets the shape on the whole video's layout", () => {
     const edits = makeEdits();
     renderPanel({ edits });
