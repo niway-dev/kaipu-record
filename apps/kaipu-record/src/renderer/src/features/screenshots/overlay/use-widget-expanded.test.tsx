@@ -125,6 +125,28 @@ describe("useWidgetExpanded", () => {
     expect(result.current.expanded).toBe(true);
   });
 
+  it("open, closed, open: the first echo does not end the claim of the third tap", async () => {
+    const ipc = installSettingsIpc(BASE);
+    const { result } = renderHook(() => useWidgetExpanded(api(), "capture"));
+    await loaded();
+
+    act(() => {
+      result.current.toggle();
+      result.current.toggle();
+      result.current.toggle();
+    });
+    expect(result.current.expanded).toBe(true);
+
+    // Main echoes the three saves in order. The toolbar shows the newest tap all along.
+    for (const value of [true, false, true]) {
+      act(() => ipc.broadcast(withWidget({ screenshotExpanded: value, recordingExpanded: false })));
+      expect(result.current.expanded).toBe(true);
+    }
+    // All three are echoed: the store decides again.
+    act(() => ipc.broadcast(withWidget({ screenshotExpanded: false, recordingExpanded: false })));
+    expect(result.current.expanded).toBe(false);
+  });
+
   it("a failed save shows the stored value again instead of sticking", async () => {
     installSettingsIpc(BASE);
     const bridge = { updateSettings: vi.fn(async () => Promise.reject(new Error("write failed"))) };
@@ -182,6 +204,34 @@ describe("useWidgetExpanded", () => {
     // The store never echoed the first save, and still holds both as false.
     expect(bridge.updateSettings).toHaveBeenLastCalledWith({
       captureWidget: { screenshotExpanded: true, recordingExpanded: true },
+    });
+  });
+
+  it("a save of the other type does not write back a claim whose own save failed", async () => {
+    installSettingsIpc(BASE);
+    let failFirst: (error: Error) => void = () => {};
+    const updateSettings = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((_, reject) => (failFirst = reject)))
+      .mockImplementation(async () => BASE);
+    const { result, rerender } = renderHook(
+      ({ intent }: { intent: "capture" | "record" }) =>
+        useWidgetExpanded({ updateSettings }, intent),
+      { initialProps: { intent: "capture" } },
+    );
+    await loaded();
+
+    // The screenshot toggle is still saving when the recording toggle is made.
+    act(() => result.current.toggle());
+    rerender({ intent: "record" });
+    act(() => result.current.toggle());
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    await act(async () => failFirst(new Error("write failed")));
+
+    // The recording save runs after the failure: the screenshot value stays what the store holds.
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
+    expect(updateSettings).toHaveBeenLastCalledWith({
+      captureWidget: { screenshotExpanded: false, recordingExpanded: true },
     });
   });
 

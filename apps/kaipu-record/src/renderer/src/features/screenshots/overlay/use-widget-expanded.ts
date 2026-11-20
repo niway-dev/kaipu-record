@@ -89,16 +89,25 @@ export function useWidgetExpanded(
     const mine = ++lastId.current;
     (saving.current[current] ??= []).push({ id: mine, value: next });
     publishClaims();
-    // What the other capture type still has in flight: it goes into this save, so the store's
-    // older snapshot cannot undo it.
-    const others = { ...claims.current };
-    delete others[current];
     // The whole object is written back: the other capture type's value must stay.
     writes.current = writes.current
       .then(() => loadSettings())
-      .then((app) =>
-        api.updateSettings({ captureWidget: { ...app.captureWidget, ...others, [current]: next } }),
-      )
+      .then((app) => {
+        // What the other capture type had in flight when this toggle was made and still has
+        // by now: its value goes into this save, so the store's older snapshot cannot undo it.
+        // Read when the save runs, not when the tap happened: an earlier save that failed is
+        // gone from `saving`, and its value must not be written back by this one.
+        const others: Partial<CaptureWidgetSettings> = {};
+        for (const name of Object.keys(saving.current) as WidgetKey[]) {
+          if (name === current) continue;
+          for (const save of saving.current[name] ?? []) {
+            if (save.id < mine) others[name] = save.value;
+          }
+        }
+        return api.updateSettings({
+          captureWidget: { ...app.captureWidget, ...others, [current]: next },
+        });
+      })
       .catch(() => {
         // The save failed and main will not echo it: stop waiting for it. The type shows its
         // newest save that is still out, or the stored value when none is.
