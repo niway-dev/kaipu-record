@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import type { Microphone } from "@renderer/features/recording/types";
 import {
-  MicPanelDrawer,
+  MicPanelPopover,
   MicToggleSplit,
-  SystemAudioPanelDrawer,
+  SystemAudioPanelPopover,
   SystemAudioToggleSplit,
   useAudioControl,
   type MicDevices,
@@ -45,7 +45,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The Record page's shape: both tiles and their wide drawers over one store. */
+/** The Capture page's shape: both tiles and their popovers over one store. */
 function PageHarness({
   micOn = true,
   isRecording = false,
@@ -65,8 +65,8 @@ function PageHarness({
     <div>
       <MicToggleSplit control={mic} on={micOn} onToggle={onToggle} />
       <SystemAudioToggleSplit control={audio} on onToggle={() => {}} unavailable={unavailable} />
-      <MicPanelDrawer variant="page" control={mic} on={micOn} isRecording={isRecording} {...mics} />
-      <SystemAudioPanelDrawer variant="page" control={audio} micOn={micOn} />
+      <MicPanelPopover control={mic} on={micOn} isRecording={isRecording} {...mics} />
+      <SystemAudioPanelPopover control={audio} micOn={micOn} />
     </div>
   );
 }
@@ -77,33 +77,53 @@ const devices = {
   onSelectMicrophone: () => {},
 };
 
-describe("Mic drawer (Record page, page variant)", () => {
-  it("opens a drawer with focus on the selected device, and Esc returns focus to the chevron", async () => {
+describe("Mic popover", () => {
+  it("opens a popover with focus on the selected device, and Esc returns focus to the chevron", async () => {
     render(<PageHarness />);
     const chevron = screen.getByRole("button", { name: "Microphone settings" });
     await userEvent.click(chevron);
 
-    const drawer = screen.getByRole("region", { name: "Microphone settings" });
-    expect(chevron).toHaveAttribute("aria-controls", drawer.id);
+    const popover = screen.getByRole("dialog", { name: "Microphone settings" });
+    expect(chevron).toHaveAttribute("aria-controls", popover.id);
     expect(screen.getByRole("radio", { name: /MacBook Pro Microphone/ })).toHaveFocus();
 
     await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(chevron).toHaveFocus();
   });
 
-  it("lays out in two columns in the page variant and stays single-column in the panel", async () => {
-    const { unmount } = render(<PageHarness />);
+  it("floats over the page and has no columns, Done button or header", async () => {
+    render(<PageHarness />);
     await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
-    expect(
-      screen.getByRole("region", { name: "Microphone settings" }).querySelector("[data-columns]"),
-    ).not.toBeNull();
-    unmount();
-    render(<PanelHarness />);
+    const popover = screen.getByRole("dialog", { name: "Microphone settings" });
+    expect(popover.parentElement).toBe(document.body);
+    expect(popover.querySelector("[data-columns]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /done/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Microphone")).not.toBeInTheDocument();
+  });
+
+  it("keeps the device list, the input level and noise suppression", async () => {
+    render(<PageHarness />);
     await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
-    expect(
-      screen.getByRole("region", { name: "Microphone settings" }).querySelector("[data-columns]"),
-    ).toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Input" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Input level" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Reduce background noise" })).toBeInTheDocument();
+  });
+
+  it("closes on a press outside, and from its own chevron", async () => {
+    render(
+      <>
+        <PageHarness />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const chevron = screen.getByRole("button", { name: "Microphone settings" });
+    await userEvent.click(chevron);
+    await userEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(chevron);
+    await userEvent.click(chevron);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("toggles the mic from the body, not from the chevron", async () => {
@@ -153,7 +173,7 @@ describe("Mic drawer (Record page, page variant)", () => {
     );
   });
 
-  it("with no microphones, focus still moves into the drawer and Esc closes it", async () => {
+  it("with no microphones, focus still moves into the popover and Esc closes it", async () => {
     render(
       <PageHarness
         mics={{ microphones: [], selectedMicrophone: null, onSelectMicrophone: () => {} }}
@@ -161,14 +181,16 @@ describe("Mic drawer (Record page, page variant)", () => {
     );
     const chevron = screen.getByRole("button", { name: "Microphone settings" });
     await userEvent.click(chevron);
-    expect(screen.getByRole("radiogroup", { name: "Input" })).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Microphone settings" })).toContainElement(
+      document.activeElement as HTMLElement,
+    );
     await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(chevron).toHaveFocus();
   });
 
   describe("the pre-take meter", () => {
-    it("opens the selected device only while the drawer is open, and releases it on close", async () => {
+    it("opens the selected device only while the popover is open, and releases it on close", async () => {
       render(<PageHarness />);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(getUserMedia).not.toHaveBeenCalled();
@@ -183,14 +205,14 @@ describe("Mic drawer (Record page, page variant)", () => {
       await waitFor(() => expect(track.stop).toHaveBeenCalledOnce());
     });
 
-    it("closes the drawer and releases the device when the window loses focus", async () => {
+    it("closes the popover and releases the device when the window loses focus", async () => {
       render(<PageHarness />);
       await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
       await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
       act(() => {
         fireEvent.blur(window);
       });
-      expect(screen.queryByRole("region")).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       await waitFor(() => expect(track.stop).toHaveBeenCalledOnce());
     });
 
@@ -246,14 +268,15 @@ describe("one audio store per window", () => {
   });
 });
 
-describe("Audio drawer (Record page, page variant)", () => {
+describe("Audio popover", () => {
   it("opens under the Audio tile and persists the volume", async () => {
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
     render(<PageHarness />);
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
-    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "All sound" })).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Volume in the recording" })).toHaveFocus();
+    expect(screen.queryByRole("radio", { name: /One app/ })).not.toBeInTheDocument();
     // Let the saved value land before the change, as a person would.
     await new Promise((resolve) => setTimeout(resolve, 0));
     screen.getByRole("slider").focus();
@@ -269,7 +292,7 @@ describe("Audio drawer (Record page, page variant)", () => {
     render(<PageHarness unavailable />);
     expect(screen.getByTitle("System audio isn't available for this recording")).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
-    expect(screen.getByRole("region")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("disables ducking while the mic is off", async () => {
@@ -279,36 +302,12 @@ describe("Audio drawer (Record page, page variant)", () => {
   });
 });
 
-function PanelHarness(): React.JSX.Element {
-  const store = useAudioSettings();
-  const [mic, audio] = exclusive([useAudioControl(store), useAudioControl(store)]);
-  return (
-    <div>
-      <MicToggleSplit compact control={mic} on onToggle={() => {}} />
-      <SystemAudioToggleSplit compact control={audio} on onToggle={() => {}} />
-      <MicPanelDrawer control={mic} on isRecording={false} {...devices} />
-      <SystemAudioPanelDrawer control={audio} micOn />
-    </div>
-  );
-}
-
-describe("drawers (capture panel)", () => {
-  it("expands inline and closes on Esc with focus back on the chevron", async () => {
-    render(<PanelHarness />);
-    const chevron = screen.getByRole("button", { name: "Microphone settings" });
-    await userEvent.click(chevron);
-    expect(screen.getByRole("region", { name: "Microphone settings" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /MacBook/ })).toHaveFocus();
-    await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
-    expect(chevron).toHaveFocus();
-  });
-
-  it("keeps one drawer open at a time", async () => {
-    render(<PanelHarness />);
+describe("one popover at a time", () => {
+  it("opening the other card's closes this one", async () => {
+    render(<PageHarness />);
     await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
-    expect(screen.queryByRole("region", { name: "Microphone settings" })).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Microphone settings" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
   });
 });

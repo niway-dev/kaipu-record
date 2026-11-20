@@ -30,7 +30,7 @@ export interface OverlayChrome {
   onIntent?(intent: CaptureIntent): void;
   /** Mic, System audio and Camera as main holds them. Absent outside the record intent. */
   toggles?: OverlayToggles;
-  /** The devices the Microphone and Camera chevrons offer. Absent outside the record intent. */
+  /** The microphones the Microphone chevron's popover offers. Absent outside the record intent. */
   devices?: WidgetDevices;
   /** The last key toggle's toast, until it expires; `null` when none shows. */
   toast: InputToast | null;

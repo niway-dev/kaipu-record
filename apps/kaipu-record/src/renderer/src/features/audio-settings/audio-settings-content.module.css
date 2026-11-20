@@ -1,93 +1,21 @@
-/* The frame both audio settings share: header, section labels, the live note. */
+/* The frame both audio popovers share: the Live tag and the live note. */
 
 .content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.content[data-compact] {
   gap: 6px;
 }
 
-/* A group of rows. Transparent to layout in the single-column settings. */
+/* A group of rows. Transparent to layout. */
 .column {
   display: contents;
-}
-
-/* The Record page's drawer: header across the top, two columns under it, one column when
-   the drawer (a size container, see settings-drawer.module.css) is narrower than 520 px. */
-.content[data-columns] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  column-gap: 20px;
-  row-gap: 6px;
-}
-
-.content[data-columns] .header {
-  grid-column: 1 / -1;
-}
-
-.content[data-columns] .column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.content[data-columns] .column > .label:first-child {
-  margin-top: 0;
-}
-
-/* The page's section labels: small uppercase monospace, the design's INPUT / SOUND / MIX. */
-.content[data-columns] .label {
-  margin-top: 0;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-/* Only the "Live" tag is left of the page's header, pushed to the right. */
-.content[data-columns] .header[data-bare] {
-  justify-content: flex-end;
-}
-
-/* A control's own name, above its slider (Input level, Volume in the recording). */
-.fieldTitle {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-}
-
-@container (max-width: 519px) {
-  .content[data-columns] {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 24px;
-}
-
-.content[data-compact] .header {
+  justify-content: flex-end;
   height: 22px;
-}
-
-.headerIcon {
-  color: var(--accent-primary);
-  flex-shrink: 0;
-}
-
-.headerTitle {
-  flex: 1 1 auto;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
 }
 
 .live {
@@ -108,23 +36,6 @@
   height: 6px;
   border-radius: 50%;
   background: currentColor;
-}
-
-.label {
-  margin-top: 4px;
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-label);
-  letter-spacing: 0;
-  color: var(--text-4);
-}
-
-.hint {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-muted);
 }
 
 .note {
@@ -148,4 +59,11 @@
 .noteIcon {
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
 }

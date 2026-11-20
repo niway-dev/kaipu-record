@@ -79,6 +79,7 @@ describe("SetupCard", () => {
       <SetupCard {...base} onToggle={onToggle} onOpenChange={onOpenChange} />,
     );
     const device = screen.getByRole("button", { name: /^Microphone settings/ });
+    expect(device).toHaveAttribute("aria-haspopup", "dialog");
     expect(device).toHaveAttribute("aria-expanded", "false");
     expect(within(device).getByText("Yeti Nano")).toBeInTheDocument();
     await userEvent.click(device);

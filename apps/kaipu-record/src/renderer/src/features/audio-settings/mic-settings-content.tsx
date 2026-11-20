@@ -1,5 +1,5 @@
-import React, { useRef, type KeyboardEvent, type RefObject } from "react";
-import { Info, Mic, Volume1 } from "lucide-react";
+import React, { useRef, type KeyboardEvent } from "react";
+import { Info, Volume1 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { MIC_LEVEL_MAX, MIC_LEVEL_MIN, type AudioSettings } from "@shared/audio-settings";
 import { getMicrophoneType } from "@renderer/features/recording/microphone";
@@ -17,19 +17,13 @@ export interface MicSettingsContentProps {
   isRecording: boolean;
   /** Bars (0..1) for the selected device's meter. */
   levels: readonly number[];
-  compact?: boolean;
-  /** The Record page's wide layout: devices on the left, level and noise on the right. */
-  columns?: boolean;
-  /** The device group, which takes focus when the settings open. */
-  firstRef: RefObject<HTMLElement | null>;
 }
 
 /**
- * The microphone settings, shared by the Record page's drawer and the capture panel's
- * drawer: the input device (locked during a take), the input level, noise reduction. The
- * compact (panel) variant keeps the panel short: no section labels, one-line device rows
- * in a list that scrolls past four, the type only where a device is disconnected, and the
- * noise hint on hover.
+ * The microphone popover's content, shared by the Capture page and the capture widget: the
+ * input device (locked during a take), the input level, noise reduction. It stays short: no
+ * section labels, one-line device rows in a list that scrolls past five, the type only where a
+ * device is disconnected (it is in each row's tooltip), and the noise hint on hover.
  */
 export function MicSettingsContent({
   microphones,
@@ -39,9 +33,6 @@ export function MicSettingsContent({
   onChange,
   isRecording,
   levels,
-  compact = false,
-  columns = false,
-  firstRef,
 }: MicSettingsContentProps): React.JSX.Element {
   const t = useTranslations("micSettings");
   const tRecord = useTranslations("record");
@@ -71,42 +62,19 @@ export function MicSettingsContent({
   };
 
   return (
-    <div
-      className={styles.content}
-      data-compact={compact || undefined}
-      data-columns={columns || undefined}
-    >
-      {/* The page's setup card already names the microphone: its panel only keeps the
-          "Live" tag, and only during a take. */}
-      {(!columns || isRecording) && (
-        <div className={styles.header} data-bare={columns || undefined}>
-          {!columns && (
-            <>
-              <Mic size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
-              <span className={styles.headerTitle}>{t("microphone")}</span>
-            </>
-          )}
-          {isRecording && <span className={styles.live}>{t("live")}</span>}
+    <div className={styles.content}>
+      {/* The card names the microphone: only the "Live" tag is left, and only during a take. */}
+      {isRecording && (
+        <div className={styles.header}>
+          <span className={styles.live}>{t("live")}</span>
         </div>
       )}
 
       <div className={styles.column}>
-        {/* The panel drops the section labels: the radios and the slider name themselves. */}
-        {!compact && (
-          <span className={styles.label} aria-hidden>
-            {t("input")}
-          </span>
-        )}
         <div
-          ref={firstRef as RefObject<HTMLDivElement | null>}
           role="radiogroup"
           aria-label={t("input")}
           className={micStyles.devices}
-          data-dense={columns || undefined}
-          data-compact={compact || undefined}
-          // With no device there is no radio to take focus: the group itself does, so focus
-          // still enters the settings and Esc reaches their key handler.
-          tabIndex={devices.length === 0 ? -1 : undefined}
           onKeyDown={onKeyDown}
         >
           {devices.length === 0 && <p className={styles.hint}>{t("noDevices")}</p>}
@@ -128,8 +96,8 @@ export function MicSettingsContent({
                 tabIndex={checked ? 0 : -1}
                 className={micStyles.device}
                 data-missing={isMissing || undefined}
-                // Compact rows are one line: the full name and type show on hover.
-                title={compact ? `${mic.label} · ${type}` : undefined}
+                // Rows are one line: the full name and type show on hover.
+                title={`${mic.label} · ${type}`}
                 onClick={canPick ? () => onSelect(mic) : undefined}
               >
                 <span className={micStyles.dot} aria-hidden />
@@ -157,16 +125,6 @@ export function MicSettingsContent({
       </div>
 
       <div className={styles.column}>
-        {!compact && (
-          <span className={styles.label} aria-hidden>
-            {columns ? t("sound") : t("inputLevel")}
-          </span>
-        )}
-        {columns && (
-          <span className={styles.fieldTitle} aria-hidden>
-            {t("inputLevel")}
-          </span>
-        )}
         <LevelSlider
           label={t("inputLevel")}
           value={audio.micLevel}
@@ -180,7 +138,7 @@ export function MicSettingsContent({
         <SwitchRow
           title={t("noiseTitle")}
           hint={t("noiseHint")}
-          hintHidden={compact}
+          hintHidden
           checked={audio.noiseSuppression}
           onChange={(noiseSuppression) => onChange({ noiseSuppression })}
         />

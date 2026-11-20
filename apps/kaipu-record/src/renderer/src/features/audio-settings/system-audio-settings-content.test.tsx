@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -9,37 +8,20 @@ function Harness({
   micOn = true,
   audio = DEFAULT_AUDIO_SETTINGS,
   onChange = vi.fn(),
-  compact = false,
 }: {
-  compact?: boolean;
   micOn?: boolean;
   audio?: AudioSettings;
   onChange?: (patch: Partial<AudioSettings>) => void;
 }): React.JSX.Element {
-  const firstRef = useRef<HTMLElement | null>(null);
-  return (
-    <SystemAudioSettingsContent
-      audio={audio}
-      onChange={onChange}
-      micOn={micOn}
-      compact={compact}
-      firstRef={firstRef}
-    />
-  );
+  return <SystemAudioSettingsContent audio={audio} onChange={onChange} micOn={micOn} />;
 }
 
 describe("SystemAudioSettingsContent", () => {
-  it("captures All sound, and One app is disabled with its reason", () => {
+  it("has no capture choice: One app is gone, and the card already says All sound", () => {
     render(<Harness />);
-    expect(screen.getByRole("radiogroup", { name: "What to capture" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "All sound" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    const oneApp = screen.getByRole("radio", { name: "One app, Not available yet" });
-    expect(oneApp).toHaveAttribute("aria-disabled", "true");
-    expect(oneApp).toHaveAttribute("title", "Not available yet");
-    expect(screen.getByText(/Not available yet/, { selector: "p" })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByText(/One app/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Not available yet/)).not.toBeInTheDocument();
   });
 
   it("writes the volume from the slider, 0 to 100", async () => {
@@ -71,14 +53,5 @@ describe("SystemAudioSettingsContent", () => {
     expect(screen.getByText("Turn on the microphone to use this")).toBeInTheDocument();
     await userEvent.click(toggle);
     expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("compact (capture panel): no One app line; the disabled chip's tooltip says it", () => {
-    render(<Harness compact />);
-    expect(screen.queryByText(/Not available yet/, { selector: "p" })).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "One app, Not available yet" })).toHaveAttribute(
-      "title",
-      "Not available yet",
-    );
   });
 });

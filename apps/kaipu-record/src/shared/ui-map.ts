@@ -105,12 +105,12 @@ export const UI_MAP = {
         states: ["on", "off", "toggleHover", "deviceHover"],
         gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }, { permission: "microphone" }],
       },
-      micSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
+      micPopover: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
       audio: {
         states: ["on", "off", "unavailable"],
         gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }],
       },
-      audioSettings: {
+      audioPopover: {
         states: ["open"],
         gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }],
       },
@@ -118,7 +118,7 @@ export const UI_MAP = {
         states: ["on", "off", "blocked"],
         gatedBy: [{ recordingSetting: "isCameraEnabled" }, { permission: "camera" }],
       },
-      cameraSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isCameraEnabled" }] },
+      cameraPopover: { states: ["open"], gatedBy: [{ recordingSetting: "isCameraEnabled" }] },
       // Drawn only when the input is on and its permission is denied.
       micNotice: {
         states: ["denied"],
@@ -821,6 +821,10 @@ export const UI_MAP = {
           { recordingSetting: "isCameraEnabled" },
         ],
       },
+      // The Microphone and Camera chevrons open the same popovers as the Capture page's cards
+      // (NIW2-892), anchored to the widget and flipped above it when it sits at the bottom.
+      micPopover: { states: ["open"] },
+      cameraPopover: { states: ["open"] },
       // The display badge of Screen mode: number, name, size.
       screenCard: { states: ["default", "highlighted"] },
       windowPicker: { states: ["noWindow", "hovered"] },

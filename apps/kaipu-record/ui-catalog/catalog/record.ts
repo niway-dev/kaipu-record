@@ -133,27 +133,27 @@ export const record = catalog(
       ],
       requires: { microphone: true },
     },
-    "mic-settings": {
+    "mic-popover": {
       profile: "default",
       steps: [
         { click: { area: "record.mic", part: { role: "button", name: "Microphone settings" } } },
       ],
-      demonstrates: ["record.micSettings:open"],
-      ready: { area: "record.micSettings" },
+      demonstrates: ["record.micPopover:open"],
+      ready: { area: "record.micPopover" },
       gates: [
         { recordingSetting: "isMicrophoneEnabled", side: "on" },
         { permission: "microphone", side: "granted" },
       ],
       requires: { microphone: true },
     },
-    "mic-settings-off": {
+    "mic-popover-off": {
       profile: "default",
       steps: [
         micOff,
         { click: { area: "record.mic", part: { role: "button", name: "Microphone settings" } } },
       ],
-      demonstrates: ["record.micSettings:open"],
-      ready: { area: "record.micSettings" },
+      demonstrates: ["record.micPopover:open"],
+      ready: { area: "record.micPopover" },
       gates: [{ recordingSetting: "isMicrophoneEnabled", side: "off" }],
     },
     "mic-denied": {
@@ -168,7 +168,7 @@ export const record = catalog(
       demonstrates: ["record.audio:on"],
       gates: [{ recordingSetting: "isSystemAudioEnabled", side: "on" }],
     },
-    "audio-settings": {
+    "audio-popover": {
       profile: "default",
       steps: [
         audioOn,
@@ -176,19 +176,19 @@ export const record = catalog(
           click: { area: "record.audio", part: { role: "button", name: "System audio settings" } },
         },
       ],
-      demonstrates: ["record.audioSettings:open"],
-      ready: { area: "record.audioSettings" },
+      demonstrates: ["record.audioPopover:open"],
+      ready: { area: "record.audioPopover" },
       gates: [{ recordingSetting: "isSystemAudioEnabled", side: "on" }],
     },
-    "audio-settings-off": {
+    "audio-popover-off": {
       profile: "default",
       steps: [
         {
           click: { area: "record.audio", part: { role: "button", name: "System audio settings" } },
         },
       ],
-      demonstrates: ["record.audioSettings:open"],
-      ready: { area: "record.audioSettings" },
+      demonstrates: ["record.audioPopover:open"],
+      ready: { area: "record.audioPopover" },
       gates: [{ recordingSetting: "isSystemAudioEnabled", side: "off" }],
     },
     "camera-on": {
@@ -203,25 +203,25 @@ export const record = catalog(
       requires: { camera: true },
       after: [cameraOff],
     },
-    "camera-settings": {
+    "camera-popover": {
       profile: "default",
       embedsScreen: true,
       steps: [
         cameraOn,
         { click: { area: "record.camera", part: { role: "button", name: "Camera settings" } } },
       ],
-      demonstrates: ["record.cameraSettings:open"],
-      ready: { area: "record.cameraSettings" },
+      demonstrates: ["record.cameraPopover:open"],
+      ready: { area: "record.cameraPopover" },
       gates: [{ recordingSetting: "isCameraEnabled", side: "on" }],
       after: [cameraOff],
     },
-    "camera-settings-off": {
+    "camera-popover-off": {
       profile: "default",
       steps: [
         { click: { area: "record.camera", part: { role: "button", name: "Camera settings" } } },
       ],
-      demonstrates: ["record.cameraSettings:open"],
-      ready: { area: "record.cameraSettings" },
+      demonstrates: ["record.cameraPopover:open"],
+      ready: { area: "record.cameraPopover" },
       gates: [{ recordingSetting: "isCameraEnabled", side: "off" }],
     },
     "camera-denied": {

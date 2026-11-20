@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -17,9 +17,7 @@ function Harness({
   onSelect = vi.fn(),
   onChange = vi.fn(),
   audio = DEFAULT_AUDIO_SETTINGS,
-  compact = false,
 }: {
-  compact?: boolean;
   microphones?: Microphone[];
   initial?: Microphone | null;
   isRecording?: boolean;
@@ -28,7 +26,6 @@ function Harness({
   audio?: AudioSettings;
 }): React.JSX.Element {
   const [selected, setSelected] = useState(initial);
-  const firstRef = useRef<HTMLElement | null>(null);
   return (
     <MicSettingsContent
       microphones={microphones}
@@ -41,8 +38,6 @@ function Harness({
       onChange={onChange}
       isRecording={isRecording}
       levels={Array.from({ length: 14 }, () => 0.5)}
-      compact={compact}
-      firstRef={firstRef}
     />
   );
 }
@@ -163,20 +158,13 @@ describe("MicSettingsContent", () => {
     expect(screen.getByText("No microphones found")).toBeInTheDocument();
   });
 
-  it("compact (capture panel): one-line rows carry name and type in a tooltip", () => {
-    render(<Harness compact />);
+  it("one-line rows carry name and type in a tooltip", () => {
+    render(<Harness />);
     expect(screen.getByRole("radio", { name: /Blue Yeti USB Microphone/ })).toHaveAttribute(
       "title",
       "Blue Yeti USB Microphone · USB",
     );
     const noise = screen.getByRole("switch", { name: "Reduce background noise" });
     expect(noise.closest("[title]")).toHaveAttribute("title", "Fans, keyboard and street noise");
-  });
-
-  it("the Record page's rows have no tooltip", () => {
-    render(<Harness />);
-    expect(screen.getByRole("radio", { name: /Blue Yeti USB Microphone/ })).not.toHaveAttribute(
-      "title",
-    );
   });
 });
