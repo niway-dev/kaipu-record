@@ -229,7 +229,11 @@ async function checkFreshness(id: string): Promise<TranscriptFreshnessResult> {
     }
     return UNKNOWN;
   }
-  if (contentSha256 === read.transcript.media.contentHash) {
+  // The hash can take seconds, and a job may rewrite the transcript meanwhile: judge against
+  // the transcript as it is now, not the one read before hashing.
+  const current = await readTranscriptFile(vault.companionPaths(id).transcript);
+  if (!current.ok) return UNKNOWN;
+  if (contentSha256 === current.transcript.media.contentHash) {
     return { verdict: "fresh", autoRetranscribe: false };
   }
   const sidecar = await vault.sidecar(id).catch(() => null);

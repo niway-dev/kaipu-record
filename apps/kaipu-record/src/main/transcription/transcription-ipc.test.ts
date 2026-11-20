@@ -448,6 +448,24 @@ describe("with a real vault", () => {
       });
     });
 
+    it("judges against the transcript as it is after the hash, when a job rewrote it meanwhile", async () => {
+      await addMedia("c-rewritten");
+      await seedTranscript("c-rewritten", "an-older-hash");
+      const actual =
+        await vi.importActual<typeof import("../library/content-hash")>("../library/content-hash");
+      hashSpy.mockImplementationOnce(async (path: string) => {
+        const hash = await actual.sha256FileBase64(path);
+        // A job finishes while the hash runs: the transcript now describes this very media.
+        await seedTranscript("c-rewritten", hash);
+        return hash;
+      });
+
+      expect(await checkFreshness("c-rewritten")).toEqual({
+        verdict: "fresh",
+        autoRetranscribe: false,
+      });
+    });
+
     it("does not allow a second automatic attempt for the same content", async () => {
       const item = await addMedia("c-once");
       await seedTranscript("c-once", "an-older-hash");
