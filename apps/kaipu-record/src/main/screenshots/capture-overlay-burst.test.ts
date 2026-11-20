@@ -96,7 +96,7 @@ vi.mock("electron", () => ({
 }));
 vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 
-const { CaptureOverlayWindows } = await import("./capture-overlay-windows");
+const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS } = await import("./capture-overlay-windows");
 const { decideWidgetShortcut } = await import("../shortcuts/widget-shortcut");
 const { createCaptureHandler } = await import("./capture-handler");
 const { runWithOverlay } = await import("./screenshot-capture");
@@ -183,7 +183,12 @@ it("opens on every press even while the previous shot is still saving, through t
   port.prewarm();
   await vi.advanceTimersByTimeAsync(5000);
 
+  // The fake windows never ack the hide, so a pick's guard is released when `hideAll`'s cap
+  // runs out. The next press lands `PRESS_AFTER_RELEASE_MS` after that, inside the save.
   const SAVE_MS = 200;
+  const PRESS_AFTER_RELEASE_MS = 50;
+  const HANDLER_GAP_MS = HIDDEN_ACK_CAP_MS + PRESS_AFTER_RELEASE_MS;
+  expect(PRESS_AFTER_RELEASE_MS).toBeLessThan(SAVE_MS);
   const saved: number[] = [];
   const handler = createCaptureHandler({
     platform: "darwin",
@@ -260,8 +265,8 @@ it("opens on every press even while the previous shot is still saving, through t
     const visible = created.filter((window) => window.shown);
     shownAtPress.push(decision === "open" && visible.length >= displays.length);
     if (visible.at(-1)) answerFrom(visible.at(-1)!);
-    // The next press comes while the shot is being hidden, grabbed and saved.
-    await vi.advanceTimersByTimeAsync(GAP_MS);
+    // The next press comes while the shot is being saved, after the pick released its guard.
+    await vi.advanceTimersByTimeAsync(HANDLER_GAP_MS);
   }
   await vi.advanceTimersByTimeAsync(5000);
 

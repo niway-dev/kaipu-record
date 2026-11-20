@@ -97,6 +97,16 @@ describe("CaptureOverlayHost", () => {
     expect(mounts.count).toBe(1);
   });
 
+  it("treats states without a session id as one pick: no remount between them", () => {
+    const fake = fakeApi();
+    render(<CaptureOverlayHost query={QUERY} api={fake.api} />);
+
+    fake.state({ ...stateOf(1), session: undefined });
+    fake.state({ ...stateOf(1, { hoverDisplayId: 1 }), session: undefined });
+
+    expect(mounts.count).toBe(1);
+  });
+
   it("mounts a fresh overlay when the window serves a new pick, so nothing of the last one survives", () => {
     const fake = fakeApi();
     render(<CaptureOverlayHost query={QUERY} api={fake.api} />);

@@ -2,6 +2,7 @@ import type { Display } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import { CAPTURE_MODES } from "@shared/types/screenshot-capture";
+import type { FrameMemoryUpdate } from "./capture-overlay-windows";
 
 const created: Array<{ options: Record<string, unknown>; window: FakeWindow }> = [];
 const ipcListeners = new Map<
@@ -89,7 +90,6 @@ vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS, OVERLAY_READY_TIMEOUT_MS } =
   await import("./capture-overlay-windows");
 const { beginRecordTiming, endRecordTiming } = await import("../recording/record-timing");
-import type { FrameMemoryUpdate } from "./capture-overlay-windows";
 
 function display(id: number, x: number, scaleFactor = 2): Display {
   return {
@@ -2010,11 +2010,12 @@ describe("CaptureOverlayWindows: windows kept for the next pick (NIW2-878)", () 
 
     expect(created).toHaveLength(2);
     expect(created.map(({ window }) => window)).toEqual(windows);
-    expect(
-      windows.some(
-        (window) => window.show.mock.calls.length + window.showInactive.mock.calls.length > 0,
-      ),
-    ).toBe(true);
+    // Every kept window is shown, not just one of them.
+    for (const window of windows) {
+      expect(window.show.mock.calls.length + window.showInactive.mock.calls.length).toBeGreaterThan(
+        0,
+      );
+    }
     for (const window of windows) expect(window.loadFile).toHaveBeenCalledTimes(1);
   });
 
