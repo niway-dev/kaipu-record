@@ -53,6 +53,8 @@ export function useWidgetExpanded(
   latest.current = { key, expanded };
   // Saves run one after another, so the store sees the toggles in the order they were made.
   const saves = useRef<Promise<unknown>>(Promise.resolve());
+  // Which toggle owns each type's claim: a failed save only gives up a claim that is still its own.
+  const owners = useRef({ count: 0, byKey: {} as Partial<Record<WidgetKey, number>> });
 
   // Every value the store takes, not the rendered one: a pending toggle ends when the store
   // reaches it.
@@ -80,6 +82,8 @@ export function useWidgetExpanded(
     latest.current = { key: current, expanded: next };
     // What the other capture type still has in flight: it goes into this save, so the store's
     // older snapshot cannot undo it.
+    const mine = ++owners.current.count;
+    owners.current.byKey[current] = mine;
     const others = { ...claims.current };
     delete others[current];
     // Nothing stands over a value the store already holds: its later changes must show.
@@ -93,7 +97,7 @@ export function useWidgetExpanded(
       )
       .catch(() => {
         // The save failed: show what the store holds again, unless a newer toggle has taken over.
-        if (claims.current[current] !== next) return;
+        if (owners.current.byKey[current] !== mine) return;
         const rest = { ...claims.current };
         delete rest[current];
         setPending(rest);

@@ -117,7 +117,7 @@ describe("useWidgetExpanded", () => {
     expect(result.current.expanded).toBe(true);
   });
 
-  it("a failed save does not undo a newer toggle of the same type", async () => {
+  it("a failed save does not undo a newer toggle of the same type, even one with the same value", async () => {
     installSettingsIpc(BASE);
     let failFirst: (error: Error) => void = () => {};
     const updateSettings = vi
@@ -127,14 +127,18 @@ describe("useWidgetExpanded", () => {
     const { result } = renderHook(() => useWidgetExpanded({ updateSettings }, "capture"));
     await loaded();
 
+    // Expanded, compact, expanded again: the third tap's claim asks for the same value as the
+    // first one's, whose save is the one that fails.
     act(() => result.current.toggle());
     act(() => result.current.toggle());
+    act(() => result.current.toggle());
+    expect(result.current.expanded).toBe(true);
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     await act(async () => failFirst(new Error("write failed")));
 
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
-    // Compact again: the second toggle is the claim that stands.
-    expect(result.current.expanded).toBe(false);
+    // The other two saves still run, and the newest tap is what shows.
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(3));
+    expect(result.current.expanded).toBe(true);
   });
 
   it("a toggle of the other type, made before the store echoes, keeps the first one's value", async () => {

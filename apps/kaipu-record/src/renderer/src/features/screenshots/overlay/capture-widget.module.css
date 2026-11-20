@@ -386,7 +386,7 @@ span.inputName {
   flex: none;
 }
 
-/* Cancel sits at the end of the row, after the confirm button. The row never wraps. */
+/* Cancel is pushed to the right end of the row, just before the confirm button. */
 .cancel {
   height: 40px;
   padding: 0 12px;
