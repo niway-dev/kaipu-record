@@ -105,9 +105,9 @@ export function editBadge(video: LibraryVideo, lineage: Lineage): EditBadge {
 }
 
 /**
- * The master (NIW2-585): an original recording, the file every copy is made from. Copies,
- * screenshots and GIFs are never masters.
+ * The master (NIW2-585): an original recording or screenshot, the file every copy and edit is
+ * made from. Copies and GIFs are never masters.
  */
 export function isMaster(video: Pick<LibraryVideo, "kind" | "derivedFromAssetId">): boolean {
-  return video.kind === "recording" && video.derivedFromAssetId === null;
+  return video.kind !== "gif" && video.derivedFromAssetId === null;
 }

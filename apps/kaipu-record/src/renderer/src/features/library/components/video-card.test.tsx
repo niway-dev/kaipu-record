@@ -84,6 +84,18 @@ describe("VideoCard", () => {
     expect(screen.queryByRole("button", { name: "Export a copy" })).toBeNull();
   });
 
+  it("tags an original screenshot as the master and keeps its Screenshot badge", () => {
+    render(
+      <VideoCard
+        video={{ ...video, kind: "screenshot", durationSeconds: 0 }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Master · full quality")).toBeInTheDocument();
+    expect(screen.getByText("Screenshot")).toBeInTheDocument();
+  });
+
   it("tags an original as the master instead of a plain Recording badge (NIW2-585)", () => {
     const { rerender } = render(
       <VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />,
@@ -92,7 +104,7 @@ describe("VideoCard", () => {
     expect(screen.queryByText("Recording")).toBeNull();
     for (const notMaster of [
       { ...video, derivedFromAssetId: "src" },
-      { ...video, kind: "screenshot" as const },
+      { ...video, kind: "screenshot" as const, derivedFromAssetId: "src" },
       { ...video, kind: "gif" as const, derivedFromAssetId: "src" },
     ]) {
       rerender(<VideoCard video={notMaster} onNavigate={vi.fn()} onDelete={vi.fn()} />);

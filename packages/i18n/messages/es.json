@@ -1032,6 +1032,8 @@
     "versionsExportedCopy": "Copia exportada",
     "versionsEmpty": "Aún no hay copias. Elige un lugar en “¿A dónde va?” para crear una.",
     "versionsEmptyPlain": "Aún no hay copias.",
+    "versionsOnlyOriginal": "Este es el original. Elige un destino en “¿A dónde va?” para crear una copia.",
+    "versionsOnlyOriginalPlain": "Este es el original. Las copias que guardes aparecerán aquí.",
     "shotZoomOut": "Alejar",
     "shotZoomIn": "Acercar",
     "shotZoomFit": "Ajustar"

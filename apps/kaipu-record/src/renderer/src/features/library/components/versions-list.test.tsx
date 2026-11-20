@@ -151,7 +151,14 @@ describe("VersionsList", () => {
   it("does not point to a tab the item lacks", () => {
     const region = renderList(master, [master], null, false);
     expect(within(region).queryByText(/Pick a place/)).toBeNull();
-    expect(within(region).getByText("No copies yet.")).toBeTruthy();
+    expect(within(region).getByText(/Copies you save appear here/)).toBeTruthy();
+  });
+
+  it("with only the original on screen, says so instead of repeating it as a Viewing row", () => {
+    const region = renderList(master, [master], null, false);
+    expect(within(region).queryAllByRole("listitem")).toHaveLength(0);
+    expect(within(region).queryByText("Viewing")).toBeNull();
+    expect(within(region).getByText(/This is the original/)).toBeTruthy();
   });
 
   it("walks a copy of a copy up to the root original, and shows the same family from any member", () => {

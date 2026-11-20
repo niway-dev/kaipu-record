@@ -122,10 +122,14 @@ export function VideoCard({
         <div className={styles.scrim} aria-hidden />
 
         <span className={styles.kindBadge}>
-          {/* An original reads as the master (NIW2-585); the tag also says it is a recording.
+          {/* An original reads as the master (NIW2-585); a recording's capture tag says it is a
+              recording, and a screenshot keeps its kind badge next to the tag.
               A copy for a destination says where it is going instead. */}
           {isMaster(video) ? (
-            <MasterTag size="sm" />
+            <>
+              <MasterTag size="sm" overMedia />
+              {video.kind === "screenshot" && <KindBadge kind={video.kind} />}
+            </>
           ) : destination ? (
             <DestinationTag destination={destination} />
           ) : (

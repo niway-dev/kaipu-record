@@ -1032,6 +1032,8 @@
     "versionsExportedCopy": "Exported copy",
     "versionsEmpty": "No copies yet. Pick a place in “Where is it going?” to make one.",
     "versionsEmptyPlain": "No copies yet.",
+    "versionsOnlyOriginal": "This is the original. Pick a place in “Where is it going?” to make a copy.",
+    "versionsOnlyOriginalPlain": "This is the original. Copies you save appear here.",
     "shotZoomOut": "Zoom out",
     "shotZoomIn": "Zoom in",
     "shotZoomFit": "Fit"

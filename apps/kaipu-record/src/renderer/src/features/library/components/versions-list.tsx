@@ -104,6 +104,9 @@ export function VersionsList({
 
   const viewing = (assetId: string): boolean => assetId === item.assetId;
   const empty = copies.length === 0 && running === null;
+  // With nothing but the original, its row repeats the image shown beside the panel; a line
+  // that says this is the original replaces it.
+  const onlyOriginal = empty && !hasEdit && master !== null && viewing(master.assetId);
 
   return (
     <section
@@ -118,7 +121,7 @@ export function VersionsList({
         <span className={styles.count}>{count}</span>
       </div>
       <ul className={styles.rows}>
-        {master && (
+        {master && !onlyOriginal && (
           <Row
             assetId={master.assetId}
             current={viewing(master.assetId)}
@@ -222,7 +225,13 @@ export function VersionsList({
       </ul>
       {empty && (
         <p className={styles.empty}>
-          {canExport ? tPrepare("versionsEmpty") : tPrepare("versionsEmptyPlain")}
+          {onlyOriginal
+            ? canExport
+              ? tPrepare("versionsOnlyOriginal")
+              : tPrepare("versionsOnlyOriginalPlain")
+            : canExport
+              ? tPrepare("versionsEmpty")
+              : tPrepare("versionsEmptyPlain")}
         </p>
       )}
     </section>

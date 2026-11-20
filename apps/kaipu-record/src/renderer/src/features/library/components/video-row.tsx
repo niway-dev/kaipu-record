@@ -100,8 +100,9 @@ export function VideoRow({
       <div className={styles.info}>
         <p className={styles.title}>{video.title || t("untitled")}</p>
         <div className={styles.metaLine}>
-          {/* An original reads as the master (NIW2-585); the tag also says it is a recording. */}
-          {isMaster(video) ? <MasterTag size="sm" /> : <KindBadge kind={video.kind} />}
+          {/* An original reads as the master (NIW2-585); a screenshot also keeps its kind badge. */}
+          {isMaster(video) && <MasterTag size="sm" />}
+          {(!isMaster(video) || video.kind === "screenshot") && <KindBadge kind={video.kind} />}
           <StorageMeta video={video} />
           <EditBadge state={badge} />
           <span className={styles.specs}>
