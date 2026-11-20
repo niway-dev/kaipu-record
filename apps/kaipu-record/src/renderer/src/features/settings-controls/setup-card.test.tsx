@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { createRef } from "react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Mic } from "lucide-react";
 import { SetupCard } from "./setup-card";
@@ -26,39 +27,88 @@ describe("SetupCard", () => {
 
   it("keeps the full current choice on hover, since the line truncates", () => {
     render(<SetupCard {...base} detail="iPhone Camera · circle, M" />);
-    expect(screen.getByText("iPhone Camera · circle, M")).toHaveAttribute(
+    expect(screen.getByText("iPhone Camera · circle, M").closest("button")).toHaveAttribute(
       "title",
       "iPhone Camera · circle, M",
     );
   });
 
-  it("toggles from the switch, and the switch alone", async () => {
+  it("toggles from the left zone (name and readout) with a click, and only that", async () => {
     const onToggle = vi.fn();
     const onOpenChange = vi.fn();
     render(<SetupCard {...base} onToggle={onToggle} onOpenChange={onOpenChange} />);
     const toggle = screen.getByRole("switch", { name: "Microphone" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(within(toggle).getByText("Microphone")).toBeInTheDocument();
+    expect(within(toggle).getByText("ON")).toBeInTheDocument();
     await userEvent.click(toggle);
     expect(onToggle).toHaveBeenCalledOnce();
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
-  it("opens and closes the panel from its own chevron, without toggling", async () => {
+  it("toggles from the keyboard with Space and Enter", async () => {
+    const onToggle = vi.fn();
+    render(<SetupCard {...base} onToggle={onToggle} />);
+    await userEvent.tab();
+    expect(screen.getByRole("switch", { name: "Microphone" })).toHaveFocus();
+    await userEvent.keyboard(" ");
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard("{Enter}");
+    expect(onToggle).toHaveBeenCalledTimes(2);
+  });
+
+  it("never toggles from the right zone, the device name or the chevron", async () => {
+    const onToggle = vi.fn();
+    const onOpenChange = vi.fn();
+    render(<SetupCard {...base} onToggle={onToggle} onOpenChange={onOpenChange} />);
+    await userEvent.click(screen.getByText("Yeti Nano"));
+    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledTimes(2);
+
+    screen.getByRole("button", { name: "Microphone settings" }).focus();
+    await userEvent.keyboard(" ");
+    await userEvent.keyboard("{Enter}");
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it("opens and closes the panel from the right zone, without toggling", async () => {
     const onToggle = vi.fn();
     const onOpenChange = vi.fn();
     const { rerender } = render(
       <SetupCard {...base} onToggle={onToggle} onOpenChange={onOpenChange} />,
     );
-    const chevron = screen.getByRole("button", { name: "Microphone settings" });
-    expect(chevron).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(chevron);
+    const device = screen.getByRole("button", { name: "Microphone settings" });
+    expect(device).toHaveAttribute("aria-expanded", "false");
+    expect(within(device).getByText("Yeti Nano")).toBeInTheDocument();
+    await userEvent.click(device);
     expect(onOpenChange).toHaveBeenLastCalledWith(true);
 
     rerender(<SetupCard {...base} open onToggle={onToggle} onOpenChange={onOpenChange} />);
-    expect(chevron).toHaveAttribute("aria-expanded", "true");
-    await userEvent.click(chevron);
+    expect(device).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(device);
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
     expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it("hands the right zone to chevronRef, so the panel can return focus to it", () => {
+    const chevronRef = createRef<HTMLButtonElement>();
+    render(<SetupCard {...base} chevronRef={chevronRef} />);
+    expect(chevronRef.current).toBe(screen.getByRole("button", { name: "Microphone settings" }));
+    chevronRef.current?.focus();
+    expect(screen.getByRole("button", { name: "Microphone settings" })).toHaveFocus();
+  });
+
+  it("has one switch and one button, neither inside the other", () => {
+    render(<SetupCard {...base} />);
+    const toggle = screen.getByRole("switch");
+    const device = screen.getByRole("button");
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(toggle.contains(device)).toBe(false);
+    expect(device.contains(toggle)).toBe(false);
+    expect(toggle.querySelector("button, [role='switch'], a, input")).toBeNull();
+    expect(device.querySelector("button, [role='switch'], a, input")).toBeNull();
   });
 
   it("marks the open card, so it can take the accent border", () => {
@@ -66,23 +116,57 @@ describe("SetupCard", () => {
     expect(container.firstElementChild).toHaveAttribute("data-open", "true");
   });
 
-  it("does nothing from a disabled switch, but the chevron still opens", async () => {
+  it("does nothing from a blocked left zone, keeps it focusable and explained, and the right zone still opens", async () => {
     const onToggle = vi.fn();
     const onOpenChange = vi.fn();
     render(
       <SetupCard
         {...base}
+        on={false}
+        blocked
         switchDisabled
-        switchTitle="Not available"
+        switchLabel="Camera blocked"
+        switchTitle="Allow camera access in System Settings"
         onToggle={onToggle}
         onOpenChange={onOpenChange}
       />,
     );
-    const toggle = screen.getByTitle("Not available");
+    const toggle = screen.getByRole("switch", { name: "Camera blocked" });
+    expect(toggle).toHaveAttribute("title", "Allow camera access in System Settings");
     expect(toggle).toHaveAttribute("aria-disabled", "true");
+    expect(toggle).not.toBeDisabled();
+    await userEvent.tab();
+    expect(toggle).toHaveFocus();
     await userEvent.click(toggle);
+    await userEvent.keyboard(" ");
+    await userEvent.keyboard("{Enter}");
     expect(onToggle).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
     expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it("disables both zones natively when the source is unavailable, with the reason as tooltip", async () => {
+    const onToggle = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <SetupCard
+        {...base}
+        on={false}
+        switchUnavailable
+        switchTitle="Not available on this system"
+        onToggle={onToggle}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    const toggle = screen.getByRole("switch", { name: "Microphone" });
+    const device = screen.getByRole("button", { name: "Microphone settings" });
+    expect(toggle).toBeDisabled();
+    expect(device).toBeDisabled();
+    expect(toggle).toHaveAttribute("title", "Not available on this system");
+    expect(device).toHaveAttribute("title", "Not available on this system");
+    await userEvent.click(toggle);
+    await userEvent.click(device);
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

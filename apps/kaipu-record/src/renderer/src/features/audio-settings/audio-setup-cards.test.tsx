@@ -122,11 +122,16 @@ describe("Microphone and System audio cards", () => {
     expect(onToggleAudio).toHaveBeenCalledOnce();
   });
 
-  it("keeps the unavailable system audio switch disabled and its panel reachable", async () => {
+  it("disables both zones of the unavailable system audio card, with the reason as tooltip", async () => {
+    const reason = "System audio isn't available for this recording";
     render(<CardHarness unavailable />);
-    expect(screen.getByTitle("System audio isn't available for this recording")).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
-    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "System audio" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "System audio" })).toHaveAttribute("title", reason);
+    const device = screen.getByRole("button", { name: "System audio settings" });
+    expect(device).toBeDisabled();
+    expect(device).toHaveAttribute("title", reason);
+    await userEvent.click(device);
+    expect(screen.queryByRole("region", { name: "System audio settings" })).not.toBeInTheDocument();
   });
 
   it("opens one panel at a time from the chevrons", async () => {

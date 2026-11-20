@@ -77,6 +77,32 @@ export const record = catalog(
       demonstrates: ["record.mic:off"],
       gates: [{ recordingSetting: "isMicrophoneEnabled", side: "off" }],
     },
+    "mic-toggle-hover": {
+      profile: "default",
+      how: "Rest the pointer on the Microphone card's left zone (name and ON/OFF readout): only that zone lights up, the device zone stays as it was.",
+      steps: [{ hover: { area: "record.mic", part: { role: "switch", name: "Microphone" } } }],
+      keepPointer: true,
+      demonstrates: ["record.mic:toggleHover"],
+      gates: [
+        { recordingSetting: "isMicrophoneEnabled", side: "on" },
+        { permission: "microphone", side: "granted" },
+      ],
+      requires: { microphone: true },
+    },
+    "mic-device-hover": {
+      profile: "default",
+      how: "Rest the pointer on the Microphone card's right zone (device name and chevron): only that zone lights up, the toggle zone stays as it was.",
+      steps: [
+        { hover: { area: "record.mic", part: { role: "button", name: "Microphone settings" } } },
+      ],
+      keepPointer: true,
+      demonstrates: ["record.mic:deviceHover"],
+      gates: [
+        { recordingSetting: "isMicrophoneEnabled", side: "on" },
+        { permission: "microphone", side: "granted" },
+      ],
+      requires: { microphone: true },
+    },
     "mic-settings": {
       profile: "default",
       steps: [

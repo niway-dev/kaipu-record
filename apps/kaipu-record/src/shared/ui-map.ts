@@ -96,10 +96,13 @@ export const UI_MAP = {
       },
       instantLine: { states: ["default", "locked"] },
       // Recording setup: the heading, its hint, and the Microphone, System audio and Camera
-      // cards below it. It stays live during a take.
+      // cards below it. It stays live during a take. Each card has two zones (NIW2-882): the
+      // name and ON/OFF readout toggle the source, the device and chevron open its panel.
+      // `toggleHover` / `deviceHover` are the pointer on each zone, shown on the Microphone
+      // card (the three cards share one component and stylesheet).
       setup: { states: ["default"] },
       mic: {
-        states: ["on", "off"],
+        states: ["on", "off", "toggleHover", "deviceHover"],
         gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }, { permission: "microphone" }],
       },
       micSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
