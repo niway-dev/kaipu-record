@@ -149,3 +149,91 @@ describe("the editor page with a cropped or resized base", () => {
     await waitFor(() => expect(label()).toHaveTextContent("432 × 200 px"));
   });
 });
+
+describe("dragging the base (NIW2-876, AC9 and AC10)", () => {
+  // The 400 px asset shown at 200 px, at half size with its corner at (0.25, 0.25): it covers
+  // (50..150) px on both axes, so a press at (100, 100) is on the base and on nothing else.
+  const PLACED = { basePlacement: { x: 0.25, y: 0.25, scale: 0.5 } };
+  const view = () => screen.getByTestId("base-view");
+  /** A `left`/`top` in percent, as a number: a drag's float noise is not part of the contract. */
+  const pct = (v: string): number => parseFloat(v);
+  const drag = (to: { clientX: number; clientY: number }, release = true) => {
+    const surface = screen.getByTestId("canvas-hit-surface");
+    fireEvent.pointerDown(surface, { button: 0, clientX: 100, clientY: 100, pointerId: 8 });
+    fireEvent.pointerMove(surface, { ...to, pointerId: 8 });
+    if (release) fireEvent.pointerUp(surface, { pointerId: 8 });
+  };
+  const copiedScene = async () => {
+    exportScene.mockResolvedValue(new ArrayBuffer(1));
+    exportScene.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(exportScene).toHaveBeenCalled());
+    return (exportScene.mock.calls.at(-1) as [string, { scene: Scene }])[1].scene;
+  };
+
+  it("the live frame follows the pointer while it moves and lands where it was released", async () => {
+    await open(PLACED);
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    expect(view().style.left).toBe("25%");
+    drag({ clientX: 120, clientY: 110 }, false);
+    // 20 px of a 200 px shot is 0.1 of the base; 10 px is 0.05.
+    expect(pct(view().style.left)).toBeCloseTo(35);
+    expect(pct(view().style.top)).toBeCloseTo(30);
+    fireEvent.pointerUp(screen.getByTestId("canvas-hit-surface"), { pointerId: 8 });
+    expect(pct(view().style.left)).toBeCloseTo(35);
+    expect(pct(view().style.top)).toBeCloseTo(30);
+    // The box is still the visible base: moving it does not resize it.
+    expect(label()).toHaveTextContent("200 × 200 px");
+  });
+
+  it("Copy exports the moved base: the new placement, the same scale and no annotation touched", async () => {
+    await open(PLACED);
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    drag({ clientX: 120, clientY: 110 });
+    const exported = await copiedScene();
+    expect(exported.basePlacement!.x).toBeCloseTo(0.35);
+    expect(exported.basePlacement!.y).toBeCloseTo(0.3);
+    expect(exported.basePlacement!.scale).toBe(0.5);
+    expect(exported.annotations).toEqual([]);
+  });
+
+  it("an unmoved base is moved from its natural place, writing a placement at scale 1", async () => {
+    await open({});
+    await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+    drag({ clientX: 120, clientY: 110 });
+    const exported = await copiedScene();
+    expect(exported.basePlacement!.x).toBeCloseTo(0.1);
+    expect(exported.basePlacement!.y).toBeCloseTo(0.05);
+    expect(exported.basePlacement!.scale).toBe(1);
+  });
+
+  it("Cmd+Z undoes the whole drag in one step, and Cmd+Shift+Z puts it back", async () => {
+    await open(PLACED);
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    // Many moves, one release.
+    const surface = screen.getByTestId("canvas-hit-surface");
+    fireEvent.pointerDown(surface, { button: 0, clientX: 100, clientY: 100, pointerId: 8 });
+    for (const x of [105, 110, 115, 120]) {
+      fireEvent.pointerMove(surface, { clientX: x, clientY: 110, pointerId: 8 });
+    }
+    fireEvent.pointerUp(surface, { pointerId: 8 });
+    expect(pct(view().style.left)).toBeCloseTo(35);
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    await waitFor(() => expect(view().style.left).toBe("25%"));
+    expect(view().style.top).toBe("25%");
+    // One step: there is nothing earlier to undo.
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(view().style.left).toBe("25%");
+    fireEvent.keyDown(window, { key: "Z", metaKey: true, shiftKey: true });
+    await waitFor(() => expect(pct(view().style.left)).toBeCloseTo(35));
+  });
+
+  it("a press that does not move leaves the frame as it was", async () => {
+    await open(PLACED);
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    drag({ clientX: 100, clientY: 100 });
+    expect(view().style.left).toBe("25%");
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(view().style.left).toBe("25%");
+  });
+});

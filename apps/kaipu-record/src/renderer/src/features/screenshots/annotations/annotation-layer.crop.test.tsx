@@ -184,10 +184,11 @@ describe("selecting and resizing the base", () => {
     expect(screen.getAllByTestId("image-handle")).toHaveLength(8);
   });
 
-  it("the base's tag shows its size but not 'Drag to move', which an added image keeps", () => {
-    const base = mount(sceneOf([], BASE_IMAGE_ID));
+  it("the base's tag shows its size and 'Drag to move', like an added image's", () => {
+    // The base is dragged where the layer has crop handlers (everywhere but Inspect).
+    const base = mount(sceneOf([], BASE_IMAGE_ID), { onEnterCrop: vi.fn() });
     expect(screen.getByTestId("image-tag").textContent).toContain("200 × 200 px");
-    expect(screen.queryByText("Drag to move")).toBeNull();
+    expect(screen.getByText("Drag to move")).not.toBeNull();
     base.unmount();
     mount(sceneOf([image], "i1"));
     expect(screen.getByText("Drag to move")).not.toBeNull();
@@ -217,16 +218,6 @@ describe("selecting and resizing the base", () => {
     fireEvent.pointerDown(layer, { clientX: 100, clientY: 100 });
     fireEvent.pointerUp(layer);
     expect(scene.commitBase).not.toHaveBeenCalled();
-  });
-
-  it("the base is not moved by dragging its middle", () => {
-    const scene = sceneOf([], BASE_IMAGE_ID);
-    const { layer } = mount(scene);
-    fireEvent.pointerDown(layer, { clientX: 50, clientY: 50 });
-    fireEvent.pointerMove(layer, { clientX: 70, clientY: 60 });
-    fireEvent.pointerUp(layer);
-    expect(scene.commitBase).not.toHaveBeenCalled();
-    expect(scene.commitAnnotation).not.toHaveBeenCalled();
   });
 
   it("Delete leaves the base alone", () => {

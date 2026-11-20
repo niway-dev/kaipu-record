@@ -72,7 +72,11 @@ export function ImageSelection({
   unit: number;
   /** Just added and not yet moved: the tag reads "just added" and drops the pixel size. */
   justAdded?: boolean;
-  /** False for the base image: it resizes but is never dragged, so the tag omits "drag to move". */
+  /**
+   * False when a press on the image does not drag it (the base in Inspect, where the image is
+   * read, not edited): the tag then omits "drag to move" instead of advertising a drag that
+   * does nothing.
+   */
   movable?: boolean;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");

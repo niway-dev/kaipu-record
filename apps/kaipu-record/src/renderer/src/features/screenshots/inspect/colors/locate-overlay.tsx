@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
+import type { CropRect, NormalizedRect } from "../../annotations/scene";
 import type { LocatedImage } from "./colors-client";
 import { tagPlacement } from "./locate-tag";
 import styles from "./colors.module.css";
@@ -9,13 +10,19 @@ import styles from "./colors.module.css";
  * located pixels. Pointer events pass through. `label` is the tag under the largest area of
  * the color ("#FDFDFD · 2 AREAS · 17.5% OF THE IMAGE"); it is a sibling of the canvas, not
  * inside it, so the canvas keeps the image's own parent.
+ *
+ * `base` is a base that was cropped, resized or moved (the live frame's view of it): the canvas
+ * is the WHOLE asset, so it is laid out where the asset sits and clipped to what shows, the way
+ * the frame draws the base itself. Without it the base is at its natural place and size.
  */
 export function LocateOverlay({
   image,
   label = null,
+  base,
 }: {
   image: LocatedImage | null;
   label?: string | null;
+  base?: { visible: NormalizedRect; crop?: CropRect };
 }): React.JSX.Element | null {
   const ref = useRef<HTMLCanvasElement | null>(null);
   // Release the backing store (59 MiB at 5K) as soon as the canvas leaves the page, which is
@@ -44,7 +51,7 @@ export function LocateOverlay({
   if (!image) return null;
   const placed =
     label && image.bounds ? tagPlacement(image.bounds, image.width, image.height) : null;
-  return (
+  const marks = (
     <>
       <canvas
         ref={attach}
@@ -65,5 +72,32 @@ export function LocateOverlay({
         </span>
       )}
     </>
+  );
+  if (!base) return marks;
+  const { visible: v, crop: c } = base;
+  return (
+    <div
+      className={styles.locateView}
+      data-testid="inspect-locate-view"
+      style={{
+        left: `${v.x * 100}%`,
+        top: `${v.y * 100}%`,
+        width: `${v.w * 100}%`,
+        height: `${v.h * 100}%`,
+      }}
+    >
+      <div
+        className={styles.locateAsset}
+        data-testid="inspect-locate-asset"
+        style={{
+          left: `${-((c?.x ?? 0) / (c?.w ?? 1)) * 100}%`,
+          top: `${-((c?.y ?? 0) / (c?.h ?? 1)) * 100}%`,
+          width: `${100 / (c?.w ?? 1)}%`,
+          height: `${100 / (c?.h ?? 1)}%`,
+        }}
+      >
+        {marks}
+      </div>
+    </div>
   );
 }
