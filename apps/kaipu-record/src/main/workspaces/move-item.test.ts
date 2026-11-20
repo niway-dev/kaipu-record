@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sha256FileBase64 } from "../library/content-hash";
@@ -220,6 +230,45 @@ describe("moveItem — across volumes (EXDEV)", () => {
     expect(meta).toMatchObject({ sourceSizeBytes: now.size, sourceMtimeMs: now.mtimeMs });
     // No staging left behind.
     expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual([]);
+  });
+
+  it("a copy that keeps its mtime still gets the stamp of the new file, so it is not re-hashed", async () => {
+    const item = await seedItem(src.directory);
+    const before = await stat(join(src.directory, "Demo.mp4"));
+    const outcome = await moveItem(
+      { source: src, target: dst, id: item.id },
+      deps({
+        fs: { link: exdev },
+        hooks: {
+          // The copy is made with a new mtime; put the source's back, as a tool that keeps it would.
+          after: async (step) => {
+            if (step !== "media-verified") return;
+            const staged = join(dst.directory, ".kaipu", "tmp");
+            for (const dir of await readdir(staged)) {
+              await utimes(
+                join(staged, dir, "Demo.mp4"),
+                before.atimeMs / 1000,
+                before.mtimeMs / 1000,
+              );
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, mode: "copied" });
+    const now = await stat(join(dst.directory, "Demo.mp4"));
+    // The mtime is the one the source had, so the early return for "unchanged" is taken, and the
+    // stamp was still rewritten for the new file (its own ctime and inode).
+    expect(now.mtimeMs).toBe(before.mtimeMs);
+    const vault = new LibraryVault(dst.directory);
+    const sidecar = await vault.sidecar("Demo");
+    expect(sidecar).toMatchObject({
+      hashedSizeBytes: now.size,
+      hashedMtimeMs: now.mtimeMs,
+      hashedCtimeMs: now.ctimeMs,
+      hashedIno: now.ino,
+    });
+    expect(await vault.cachedContentHash("Demo")).toMatchObject({ status: "hit" });
   });
 
   it("aborts on a checksum mismatch and leaves the source untouched", async () => {
