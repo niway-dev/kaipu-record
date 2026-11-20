@@ -446,11 +446,32 @@ describe("createCaptureHandler", () => {
       expect(log).toEqual([
         "before",
         "second pick opened",
-        "after quiet",
+        "after handedOver",
         "before",
         "second shot grabbed",
         "after cancelled",
       ]);
+    });
+
+    it("does not restore the windows, the take's Esc or `capturing` while the new pick is open, and restores once when it is confirmed", async () => {
+      const { handler, saveToVault, log, release, confirm, answer } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+
+      release();
+      await first;
+      await tick();
+      // Pick 2 is open: nothing that puts the app back over its overlay has run.
+      expect(log.filter((entry) => /^after (?!handedOver)/.test(entry))).toEqual([]);
+
+      confirm();
+      await vi.waitFor(() => expect(answer()).toBeDefined());
+      answer()({ kind: "captured", png: Buffer.from([2]), mode: "frame", action: "capture" });
+      await second;
+
+      expect(log.filter((entry) => /^after (?!handedOver)/.test(entry))).toEqual(["after quiet"]);
     });
 
     it("leaves the previous capture's toast up while the new pick is open, and hides it only when the new shot is about to be taken", async () => {
@@ -465,7 +486,7 @@ describe("createCaptureHandler", () => {
       await tick();
       // The first capture's `afterCapture` showed its toast; the second's `beforeCapture`
       // (which dismisses it) has not run in the same turn.
-      expect(log).toEqual(["before", "second pick opened", "after quiet"]);
+      expect(log).toEqual(["before", "second pick opened", "after handedOver"]);
 
       confirm();
       await vi.waitFor(() => expect(answer()).toBeDefined());
@@ -474,7 +495,7 @@ describe("createCaptureHandler", () => {
       await second;
     });
 
-    it("leaves the windows and the previous toast alone when the new pick is cancelled without a shot", async () => {
+    it("restores the windows once, in the new capture, when the new pick is cancelled without a shot", async () => {
       const log: string[] = [];
       let releaseSave!: () => void;
       const capture = vi
@@ -499,7 +520,8 @@ describe("createCaptureHandler", () => {
       await first;
       expect(await second).toEqual({ kind: "cancelled" });
 
-      expect(log).toEqual(["before", "after quiet"]);
+      // The first capture hands the restore over; the cancelled second one runs it, once.
+      expect(log).toEqual(["before", "after handedOver", "after cancelled"]);
     });
 
     it("clears the previous capture's kept bytes after it has kept them, not before", async () => {

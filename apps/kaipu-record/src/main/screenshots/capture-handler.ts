@@ -29,9 +29,10 @@ import type {
  * window stays hidden), `cancelled` (nothing was captured: Esc,
  * an unsupported answer or a throw; the window comes back where it was), `recording` (the
  * overlay started a recording: the countdown runs on the chosen region and the window stays
- * out of sight, as it does for the whole take).
+ * out of sight, as it does for the whole take), `handedOver` (a newer capture's pick is open:
+ * restore nothing, the newest capture inherits the restore and runs it with its own ending).
  */
-export type CaptureEnding = "editor" | "quiet" | "cancelled" | "recording";
+export type CaptureEnding = "editor" | "quiet" | "cancelled" | "recording" | "handedOver";
 
 /**
  * Window orchestration around a capture, owned by main (which holds the windows).
@@ -154,10 +155,13 @@ export function createCaptureHandler(
   // open must not release that pick's guard.
   let picking: object | null = null;
   // What a capture does after its pick (save, copy, toast, `afterCapture`), as one promise
-  // per capture. The next capture's window hooks wait for it: both share the hidden-window
-  // state, the toast and the camera bubble, and an `afterCapture` that ran inside the next
-  // pick would put them back over its overlay. Null when nothing is finishing.
+  // per capture. The next capture's hide step (not its pick) waits for it: both share the
+  // hidden-window state, the toast and the camera bubble. Null when nothing is finishing.
   let finishing: Promise<void> | null = null;
+  // A capture that finishes while a newer pick is open must not put the windows, the take's
+  // Esc or the camera bubble back over that overlay: it ends `handedOver` and the newest
+  // capture owes the restore, once, in its own `afterCapture` (even if it hid nothing).
+  let restoreOwed = false;
 
   return async (request) => {
     const mode = assertCaptureMode(request?.mode);
@@ -300,10 +304,20 @@ export function createCaptureHandler(
       try {
         // Never before this capture's own `beforeCapture`; none ran when it hid nothing.
         await after;
-        if (hooksReady) {
-          await hooksReady.catch(() => {});
+        if (hooksReady || restoreOwed) {
+          await hooksReady?.catch(() => {});
+          // A newer capture started while this one was finishing: its pick is open now.
+          // The handed-over ending still lets the toast show (it restores nothing).
+          const handOver = finishing !== mine;
+          restoreOwed = handOver;
           deps.windows.afterCapture(
-            answer.kind === "captured" ? answer.after : recordStarted ? "recording" : "cancelled",
+            handOver
+              ? "handedOver"
+              : answer.kind === "captured"
+                ? answer.after
+                : recordStarted
+                  ? "recording"
+                  : "cancelled",
           );
         }
       } finally {

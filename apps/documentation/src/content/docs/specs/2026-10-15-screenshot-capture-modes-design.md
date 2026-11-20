@@ -258,14 +258,20 @@ next spare was ready, and an Esc sent in that gap reached no window.
   covers the pick and the grab only (a per-capture token, so a capture that ends cannot release
   the next one's guard): when the provider returns the pick has ended, so a press while the shot
   is still being saved opens its own overlay instead of being answered `cancelled`. What the
-  previous capture still does (save, copy, toast, `afterCapture`) is chained, because both
-  share the hidden-window state, the toast, the camera bubble and the kept quiet bytes. The new
-  capture hides its windows (`beforeCapture`, which also dismisses the previous toast and clears
-  the kept bytes) only when its shot is about to be taken, and only after the previous capture
-  has finished. So the previous toast stays up while the new pick is open, and a new pick that
-  is cancelled touches neither the windows nor the toast. If a save never finishes, later
-  captures open but wait at the hide step. The previous toast may appear on the display the new
-  pick chose, because the toast seam keeps one picked display.
+  previous capture still does (save, copy, toast) is chained, because both share the
+  hidden-window state, the toast, the camera bubble and the kept quiet bytes. The new capture
+  hides its windows (`beforeCapture`, which also dismisses the previous toast and clears the
+  kept bytes) only when its shot is about to be taken, or when its pick answers `record`, and
+  only after the previous capture has finished. Windows are restored once, by the newest
+  capture: a capture that finishes while a newer pick is open ends `handedOver`, which restores
+  nothing (the main window stays hidden, the take's Esc stays released, `capturing` stays true,
+  the camera bubble stays hidden), so the overlay is never covered and Esc only cancels the
+  selection. It still shows its toast, which stays up while the new pick is open and is
+  dismissed when the new shot is about to be taken. The newest capture runs the real
+  `afterCapture` in its own `finally`, also when its pick was cancelled and it hid nothing, and
+  its `beforeCapture` keeps the visibility the first capture recorded. If a save never
+  finishes, later captures open but wait at the hide step. The previous toast may appear on the
+  display the new pick chose, because the toast seam keeps one picked display.
 
 ### Entry points and shortcuts
 
