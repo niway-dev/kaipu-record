@@ -627,7 +627,8 @@ function RatioMenu({
   const t = useTranslations("screenshots");
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLDivElement | null>(null);
-  useDismissMenu(wrapper, open, () => setOpen(false));
+  // Not while the countdown runs: then Esc belongs to the overlay, which stops the count.
+  useDismissMenu(wrapper, open && !locked, () => setOpen(false));
   const nameOf = (value: RecordingRatio): string =>
     value === "free" ? t("overlay.ratioFree") : value;
   return (
@@ -738,7 +739,8 @@ function InputCell({
     const timer = setTimeout(() => setLit(false), TOAST_MS);
     return () => clearTimeout(timer);
   }, [halo]);
-  useDismissMenu(cell, open, () => setOpen(false));
+  // Not while the countdown runs: then Esc belongs to the overlay, which stops the count.
+  useDismissMenu(cell, open && !locked, () => setOpen(false));
   const chooseDevice = (
     <button
       type="button"

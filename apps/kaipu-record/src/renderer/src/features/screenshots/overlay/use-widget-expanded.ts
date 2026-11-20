@@ -46,14 +46,12 @@ export function useWidgetExpanded(
   // second toggle that comes before React renders sees the first one's value, not the store's.
   const saving = useRef<Partial<Record<WidgetKey, { id: number; value: boolean }[]>>>({});
   const lastId = useRef(0);
-  const claims = useRef<Partial<CaptureWidgetSettings>>({});
   const publishClaims = useCallback((): void => {
     const next: Partial<CaptureWidgetSettings> = {};
     for (const name of Object.keys(saving.current) as WidgetKey[]) {
       const queue = saving.current[name];
       if (queue?.length) next[name] = queue[queue.length - 1].value;
     }
-    claims.current = next;
     setPendingState(next);
   }, []);
   const expanded = pending[key] ?? stored?.[key] ?? false;

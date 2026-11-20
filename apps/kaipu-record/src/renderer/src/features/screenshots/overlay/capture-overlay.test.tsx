@@ -2859,6 +2859,18 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
   });
 
+  it("Esc stops the count even when a ratio menu was left open as it started", async () => {
+    const { answer, setCounting } = await renderCounting(3);
+    fireEvent.click(screen.getByTestId("ratio-menu"));
+    press("Enter");
+    await tick(1000);
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(setCounting.mock.calls).toEqual([[true], [false]]);
+    expect(answer).not.toHaveBeenCalled();
+  });
+
   it("Cancel on the widget also stops only the count; the box can be recorded again afterwards", async () => {
     const { answer, setCounting } = await renderCounting(3);
     press("Enter");
