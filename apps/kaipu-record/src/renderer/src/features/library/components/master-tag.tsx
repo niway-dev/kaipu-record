@@ -3,9 +3,9 @@ import { useTranslations } from "@kaipu/i18n";
 import styles from "./master-tag.module.css";
 
 /**
- * "MASTER · FULL QUALITY" (NIW2-585): marks an original recording over its player and on its
- * Library card, so the file copies are made from reads as such everywhere. Callers decide
- * when it shows (`isMaster`).
+ * "MASTER · FULL QUALITY" (NIW2-585): marks an original recording or screenshot on its Library
+ * card and row, so the file copies and edits start from reads as such everywhere. Callers
+ * decide when it shows (`isMaster`).
  */
 export function MasterTag({
   size = "md",
