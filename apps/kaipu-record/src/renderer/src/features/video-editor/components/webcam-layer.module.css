@@ -61,3 +61,38 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* The editor's corner handles and size chip (NIW2-888). A sibling of the bubble that mirrors its
+   box (the layer sets left, top, width and height with the bubble's), so the bubble's outline
+   filter, clip and drag never reach it. The box takes no pointer; only a handle does. */
+.overlay {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* The corner handle: the rules live in corner-handle.module.css, shared with the floating images. */
+.handle {
+  composes: handle from "./corner-handle.module.css";
+}
+
+/* "28% · L" while a corner is dragged: above the bubble, below it near the top of the frame. */
+.sizeChip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 75%);
+  color: #fff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sizeChip[data-below="true"] {
+  top: calc(100% + 8px);
+  bottom: auto;
+}

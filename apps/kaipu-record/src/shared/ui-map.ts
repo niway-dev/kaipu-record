@@ -342,7 +342,10 @@ export const UI_MAP = {
       // The Export menu under the Transcript panel's Export button (NIW2-818 M3): SubRip, WebVTT
       // and plain text. Portalled to the body, so it is its own area, not part of the panel's.
       transcriptExportMenu: { states: ["open"], gatedBy: [{ flag: "transcription" }] },
-      webcam: { states: ["visible"] },
+      // The camera bubble in the preview. `resizeHandles` is the bubble selected: four corner
+      // handles on its box (a drag resizes it with the opposite corner fixed), drawn in a
+      // preview-only overlay beside the bubble and so never in the export.
+      webcam: { states: ["visible", "resizeHandles"] },
       // The card that asks where a dropped camera bubble belongs: `asking` offers a new part,
       // `noRoom` has less than a second before the next block or the end, so that choice is off.
       webcamDrop: { states: ["asking", "noRoom"] },

@@ -65,7 +65,13 @@ function renderLayer(
     videoRef: React.RefObject<PreviewMedia | null>;
   },
 ) {
-  const handlers = { onSelect: vi.fn(), onDrop: vi.fn() };
+  const handlers = {
+    onSelect: vi.fn(),
+    onDrop: vi.fn(),
+    onResizeBegin: vi.fn(),
+    onResize: vi.fn(),
+    onResizeEnd: vi.fn(),
+  };
   const utils = render(
     <WebcamLayer
       src="kaipu-media://webcam/rec-1"
@@ -263,6 +269,9 @@ describe("WebcamLayer", () => {
         dropAt={null}
         onSelect={vi.fn()}
         onDrop={vi.fn()}
+        onResizeBegin={vi.fn()}
+        onResize={vi.fn()}
+        onResizeEnd={vi.fn()}
       />,
     );
     expect(bubble().style.width).toBe("20%");
@@ -965,5 +974,288 @@ describe("WebcamLayer over joined recordings (ADR 0058)", () => {
     act(() => setTime(el, 3610));
     loadWebcam(100);
     expect([bubble().style.left, bubble().style.top, bubble().style.width]).toEqual(before);
+  });
+});
+
+// Corner handles (NIW2-888): the selected bubble gets four, a drag resizes it live and ends as one
+// gesture; the page writes the layout, so the layer only reports a size (and a centre).
+describe("WebcamLayer — corner resize", () => {
+  const handle = (corner: string): HTMLElement => screen.getByTestId(`webcam-handle-${corner}`);
+  const chip = (): HTMLElement | null => screen.queryByTestId("webcam-size-chip");
+
+  /** A selected bubble in a 1000 px frame whose slot measures 1000 px: 200 px at (400, 400). */
+  function resizeSetup(
+    extra: Partial<React.ComponentProps<typeof WebcamLayer>> = {},
+    webcam: WebcamScene = scene(),
+  ) {
+    const { ref, el } = mainVideo(1);
+    const view = renderLayer({ videoRef: ref, webcam, selected: true, ...extra });
+    loadWebcam(30);
+    const slot = view.container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
+    slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
+    return { ...view, el, ref };
+  }
+
+  it("draws four corner handles for the selected bubble", () => {
+    resizeSetup();
+    for (const corner of ["nw", "ne", "sw", "se"]) expect(handle(corner)).toBeTruthy();
+    const overlay = screen.getByTestId("webcam-resize-overlay");
+    // The overlay is the bubble's box, so the handles sit on the bubble's corners.
+    expect(overlay.style.left).toBe(bubble().style.left);
+    expect(overlay.style.top).toBe(bubble().style.top);
+    expect(overlay.style.width).toBe(bubble().style.width);
+    expect(overlay.style.height).toBe(bubble().style.height);
+  });
+
+  it("draws no handles for a bubble that is not selected", () => {
+    resizeSetup({ selected: false });
+    expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+    expect(screen.queryByTestId("webcam-resize-overlay")).toBeNull();
+  });
+
+  it("draws no handles while a drawing tool is armed (not interactive)", () => {
+    resizeSetup({ interactive: false });
+    expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+  });
+
+  it("hides the handles when the playhead moves from the bubble into a hidden segment", () => {
+    const { el } = resizeSetup(
+      {},
+      scene({ segments: [{ id: "h", mode: "hidden", start: 3, end: 5 }] }),
+    );
+    const overlay = screen.getByTestId("webcam-resize-overlay");
+    // Visible first: the overlay only shows once the bubble is drawn, so the next step has
+    // something to hide (it starts hidden, and a hidden segment alone would leave it that way).
+    expect(overlay.style.display).toBe("");
+    act(() => setTime(el, 4));
+    expect(bubble().style.display).toBe("none");
+    expect(overlay.style.display).toBe("none");
+    act(() => setTime(el, 1));
+    expect(overlay.style.display).toBe("");
+  });
+
+  it("draws no handles when the page says this bubble cannot be resized now", () => {
+    resizeSetup({ resizable: false });
+    expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+    expect(screen.queryByTestId("webcam-resize-overlay")).toBeNull();
+  });
+
+  it("reports the new size and centre live, one begin and one end", () => {
+    const { handlers } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    expect(handlers.onResizeBegin).not.toHaveBeenCalled();
+    fireEvent.pointerMove(handle("se"), { clientX: 700, clientY: 700, pointerId: 1 });
+    expect(handlers.onResizeBegin).toHaveBeenCalledTimes(1);
+    // 100 px outwards on both axes: the height grows by 100 px, the top-left corner stays.
+    expect(handlers.onResize).toHaveBeenLastCalledWith(
+      { size: 0.3, position: { x: 0.55, y: 0.55 } },
+      1,
+    );
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    expect(handlers.onResizeBegin).toHaveBeenCalledTimes(1);
+    expect(handlers.onResize).toHaveBeenLastCalledWith(
+      { size: 0.25, position: { x: 0.525, y: 0.525 } },
+      1,
+    );
+    expect(handlers.onResizeEnd).not.toHaveBeenCalled();
+    fireEvent.pointerUp(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
+    // Nothing else reached the page: not a selection, not a drop.
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+    expect(handlers.onDrop).not.toHaveBeenCalled();
+  });
+
+  it("anchors the opposite corner for every handle", () => {
+    const anchors: Array<[string, number, number, { x: number; y: number }]> = [
+      ["nw", 400, 400, { x: 0.45, y: 0.45 }],
+      ["ne", 600, 400, { x: 0.55, y: 0.45 }],
+      ["sw", 400, 600, { x: 0.45, y: 0.55 }],
+      ["se", 600, 600, { x: 0.55, y: 0.55 }],
+    ];
+    for (const [corner, x, y, position] of anchors) {
+      const { handlers, unmount } = resizeSetup();
+      // Each corner pulled 100 px away from the centre along both axes.
+      const out = { x: x + (x < 500 ? -100 : 100), y: y + (y < 500 ? -100 : 100) };
+      fireEvent.pointerDown(handle(corner), { clientX: x, clientY: y, pointerId: 1 });
+      fireEvent.pointerMove(handle(corner), { clientX: out.x, clientY: out.y, pointerId: 1 });
+      expect(handlers.onResize).toHaveBeenLastCalledWith({ size: 0.3, position }, 1);
+      unmount();
+    }
+  });
+
+  it("shows the size and the preset while dragging, and drops the chip on release", () => {
+    resizeSetup();
+    expect(chip()).toBeNull();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 730, clientY: 730, pointerId: 1 });
+    expect(chip()?.textContent).toBe("33% · L");
+    fireEvent.pointerMove(handle("se"), { clientX: 680, clientY: 680, pointerId: 1 });
+    expect(chip()?.textContent).toBe("28%");
+    fireEvent.pointerUp(handle("se"), { clientX: 680, clientY: 680, pointerId: 1 });
+    expect(chip()).toBeNull();
+  });
+
+  it("is not a resize when the press moves under 2 px", () => {
+    const { handlers } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 601, clientY: 600, pointerId: 1 });
+    fireEvent.pointerUp(handle("se"), { clientX: 601, clientY: 600, pointerId: 1 });
+    expect(handlers.onResizeBegin).not.toHaveBeenCalled();
+    expect(handlers.onResize).not.toHaveBeenCalled();
+    expect(handlers.onResizeEnd).not.toHaveBeenCalled();
+  });
+
+  it("does not move the bubble: a handle press never starts the body's drag", () => {
+    const { handlers } = resizeSetup();
+    fireEvent.pointerDown(handle("nw"), { clientX: 400, clientY: 400, pointerId: 1 });
+    fireEvent.pointerMove(handle("nw"), { clientX: 300, clientY: 300, pointerId: 1 });
+    fireEvent.pointerUp(handle("nw"), { clientX: 300, clientY: 300, pointerId: 1 });
+    expect(bubble().dataset.dragging).toBe("false");
+    expect(handlers.onDrop).not.toHaveBeenCalled();
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+  });
+
+  it("reports only the size when it grows around the centre", () => {
+    const { handlers } = resizeSetup({ resizeAnchor: "center" });
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    expect(handlers.onResize).toHaveBeenLastCalledWith({ size: 0.3 }, 1);
+  });
+
+  it("keeps the rectangle's 3/4 aspect from a horizontal move", () => {
+    const { handlers } = resizeSetup(
+      {},
+      scene({ layout: { ...scene().layout, shape: "rectangle" } }),
+    );
+    // The rectangle is 150 × 200 at (425, 400): its se corner is at (575, 600).
+    fireEvent.pointerDown(handle("se"), { clientX: 575, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 600, pointerId: 1 });
+    // 75 px wider is 100 px taller.
+    expect(handlers.onResize).toHaveBeenLastCalledWith(
+      { size: 0.3, position: { x: 0.5375, y: 0.55 } },
+      1,
+    );
+  });
+
+  it("starts from the size the zoom draws, so the bubble does not jump", () => {
+    const zoomed = buildCameraPath(
+      [
+        {
+          id: "z",
+          start: 0,
+          end: 9,
+          scale: 2,
+          mode: "fixed",
+          anchor: { x: 0.5, y: 0.5 },
+          smoothing: 0,
+          origin: "manual",
+          trigger: null,
+        },
+      ],
+      null,
+      10,
+    );
+    const { ref } = mainVideo(5);
+    const { handlers, container } = renderLayer({ videoRef: ref, selected: true, path: zoomed });
+    loadWebcam(30);
+    const slot = container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
+    slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
+    // 0.2 × 0.7 (this file's shrink) = a 140 px bubble at (430, 430)..(570, 570).
+    expect(parseFloat(bubble().style.width)).toBeCloseTo(14, 0);
+    fireEvent.pointerDown(handle("se"), { clientX: 570, clientY: 570, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 620, clientY: 570, pointerId: 1 });
+    // 50 px more on screen is 50 / 0.7 more of the layout's own height: 0.2 + 0.0714 → 0.27.
+    expect(handlers.onResize.mock.calls.at(-1)?.[0].size).toBe(0.27);
+  });
+
+  it("raises held while resizing and lowers it on release", () => {
+    const onHeldChange = vi.fn();
+    resizeSetup({ onHeldChange });
+    onHeldChange.mockClear();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    expect(onHeldChange).not.toHaveBeenCalled();
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    expect(onHeldChange.mock.calls).toEqual([[true]]);
+    fireEvent.pointerUp(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    expect(onHeldChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("ends the gesture once when the pointer is cancelled or lost", () => {
+    for (const abort of ["pointerCancel", "lostPointerCapture"] as const) {
+      const { handlers, unmount } = resizeSetup();
+      fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+      fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+      fireEvent[abort](handle("se"), { pointerId: 1 });
+      fireEvent.pointerUp(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+      expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
+      unmount();
+    }
+  });
+
+  it("ends the gesture when the bubble is deselected mid-drag", () => {
+    const { handlers, rerender, ref } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    rerender(
+      <WebcamLayer
+        videoRef={ref}
+        src="kaipu-media://webcam/rec-1"
+        startOffsetMs={0}
+        webcam={scene()}
+        path={flatPath}
+        cameraEnabled
+        frame={FRAME}
+        hidden={false}
+        interactive
+        selected={false}
+        dropAt={null}
+        {...handlers}
+      />,
+    );
+    expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+  });
+
+  it("ends the gesture once when resizing is switched off mid-drag", () => {
+    const { handlers, rerender, ref } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    rerender(
+      <WebcamLayer
+        videoRef={ref}
+        src="kaipu-media://webcam/rec-1"
+        startOffsetMs={0}
+        webcam={scene()}
+        path={flatPath}
+        cameraEnabled
+        frame={FRAME}
+        hidden={false}
+        interactive
+        selected
+        resizable={false}
+        dropAt={null}
+        {...handlers}
+      />,
+    );
+    expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+  });
+
+  it("ends the gesture once when the layer unmounts mid-drag", () => {
+    const { handlers, unmount } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    unmount();
+    expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a second pointer while one resize is live", () => {
+    const { handlers } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerDown(handle("nw"), { clientX: 400, clientY: 400, pointerId: 2 });
+    fireEvent.pointerMove(handle("nw"), { clientX: 300, clientY: 300, pointerId: 2 });
+    expect(handlers.onResizeBegin).not.toHaveBeenCalled();
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    expect(handlers.onResizeBegin).toHaveBeenCalledTimes(1);
   });
 });
