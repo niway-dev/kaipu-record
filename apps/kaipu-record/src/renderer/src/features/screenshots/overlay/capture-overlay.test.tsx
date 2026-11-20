@@ -119,6 +119,7 @@ function fakeApi(
       setMode: vi.fn(),
       setIntent: vi.fn(),
       setCounting: vi.fn(),
+      reportFrame: vi.fn(),
       openRecordSettings: vi.fn(),
       onState: vi.fn((cb: (state: OverlayState) => void) => {
         stateListener = cb;
@@ -127,6 +128,7 @@ function fakeApi(
           stateListener = null;
         };
       }),
+      onReset: vi.fn(() => () => {}),
       onHiddenAckRequest: vi.fn((cb: () => void) => {
         ackListener = cb;
         return () => {
@@ -326,6 +328,64 @@ describe("a spare (loaded ahead of its pick)", () => {
     pushState({ mode: "frame", frameDisplayId: 42, intent: "record" });
     await waitFor(() => expect(screen.getByTestId("capture-frame")).toBeInTheDocument());
     expect(frameGeometry()).toMatchObject({ width: 300, height: 200 });
+  });
+});
+
+describe("a window reused by many picks (NIW2-878)", () => {
+  it("paints the state the host seeds it with, without waiting for main", () => {
+    const { api } = fakeApi({}, null);
+    const { container } = render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        initialState={{ ...SCREEN, session: 4, intent: "capture" }}
+        api={api}
+      />,
+    );
+    expect(container).not.toBeEmptyDOMElement();
+    expect(screen.getByTestId("capture-widget")).toBeInTheDocument();
+  });
+
+  it("tags its answer with the pick it belongs to, so main can drop a late one", () => {
+    const { api, answer } = fakeApi({}, null);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        initialState={{ ...SCREEN, session: 4, intent: "capture" }}
+        api={api}
+      />,
+    );
+    press("Escape");
+    expect(answer).toHaveBeenCalledWith({ kind: "cancelled", session: 4 });
+  });
+
+  it("tags a settled-frame report and a confirmed rect answer with the pick's session", async () => {
+    const frame = { x: 100, y: 120, width: 640, height: 360 };
+    const { api, answer } = fakeApi({ "42": frame }, { ...FRAME_ON_42, session: 7 });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "1:1" }));
+    const box = frameGeometry();
+    await waitFor(() => expect(api.captureOverlay.reportFrame).toHaveBeenCalledOnce());
+    expect(api.captureOverlay.reportFrame).toHaveBeenCalledWith({
+      displayId: 42,
+      rect: box,
+      session: 7,
+    });
+
+    press("Enter");
+    await waitFor(() => expect(answer).toHaveBeenCalledOnce());
+    expect(answer).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "rect", rect: box, session: 7 }),
+    );
+  });
+
+  it("sends the answer as before when main sent no session", () => {
+    const { api, answer } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
+    press("Escape");
+    expect(answer).toHaveBeenCalledWith({ kind: "cancelled" });
   });
 });
 
@@ -721,9 +781,29 @@ describe("FrameBox (chrome and keys)", () => {
     // Persisted for this display, the other display's frame kept, before answering.
     expect(api.updateSettings).toHaveBeenCalledWith({
       screenshotFrame: { "42": remembered, "7": other },
+      lastFrameDisplay: { capture: 42 },
     });
     expect(api.updateSettings.mock.invocationCallOrder[0]).toBeLessThan(
       answer.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("tells main the confirmed frame is being saved before its own settings write (NIW2-878)", async () => {
+    const remembered = { x: 100, y: 120, width: 400, height: 300 };
+    const { api } = fakeApi({ "42": remembered });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+
+    press("Enter");
+
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledOnce());
+    expect(api.captureOverlay.reportFrame).toHaveBeenCalledWith({
+      displayId: 42,
+      rect: remembered,
+      confirming: true,
+    });
+    expect(api.captureOverlay.reportFrame.mock.invocationCallOrder[0]).toBeLessThan(
+      api.updateSettings.mock.invocationCallOrder[0]!,
     );
   });
 
@@ -1072,7 +1152,10 @@ describe("FrameBox drawing on the dim sheet", () => {
         rect: drawn,
       }),
     );
-    expect(api.updateSettings).toHaveBeenCalledWith({ screenshotFrame: { "42": drawn } });
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      screenshotFrame: { "42": drawn },
+      lastFrameDisplay: { capture: 42 },
+    });
   });
 
   it("a click on the sheet that barely moves keeps the box it found", async () => {
@@ -1084,6 +1167,63 @@ describe("FrameBox drawing on the dim sheet", () => {
 
     expect(frameGeometry()).toEqual(REMEMBERED);
     expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("reports nothing while a box is being dragged, and the settled box once on release (NIW2-878)", async () => {
+    const { sheet, api } = await setup();
+    const report = api.captureOverlay.reportFrame;
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 900, clientY: 650 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    expect(report).not.toHaveBeenCalled();
+    expect(api.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
+
+    await waitFor(() => expect(report).toHaveBeenCalledOnce());
+    expect(report).toHaveBeenCalledWith({
+      displayId: 42,
+      rect: { x: 800, y: 600, width: 200, height: 150 },
+    });
+    expect(api.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("switching intent after a drag does not report the unchanged box again under the new intent (NIW2-878)", async () => {
+    const { sheet, api } = await setup();
+    const report = api.captureOverlay.reportFrame;
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
+    await waitFor(() => expect(report).toHaveBeenCalledOnce());
+
+    // Main attributes a report to the intent it holds when the report arrives: a second one
+    // here would save the screenshot's box as the recording area (and the reverse).
+    press("v");
+    await flush();
+    press("p");
+    await flush();
+    expect(report).toHaveBeenCalledOnce();
+  });
+
+  it("reports nothing for a click that did not move the box, or a drag a key cut short", async () => {
+    const { sheet, api } = await setup();
+    const report = api.captureOverlay.reportFrame;
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 802, clientY: 598 });
+    fireEvent.pointerUp(sheet, { clientX: 802, clientY: 598 });
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    press("Shift");
+    press("x");
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
+
+    expect(frameGeometry()).toEqual(REMEMBERED);
+    await flush();
+    expect(report).not.toHaveBeenCalled();
   });
 
   it("still moves from the body and resizes from a handle (a press on the box does not draw)", async () => {
@@ -1692,6 +1832,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     );
     expect(api.updateSettings).toHaveBeenCalledWith({
       recordingArea: { "42": { ...area, ratio: "free" } },
+      lastFrameDisplay: { record: 42 },
     });
     expect(api.updateSettings).not.toHaveBeenCalledWith(
       expect.objectContaining({ screenshotFrame: expect.anything() }),
@@ -1888,6 +2029,7 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     );
     expect(api.updateSettings).toHaveBeenCalledWith({
       recordingArea: { "42": { ...box, ratio: "1:1" } },
+      lastFrameDisplay: { record: 42 },
     });
   });
 
@@ -2703,7 +2845,49 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
       displayId: 42,
       rect: box,
     });
-    expect(api.updateSettings).toHaveBeenCalledWith({ screenshotFrame: { "42": box } });
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      screenshotFrame: { "42": box },
+      lastFrameDisplay: { capture: 42 },
+    });
+  });
+
+  it("a chip choice is reported as a settled box, with the ratio only when recording (NIW2-878)", async () => {
+    const shot = fakeApi({ "42": area });
+    const first = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={shot.api} />,
+    );
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "1:1" }));
+    const box = frameGeometry();
+    await waitFor(() => expect(shot.api.captureOverlay.reportFrame).toHaveBeenCalledOnce());
+    expect(shot.api.captureOverlay.reportFrame).toHaveBeenCalledWith({
+      displayId: 42,
+      rect: box,
+    });
+    first.unmount();
+
+    // The window's settings store caches the first render's settings; start the second clean
+    // so it reads its own fake, whose recording area is `area`.
+    resetSettingsStoreForTests();
+    const rec = fakeApi({}, FRAME_ON_42, { "42": area });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={{ ...query("frame"), intent: "record" }}
+        api={rec.api}
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    await waitFor(() => expect(frameGeometry()).toEqual(area));
+    fireEvent.click(
+      within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "16:9" }),
+    );
+    await waitFor(() => expect(rec.api.captureOverlay.reportFrame).toHaveBeenCalledOnce());
+    expect(rec.api.captureOverlay.reportFrame).toHaveBeenCalledWith({
+      displayId: 42,
+      rect: frameGeometry(),
+      ratio: "16:9",
+    });
   });
 
   it("in the record intent the same chip is carried by the answer and the recording area", async () => {
@@ -2729,6 +2913,7 @@ describe("CaptureOverlay — the ratio chips work in both intents, in Frame only
     );
     expect(api.updateSettings).toHaveBeenCalledWith({
       recordingArea: { "42": { ...box, ratio: "16:9" } },
+      lastFrameDisplay: { record: 42 },
     });
   });
 

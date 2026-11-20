@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
+import type { CropRect } from "../annotations/scene";
 import type { GapMeasure } from "./image-gap";
 import styles from "./image-selection.module.css";
 
@@ -24,6 +25,20 @@ const HANDLE_AT: readonly (readonly [number, number])[] = [
 ];
 
 /**
+ * The part of an image's source that shows, in whole source pixels: its crop window of the
+ * asset, or the whole asset without one. The tag reads it next to the full size so a cropped
+ * image never shows a number that disagrees with what is on screen (NIW2-876).
+ */
+export function visibleSourceSize(
+  pixelWidth: number,
+  pixelHeight: number,
+  crop?: CropRect,
+): { w: number; h: number } {
+  if (!crop) return { w: pixelWidth, h: pixelHeight };
+  return { w: Math.round(crop.w * pixelWidth), h: Math.round(crop.h * pixelHeight) };
+}
+
+/**
  * What a selected added image wears in canvas mode (mock A4), drawn over the annotation layer:
  * the white halo hugging the accent frame (the frame itself is the image's own outline), the
  * handles, a "drag to move" tag with the image's pixel size, and the gap to its nearest
@@ -42,6 +57,7 @@ export function ImageSelection({
   rect,
   pixelWidth,
   pixelHeight,
+  crop,
   gaps,
   unit,
   justAdded = false,
@@ -50,14 +66,21 @@ export function ImageSelection({
   rect: LayerRect;
   pixelWidth: number;
   pixelHeight: number;
+  /** The image's crop window of its source: the tag then reads the visible size of the total. */
+  crop?: CropRect;
   gaps: readonly GapMeasure[];
   unit: number;
   /** Just added and not yet moved: the tag reads "just added" and drops the pixel size. */
   justAdded?: boolean;
-  /** False for the base image: it resizes but is never dragged, so the tag omits "drag to move". */
+  /**
+   * False when a press on the image does not drag it (the base in Inspect, where the image is
+   * read, not edited): the tag then omits "drag to move" instead of advertising a drag that
+   * does nothing.
+   */
   movable?: boolean;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
+  const visible = visibleSourceSize(pixelWidth, pixelHeight, crop);
   return (
     <>
       <div
@@ -86,9 +109,20 @@ export function ImageSelection({
           ) : (
             <>
               {movable && <span className={styles.tagLabel}>{t("dragToMove")}</span>}
-              <span>
-                {pixelWidth} × {pixelHeight} px
-              </span>
+              {crop ? (
+                <span>
+                  {t("imageSizeShowing", {
+                    visibleW: visible.w,
+                    visibleH: visible.h,
+                    w: pixelWidth,
+                    h: pixelHeight,
+                  })}
+                </span>
+              ) : (
+                <span>
+                  {pixelWidth} × {pixelHeight} px
+                </span>
+              )}
             </>
           )}
         </div>

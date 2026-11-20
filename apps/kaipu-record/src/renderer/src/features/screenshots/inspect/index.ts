@@ -6,6 +6,7 @@ export type {
   InspectStatus,
   PinnedRun,
 } from "./use-inspect";
+export { visiblePixelWindow, type PixelWindow } from "./pixel-buffer";
 export { DEFAULT_TOLERANCE, scanRun, runLength, type PixelRun, type RulerAxis } from "./pixel-run";
 export { InspectToggle } from "./inspect-toggle";
 export { InspectLayer } from "./inspect-layer";

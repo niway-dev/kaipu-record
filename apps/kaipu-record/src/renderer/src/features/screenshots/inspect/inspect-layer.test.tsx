@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InspectLayer } from "./inspect-layer";
+import { RULER_HALO_PX, RULER_STROKE_PX, RULER_TICK_PX } from "../ruler-line";
 import type { InspectController, InspectHover } from "./use-inspect";
 
 const originalRect = Element.prototype.getBoundingClientRect;
@@ -154,6 +155,29 @@ describe("InspectLayer HUD", () => {
     const label = screen.getByTestId("inspect-ruler-length");
     expect(label).toHaveTextContent(/^916 px$/);
     expect(label).toHaveAttribute("data-sub", "OUTER · ⇧");
+  });
+
+  it("draws the ruler with the shared line constants (the pinned measure uses the same)", () => {
+    const run = {
+      run: { axis: "x", at: 1, from: 0, to: 4 },
+      length: 190,
+      outer: false,
+      line: { x1: 10, y1: 50, x2: 200, y2: 50 },
+    } as unknown as InspectController["run"];
+    render(<InspectLayer inspect={controller({ run, hover: hoverAt(50, 50) })} />);
+    const lines = screen.getByTestId("inspect-ruler").querySelectorAll("line");
+    // Halo then accent copies of the line and its two caps.
+    expect(lines).toHaveLength(6);
+    for (const l of Array.from(lines).slice(0, 3)) {
+      expect(l.getAttribute("stroke-width")).toBe(String(RULER_HALO_PX));
+    }
+    for (const l of Array.from(lines).slice(3)) {
+      expect(l.getAttribute("stroke-width")).toBe(String(RULER_STROKE_PX));
+    }
+    const cap = lines[1]!;
+    expect(Math.abs(Number(cap.getAttribute("y2")) - Number(cap.getAttribute("y1")))).toBe(
+      RULER_TICK_PX * 2,
+    );
   });
 
   it("puts the tolerance card beside the pointer, never over the HUD", () => {

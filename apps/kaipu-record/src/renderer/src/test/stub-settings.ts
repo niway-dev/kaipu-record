@@ -21,6 +21,7 @@ export const STUB_SETTINGS = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  lastFrameDisplay: {},
   recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,

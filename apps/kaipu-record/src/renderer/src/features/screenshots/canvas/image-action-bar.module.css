@@ -1,0 +1,28 @@
+/*
+ * The selected image's floating bar (NIW2-876). The anchor is a zero-size point at the middle
+ * of the image's top edge, scaled by 1 / canvas zoom so everything inside is in screen px:
+ * the bar is one size on screen at any zoom, like the handles and the size tag.
+ */
+.anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: scale(calc(1 / var(--canvas-zoom, 1)));
+  transform-origin: 0 0;
+  z-index: 4;
+}
+
+/* Where the bar would sit above the image: watched, never seen or hit. */
+.probe {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  transform: translateX(-50%);
+}

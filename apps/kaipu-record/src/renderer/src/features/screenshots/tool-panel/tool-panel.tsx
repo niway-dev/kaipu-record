@@ -9,13 +9,14 @@ import {
   type EditorScene,
 } from "../annotations";
 import { ExportFrameCard } from "../canvas/export-frame-card";
+import { ImageActions, type ImageActionsProps } from "../canvas/image-actions";
 import { InspectBar, type InspectController } from "../inspect";
 import type { ColorsController } from "../inspect/colors/use-colors";
 import type { TextToolStatus } from "../text-selection";
 import styles from "./tool-panel.module.css";
 
 /** What the Tool tab is showing: its `data-state`, and the ui-map's `toolPanel` states. */
-export type ToolPanelState = AnnotationOptionsState | "empty" | "inspect";
+export type ToolPanelState = AnnotationOptionsState | "empty" | "inspect" | "imageOptions";
 
 /**
  * The Tool tab of the side panel (NIW2-723): the active tool's options, wherever they used to
@@ -24,6 +25,7 @@ export type ToolPanelState = AnnotationOptionsState | "empty" | "inspect";
  *
  *   Inspect on          the Inspect controls (rulers, format, tolerance, copy, Colors)
  *   Export frame        what the frame is for, Fit to content, Remove
+ *   Select, an image selected (the base or an added one)    Crop, Corners, Reset (NIW2-876)
  *   any other tool or a selected annotation      colour, stroke or size, Redact style, delete, ...
  *   Select, nothing selected    "No tool selected"
  *   a tool without options      "This tool has no options"
@@ -39,6 +41,7 @@ export function ToolPanel({
   inspect,
   colors,
   exportFrame,
+  imageActions,
 }: {
   tools: AnnotationToolsController;
   /** The scene the options edit; in canvas mode the one whose `crop` is the export frame. */
@@ -52,11 +55,24 @@ export function ToolPanel({
   colors?: ColorsController;
   /** The export frame card's data, in canvas mode (`image-canvas`). */
   exportFrame?: { hasFrame: boolean; onFit(): void; onRemove(): void };
+  /**
+   * The selected image's Crop / Corners / Reset (NIW2-876), the same component the floating bar
+   * wears. Present only while the Select tool has an image selected, and not in Inspect or crop
+   * mode; absent otherwise.
+   */
+  imageActions?: Omit<ImageActionsProps, "variant">;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const frameCard = !inspect && canvasMode && tools.tool === "crop" && exportFrame !== undefined;
   const options = inspect ? null : annotationOptionsState(tools, scene, canvasMode, textTool);
-  const state: ToolPanelState = inspect ? "inspect" : frameCard ? "crop" : (options ?? "empty");
+  const imageOptions = !inspect && !frameCard && imageActions !== undefined;
+  const state: ToolPanelState = inspect
+    ? "inspect"
+    : frameCard
+      ? "crop"
+      : imageOptions
+        ? "imageOptions"
+        : (options ?? "empty");
 
   return (
     <div {...uiArea("editorImage.toolPanel")} className={styles.panel} data-state={state}>
@@ -72,6 +88,7 @@ export function ToolPanel({
               onDone={() => tools.setTool("select")}
             />
           )}
+          {imageOptions && imageActions && <ImageActions variant="panel" {...imageActions} />}
           <AnnotationOptions
             tools={tools}
             scene={scene}

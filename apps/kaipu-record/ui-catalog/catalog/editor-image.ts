@@ -304,6 +304,116 @@ export const editorImage = catalog(
       demonstrates: ["editorImage.cropChip:shown"],
       after: afterCrop,
     },
+    "base-cropped-selected": {
+      profile: "image-canvas",
+      how: "NIW2-876: with the flag forced on, open “Settings page”, double-click the image, drag the crop window's bottom-right handle inward and press Done, then pick Select and click the image: the selection tag under the cropped image reads “Showing W×H of W×H px” (the visible part of the whole shot).",
+      steps: [
+        open(ASSETS.settingsShot),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true },
+        { waitFor: { area: "editorImage.imageCropMode" } },
+        {
+          drag: {
+            area: "editorImage.imageCropMode",
+            part: { css: "[data-testid='crop-handle']" },
+            nth: 4,
+          },
+          from: { x: 0.5, y: 0.5 },
+          to: { x: -20, y: -15 },
+        },
+        {
+          click: {
+            area: "editorImage.canvas",
+            part: { role: "button", name: "Done", exact: true },
+          },
+        },
+        { waitFor: { area: "editorImage.imageCropMode", state: "hidden" } },
+        windowSettled,
+        tool("Select"),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 } },
+        { waitFor: { area: "editorImage.canvas", part: { css: "[data-testid='image-tag']" } } },
+      ],
+      demonstrates: ["editorImage.canvas:cropped"],
+      after: afterCrop,
+    },
+    "image-action-bar": {
+      profile: "image-canvas",
+      how: "NIW2-876: with the flag forced on, open “Settings page” and click the image: the thin accent frame and small handles show, a bar with the Move | Crop mode control (Move in pink, the default), Corners and Reset floats above it (Reset is disabled: nothing is cropped), and the Tool tab offers the same.",
+      steps: [
+        open(ASSETS.settingsShot),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 } },
+        { waitFor: { area: "editorImage.imageActionBar" } },
+      ],
+      demonstrates: ["editorImage.imageActionBar:shown", "editorImage.toolPanel:imageOptions"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+    },
+    "image-action-bar-crop-mode": {
+      profile: "image-canvas",
+      how: "NIW2-876: with the flag forced on, open “Settings page”, click the image and choose Crop in the bar: crop mode opens, the bar stays over the crop window with Crop in pink (Move is the way back), and Reset and Done keep their size under the window's corner.",
+      steps: [
+        open(ASSETS.settingsShot),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 } },
+        { waitFor: { area: "editorImage.imageActionBar" } },
+        {
+          click: {
+            area: "editorImage.imageActionBar",
+            part: { role: "radio", name: "Crop", exact: true },
+          },
+        },
+        { waitFor: { area: "editorImage.imageCropMode" } },
+      ],
+      demonstrates: ["editorImage.imageActionBar:cropMode", "editorImage.imageCropMode:active"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+    },
+    "image-action-bar-cropped": {
+      profile: "image-canvas",
+      how: "NIW2-876: with the flag forced on, open “Settings page”, double-click the image, drag the crop window's bottom-right handle inward and press Done, then pick Select and click the image: the bar over the cropped image has Reset enabled.",
+      steps: [
+        open(ASSETS.settingsShot),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true },
+        { waitFor: { area: "editorImage.imageCropMode" } },
+        {
+          drag: {
+            area: "editorImage.imageCropMode",
+            part: { css: "[data-testid='crop-handle']" },
+            nth: 4,
+          },
+          from: { x: 0.5, y: 0.5 },
+          to: { x: -20, y: -15 },
+        },
+        {
+          click: {
+            area: "editorImage.canvas",
+            part: { role: "button", name: "Done", exact: true },
+          },
+        },
+        { waitFor: { area: "editorImage.imageCropMode", state: "hidden" } },
+        windowSettled,
+        tool("Select"),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 } },
+        { waitFor: { area: "editorImage.imageActionBar" } },
+      ],
+      demonstrates: ["editorImage.imageActionBar:cropped"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+      after: afterCrop,
+    },
+    "inspect-cropped-run": {
+      profile: "image-inspect",
+      how: "NIW2-876: with the flag forced on, open “Settings page”, pick Crop, drag a frame, press Done, press Inspect, rest the pointer on the image and press 1: the horizontal run stops at the visible crop edge.",
+      steps: [
+        ...drawCrop("Crop"),
+        cropDone,
+        chipInPage,
+        windowSettled,
+        inspectToggle,
+        hoverCanvas,
+        hudShown,
+        { press: "1" },
+        runShown,
+      ],
+      keepPointer: true,
+      demonstrates: ["editorImage.canvas:cropped"],
+      after: afterCrop,
+    },
     toolbar: {
       profile: "image-toolbar",
       how: "Mock B1: with the three image-editor flags forced on, open “Settings page” at the editor's default size: the toolbar reads mode switch (Annotate | Inspect), Select Pen Box Arrow Text Step, Redact, Export frame, Add image, Select text, Undo Redo, the title, then Copy, Save and PDF.",
@@ -662,13 +772,13 @@ export const editorImage = catalog(
     },
     "canvas-crop-mode": {
       profile: "image-canvas",
-      how: "With the flag forced on, open “Settings page” and double-click the image's own pixels: crop mode starts, the whole image shows dimmed with the crop window and its eight handles, and a Done button sits at the window's corner.",
+      how: "With the flag forced on, open “Settings page” and double-click the image's own pixels: crop mode starts, the whole image shows dimmed with a thin pink window outline, thick pink L corners, a short bar at the middle of each edge and a rule-of-thirds grid, and Reset (disabled: nothing is cropped) and Done sit side by side at the window's corner at a fixed size on screen; the bar and the Tool tab keep Move | Crop (Crop checked), Corners and Reset (NIW2-876).",
       steps: [
         open(ASSETS.settingsShot),
         { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true },
         { waitFor: { area: "editorImage.imageCropMode" } },
       ],
-      demonstrates: ["editorImage.imageCropMode:active"],
+      demonstrates: ["editorImage.imageCropMode:active", "editorImage.toolPanel:imageOptions"],
       gates: [{ flag: "image-canvas", side: "on" }],
     },
     "canvas-zoomed-out": {

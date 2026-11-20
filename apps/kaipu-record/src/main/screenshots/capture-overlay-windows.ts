@@ -8,12 +8,15 @@ import {
   ENABLED_CAPTURE_MODES,
   isCaptureAction,
   isCaptureMode,
+  isRecordAction,
   isRecordingRatio,
   type CaptureAction,
   type CaptureIntent,
   type CaptureMode,
+  type CaptureRect,
   type ListedWindow,
   type OverlayState,
+  type RecordingRatio,
 } from "@shared/types/screenshot-capture";
 import {
   NO_WINDOWS_LISTER,
@@ -149,6 +152,8 @@ export interface CaptureOverlayDeps {
    * is not hidden again by that path.
    */
   openRecordSettings: () => void;
+  /** The last-used display and rectangle, per intent. Defaults to remembering nothing. */
+  frameMemory: FrameMemory;
 }
 
 const electronDeps = (): CaptureOverlayDeps => ({
@@ -173,6 +178,7 @@ const electronDeps = (): CaptureOverlayDeps => ({
   protectContent: () => false,
   warmDelayMs: OVERLAY_WARM_DELAY_MS,
   warmRetryMs: OVERLAY_WARM_RETRY_MS,
+  frameMemory: NO_FRAME_MEMORY,
   openRecordSettings: () => {},
 });
 
@@ -188,7 +194,36 @@ type OverlayEntry = {
 /** Windows loaded hidden for a pick that has not opened yet; `key` is their joined queries. */
 type Spares = { key: string; entries: OverlayEntry[] };
 
+/** A rectangle the Frame box settled on, with the display it belongs to. */
+type FrameArea = { displayId: number; rect: CaptureRect; ratio?: RecordingRatio };
+
+/**
+ * What a pick leaves behind for the next one (NIW2-878): where its frame was, and the last
+ * rectangle the user settled on on each display. Written once, when the pick ends (see `FrameMemory`).
+ */
+export interface FrameMemoryUpdate {
+  /** Screenshot (`capture`) or recording (`record`): each keeps its own last selection. */
+  intent: "capture" | "record";
+  /** The display that held the frame (or the one a Screen answer chose); null when none did. */
+  displayId: number | null;
+  /** The last rectangle drawn or resized on each display, in this intent; oldest first. */
+  areas: FrameArea[];
+}
+
+/** Where the last-used display and rectangle live (the settings, in production). */
+export interface FrameMemory {
+  /** The display the frame was last used on for `intent`, or null when none was. */
+  lastDisplay(intent: CaptureIntent): number | null;
+  /** Remember `updates` in one write. Called once per pick that closes, never while a frame is dragged. */
+  save(updates: FrameMemoryUpdate[]): void;
+}
+
+/** Remembers nothing: the frame opens under the pointer, as it did before NIW2-878. */
+const NO_FRAME_MEMORY: FrameMemory = { lastDisplay: () => null, save: () => {} };
+
 type PickSession = {
+  /** Counts picks; the renderer remounts on a new id, so a reused window starts clean. */
+  id: number;
   displays: Display[];
   displayIds: Set<number>;
   /** Set once the window lister has been asked; it is asked at most once per pick. */
@@ -199,6 +234,14 @@ type PickSession = {
   shown: number;
   /** Fires `destroyAll` when the overlays never all paint; cleared once they have. */
   watchdog: ReturnType<typeof setTimeout> | null;
+  /**
+   * What the Frame box reported (drag end, ratio chip), the latest per intent and display,
+   * oldest first: saved if the pick closes. A report belongs to the intent showing when it
+   * arrived, so a P / V switch never moves a rectangle into the other intent's memory.
+   */
+  frameReports: (FrameArea & { intent: "capture" | "record" })[];
+  /** The overlay is saving the confirmed frame itself; a cancel then writes nothing. */
+  confirming: boolean;
 };
 
 type HiddenWait = { waiting: Set<number>; done: Promise<void>; finish: () => void };
@@ -214,36 +257,6 @@ function contains(bounds: Rectangle, point: { x: number; y: number }): boolean {
 
 function rectParam({ x, y, width, height }: Rectangle): string {
   return `${x},${y},${width},${height}`;
-}
-
-/**
- * The overlay's render-target query: everything the renderer needs to draw, so it never
- * has to ask main. `index` is 1-based among the picked displays; `bounds` and `work` are
- * the display's bounds and work area in DIP. `ids` lists every picked display in order,
- * so whichever overlay has keyboard focus can map the digit N to the N-th display.
- * `frame` (Frame only) is the display that starts with the frame, so each overlay paints
- * the right thing at once instead of waiting for the first state message. `internal=1`
- * marks the built-in display, which the Screen card labels "Built-in".
- */
-export function overlayQuery(
-  ui: OverlayUi,
-  display: Display,
-  index: number,
-  displayIds: readonly number[],
-  frameDisplayId: number | null = null,
-  intent: CaptureIntent = "capture",
-): string {
-  return (
-    `?window=capture-overlay&display=${display.id}&ui=${ui}` +
-    `&index=${index}&count=${displayIds.length}` +
-    `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
-    `&ids=${displayIds.join(",")}` +
-    (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "") +
-    (display.internal ? "&internal=1" : "") +
-    // Only the record intent is written: every screenshot query stays exactly as it was.
-    // The scale only feeds the record intent's size readout (device pixels).
-    (intent === "record" ? `&intent=record&scale=${display.scaleFactor}` : "")
-  );
 }
 
 /**
@@ -356,10 +369,12 @@ function parseAnswer(
  * `features/screenshots/overlay/`). It only ever answers "this rectangle / this window / this display"
  * or "cancelled"; the provider captures the pixels.
  *
- * The provider drives one session: `pick` → answer → `hideAll` → capture → `destroyAll`.
- * `pick` does not destroy the windows when it settles, so the dim sheet never flashes
- * off and back before the shot; a second `pick` before `destroyAll` answers `cancelled`
- * without touching the session in progress.
+ * The provider drives one session: `pick` → answer → `hideAll` → capture → `endPick`.
+ * `pick` does not hide or destroy the windows when it settles, so the dim sheet never flashes
+ * off and back before the shot; a second `pick` before `endPick` answers `cancelled`
+ * without touching the session in progress. `endPick` keeps the windows, hidden, as the next
+ * pick's (the same as the warm-up's spares); only a change of displays, language or theme, or
+ * a broken window, makes the next pick load new ones.
  *
  * On macOS each overlay is a `panel` at the screen-saver level, so it floats over a
  * full-screen app on the Space the user is on, and it joins every Space only while it is
@@ -393,6 +408,13 @@ export class CaptureOverlayWindows implements OverlayPort {
   private lastIntent: CaptureIntent | null = null;
   /** `dispose()` ran: the app is quitting, so no window is loaded again. */
   private disposed = false;
+  /** The last pick's id; every pick gets the next one. */
+  private lastSessionId = 0;
+  /**
+   * The displays, language or theme changed while a pick was open: its windows were laid out
+   * or loaded for the old ones, so they are destroyed at the end instead of kept.
+   */
+  private keptStale = false;
   /**
    * True while the overlay runs its own recording countdown: Esc then belongs to the
    * renderer (it cancels only the countdown). Reset on every session start and end.
@@ -419,27 +441,30 @@ export class CaptureOverlayWindows implements OverlayPort {
     const ui: OverlayUi = this.deps.enabledModes.includes(requested) ? requested : "frame";
 
     return new Promise<OverlayAnswer>((resolve) => {
+      this.keptStale = false;
       this.session = {
+        id: ++this.lastSessionId,
         displays,
         displayIds: new Set(displays.map((display) => display.id)),
         windowsRequested: false,
         settle: resolve,
         shown: 0,
         watchdog: null,
+        frameReports: [],
+        confirming: false,
       };
       this.mode = ui;
       this.intent = intent;
       this.hoverDisplayId = null;
       this.windows = null;
-      const { frameDisplayId, underCursor } = this.initialFrame(ui, displays);
+      const { frameDisplayId, underCursor } = this.initialFrame(ui, displays, intent);
       this.frameDisplayId = frameDisplayId;
       // Keyboard focus (Esc, Enter, 1/2/3): the Frame's Enter only works in the window
       // that holds the frame, so there focus follows the frame, not the pointer.
       this.focusDisplayId = this.frameDisplayId ?? displays[Math.max(0, underCursor)].id;
-      const queries = this.queriesFor(ui, displays, frameDisplayId, intent);
-      // Spares loaded for the same displays are used as they are, whatever the mode, intent or
-      // frame display: those reach them as state. Any others (the displays changed) are
-      // thrown away, and this pick loads its own as it always did.
+      // Windows kept or loaded ahead for the same displays are used as they are, whatever the
+      // mode, intent or frame display: those reach them as state. Any others (the displays
+      // changed) are thrown away, and this pick loads its own.
       const spares = this.spares;
       this.spares = null;
       if (spares && spares.key === this.spareQueries(displays).join("|")) {
@@ -448,6 +473,7 @@ export class CaptureOverlayWindows implements OverlayPort {
       } else {
         markRecordTiming("overlay loaded fresh");
         this.destroySpares(spares);
+        const queries = this.spareQueries(displays);
         displays.forEach((display, index) => {
           this.entries.push(this.createOverlay(display, queries[index]!));
         });
@@ -479,6 +505,8 @@ export class CaptureOverlayWindows implements OverlayPort {
 
   /** Throw the spares away and load them again (the next pick changed: mode, language). */
   refreshSpares(): void {
+    // An open pick's windows are not spares yet, but they would be kept when it ends.
+    if (this.session) this.keptStale = true;
     if (!this.spares) return;
     this.destroySpares(this.spares);
     this.spares = null;
@@ -486,32 +514,27 @@ export class CaptureOverlayWindows implements OverlayPort {
   }
 
   /**
-   * One frame at a time: it starts where the pointer is, else on the primary display (else
-   * the first picked one), and the user moves it by clicking another display.
+   * One frame at a time: it starts on the display the frame was last used on for this intent
+   * (screenshot and recording each remember theirs), else where the pointer is, else on the
+   * primary display (else the first picked one), and the user moves it by clicking another
+   * display.
    */
   private initialFrame(
     ui: OverlayUi,
     displays: Display[],
+    intent: CaptureIntent,
   ): { frameDisplayId: number | null; underCursor: number } {
     const cursor = this.deps.cursorPoint();
     const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
     if (ui !== "frame") return { frameDisplayId: null, underCursor };
     const primary = this.deps.primaryDisplayId();
+    const last = this.deps.frameMemory.lastDisplay(intent);
     const frame =
-      displays[underCursor] ?? displays.find((display) => display.id === primary) ?? displays[0];
+      displays.find((display) => display.id === last) ??
+      displays[underCursor] ??
+      displays.find((display) => display.id === primary) ??
+      displays[0];
     return { frameDisplayId: frame!.id, underCursor };
-  }
-
-  private queriesFor(
-    ui: OverlayUi,
-    displays: Display[],
-    frameDisplayId: number | null,
-    intent: CaptureIntent,
-  ): string[] {
-    const displayIds = displays.map((display) => display.id);
-    return displays.map((display, index) =>
-      overlayQuery(ui, display, index + 1, displayIds, frameDisplayId, intent),
-    );
   }
 
   /** What the spares of `displays` load: independent of mode, intent and frame (`overlaySpareQuery`). */
@@ -573,6 +596,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     if (!spares?.entries.includes(entry)) return;
     this.spares = null;
     this.destroySpares(spares);
+    this.scheduleWarm(this.deps.warmDelayMs);
   }
 
   hideAll(): Promise<void> {
@@ -675,18 +699,40 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.answer({ kind: "cancelled" });
   }
 
+  /**
+   * End the pick session and keep its windows for the next one (NIW2-878): hidden, out of
+   * every Space, and told to forget the pick, so the next press shows them at once instead of
+   * waiting for a reload. The windows are destroyed instead when they cannot serve a later pick:
+   * the app is quitting, a window went away, or the displays, language or theme changed under
+   * the pick. Safe to call with no pick open.
+   */
+  endPick(): void {
+    const keep =
+      !this.disposed &&
+      !this.keptStale &&
+      this.session !== null &&
+      !this.spares &&
+      this.entries.length > 0 &&
+      this.entries.every(({ window }) => !window.isDestroyed());
+    if (!keep) {
+      this.destroyAll();
+      return;
+    }
+    const { entries, session } = this.closeSession();
+    for (const { window } of entries) {
+      window.hide();
+      this.setSpaceBehavior(window, false);
+      // The renderer drops the pick it showed, so a stale frame never flashes on the next one.
+      window.webContents.send(IPC_CHANNELS.screenshotOverlayReset);
+    }
+    this.spares = { key: this.spareQueries(session!.displays).join("|"), entries };
+    this.hiddenWait?.finish();
+    session!.settle?.({ kind: "cancelled" });
+  }
+
+  /** Destroy every window of the pick and schedule new spares: the pick cannot be reused. */
   destroyAll(): void {
-    const entries = this.entries;
-    this.entries = [];
-    const session = this.session;
-    this.session = null;
-    this.counting = false;
-    if (session) this.lastIntent = this.intent;
-    this.hoverDisplayId = null;
-    this.frameDisplayId = null;
-    this.focusDisplayId = null;
-    this.windows = null;
-    if (session?.watchdog) clearTimeout(session.watchdog);
+    const { entries, session } = this.closeSession();
     for (const { window } of entries) {
       if (!window.isDestroyed()) window.destroy();
     }
@@ -694,6 +740,23 @@ export class CaptureOverlayWindows implements OverlayPort {
     session?.settle?.({ kind: "cancelled" });
     // The next pick's windows load once this one's shot or take is under way.
     this.scheduleWarm(this.deps.warmDelayMs);
+  }
+
+  /** Clear everything the open pick owned except its windows, which the caller disposes of. */
+  private closeSession(): { entries: OverlayEntry[]; session: PickSession | null } {
+    const entries = this.entries;
+    this.entries = [];
+    const session = this.session;
+    this.session = null;
+    this.counting = false;
+    this.keptStale = false;
+    if (session) this.lastIntent = this.intent;
+    this.hoverDisplayId = null;
+    this.frameDisplayId = null;
+    this.focusDisplayId = null;
+    this.windows = null;
+    if (session?.watchdog) clearTimeout(session.watchdog);
+    return { entries, session };
   }
 
   /** One overlay window for `display`, loading `query`; shown once it paints and a pick is open. */
@@ -733,7 +796,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     const entry: OverlayEntry = { window, displayId: display.id, ready: false, protected: protect };
     window.once("ready-to-show", () => {
       entry.ready = true;
-      // A spare waits hidden for its pick; one whose pick ended was destroyed with it.
+      // A spare waits hidden for its pick; one whose pick ended is kept, not in `entries`, and waits for the next.
       if (this.entries.includes(entry)) this.reveal(entry);
     });
     window.on("closed", () => {
@@ -825,6 +888,7 @@ export class CaptureOverlayWindows implements OverlayPort {
 
   private sendState(window: OverlayWindow): void {
     const state: OverlayState = {
+      session: this.session?.id ?? 0,
       mode: this.mode,
       intent: this.intent,
       hoverDisplayId: this.hoverDisplayId,
@@ -844,7 +908,47 @@ export class CaptureOverlayWindows implements OverlayPort {
     const settle = this.session?.settle;
     if (!this.session || !settle) return;
     this.session.settle = null;
+    this.remember(this.session, answer);
     settle(answer);
+  }
+
+  /**
+   * The one write a pick makes to the frame memory (NIW2-878). Closing without an answer (Esc,
+   * a second press of the key) keeps the display the frame was on, for the intent the pick
+   * closed in, and the last rectangle the Frame box reported on each display, for the intent
+   * it was drawn in. A Screen answer keeps the display it chose. A confirmed frame is written
+   * by the overlay with its answer, so nothing is saved here for it, and nothing is ever
+   * saved while a frame is dragged.
+   */
+  private remember(session: PickSession, answer: OverlayAnswer): void {
+    const updates: FrameMemoryUpdate[] = [];
+    if (answer.kind === "cancelled") {
+      // The overlay is already writing the confirmed frame (and its display): a second write
+      // for the same close would only repeat it.
+      if (session.confirming) return;
+      const closing = this.intent === "record" ? "record" : "capture";
+      for (const intent of ["capture", "record"] as const) {
+        const areas = session.frameReports
+          .filter((report) => report.intent === intent)
+          .map(({ intent: _intent, ...area }) => area);
+        // The closing intent keeps the display the frame is on; the other keeps where it was drawn.
+        const displayId =
+          intent === closing ? this.frameDisplayId : (areas.at(-1)?.displayId ?? null);
+        if (displayId !== null || areas.length > 0) updates.push({ intent, displayId, areas });
+      }
+    } else if (answer.kind === "display") {
+      updates.push({
+        intent: isRecordAction(answer.action) ? "record" : "capture",
+        displayId: answer.displayId,
+        areas: [],
+      });
+    }
+    if (updates.length === 0) return;
+    try {
+      this.deps.frameMemory.save(updates);
+    } catch (error) {
+      console.warn("[screenshot] could not remember the frame", error);
+    }
   }
 
   private ackFrom(senderId: number | null): void {
@@ -892,8 +996,43 @@ export class CaptureOverlayWindows implements OverlayPort {
 
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayAnswer, (event, payload) => {
       if (!this.session?.settle || !this.ownsSender(event)) return;
+      // A window kept from the previous pick may still be answering it: drop that.
+      const from = (payload as { session?: unknown } | undefined)?.session;
+      if (from !== undefined && from !== this.session.id) return;
       const answer = parseAnswer(payload, this.session.displayIds, this.windows);
       if (answer) this.answer(answer);
+    });
+
+    // Frame mode: the box settled (a drag ended, a ratio was chosen). Kept in memory only; it
+    // is saved, once, if the pick closes.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayFrame, (event, payload) => {
+      if (!this.session?.settle || !this.ownsSender(event)) return;
+      const report = payload as
+        | {
+            displayId?: unknown;
+            rect?: unknown;
+            ratio?: unknown;
+            session?: unknown;
+            confirming?: unknown;
+          }
+        | undefined;
+      // Only the Frame box sends this, and it always knows its pick: no id, no report.
+      if (!report || report.session !== this.session.id) return;
+      const displayId = report.displayId;
+      if (!isFiniteNumber(displayId) || !this.session.displayIds.has(displayId)) return;
+      const rect = parseRect(report.rect);
+      if (!rect) return;
+      const ratio = isRecordingRatio(report.ratio) ? report.ratio : undefined;
+      if (report.confirming === true) this.session.confirming = true;
+      // The latest report of a display replaces the one before and moves to the end, so the
+      // order is how recently each display was used.
+      const intent = this.intent === "record" ? "record" : "capture";
+      this.session.frameReports = [
+        ...this.session.frameReports.filter(
+          (earlier) => earlier.intent !== intent || earlier.displayId !== displayId,
+        ),
+        { intent, displayId, rect, ...(ratio ? { ratio } : {}) },
+      ];
     });
 
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayHover, (event, payload) => {

@@ -14,7 +14,8 @@ import type {
   CaptureToastPayload,
   CaptureToastTimer,
   OpenSavedScreenshotRequest,
-  OverlayAnswer,
+  FrameReport,
+  TaggedOverlayAnswer,
   OverlayState,
   QuietCaptureHandOff,
 } from "./screenshot-capture";
@@ -110,7 +111,7 @@ export interface ScreenSource {
  */
 export interface CaptureOverlayBridge {
   /** Send the user's pick. Main keeps the first valid answer and ignores the rest. */
-  answer(answer: OverlayAnswer): void;
+  answer(answer: TaggedOverlayAnswer): void;
   /** The pointer entered this display (its id) or left it (`null`). */
   hover(displayId: number | null): void;
   /** Frame mode: ask main to move the one frame to this display. */
@@ -131,6 +132,17 @@ export interface CaptureOverlayBridge {
   openRecordSettings(): void;
   /** Main's state broadcast (mode, hover, frame display, window list). Returns an unsubscribe fn. */
   onState(callback: (state: OverlayState) => void): () => void;
+  /**
+   * Main kept this window for the next pick and ended the one it showed: drop it, paint
+   * nothing until a state of a new session arrives. Returns an unsubscribe fn.
+   */
+  onReset(callback: () => void): () => void;
+  /**
+   * The Frame box settled on a rectangle (a drag ended, a ratio was chosen). Main keeps the
+   * latest in memory and saves it once if the pick closes without an answer (NIW2-878); the
+   * overlay never writes settings on a move.
+   */
+  reportFrame(report: FrameReport): void;
   /** Ask main for the current state again, once `onState` is listening (see `screenshotOverlayStateRequest`). */
   requestState(): void;
   /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */

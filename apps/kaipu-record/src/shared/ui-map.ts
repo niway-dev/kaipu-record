@@ -510,9 +510,17 @@ export const UI_MAP = {
         states: ["blur", "solid"],
         gatedBy: [{ flag: "image-canvas" }],
       },
-      // Per-image crop mode (NIW2-853): the dimmed whole asset, the crop window and its handles,
-      // entered by a double-click on the image's own pixels.
+      // Per-image crop mode (NIW2-853): the whole asset dimmed, and the crop window with its
+      // pink L corners, edge bars and thirds grid (NIW2-876), entered by a double-click on the
+      // image's own pixels or by choosing Crop in the action bar.
       imageCropMode: { states: ["active"], gatedBy: [{ flag: "image-canvas" }] },
+      // The floating bar over a selected image, base or added (NIW2-876): the Move | Crop mode
+      // control, Corners and Reset. `cropped` is an image with a crop, where Reset is enabled.
+      // `cropMode` is the bar while crop mode is open: Crop is the checked mode, and Move leaves.
+      imageActionBar: {
+        states: ["shown", "cropped", "cropMode"],
+        gatedBy: [{ flag: "image-canvas" }],
+      },
       redactionLock: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       redactionNotice: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       // Inspect mode (NIW2-699): the toolbar button, the floating bar and the loupe chip.
@@ -539,7 +547,9 @@ export const UI_MAP = {
       // the renumbering delete line; `redact` is Blur / Solid (canvas mode); `crop` is the
       // export frame card, or the classic Crop / Reset row; `selectText` is the recognition
       // status and its actions (`image-text`); `selection` is a selected annotation with only
-      // Delete to offer (an added image); `inspect` is the Inspect controls (`image-inspect`).
+      // Delete to offer (an added image); `inspect` is the Inspect controls (`image-inspect`);
+      // `imageOptions` is a selected image, the base or an added one, with the same Crop,
+      // Corners and Reset as the floating bar (NIW2-876); in crop mode it stays, Crop shown pressed.
       toolPanel: {
         states: [
           "empty",
@@ -551,6 +561,7 @@ export const UI_MAP = {
           "selectText",
           "selection",
           "inspect",
+          "imageOptions",
         ],
       },
       // The colors panel (NIW2-704), the Colors tab of the side panel (NIW2-714): the list

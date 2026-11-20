@@ -176,6 +176,16 @@ describe("useEditorScene", () => {
     expect(result.current.canUndo).toBe(false);
   });
 
+  it("commitAnnotation with an undefined value removes the key instead of keeping it dead", () => {
+    const { result } = renderHook(() => useEditorScene());
+    act(() => result.current.addAnnotation({ ...box, kind: "box" }));
+    act(() => result.current.commitAnnotation("b1", { color: "#0f0" }));
+    act(() => result.current.commitAnnotation("b1", { color: undefined } as never));
+    expect("color" in result.current.annotations[0]!).toBe(false);
+    act(() => result.current.undo());
+    expect(colorOf(result.current.annotations[0]!)).toBe("#0f0");
+  });
+
   it("a scene with no base fields exposes none", () => {
     const { result } = renderHook(() => useEditorScene());
     expect(result.current.baseCrop).toBeUndefined();

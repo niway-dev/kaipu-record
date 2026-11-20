@@ -338,6 +338,14 @@
   display: flex;
   min-width: 0;
   min-height: 0;
+  /* A size container, so the frame can bound a tall shot by the stage height (`--stage-h`
+     below, read in beautified-frame.module.css). Here and not on `.canvas`: layout containment,
+     which comes with it, makes the element the containing block of its absolute children, and
+     `.canvasArea` already is one (`position: relative`), while `.canvas` is a scroll container
+     in the zoomed classic editor, where the Inspect layer would then scroll with it. The area
+     has a definite size (flex: 1 in a sized row), so size containment changes nothing about
+     its own layout. */
+  container-type: size;
 }
 
 .canvas {
@@ -347,6 +355,9 @@
   align-items: safe center;
   justify-content: safe center;
   padding: var(--space-xl);
+  /* The room the frame has: the area's height (`cqh` resolves where it is read, against
+     `.canvasArea`) minus this padding, the box the frame's `max-height: 100%` resolves against. */
+  --stage-h: calc(100cqh - 2 * var(--space-xl));
   /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll); the
      view-zoom overflows → scroll/pan the view. */
   overflow: auto;

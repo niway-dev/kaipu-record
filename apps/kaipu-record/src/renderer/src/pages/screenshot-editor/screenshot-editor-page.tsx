@@ -52,6 +52,7 @@ import {
   unpackRgb,
   useColors,
   useInspect,
+  visiblePixelWindow,
 } from "@renderer/features/screenshots/inspect";
 import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
 import { CaptureTitleInput } from "@renderer/features/screenshots/capture-title-input";
@@ -80,8 +81,12 @@ import {
   frameToWorld,
   baseVisibleRect,
   hasBaseView,
+  followRadiusSource,
+  imageActionState,
   imageCropPatch,
   intersectFrame,
+  resetImageCrop,
+  setImageRadius,
   cropTarget,
   sameWindow,
   windowToCrop,
@@ -132,6 +137,7 @@ import { isTextField, readFromMain } from "@renderer/features/editor/use-paste-t
 import { useFlag } from "@renderer/features/analytics/use-flag";
 import {
   redactionRectsInPixels,
+  selectableWords,
   useRecognizedText,
   distinctLineCount,
   TextNotice,
@@ -431,6 +437,28 @@ function ScreenshotEditorBody({
     },
     [setCropSession],
   );
+  // The image actions (NIW2-876), shared by the floating bar and the Tool tab. Both write
+  // through the scene, so each is one undo step.
+  // In crop mode, Reset also puts the window back to the whole asset. The crop that was already
+  // committed goes in the same single commit as outside crop mode; a window only dragged has
+  // nothing committed, so nothing is written for it.
+  const onResetCrop = useCallback(
+    (id: string): void => {
+      const s = cropSessionRef.current;
+      if (s && s.id !== id) return;
+      const sc = sceneLatest.current;
+      resetImageCrop(
+        sc,
+        { baseCrop: sc.baseCrop, baseRadius: sc.baseRadius, basePlacement: sc.basePlacement },
+        id,
+      );
+      if (s) setCropSession({ ...s, win: s.full, start: s.full });
+    },
+    [setCropSession],
+  );
+  const onImageRadius = useCallback((id: string, radius: number | undefined): void => {
+    setImageRadius(sceneLatest.current, id, radius);
+  }, []);
   // The base mid-resize, from the layer: the frame and the page lay out from it while it drags.
   const [liveBase, setLiveBase] = useState<BaseFields | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -475,7 +503,19 @@ function ScreenshotEditorBody({
     },
   });
   // The colors panel (NIW2-704) counts Inspect's decoded pixels in a worker.
-  const colors = useColors({ active: inspect.active, buffer: inspect.buffer });
+  // Only the pixels the base shows count: a cropped base's hidden part is not in the colors.
+  const colorsWindow = useMemo(
+    () =>
+      inspect.buffer && scene.baseCrop
+        ? visiblePixelWindow(inspect.buffer, scene.baseCrop)
+        : undefined,
+    [inspect.buffer, scene.baseCrop],
+  );
+  const colors = useColors({
+    active: inspect.active,
+    buffer: inspect.buffer,
+    window: colorsWindow,
+  });
   const [zoom, setZoom] = useState(1);
   // Text recognition (NIW2-705, behind `image-text`). Latched at mount like `canvasMode`:
   // a shot never gains or loses the tool halfway through an edit.
@@ -550,13 +590,23 @@ function ScreenshotEditorBody({
     h: imgRef.current?.naturalHeight || doc?.pixelHeight || source.height || 0,
   });
   const [natural, setNatural] = useState<PixelSize | null>(null);
-  // The words a person can select: those no redaction of this session (saved or not) covers.
+  // The words a person can select: those no redaction of this session (saved or not) covers
+  // and that lie inside the part of the base that shows (a cropped-out word is never offered).
   const visibleWords = useMemo(() => {
     if (recognized.status !== "ready" || !natural || natural.w <= 0 || natural.h <= 0) return [];
-    return wordsOutsideRects(
+    return selectableWords(
       recognized.words,
-      redactionRectsInPixels(scene.annotations, natural, scene.basePlacement),
+      scene.annotations,
+      natural,
+      scene.basePlacement,
+      scene.baseCrop,
     );
+  }, [recognized, natural, scene.annotations, scene.basePlacement, scene.baseCrop]);
+  // The same words with the crop ignored: a redaction's margin must still stop at a word the
+  // crop hides, because the baked asset keeps that word's pixels.
+  const marginWords = useMemo(() => {
+    if (recognized.status !== "ready" || !natural || natural.w <= 0 || natural.h <= 0) return [];
+    return selectableWords(recognized.words, scene.annotations, natural, scene.basePlacement);
   }, [recognized, natural, scene.annotations, scene.basePlacement]);
   const textSelection = useTextSelection(visibleWords);
   const textActive = textEnabled && tools.tool === "selectText";
@@ -594,7 +644,9 @@ function ScreenshotEditorBody({
       textEnabled && natural && natural.w > 0 && natural.h > 0
         ? {
             words: textSelection.ordered,
+            marginWords,
             natural,
+            basePlacement: scene.basePlacement,
             selected: textSelection.selectedSet,
             select: textSelection.select,
             clear: textSelection.clear,
@@ -603,6 +655,8 @@ function ScreenshotEditorBody({
     [
       textEnabled,
       natural,
+      scene.basePlacement,
+      marginWords,
       textSelection.ordered,
       textSelection.selectedSet,
       textSelection.select,
@@ -817,6 +871,7 @@ function ScreenshotEditorBody({
       m.naturalW / m.w,
       undefined,
       visibleBaseBounds(geomBaseRef.current, m.naturalW, m.naturalH),
+      geomBaseRef.current.basePlacement,
     );
     setLiveExtents((prev) =>
       prev &&
@@ -840,6 +895,7 @@ function ScreenshotEditorBody({
         metrics.naturalW / metrics.w,
         undefined,
         visibleBaseBounds(geomBase, metrics.naturalW, metrics.naturalH),
+        geomBase.basePlacement,
       )
     );
   }, [canvasMode, metrics, geomAnnotations, liveExtents, geomBase]);
@@ -1028,12 +1084,17 @@ function ScreenshotEditorBody({
   // what Copy and Save use, PDF what Export writes. Only ever invoked once
   // `imageReady` is true (see the guards below), which itself can only happen once
   // `image` has resolved, so the non-null assert is safe.
-  const exportInput = async (snap: Scene): Promise<ExportInput> => ({
-    scene: snap,
-    bytes: await image!.getBytes(),
-    displayedW: imgRef.current?.clientWidth ?? 0,
-    ...(canvasMode ? { canvas: true, assets: assetsRef.current } : {}),
-  });
+  const exportInput = async (snap: Scene): Promise<ExportInput> => {
+    // Read with the snapshot, before the await: a padding change during the byte read
+    // resizes the displayed image and would pair the old scene with the new width.
+    const displayedW = imgRef.current?.clientWidth ?? 0;
+    return {
+      scene: snap,
+      bytes: await image!.getBytes(),
+      displayedW,
+      ...(canvasMode ? { canvas: true, assets: assetsRef.current } : {}),
+    };
+  };
   const exportAs = async (format: ExportFormat, snap: Scene): Promise<ArrayBuffer> =>
     exportScene(format, await exportInput(snap));
 
@@ -1127,6 +1188,7 @@ function ScreenshotEditorBody({
       scale,
       undefined,
       visible,
+      placedBase.basePlacement,
     );
     const assetId = newImageAssetId();
     assetsRef.current = { ...assetsRef.current, [assetId]: png };
@@ -1771,14 +1833,50 @@ function ScreenshotEditorBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectActive]);
   // A selected annotation has options (colour, size, delete): show them where they live now.
-  // The base is selectable (its handles resize it) but has no tool options to show.
-  const selectedToolId = inspectActive || selectedId === BASE_IMAGE_ID ? null : selectedId;
+  // The base too: it has Crop, Corners and Reset (NIW2-876).
+  const selectedToolId = inspectActive ? null : selectedId;
   useEffect(() => {
     if (selectedToolId !== null) setTab("tool");
   }, [selectedToolId]);
   const beautifyPanel = (
     <BeautifyPanel beautify={scene.beautify} canvasMode={canvasMode} embedded />
   );
+  // The Tool tab's Crop / Corners / Reset: with the Select tool and an image selected, outside
+  // Inspect (it reads the image). Crop mode keeps them, Crop shown pressed, next to its own Done.
+  const selectedImageState =
+    canvasMode &&
+    tools.tool === "select" &&
+    !(inspectEnabled && inspect.active) &&
+    metrics &&
+    metrics.naturalW > 0 &&
+    metrics.naturalH > 0
+      ? imageActionState(
+          scene.selectedId,
+          scene.annotations,
+          {
+            baseCrop: scene.baseCrop,
+            baseRadius: scene.baseRadius,
+            basePlacement: scene.basePlacement,
+          },
+          { w: metrics.naturalW, h: metrics.naturalH },
+        )
+      : null;
+  // Reset in crop mode: a crop to remove is a window dragged in, or one the image already
+  // carries (read from the scene: the layer's base drops its crop while it is being cropped).
+  const cropCanReset =
+    cropSession !== null &&
+    (!sameWindow(cropSession.win, cropSession.full) ||
+      (metrics !== null &&
+        imageActionState(
+          cropSession.id,
+          scene.annotations,
+          {
+            baseCrop: scene.baseCrop,
+            baseRadius: scene.baseRadius,
+            basePlacement: scene.basePlacement,
+          },
+          { w: metrics.naturalW, h: metrics.naturalH },
+        )?.hasCrop === true));
   const toolPanel = (
     <ToolPanel
       tools={tools}
@@ -1787,6 +1885,32 @@ function ScreenshotEditorBody({
       {...(textTool ? { textTool } : {})}
       inspect={inspectEnabled && inspect.active ? inspect : null}
       colors={colors}
+      {...(selectedImageState && metrics
+        ? {
+            imageActions: {
+              imageId: selectedImageState.id,
+              hasCrop:
+                cropSession?.id === selectedImageState.id
+                  ? cropCanReset
+                  : selectedImageState.hasCrop,
+              cropping: cropSession?.id === selectedImageState.id,
+              ...(selectedImageState.radius !== undefined
+                ? { radius: selectedImageState.radius }
+                : {}),
+              followRadius: followRadiusSource(
+                scene.beautify.state.radius,
+                metrics.naturalW,
+                metrics.w,
+              ),
+              maxRadius: selectedImageState.maxRadius,
+              onCrop: () => onEnterCrop(selectedImageState.id),
+              // Move leaves crop mode exactly like Done: the window is committed in one step.
+              onMove: finishCrop,
+              onResetCrop: () => onResetCrop(selectedImageState.id),
+              onRadius: (r: number | undefined) => onImageRadius(selectedImageState.id, r),
+            },
+          }
+        : {})}
       {...(canvasMode
         ? {
             exportFrame: {
@@ -1877,6 +2001,8 @@ function ScreenshotEditorBody({
     const onDown = (e: PointerEvent): void => {
       const canvasEl = canvasRef.current;
       if (canvasEl && e.target instanceof Node && canvasEl.contains(e.target)) return;
+      // The Tool tab's image actions (Crop, Corners, Reset) stay usable inside the session.
+      if (e.target instanceof Element && e.target.closest("[data-keeps-crop-mode]")) return;
       finishCrop();
     };
     window.addEventListener("keydown", onKey, true);
@@ -2128,6 +2254,9 @@ function ScreenshotEditorBody({
                           cropping: cropSession,
                           onCropWindow,
                           onCropDone: finishCrop,
+                          canResetCrop: cropCanReset,
+                          onResetCrop,
+                          onImageRadius,
                           onLiveBase: setLiveBase,
                           // Inspect reads the image, it does not edit it: no crop mode there.
                           ...(inspectEnabled && inspect.active ? {} : { onEnterCrop }),
@@ -2143,7 +2272,20 @@ function ScreenshotEditorBody({
                     loaded={image != null}
                     status={recognized.status}
                   />
-                  {inspectEnabled && <LocateOverlay image={colors.overlay} label={locateLabel} />}
+                  {inspectEnabled && (
+                    <LocateOverlay
+                      image={colors.overlay}
+                      label={locateLabel}
+                      {...(baseFrame
+                        ? {
+                            base: {
+                              visible: baseFrame.visible,
+                              ...(baseFrame.crop ? { crop: baseFrame.crop } : {}),
+                            },
+                          }
+                        : {})}
+                    />
+                  )}
                 </>
               }
               frameOverlay={

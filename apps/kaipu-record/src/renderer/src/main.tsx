@@ -6,7 +6,7 @@ import App from "./app/app";
 import { CapturePanel } from "./features/capture-panel/capture-panel";
 import { ControlBarWindowRoot } from "./features/control-bar/control-bar-window";
 import { CameraBubble } from "./features/camera-bubble/camera-bubble";
-import { CaptureOverlay } from "./features/screenshots/overlay/capture-overlay";
+import { CaptureOverlayHost } from "./features/screenshots/overlay/capture-overlay-host";
 import { parseOverlayQuery } from "./features/screenshots/overlay/overlay-query";
 import { CaptureToast } from "./features/screenshots/toast/capture-toast";
 import { RecordingReadyCard } from "./features/recording-ready/recording-ready-card";
@@ -42,7 +42,7 @@ const WINDOW_TARGETS: Record<WindowKind, () => React.JSX.Element> = {
   // also what makes Windows deliver the clicks to it. No router, no app shell.
   "capture-overlay": () => {
     const overlayQuery = parseOverlayQuery(window.location.search);
-    if (overlayQuery) return <CaptureOverlay query={overlayQuery} />;
+    if (overlayQuery) return <CaptureOverlayHost query={overlayQuery} />;
     // Nothing to draw: cancel at once rather than leave a screen-covering window.
     window.electronAPI.captureOverlay.answer({ kind: "cancelled" });
     return <></>;

@@ -8,6 +8,7 @@ import {
   loupePixels,
   readProbe,
   sampleAt,
+  visiblePixelWindow,
   type PixelBuffer,
   type ProbeTile,
 } from "./pixel-buffer";
@@ -183,5 +184,91 @@ describe("the base's view in Inspect", () => {
     // The window is the lower-right quarter of the 200 px asset: client 100..200.
     expect(clientToBasePixel(50, 150, anchor, buf, view)).toBeNull();
     expect(clientToBasePixel(150, 150, anchor, buf, view)).toEqual({ x: 300, y: 300 });
+  });
+});
+
+describe("the visible pixel window of a cropped base (NIW2-876, AC2)", () => {
+  /** 10x4 image: pixel (x, y) is opaque with r = x, g = y. */
+  function wide(): PixelBuffer {
+    const width = 10;
+    const height = 4;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) data.set([x, y, 0, 255], (y * width + x) * 4);
+    }
+    return { width, height, data };
+  }
+
+  it("is the crop window in whole asset pixels, and the whole image without a crop", () => {
+    const buf = wide();
+    expect(visiblePixelWindow(buf, { x: 0.2, y: 0.25, w: 0.5, h: 0.5 })).toEqual({
+      x0: 2,
+      y0: 1,
+      x1: 7,
+      y1: 3,
+    });
+    expect(visiblePixelWindow(buf)).toEqual({ x0: 0, y0: 0, x1: 10, y1: 4 });
+  });
+
+  it("does not move an edge that float noise puts a hair past a pixel boundary", () => {
+    // 0.1 * 30 is 3.0000000000000004: the window must still start at pixel 3, not 4.
+    const buf = { width: 30, height: 1, data: new Uint8ClampedArray(120) };
+    expect(visiblePixelWindow(buf, { x: 0.1, y: 0, w: 0.5, h: 1 })).toMatchObject({
+      x0: 3,
+      x1: 18,
+    });
+  });
+
+  it("a partly visible pixel counts at both edges, so a pointer on its sliver reads it", () => {
+    // 10 px wide, crop 2.4 .. 7.4: pixel 2 shows 60% and pixel 7 shows 40%.
+    const buf = wide();
+    const crop = { x: 0.24, y: 0, w: 0.5, h: 1 };
+    expect(visiblePixelWindow(buf, crop)).toMatchObject({ x0: 2, x1: 8 });
+    const anchor = { left: 0, top: 0, width: 100, height: 40 };
+    // Display x 26 is on the visible sliver of pixel 2 (it starts at 24).
+    expect(clientToBasePixel(26, 5, anchor, buf, { baseCrop: crop })).toEqual({ x: 2, y: 0 });
+    expect(clientToBasePixel(15, 5, anchor, buf, { baseCrop: crop })).toBeNull();
+  });
+
+  it("sampleAt reads nothing outside the window", () => {
+    const buf = wide();
+    const win = visiblePixelWindow(buf, { x: 0.2, y: 0, w: 0.5, h: 1 });
+    expect(sampleAt(buf, 2, 0, win)).toEqual({ r: 2, g: 0, b: 0, a: 255 });
+    expect(sampleAt(buf, 1, 0, win)).toBeNull();
+    expect(sampleAt(buf, 7, 0, win)).toBeNull();
+  });
+
+  it("the loupe leaves cropped-out pixels transparent", () => {
+    const buf = wide();
+    const win = visiblePixelWindow(buf, { x: 0.2, y: 0, w: 0.5, h: 1 }); // pixels 2..6
+    // Radius 1 around (2, 1): the column x = 1 is cropped out, x = 2 and 3 show.
+    const out = loupePixels(buf, 2, 1, 1, win);
+    const at = (col: number, row: number): number[] =>
+      Array.from(out.slice((row * 3 + col) * 4, (row * 3 + col) * 4 + 4));
+    expect(at(0, 1)).toEqual([0, 0, 0, 0]);
+    expect(at(1, 1)).toEqual([2, 1, 0, 255]);
+    expect(at(2, 1)).toEqual([3, 1, 0, 255]);
+  });
+
+  it("clientToBasePixel and the window agree on which pixels show", () => {
+    const buf = wide();
+    const crop = { x: 0.2, y: 0, w: 0.5, h: 1 };
+    const win = visiblePixelWindow(buf, crop);
+    const anchor = { left: 0, top: 0, width: 100, height: 40 };
+    for (let x = 0; x < 10; x++) {
+      const hit = clientToBasePixel(x * 10 + 5, 5, anchor, buf, { baseCrop: crop });
+      expect(hit !== null).toBe(x >= win.x0 && x < win.x1);
+    }
+  });
+
+  it("clientToBasePixel pins the crop edges with hard-coded hits and misses", () => {
+    const buf = wide(); // 10 px wide, 4 px tall, 10 client px per source pixel
+    const anchor = { left: 0, top: 0, width: 100, height: 40 };
+    const crop = { x: 0.2, y: 0, w: 0.5, h: 1 }; // pixels 2..6 show
+    const at = (clientX: number) => clientToBasePixel(clientX, 5, anchor, buf, { baseCrop: crop });
+    expect(at(19)).toBeNull(); // last pixel before the window (x = 1)
+    expect(at(20)).toEqual({ x: 2, y: 0 }); // first visible pixel
+    expect(at(69)).toEqual({ x: 6, y: 0 }); // last visible pixel
+    expect(at(70)).toBeNull(); // first pixel after the window (x = 7)
   });
 });

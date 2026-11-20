@@ -13,11 +13,12 @@ import {
   type ProviderResult,
   type ScreenshotCaptureProvider,
 } from "./screenshot-capture";
+import { deferToastUntilAfterCapture } from "./toast-after-capture";
 
 const overlay: OverlayPort = {
   pick: async () => ({ kind: "cancelled" }),
   hideAll: async () => {},
-  destroyAll: () => {},
+  endPick: () => {},
 };
 
 // Copying manual by default, so a Capture touches the clipboard only when a test asks.
@@ -359,6 +360,347 @@ describe("createCaptureHandler", () => {
     expect(capture).toHaveBeenCalledTimes(2);
   });
 
+  describe("a press while the previous shot is still being saved (NIW2-878)", () => {
+    const shot: ProviderResult = {
+      kind: "captured",
+      png: Buffer.from([1]),
+      mode: "frame",
+      action: "capture",
+    };
+    const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    /** A handler whose first shot saves slowly; the second pick records what it does and when. */
+    function slowFirstSave() {
+      const log: string[] = [];
+      let releaseSave!: () => void;
+      let secondAnswer!: (result: ProviderResult) => void;
+      // The second pick's user taking their time before confirming (the grab).
+      let confirm!: () => void;
+      const confirmed = new Promise<void>((resolve) => (confirm = resolve));
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          // The pick ended (the real provider's `endPick`) before the shot was saved.
+          await port.hideAll();
+          return shot;
+        })
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          log.push("second pick opened");
+          await confirmed;
+          await port.hideAll();
+          log.push("second shot grabbed");
+          return new Promise<ProviderResult>((resolve) => (secondAnswer = resolve));
+        });
+      const harness = setup(capture);
+      harness.saveToVault.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseSave = () => resolve({ id: "screenshot-1", assetId: "asset-1" });
+          }),
+      );
+      harness.windows.beforeCapture.mockImplementation(() => void log.push("before"));
+      harness.windows.afterCapture.mockImplementation((ending) => void log.push(`after ${ending}`));
+      return {
+        ...harness,
+        capture,
+        log,
+        confirm: () => confirm(),
+        release: () => releaseSave(),
+        answer: () => secondAnswer,
+      };
+    }
+
+    it("opens the next pick at once instead of answering it cancelled", async () => {
+      const { handler, capture, saveToVault } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+
+      const second = handler({ mode: "frame" });
+      await tick();
+
+      expect(capture).toHaveBeenCalledTimes(2);
+      const settled = await Promise.race([
+        second.then(() => "answered"),
+        tick().then(() => "open"),
+      ]);
+      expect(settled).toBe("open");
+      void first;
+    });
+
+    it("keeps the previous capture's window hooks and save ahead of the new pick's", async () => {
+      const { handler, saveToVault, log, release, confirm, answer } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+
+      const second = handler({ mode: "frame" });
+      await tick();
+      // Open, but its windows are not hidden and nothing is grabbed until the first has finished.
+      expect(log).toEqual(["before", "second pick opened"]);
+
+      release();
+      expect((await first).kind).toBe("captured");
+      confirm();
+      await vi.waitFor(() => expect(answer()).toBeDefined());
+      answer()({ kind: "cancelled" });
+      await second;
+
+      expect(log).toEqual([
+        "before",
+        "second pick opened",
+        "after handedOver",
+        "before",
+        "second shot grabbed",
+        // The pick took nothing, so it ends the way the first capture did (quiet).
+        "after quiet",
+      ]);
+    });
+
+    it("does not restore the windows, the take's Esc or `capturing` while the new pick is open, and restores once when it is confirmed", async () => {
+      const { handler, saveToVault, log, release, confirm, answer } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+
+      release();
+      await first;
+      await tick();
+      // Pick 2 is open: nothing that puts the app back over its overlay has run.
+      expect(log.filter((entry) => /^after (?!handedOver)/.test(entry))).toEqual([]);
+
+      confirm();
+      await vi.waitFor(() => expect(answer()).toBeDefined());
+      answer()({ kind: "captured", png: Buffer.from([2]), mode: "frame", action: "capture" });
+      await second;
+
+      expect(log.filter((entry) => /^after (?!handedOver)/.test(entry))).toEqual(["after quiet"]);
+    });
+
+    it("leaves the previous capture's toast up while the new pick is open, and hides it only when the new shot is about to be taken", async () => {
+      const { handler, saveToVault, log, release, confirm, answer } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+
+      release();
+      await first;
+      await tick();
+      // The first capture's `afterCapture` showed its toast; the second's `beforeCapture`
+      // (which dismisses it) has not run in the same turn.
+      expect(log).toEqual(["before", "second pick opened", "after handedOver"]);
+
+      confirm();
+      await vi.waitFor(() => expect(answer()).toBeDefined());
+      expect(log.slice(3)).toEqual(["before", "second shot grabbed"]);
+      answer()({ kind: "cancelled" });
+      await second;
+    });
+
+    it("puts each capture's toast on the display its own pick answered on, even when the next pick answers first", async () => {
+      // The real toast seam on the real handler: pick 2 answers while shot 1 is still saving,
+      // so the toast of shot 1 is shown after pick 2's answer, and shot 2's own
+      // `beforeCapture` runs after its pick.
+      const showToast = vi.fn();
+      const seam = deferToastUntilAfterCapture(
+        { beforeCapture: () => {}, afterCapture: () => {}, reveal: () => {} },
+        showToast,
+        () => 7,
+      );
+      const answers = [3, 5].map(
+        (displayId) =>
+          ({
+            kind: "display",
+            mode: "screen",
+            action: "capture",
+            displayId,
+          }) as const,
+      );
+      let releaseSave!: () => void;
+      let confirm!: () => void;
+      const confirmed = new Promise<void>((resolve) => (confirm = resolve));
+      let next = 0;
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.pick("screen", []);
+          await port.hideAll();
+          return shot;
+        })
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.pick("screen", []);
+          await confirmed;
+          await port.hideAll();
+          return shot;
+        });
+      const saveToVault = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => (releaseSave = () => resolve({ id: "s1", assetId: "a1" }))),
+        )
+        .mockResolvedValue({ id: "s2", assetId: "a2" });
+      const handler = createCaptureHandler({
+        platform: "darwin",
+        provider: { capture, supports: () => true, supportedModes: () => [] },
+        overlay: {
+          pick: async () => answers[next++]!,
+          hideAll: async () => {},
+          endPick: () => {},
+        },
+        windows: seam.windows,
+        measure: () => ({ width: 3, height: 2 }),
+        displayCount: () => 2,
+        track: () => {},
+        rememberMode: () => {},
+        settings: () => prefs,
+        saveToVault,
+        copyToClipboard: () => {},
+        thumbnail: () => "data:image/png;base64,thumb",
+        onQuietCapture: seam.onQuietCapture,
+      });
+
+      const first = handler({ mode: "screen" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "screen" });
+      await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2));
+      await tick(); // pick 2 has answered
+      releaseSave();
+      await first;
+      expect(showToast).toHaveBeenCalledOnce();
+      expect(showToast.mock.calls[0]![0]).toMatchObject({ displayId: 3 });
+
+      confirm();
+      await second;
+      expect(showToast).toHaveBeenCalledTimes(2);
+      expect(showToast.mock.calls[1]![0]).toMatchObject({ displayId: 5 });
+    });
+
+    it("a cancelled new pick runs the restore the previous capture owes with that capture's own ending, once", async () => {
+      const log: string[] = [];
+      let releaseSave!: () => void;
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return shot;
+        })
+        .mockImplementationOnce(async () => ({ kind: "cancelled" }));
+      const { handler, windows, saveToVault } = setup(capture);
+      saveToVault.mockImplementationOnce(
+        () => new Promise((resolve) => (releaseSave = () => resolve({ id: "s", assetId: "a" }))),
+      );
+      windows.beforeCapture.mockImplementation(() => void log.push("before"));
+      windows.afterCapture.mockImplementation((ending) => void log.push(`after ${ending}`));
+
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+      releaseSave();
+      await first;
+      expect(await second).toEqual({ kind: "cancelled" });
+
+      // The first capture hands the restore over, and with it that it ended quiet (the main
+      // window stays hidden). The cancelled second one runs it once; it must not turn that
+      // quiet ending into a cancel, which would bring the main window back.
+      expect(log).toEqual(["before", "after handedOver", "after quiet"]);
+    });
+
+    it("hands the owed ending on through a chain of picks that took nothing", async () => {
+      const log: string[] = [];
+      const releases: Array<() => void> = [];
+      const answers: Array<(result: ProviderResult) => void> = [];
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return shot;
+        })
+        // The second pick is cancelled while its own (empty) finish is still pending.
+        .mockImplementationOnce(
+          () => new Promise<ProviderResult>((resolve) => answers.push(resolve)),
+        )
+        .mockImplementationOnce(
+          () => new Promise<ProviderResult>((resolve) => answers.push(resolve)),
+        );
+      const { handler, windows, saveToVault } = setup(capture);
+      saveToVault.mockImplementationOnce(
+        () => new Promise((resolve) => releases.push(() => resolve({ id: "s", assetId: "a" }))),
+      );
+      windows.beforeCapture.mockImplementation(() => void log.push("before"));
+      windows.afterCapture.mockImplementation((ending) => void log.push(`after ${ending}`));
+
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(answers).toHaveLength(1));
+      // Pick 2 is cancelled while capture 1 still saves, then pick 3 opens behind them.
+      answers[0]!({ kind: "cancelled" });
+      await tick();
+      const third = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(answers).toHaveLength(2));
+      releases[0]!();
+      await first;
+      await second;
+      // Capture 3 took nothing either: it ends the way capture 1 did, not as a cancel.
+      answers[1]!({ kind: "cancelled" });
+      await third;
+
+      expect(log).toEqual(["before", "after handedOver", "after handedOver", "after quiet"]);
+    });
+
+    it("clears the previous capture's kept bytes after it has kept them, not before", async () => {
+      prefs = { copy: "auto", afterCapture: "preview" };
+      let secondDone!: () => void;
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return { ...shot, png: Buffer.from([9, 8, 7]) };
+        })
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return new Promise<ProviderResult>((resolve) => (secondDone = () => resolve(shot)));
+        });
+      const { handler, saveToVault } = setup(capture);
+      // The first save fails: the copy is all it has, so its bytes are kept for the toast's Save.
+      let failSave!: () => void;
+      saveToVault.mockImplementationOnce(
+        () => new Promise((_resolve, reject) => (failSave = () => reject(new Error("disk full")))),
+      );
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+      failSave();
+      await first;
+      await vi.waitFor(() => expect(secondDone).toBeDefined());
+      secondDone();
+      await second;
+
+      // The second shot was saved, so nothing of the first one is left to retry.
+      expect(takeLastQuietCapture()).toBeNull();
+    });
+
+    it("still turns a press away while a pick is open, also after the previous shot finished saving", async () => {
+      const { handler, capture, release, saveToVault } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      void handler({ mode: "frame" });
+      await tick();
+
+      expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
+      release();
+      await first;
+      // The first capture ended while the second pick is still open: its guard stays.
+      expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
+      expect(capture).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("releases the guard and restores the window when hiding the windows throws", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const capture = vi.fn().mockResolvedValue({ kind: "cancelled" });
@@ -435,6 +777,7 @@ describe("createCaptureHandler", () => {
           saved: { id: "screenshot-1", assetId: "asset-1" },
           copied: false,
         }),
+        null,
       );
       // Saved, so the card opens the vault item: no bytes are kept.
       expect(takeLastQuietCapture()).toBeNull();
@@ -455,6 +798,7 @@ describe("createCaptureHandler", () => {
       expect(await handler({ mode: "frame" })).toMatchObject({ after: "quiet", copied: true });
       expect(onQuietCapture).toHaveBeenCalledWith(
         expect.objectContaining({ presentation: "copied" }),
+        null,
       );
     });
 
@@ -499,6 +843,7 @@ describe("createCaptureHandler", () => {
       expect(windows.afterCapture).toHaveBeenCalledWith("quiet");
       expect(onQuietCapture).toHaveBeenCalledWith(
         expect.objectContaining({ saved: null, copied: true }),
+        null,
       );
       expect(takeLastQuietCapture()?.png).toEqual(Buffer.from([9, 8, 7]));
     });
@@ -542,17 +887,20 @@ describe("createCaptureHandler", () => {
     it("hands the toast hook an image confirmation per successful Copy", async () => {
       const { handler, onQuietCapture } = setup(shot("copy"));
       await handler({ mode: "frame" });
-      expect(onQuietCapture).toHaveBeenCalledExactlyOnceWith({
-        presentation: "copied",
-        thumbnail: "data:image/png;base64,thumb",
-        width: 3,
-        height: 2,
-        mode: "frame",
-        saved: { id: "screenshot-1", assetId: "asset-1" },
-        copied: true,
-        workspace: { id: "ws-work", name: "Work" },
-        policy: { workspaceId: "ws-work", screenshotCopy: "manual" },
-      });
+      expect(onQuietCapture).toHaveBeenCalledExactlyOnceWith(
+        {
+          presentation: "copied",
+          thumbnail: "data:image/png;base64,thumb",
+          width: 3,
+          height: 2,
+          mode: "frame",
+          saved: { id: "screenshot-1", assetId: "asset-1" },
+          copied: true,
+          workspace: { id: "ws-work", name: "Work" },
+          policy: { workspaceId: "ws-work", screenshotCopy: "manual" },
+        },
+        null,
+      );
     });
 
     it("binds the capture to the workspace active when it started (the save, the bytes, the toast)", async () => {
@@ -564,6 +912,7 @@ describe("createCaptureHandler", () => {
       expect(saveToVault.mock.calls[0]![2]).toBe("ws-work");
       expect(onQuietCapture).toHaveBeenCalledWith(
         expect.objectContaining({ workspace: { id: "ws-work", name: "Work" } }),
+        null,
       );
       expect(takeLastQuietCapture()?.workspaceId).toBe("ws-work");
     });
@@ -622,6 +971,7 @@ describe("createCaptureHandler", () => {
             workspace: { id: "ws-work", name: "Work" },
             policy: { workspaceId: "ws-work", screenshotCopy: "auto" },
           }),
+          null,
         );
         expect(out).toMatchObject({
           policy: { workspaceId: "ws-work", screenshotCopy: "auto" },
@@ -677,7 +1027,7 @@ describe("createCaptureHandler", () => {
       saveToVault.mockRejectedValueOnce(new Error("disk full"));
       const out = await handler({ mode: "window" });
       expect(out).toMatchObject({ after: "quiet", saved: null, copied: true });
-      expect(onQuietCapture).toHaveBeenCalledWith(expect.objectContaining({ saved: null }));
+      expect(onQuietCapture).toHaveBeenCalledWith(expect.objectContaining({ saved: null }), null);
       // Copied but not saved is not a "Copied" confirmation: the card must keep Save.
       expect(onQuietCapture.mock.calls[0]?.[0]).not.toHaveProperty("presentation");
       expect(takeLastQuietCapture()).toEqual({
@@ -758,6 +1108,7 @@ describe("createCaptureHandler — a screenshot during a take (NIW2-688)", () =>
         presentation: "taken",
         saved: { id: "screenshot-1", assetId: "asset-1" },
       }),
+      2,
     );
     expect(windows.afterCapture).toHaveBeenCalledWith("quiet");
   });
@@ -800,6 +1151,7 @@ describe("createCaptureHandler — a screenshot during a take (NIW2-688)", () =>
     expect(answer).toMatchObject({ kind: "captured", after: "quiet", saved: null });
     expect(onQuietCapture).toHaveBeenCalledWith(
       expect.objectContaining({ presentation: "taken", saved: null }),
+      2,
     );
     expect(takeLastQuietCapture()).not.toBeNull();
   });

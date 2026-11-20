@@ -209,8 +209,8 @@ function wholeDisplay(display: Display): CaptureTarget {
 }
 
 /**
- * The sequence both backends share: choose → hide every overlay → settle → capture → destroy.
- * `destroyAll` runs on every path out (cancel, throw, success): the overlay session lasts
+ * The sequence both backends share: choose → hide every overlay → settle → capture → end the pick.
+ * `endPick` runs on every path out (cancel, throw, success): the overlay session lasts
  * until then, and a skipped call makes every later pick answer "cancelled".
  */
 export async function runWithOverlay(
@@ -249,7 +249,7 @@ export async function runWithOverlay(
     }
     return await capture(target);
   } finally {
-    overlay.destroyAll();
+    overlay.endPick();
   }
 }
 

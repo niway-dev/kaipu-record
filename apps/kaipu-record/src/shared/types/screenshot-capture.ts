@@ -226,6 +226,28 @@ export type OverlayAnswer =
   | { kind: "cancelled" };
 
 /**
+ * What an overlay sends main: its answer, tagged with the `OverlayState.session` it was
+ * showing, so main drops an answer that belongs to an earlier pick of a reused window.
+ */
+export type TaggedOverlayAnswer = OverlayAnswer & { session?: number };
+
+/**
+ * Overlay → main: the Frame box settled on `rect` (display-relative DIP) on `displayId`; a
+ * recording box also names the ratio it is locked to. Tagged with the session like an answer.
+ */
+export interface FrameReport {
+  displayId: number;
+  rect: CaptureRect;
+  ratio?: RecordingRatio;
+  session?: number;
+  /**
+   * Sent right before the overlay's own settings write for a confirmed frame: if Esc lands in
+   * main during that write, the close saves nothing more (one write for one close).
+   */
+  confirming?: true;
+}
+
+/**
  * Main → every overlay. `mode`: the mode every overlay renders right now. `hoverDisplayId`:
  * the display the pointer is over, so only that one highlights (Screen). `frameDisplayId`:
  * the one display that shows the Frame box; `null` in every other mode. `windows`: `null`
@@ -234,6 +256,12 @@ export type OverlayAnswer =
  * highlight the window under a pointer that has not moved over it yet.
  */
 export interface OverlayState {
+  /**
+   * The pick this state belongs to. A window is reused by many picks, so the renderer
+   * remounts on a new id (nothing of the last pick survives) and tags its answer with it.
+   * Absent from older senders.
+   */
+  session?: number;
   mode: CaptureMode;
   /**
    * Capture or record, as switched by any overlay (P / V or the switch). Main broadcasts it

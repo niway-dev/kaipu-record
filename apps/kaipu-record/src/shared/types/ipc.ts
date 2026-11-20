@@ -257,6 +257,12 @@ export interface AppSettings {
    */
   recordingArea: Record<string, RememberedArea>;
   /**
+   * The display the capture frame was last used on, apart for a screenshot (`capture`) and a
+   * recording (`record`), so each opens where it was left (NIW2-878). Absent until used; a
+   * display that is no longer connected falls back to the pointer's, then the primary.
+   */
+  lastFrameDisplay: { capture?: number; record?: number };
+  /**
    * The mode "Start recording" opens the selector in (design "Kaipu Record Modes"): the
    * last one the user recorded with or picked on the Record page or the tray. `window`
    * opens the thumbnail picker while Window mode is off in the overlay (NIW2-469).
@@ -333,6 +339,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  lastFrameDisplay: {},
   recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,
@@ -560,6 +567,9 @@ export const IPC_CHANNELS = {
   screenshotOverlayOpenRecordSettings: "screenshot:overlay-open-record-settings",
   // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
   screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
+  // Overlay → main (Frame): the box settled, `{ displayId, rect, ratio?, session? }`. Kept in
+  // memory and saved once when the pick closes (NIW2-878); never sent while a drag is going.
+  screenshotOverlayFrame: "screenshot:overlay-frame",
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
   // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
   screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",
@@ -567,6 +577,8 @@ export const IPC_CHANNELS = {
   // A spare learns its mode and intent only from state, and one sent before its listener
   // was attached (a spare still loading when its pick opened) is lost.
   screenshotOverlayStateRequest: "screenshot:overlay-state-request",
+  /** Main → a window kept for the next pick: forget the pick it showed and paint nothing. */
+  screenshotOverlayReset: "screenshot:overlay-reset",
   // Capture toast (main/screenshots/capture-toast-window.ts), shown after a quiet capture.
   // Main → toast: `CaptureToastPayload` to render; sent again with `saved` after Save.
   screenshotToastShow: "screenshot:toast-show",

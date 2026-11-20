@@ -127,6 +127,25 @@ describe("createCaptureWindowHooks", () => {
     expect(deps.restoreCameraBubble).toHaveBeenCalledOnce();
   });
 
+  it("a hand-over restores nothing and keeps `capturing`, and the next capture inherits what was hidden (NIW2-878)", () => {
+    const { hooks, deps, window, calls } = setup();
+    hooks.beforeCapture();
+    hooks.afterCapture("handedOver");
+    expect(hooks.isCapturing()).toBe(true);
+    expect(deps.resumeTakeEscape).not.toHaveBeenCalled();
+    expect(deps.restoreCameraBubble).not.toHaveBeenCalled();
+    expect(deps.showMainWindow).not.toHaveBeenCalled();
+
+    // The window is still hidden from the first capture: that is not "was hidden before".
+    hooks.beforeCapture();
+    hooks.afterCapture("cancelled");
+    expect(window.isVisible()).toBe(false);
+    expect(deps.showMainWindow).toHaveBeenCalledOnce();
+    expect(deps.restoreCameraBubble).toHaveBeenCalledOnce();
+    expect(hooks.isCapturing()).toBe(false);
+    expect(calls.filter((call) => call === "resume-esc")).toHaveLength(1);
+  });
+
   it("reveal brings the app to the front", () => {
     const { hooks, deps } = setup();
     hooks.reveal();

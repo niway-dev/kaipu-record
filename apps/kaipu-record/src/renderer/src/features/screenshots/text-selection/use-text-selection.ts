@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { textOfWords, wordsInReadingOrder, type RecognizedWord } from "@kaipu/domain/schemas";
+import type { BasePlacement } from "../annotations/scene";
 import { wordRange, type PixelSize } from "./geometry";
 
 /** What the annotation layer needs to draw and drive the "Select text" tool. */
 export interface TextLayerModel {
   /** The selectable words (redacted ones already removed), in reading order. */
   words: RecognizedWord[];
+  /**
+   * Every uncovered recognized word, cropped-out ones included: what a one-click redaction's
+   * margin must not reach. The save bakes the whole asset, so a word the crop hides still has
+   * its pixels. Absent = `words`.
+   */
+  marginWords?: RecognizedWord[];
   /** The base image's pixel size, the space the words' rects are in. */
   natural: PixelSize;
+  /**
+   * Where the whole base asset sits (a resized or moved base); absent = unmoved, natural size.
+   * The words' pixels map to the world through it.
+   */
+  basePlacement?: BasePlacement;
   /** The words currently selected. */
   selected: ReadonlySet<RecognizedWord>;
   /** Select the range from `anchor` to `focus` in reading order, both included. */
