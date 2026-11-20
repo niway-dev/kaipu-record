@@ -29,8 +29,11 @@ export interface TranscribeControlItem {
 
 export interface TranscribeControl {
   state: TranscribeControlState;
-  /** Starts a job when the control allows it; resolves `null` and does nothing otherwise. */
-  start(): Promise<StartOutcome | null>;
+  /**
+   * Starts a job when the control allows it; resolves `null` and does nothing otherwise.
+   * `automatic` marks a job the app starts by itself, so main can keep its loop guard.
+   */
+  start(options?: { automatic?: boolean }): Promise<StartOutcome | null>;
   cancel(): void;
   /**
    * The model status this control reads, with its download, cancel and refresh calls, so the
@@ -77,17 +80,21 @@ export function useTranscribeControl(item: TranscribeControlItem): TranscribeCon
   const latest = useRef({ state, item, modelId: status?.defaultModelId ?? null });
   latest.current = { state, item, modelId: status?.defaultModelId ?? null };
 
-  const start = useCallback(async (): Promise<StartOutcome | null> => {
-    const { state: current, item: target, modelId } = latest.current;
-    if (!STARTABLE.has(current.kind) || modelId === null || target.mediaUrl === null) return null;
-    return startTranscription({
-      itemId: target.id,
-      assetId: target.assetId,
-      modelId,
-      mediaUrl: target.mediaUrl,
-      durationMs: target.durationMs,
-    });
-  }, []);
+  const start = useCallback(
+    async (options?: { automatic?: boolean }): Promise<StartOutcome | null> => {
+      const { state: current, item: target, modelId } = latest.current;
+      if (!STARTABLE.has(current.kind) || modelId === null || target.mediaUrl === null) return null;
+      return startTranscription({
+        itemId: target.id,
+        assetId: target.assetId,
+        modelId,
+        mediaUrl: target.mediaUrl,
+        durationMs: target.durationMs,
+        ...(options?.automatic ? { automatic: true } : {}),
+      });
+    },
+    [],
+  );
 
   const cancel = useCallback((): void => {
     if (latest.current.state.kind === "running") cancelRunningTranscription();

@@ -96,10 +96,12 @@ export async function startTranscription(args: {
   modelId: string;
   mediaUrl: string;
   durationMs: number;
+  /** Set when the app started this job on its own (the stale auto re-transcribe). */
+  automatic?: boolean;
 }): Promise<StartOutcome> {
   if (snapshot.running) return { status: "refused", reason: "busy" };
 
-  const { itemId, assetId, modelId, mediaUrl, durationMs } = args;
+  const { itemId, assetId, modelId, mediaUrl, durationMs, automatic } = args;
   const own = new AbortController();
   controller = own;
   // Claimed before the first await, so two starts in the same tick cannot both pass the check.
@@ -130,6 +132,7 @@ export async function startTranscription(args: {
       modelId,
       mediaUrl,
       durationMs,
+      ...(automatic ? { automatic: true } : {}),
       signal: own.signal,
       onProgress: mirror,
     });

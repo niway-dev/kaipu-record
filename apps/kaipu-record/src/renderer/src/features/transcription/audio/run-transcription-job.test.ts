@@ -161,6 +161,18 @@ describe("runTranscriptionJob", () => {
     expect(seen.map((p) => p.phase)).toEqual(["done"]);
   });
 
+  it("marks the begin request automatic only when the caller says so", async () => {
+    stubDecoder(1);
+    await runTranscriptionJob({ ...request, automatic: true });
+    expect(harness.api.beginTranscription).toHaveBeenLastCalledWith({
+      id: "r1",
+      assetId: "asset-1",
+      modelId: "parakeet-v3",
+      durationMs: 12_000,
+      automatic: true,
+    });
+  });
+
   it("waits for each chunk to be taken before sending the next", async () => {
     stubDecoder(2);
     let release: () => void = () => {};

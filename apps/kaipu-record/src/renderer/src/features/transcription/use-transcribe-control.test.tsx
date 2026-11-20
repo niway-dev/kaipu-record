@@ -132,6 +132,32 @@ describe("useTranscribeControl", () => {
     await waitFor(() => expect(result.current.state.kind).toBe("model-downloading"));
   });
 
+  it("starts the job marked automatic only when start is called that way", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const { result } = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+
+    const first = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start();
+      first.finish(progress("a", "done"));
+      await outcome;
+    });
+    expect(run.mock.calls[0]![0].automatic).toBeUndefined();
+
+    // A finished job leaves the control non-startable, so the second start uses a fresh store.
+    resetTranscriptionJobStore();
+    const again = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(again.result.current.state.kind).toBe("idle"));
+    const second = controlledJob();
+    await act(async () => {
+      const outcome = again.result.current.start({ automatic: true });
+      second.finish(progress("a", "done"));
+      await outcome;
+    });
+    expect(run.mock.calls[1]![0].automatic).toBe(true);
+  });
+
   it("goes idle, running, then done, starting the job with the default model", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
     const job = controlledJob();
