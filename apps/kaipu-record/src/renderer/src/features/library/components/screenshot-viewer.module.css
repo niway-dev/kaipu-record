@@ -111,10 +111,8 @@
   outline-offset: 1px;
 }
 
-/* Hidden until the pointer is over the image (or focus is on the button), so the shot reads
-   clean at rest. Dark glass so it stays legible over light and dark screenshots alike. */
 /* Edit and Copy over the image's top-right corner. Always shown: hidden until hover, the
-   copy button went unnoticed. */
+   copy button went unnoticed. Dark glass so they stay legible over light and dark shots. */
 .tools {
   position: absolute;
   top: 10px;

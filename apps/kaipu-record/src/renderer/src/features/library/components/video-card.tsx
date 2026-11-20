@@ -127,7 +127,7 @@ export function VideoCard({
               A copy for a destination says where it is going instead. */}
           {isMaster(video) ? (
             <>
-              <MasterTag size="sm" overMedia />
+              <MasterTag size="sm" overMedia screenshot={video.kind === "screenshot"} />
               {video.kind === "screenshot" && <KindBadge kind={video.kind} />}
             </>
           ) : destination ? (

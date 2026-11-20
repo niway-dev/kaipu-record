@@ -10,10 +10,13 @@ import styles from "./master-tag.module.css";
 export function MasterTag({
   size = "md",
   overMedia = false,
+  screenshot = false,
 }: {
   size?: "sm" | "md";
   /** Sits on a thumbnail: gets the dark underlay the kind badge uses, so it reads on any frame. */
   overMedia?: boolean;
+  /** Tags an original screenshot: its hint says it is edited in place, not copied. */
+  screenshot?: boolean;
 }): React.JSX.Element {
   const t = useTranslations("library");
   return (
@@ -21,7 +24,7 @@ export function MasterTag({
       className={styles.tag}
       data-size={size}
       data-over-media={overMedia ? "true" : undefined}
-      title={t("masterTagHint")}
+      title={t(screenshot ? "masterTagHintScreenshot" : "masterTagHint")}
     >
       <Shield size={size === "sm" ? 10 : 11} strokeWidth={2} aria-hidden />
       {t("masterTag")}

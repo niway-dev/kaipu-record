@@ -226,9 +226,12 @@ export function VersionsList({
       {empty && (
         <p className={styles.empty}>
           {onlyOriginal
-            ? canExport
-              ? tPrepare("versionsOnlyOriginal")
-              : tPrepare("versionsOnlyOriginalPlain")
+            ? item.kind === "screenshot"
+              ? // A screenshot is edited in place; it never has lineage copies to list here.
+                tPrepare("versionsOnlyOriginalScreenshot")
+              : canExport
+                ? tPrepare("versionsOnlyOriginal")
+                : tPrepare("versionsOnlyOriginalPlain")
             : canExport
               ? tPrepare("versionsEmpty")
               : tPrepare("versionsEmptyPlain")}
