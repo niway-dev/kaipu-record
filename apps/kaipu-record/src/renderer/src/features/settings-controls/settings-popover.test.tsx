@@ -69,6 +69,7 @@ describe("SettingsPopover", () => {
   });
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
   });
 
@@ -153,6 +154,26 @@ describe("SettingsPopover", () => {
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(elsewhere).toHaveFocus();
+  });
+
+  it("closes when Tab leaves focus on nothing while the window stays focused", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    render(<Harness />);
+
+    act(() => (document.activeElement as HTMLElement).blur());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("stays open when focus goes to nothing because the window itself blurred", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    render(<Harness />);
+
+    act(() => (document.activeElement as HTMLElement).blur());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("stays open when focus moves to its chevron or to another control inside it", () => {

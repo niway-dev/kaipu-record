@@ -164,10 +164,22 @@ export function SettingsPopover({
   };
 
   // Tab out of the popover (it is portalled to the body, so it is not on the way) closes it.
-  // Focus going to nowhere is a window blur, which the owner's own rule already handles.
+  // Focus going to nowhere is either a window blur, which the owner's own rule handles, or Tab
+  // past the last control with the window still focused: focus then rests on the body and later
+  // keys would bypass this popover's key containment. One tick later the two can be told apart.
   const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
     const next = event.relatedTarget as Node | null;
-    if (!next || event.currentTarget.contains(next) || anchorElement()?.contains(next)) return;
+    if (!next) {
+      const popover = event.currentTarget;
+      setTimeout(() => {
+        if (ref.current !== popover || !document.hasFocus()) return;
+        const active = document.activeElement;
+        if (active && (popover.contains(active) || anchorElement()?.contains(active))) return;
+        onClose();
+      }, 0);
+      return;
+    }
+    if (event.currentTarget.contains(next) || anchorElement()?.contains(next)) return;
     onClose();
   };
 
