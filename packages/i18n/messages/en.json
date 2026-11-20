@@ -888,6 +888,7 @@
     "heavyBannerBodyNoGithub": "Prepare a light copy — about {estimate}, with text that stays readable. The original stays as it is.",
     "masterTag": "Master · full quality",
     "masterTagHint": "Your original recording, at full quality. Copies are made from it.",
+    "masterTagHintScreenshot": "Your original screenshot, at full quality. The editor keeps its edit history.",
     "copyRes1440": "1440p",
     "copyRes4k": "4K",
     "savedNoticeTitle": "Saved to your Library.",

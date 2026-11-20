@@ -888,6 +888,7 @@
     "heavyBannerBodyNoGithub": "Prepara una copia liviana — de unos {estimate}, con texto que sigue legible. El original queda tal como está.",
     "masterTag": "Máster · calidad completa",
     "masterTagHint": "Tu grabación original, en calidad completa. Las copias se hacen a partir de ella.",
+    "masterTagHintScreenshot": "Tu captura original, en calidad completa. El editor guarda su historial de cambios.",
     "copyRes1440": "1440p",
     "copyRes4k": "4K",
     "savedNoticeTitle": "Guardado en tu Biblioteca.",
