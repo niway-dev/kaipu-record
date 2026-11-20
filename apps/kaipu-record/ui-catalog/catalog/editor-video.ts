@@ -521,6 +521,22 @@ export const editorVideo = catalog(
       ],
       ready: { area: "editorVideo.webcamPanel" },
     },
+    "camera-resize-handles": {
+      profile: "camera-parts",
+      how: "Open “Camera parts” and select the bubble at the start: its box shows four white corner handles with an accent border, and dragging one resizes the bubble (the opposite corner stays) with a chip like “28% · L”.",
+      // The catalog cannot drag: this shows the selected bubble with its handles at rest. The
+      // handles are drawn in an overlay beside the bubble, so the shot waits for the panel that
+      // selecting opens, and the bubble's area crop covers the handles (they sit inside its box).
+      steps: [
+        open(ASSETS.cameraParts),
+        audioWaveformDrawn,
+        loaded,
+        selectBubble,
+        { waitFor: { area: "editorVideo.webcamPanel" } },
+      ],
+      demonstrates: ["editorVideo.webcam:resizeHandles"],
+      ready: { area: "editorVideo.webcam" },
+    },
     "camera-no-part": {
       profile: "camera-parts",
       how: "Open “Camera parts” and select the bubble at the start, where no part is (the panel opens on Whole video), and open the This part tab: it says No change and has no button.",
