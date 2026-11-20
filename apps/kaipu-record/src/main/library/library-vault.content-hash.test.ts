@@ -125,12 +125,34 @@ describe("LibraryVault content-hash cache", () => {
     hashSpy.mockClear();
 
     expect(await vault.cachedContentHash("a")).toEqual({ status: "miss" });
-    expect((await vault.describe("a"))?.contentSha256).toBeNull();
     await vault.ensureContentHash("a");
     expect(hashSpy).toHaveBeenCalledTimes(1);
     expect(await sidecar("a")).toMatchObject({ hashedCtimeMs: info.ctimeMs, hashedIno: info.ino });
     await vault.ensureContentHash("a");
     expect(hashSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("describe still reports the hash of a legacy stamp (size and mtime only), without hashing", async () => {
+    await writeFile(media("a"), "aaaaaaaaaa");
+    const first = await vault.ensureContentHash("a");
+    const old = await sidecar("a");
+    delete old.hashedCtimeMs;
+    delete old.hashedIno;
+    await writeFile(join(directory, ".kaipu", "a.json"), JSON.stringify(old));
+    hashSpy.mockClear();
+
+    expect((await vault.describe("a"))?.contentSha256).toBe(first?.contentSha256);
+    expect(hashSpy).not.toHaveBeenCalled();
+  });
+
+  it("describe compares all four fields once the stamp has ctime and inode", async () => {
+    await writeFile(media("a"), "aaaaaaaaaa");
+    await vault.ensureContentHash("a");
+    const info = await stat(media("a"));
+    await writeFile(media("a"), "bbbbbbbbbb");
+    await utimes(media("a"), info.atimeMs / 1000, info.mtimeMs / 1000);
+
+    expect((await vault.describe("a"))?.contentSha256).toBeNull();
   });
 
   it("answers a cache lookup without reading the file", async () => {

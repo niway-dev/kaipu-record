@@ -6,7 +6,9 @@
  * user space and moves on every write, rename or `utimes`; the inode number moves when a file
  * is replaced by another one. A stamp matches only when all four agree, and a sidecar written
  * before ctime and inode were recorded has no such fields, so it never matches and re-hashes
- * once.
+ * once. The one place that keeps trusting such a legacy stamp on size and mtime is `describe()`
+ * (`legacyStampMatches`): it only reports a hash for cloud linking, and a re-hash it cannot
+ * trigger must not downgrade every old item to "pending".
  */
 
 /** The fields of a `stat` the stamp reads. */
@@ -42,6 +44,20 @@ export function stampMatches(stamp: HashStamp, info: StatLike): boolean {
     stamp.hashedMtimeMs === info.mtimeMs &&
     stamp.hashedCtimeMs === info.ctimeMs &&
     stamp.hashedIno === info.ino
+  );
+}
+
+/**
+ * Whether a stamp written before ctime and inode were recorded (it has neither field at all)
+ * still matches `info` on size and mtime, as every stamp did before. A stamp that has either
+ * field never takes this path.
+ */
+export function legacyStampMatches(stamp: HashStamp, info: StatLike): boolean {
+  return (
+    stamp.hashedCtimeMs === undefined &&
+    stamp.hashedIno === undefined &&
+    stamp.hashedSizeBytes === info.size &&
+    stamp.hashedMtimeMs === info.mtimeMs
   );
 }
 

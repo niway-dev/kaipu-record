@@ -39,7 +39,7 @@ import {
   takenError,
 } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
-import { sameStat, stampFields, stampMatches } from "./hash-stamp";
+import { legacyStampMatches, sameStat, stampFields, stampMatches } from "./hash-stamp";
 import { webcamTrackState } from "./webcam-track-state";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
@@ -1114,7 +1114,11 @@ export class LibraryVault {
       }
       throw error;
     }
-    const hashIsFresh = meta.contentSha256 !== undefined && stampMatches(meta, info);
+    // A legacy stamp (no ctime, no inode) still counts here, as before: describe never hashes,
+    // so refusing it would leave cloud-linked items "pending" until something else re-hashes.
+    const hashIsFresh =
+      meta.contentSha256 !== undefined &&
+      (stampMatches(meta, info) || legacyStampMatches(meta, info));
     // Only while the file is there (`webcamTrackState`, the rule `probeWebcam` shares): a
     // sidecar field without its file is a missing track. No field, no file check.
     const webcam =
