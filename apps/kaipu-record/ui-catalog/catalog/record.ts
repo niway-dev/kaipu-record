@@ -1,10 +1,20 @@
-import { catalog, type Step } from "../types";
+import { catalog, type Step, type Target } from "../types";
 import { nc } from "./not-capturable";
 
 const micOff: Step = { call: "updateRecordingSettings", args: [{ isMicrophoneEnabled: false }] };
 const audioOn: Step = { call: "updateRecordingSettings", args: [{ isSystemAudioEnabled: true }] };
 const cameraOn: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: true }] };
 const cameraOff: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: false }] };
+// The Microphone card's device line fills in once the microphones are listed; the zone's
+// accessible name carries it ("Microphone settings: <device>"). A hover shot waits for that,
+// so a late re-render cannot drop the pointer's hover after it landed.
+const micDevicesListed: Step = {
+  waitFor: { area: "record.mic", part: { css: '[aria-label^="Microphone settings: "]' } },
+};
+const micZoneHovered = (zone: "switch" | "button"): Target => ({
+  area: "record.mic",
+  part: { css: `[${zone === "switch" ? 'role="switch"' : "aria-expanded"}]:hover` },
+});
 const modeBack: Step = { call: "updateSettings", args: [{ recordingMode: "screen" }] };
 const shotModeBack: Step = { call: "updateSettings", args: [{ screenshotMode: "frame" }] };
 
@@ -80,8 +90,15 @@ export const record = catalog(
     "mic-toggle-hover": {
       profile: "default",
       how: "Rest the pointer on the Microphone card's left zone (name and ON/OFF readout): only that zone lights up, the device zone stays as it was.",
-      steps: [{ hover: { area: "record.mic", part: { role: "switch", name: "Microphone" } } }],
+      steps: [
+        micDevicesListed,
+        { hover: { area: "record.mic", part: { role: "switch", name: "Microphone" } } },
+        // The zone must be under the pointer, or the shot would show the card at rest.
+        { waitFor: micZoneHovered("switch") },
+      ],
       keepPointer: true,
+      // Still hovered when the shot is taken, or the run fails instead of keeping the image.
+      stillOnScreen: micZoneHovered("switch"),
       demonstrates: ["record.mic:toggleHover"],
       gates: [
         { recordingSetting: "isMicrophoneEnabled", side: "on" },
@@ -93,9 +110,12 @@ export const record = catalog(
       profile: "default",
       how: "Rest the pointer on the Microphone card's right zone (device name and chevron): only that zone lights up, the toggle zone stays as it was.",
       steps: [
+        micDevicesListed,
         { hover: { area: "record.mic", part: { role: "button", name: "Microphone settings" } } },
+        { waitFor: micZoneHovered("button") },
       ],
       keepPointer: true,
+      stillOnScreen: micZoneHovered("button"),
       demonstrates: ["record.mic:deviceHover"],
       gates: [
         { recordingSetting: "isMicrophoneEnabled", side: "on" },
