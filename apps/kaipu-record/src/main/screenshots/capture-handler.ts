@@ -163,8 +163,11 @@ export function createCaptureHandler(
   let finishing: Promise<void> | null = null;
   // A capture that finishes while a newer pick is open must not put the windows, the take's
   // Esc or the camera bubble back over that overlay: it ends `handedOver` and the newest
-  // capture owes the restore, once, in its own `afterCapture` (even if it hid nothing).
-  let restoreOwed = false;
+  // capture owes the restore, once, in its own `afterCapture` (even if it hid nothing). The
+  // owed restore carries how the handed-over capture ended, so a newest capture that took
+  // nothing (a cancelled pick) ends the way that one did: after a quiet capture the main
+  // window stays hidden, as it does when no press overlapped. Null when nothing is owed.
+  let restoreOwed: Exclude<CaptureEnding, "handedOver"> | null = null;
 
   return async (request) => {
     const mode = assertCaptureMode(request?.mode);
@@ -319,19 +322,15 @@ export function createCaptureHandler(
         await after;
         if (hooksReady || restoreOwed) {
           await hooksReady?.catch(() => {});
+          const own: Exclude<CaptureEnding, "handedOver"> =
+            answer.kind === "captured" ? answer.after : recordStarted ? "recording" : "cancelled";
+          // Took nothing: it ends as the capture it inherited the restore from did, if any.
+          const ending = own === "cancelled" && restoreOwed ? restoreOwed : own;
           // A newer capture started while this one was finishing: its pick is open now.
           // The handed-over ending still lets the toast show (it restores nothing).
           const handOver = finishing !== mine;
-          restoreOwed = handOver;
-          deps.windows.afterCapture(
-            handOver
-              ? "handedOver"
-              : answer.kind === "captured"
-                ? answer.after
-                : recordStarted
-                  ? "recording"
-                  : "cancelled",
-          );
+          restoreOwed = handOver ? ending : null;
+          deps.windows.afterCapture(handOver ? "handedOver" : ending);
         }
       } finally {
         if (finishing === mine) finishing = null;

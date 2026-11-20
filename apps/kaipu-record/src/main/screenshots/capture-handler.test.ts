@@ -450,7 +450,8 @@ describe("createCaptureHandler", () => {
         "after handedOver",
         "before",
         "second shot grabbed",
-        "after cancelled",
+        // The pick took nothing, so it ends the way the first capture did (quiet).
+        "after quiet",
       ]);
     });
 
@@ -575,7 +576,7 @@ describe("createCaptureHandler", () => {
       expect(showToast.mock.calls[1]![0]).toMatchObject({ displayId: 5 });
     });
 
-    it("restores the windows once, in the new capture, when the new pick is cancelled without a shot", async () => {
+    it("a cancelled new pick runs the restore the previous capture owes with that capture's own ending, once", async () => {
       const log: string[] = [];
       let releaseSave!: () => void;
       const capture = vi
@@ -600,8 +601,53 @@ describe("createCaptureHandler", () => {
       await first;
       expect(await second).toEqual({ kind: "cancelled" });
 
-      // The first capture hands the restore over; the cancelled second one runs it, once.
-      expect(log).toEqual(["before", "after handedOver", "after cancelled"]);
+      // The first capture hands the restore over, and with it that it ended quiet (the main
+      // window stays hidden). The cancelled second one runs it once; it must not turn that
+      // quiet ending into a cancel, which would bring the main window back.
+      expect(log).toEqual(["before", "after handedOver", "after quiet"]);
+    });
+
+    it("hands the owed ending on through a chain of picks that took nothing", async () => {
+      const log: string[] = [];
+      const releases: Array<() => void> = [];
+      const answers: Array<(result: ProviderResult) => void> = [];
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return shot;
+        })
+        // The second pick is cancelled while its own (empty) finish is still pending.
+        .mockImplementationOnce(
+          () => new Promise<ProviderResult>((resolve) => answers.push(resolve)),
+        )
+        .mockImplementationOnce(
+          () => new Promise<ProviderResult>((resolve) => answers.push(resolve)),
+        );
+      const { handler, windows, saveToVault } = setup(capture);
+      saveToVault.mockImplementationOnce(
+        () => new Promise((resolve) => releases.push(() => resolve({ id: "s", assetId: "a" }))),
+      );
+      windows.beforeCapture.mockImplementation(() => void log.push("before"));
+      windows.afterCapture.mockImplementation((ending) => void log.push(`after ${ending}`));
+
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(answers).toHaveLength(1));
+      // Pick 2 is cancelled while capture 1 still saves, then pick 3 opens behind them.
+      answers[0]!({ kind: "cancelled" });
+      await tick();
+      const third = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(answers).toHaveLength(2));
+      releases[0]!();
+      await first;
+      await second;
+      // Capture 3 took nothing either: it ends the way capture 1 did, not as a cancel.
+      answers[1]!({ kind: "cancelled" });
+      await third;
+
+      expect(log).toEqual(["before", "after handedOver", "after handedOver", "after quiet"]);
     });
 
     it("clears the previous capture's kept bytes after it has kept them, not before", async () => {
