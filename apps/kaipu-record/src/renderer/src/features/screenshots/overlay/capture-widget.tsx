@@ -239,9 +239,9 @@ export function CaptureWidget({
 
   const placement = widgetPlacement(selection, area, box.height, box.width);
   // The edge the widget enters from: where it is docked once its height is known, kept for the
-  // rest of this mount. A later move to the other edge (the box reaching the band) slides it
-  // there without replaying the entrance. Set in the commit that measured it, so it is in the
-  // DOM at the first paint.
+  // rest of this mount. A later move to the other edge (the box reaching the band) jumps it
+  // there, with no transition, and does not replay the entrance. Set in the commit that measured
+  // it, so it is in the DOM at the first paint.
   const [enterFrom, setEnterFrom] = useState<WidgetEdge | null>(null);
   useLayoutEffect(() => {
     if (box.measured) setEnterFrom((current) => current ?? placement.edge);
