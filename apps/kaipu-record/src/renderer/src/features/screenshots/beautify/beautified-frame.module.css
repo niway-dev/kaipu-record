@@ -7,8 +7,8 @@
  * the flex canvas (a definite size), so the shot fits without overflow/scroll
  * and keeps its aspect ratio. Only the frame's own max sizes work that way: the shot's
  * height has no definite parent to resolve against, so `--shot-max-h` (set on the frame)
- * bounds it. `100cqh` is the height of the canvas content box (the editor stage is a size
- * container), the same box the frame's `max-height: 100%` resolves against.
+ * bounds it. `--stage-h`, set by the editor stage, is the height of the box the frame's own
+ * `max-height: 100%` resolves against.
  */
 .frame {
   position: relative; /* anchors the frame-level crop overlay (inset:0 → whole frame) */

@@ -167,7 +167,7 @@ export function BeautifiedFrame({
     ? base
       ? base.shot.h
       : measured.h - 2 * measured.pad - measured.extH
-    : `calc(100cqh - ${2 * beautify.padding}px)`;
+    : `calc(var(--stage-h, 100%) - ${2 * beautify.padding}px)`;
   const frameStyle: React.CSSProperties = {
     "--shot-max-h": typeof shotMaxH === "number" ? `${shotMaxH}px` : shotMaxH,
     background: backgroundCss(beautify.bg),

@@ -261,13 +261,13 @@ describe("BeautifiedFrame — a tall shot (NIW2-880)", () => {
 
   it("bounds the shot's height by the stage height minus the padding on both sides", () => {
     render(<BeautifiedFrame src="x" beautify={beautify({ padding: 20 })} />);
-    expect(shotMaxH()).toBe("calc(100cqh - 40px)");
+    expect(shotMaxH()).toBe("calc(var(--stage-h, 100%) - 40px)");
   });
 
   it("the bound follows the padding slider", () => {
     const { rerender } = render(<BeautifiedFrame src="x" beautify={beautify({ padding: 20 })} />);
     rerender(<BeautifiedFrame src="x" beautify={beautify({ padding: 0 })} />);
-    expect(shotMaxH()).toBe("calc(100cqh - 0px)");
+    expect(shotMaxH()).toBe("calc(var(--stage-h, 100%) - 0px)");
   });
 
   it("extents and a base do not move the bound: the frame outgrows the stage by exactly them", () => {
@@ -283,7 +283,7 @@ describe("BeautifiedFrame — a tall shot (NIW2-880)", () => {
         base={base}
       />,
     );
-    expect(shotMaxH()).toBe("calc(100cqh - 40px)");
+    expect(shotMaxH()).toBe("calc(var(--stage-h, 100%) - 40px)");
   });
 
   it("a windowed frame bounds the shot by its constant size, whatever the padding is now", () => {
@@ -315,7 +315,7 @@ describe("BeautifiedFrame — a tall shot (NIW2-880)", () => {
     expect(rule("\\.shot")).toMatch(/max-height:\s*var\(--shot-max-h,\s*100%\)/);
   });
 
-  it("the editor stage is the size container that `cqh` measures", () => {
+  it("the editor stage hands the frame its height, measured against a size container", () => {
     const page = readFileSync(
       join(
         dirnameOf(import.meta.url),
@@ -323,7 +323,12 @@ describe("BeautifiedFrame — a tall shot (NIW2-880)", () => {
       ),
       "utf8",
     );
-    const stage = page.match(/(?:^|\n)\.canvas\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(stage).toMatch(/container-type:\s*size/);
+    const block = (selector: string): string =>
+      page.match(new RegExp(`(?:^|\\n)${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+    // `.canvasArea` (not the scrolling `.canvas`) is the container: layout containment would make
+    // a scroll container the containing block of the Inspect layer, which would scroll with it.
+    expect(block("\\.canvasArea")).toMatch(/container-type:\s*size/);
+    expect(block("\\.canvas")).not.toMatch(/container-type/);
+    expect(block("\\.canvas")).toMatch(/--stage-h:\s*calc\(100cqh - 2 \* var\(--space-xl\)\)/);
   });
 });
