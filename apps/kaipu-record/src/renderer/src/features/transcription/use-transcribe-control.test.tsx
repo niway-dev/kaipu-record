@@ -347,6 +347,45 @@ describe("useTranscribeControl", () => {
     expect(result.current.state.kind).toBe("done");
   });
 
+  it("an out-of-date transcript stays retryable after a job finished this session and a later attempt failed", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const stale = { ...ITEM, transcriptStale: true };
+    const { result } = renderHook(() => useTranscribeControl(stale));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+    // A job for this item finished earlier in the session (the media was replaced since).
+    const first = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start();
+      first.finish(progress("a", "done"));
+      await outcome;
+    });
+    // The transcript is still out of date, so the control does not read `done`.
+    expect(result.current.state.kind).toBe("idle");
+
+    const second = controlledJob();
+    let outcome: ReturnType<typeof result.current.start> = Promise.resolve(null);
+    act(() => {
+      outcome = result.current.start({ automatic: true });
+    });
+    await act(async () => {
+      second.finish(progress("a", "failed", { failure: "engine-failed" }));
+      await outcome;
+    });
+    expect(result.current.state).toEqual({ kind: "failed", failure: "engine-failed" });
+
+    // A manual retry is allowed.
+    const third = controlledJob();
+    let retry: ReturnType<typeof result.current.start> = Promise.resolve(null);
+    act(() => {
+      retry = result.current.start();
+    });
+    expect(run).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      third.finish(progress("a", "done"));
+      await retry;
+    });
+  });
+
   it("shows failed when main refuses the start because the item changed, so the click leaves a trace", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
     run.mockResolvedValueOnce({ status: "refused", reason: "invalid-item" });

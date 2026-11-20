@@ -33,11 +33,16 @@ describe("useAutoRetranscribe", () => {
     expect(start).toHaveBeenCalledTimes(1);
   });
 
-  it("does not start again after a cancel or a re-render", async () => {
+  it("does not start again after a cancel, even when it is armed again", async () => {
     const start = vi.fn(() => Promise.resolve<StartOutcome | null>({ status: "cancelled" }));
-    const { rerender } = renderHook(() => useAutoRetranscribe("a", true, start));
+    const { rerender } = renderHook(({ armed }) => useAutoRetranscribe("a", armed, start), {
+      initialProps: { armed: true },
+    });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    rerender({ armed: false });
+    rerender({ armed: true });
     await Promise.resolve();
-    rerender();
+    await Promise.resolve();
     expect(start).toHaveBeenCalledTimes(1);
   });
 

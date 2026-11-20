@@ -145,7 +145,11 @@ describe("registration", () => {
 });
 
 describe("scoped channels", () => {
-  it.each([IPC_CHANNELS.transcriptionJobBegin, IPC_CHANNELS.transcriptionReadTranscript])(
+  it.each([
+    IPC_CHANNELS.transcriptionJobBegin,
+    IPC_CHANNELS.transcriptionReadTranscript,
+    IPC_CHANNELS.transcriptionCheckFreshness,
+  ])(
     "%s refuses a call without the workspace stamp and never reaches the service",
     async (channel) => {
       await expect(call(channel, REQUEST)).rejects.toThrow("stale-workspace");
@@ -164,12 +168,13 @@ describe("scoped channels", () => {
     expect(service.begin).toHaveBeenCalledWith(REQUEST);
   });
 
-  it("begin and readTranscript are refused while Check and fix files runs", async () => {
+  it("begin, readTranscript and checkFreshness are refused while Check and fix files runs", async () => {
     const exit = await vaultActivity.enterMaintenance();
     try {
       for (const [channel, args] of [
         [IPC_CHANNELS.transcriptionJobBegin, [STAMP, REQUEST]],
         [IPC_CHANNELS.transcriptionReadTranscript, [STAMP, "clip"]],
+        [IPC_CHANNELS.transcriptionCheckFreshness, [STAMP, "clip"]],
       ] as const) {
         await expect(call(channel, ...args)).rejects.toThrow(VAULT_MAINTENANCE_MARKER);
       }

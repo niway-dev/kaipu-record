@@ -25,6 +25,12 @@ export interface TranscribeControlItem {
   transcribedAt: number | null;
   /** `true` when the caller has read that a transcript file exists and has no timestamp for it. */
   hasTranscript?: boolean;
+  /**
+   * `true` when the caller has read that the transcript is out of date. A job that finished this
+   * session then proves nothing about the current content, so the control reads as if there were
+   * no transcript: a failure shows and a retry stays possible.
+   */
+  transcriptStale?: boolean;
 }
 
 export interface TranscribeControl {
@@ -72,7 +78,8 @@ export function useTranscribeControl(item: TranscribeControlItem): TranscribeCon
     defaultModelReady: status ? defaultModel?.status.state === "ready" : null,
     downloading: defaultModel?.status.state === "downloading",
     transcript:
-      item.transcribedAt !== null || item.hasTranscript === true || doneThisSession
+      item.transcriptStale !== true &&
+      (item.transcribedAt !== null || item.hasTranscript === true || doneThisSession)
         ? "ready"
         : "none",
     running,

@@ -96,6 +96,7 @@ export function TranscriptPanel({
     durationMs,
     // The transcript file is read by `useTranscript`; the control only drives the job.
     transcribedAt: null,
+    transcriptStale: transcript.state === "ready" && transcript.stale,
   });
   const [offerOpen, setOfferOpen] = useState(false);
 

@@ -296,6 +296,21 @@ describe("TranscriptPanel — states", () => {
     expect(start).toHaveBeenCalledOnce();
   });
 
+  it("tells the control when the transcript is out of date, so a job done this session cannot hide it", () => {
+    hooks.transcript.mockReturnValue(READY({}, true));
+    control({ kind: "idle" });
+    setup();
+    expect(hooks.control).toHaveBeenLastCalledWith(
+      expect.objectContaining({ transcriptStale: true }),
+    );
+    cleanup();
+    hooks.transcript.mockReturnValue(READY({}, false));
+    setup();
+    expect(hooks.control).toHaveBeenLastCalledWith(
+      expect.objectContaining({ transcriptStale: false }),
+    );
+  });
+
   it.each([
     ["busy-elsewhere", { kind: "busy-elsewhere" } as const, /Another video is being transcribed/],
     ["model-downloading", { kind: "model-downloading" } as const, /speech model is downloading/],
