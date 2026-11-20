@@ -355,7 +355,10 @@
   background: var(--ie-stage);
   /* A size container, so the frame can bound a tall shot by the stage height (`100cqh` in
      beautified-frame.module.css). The stage already has a definite size (flex: 1 in a sized
-     row), so size containment changes nothing about its layout. */
+     row), so size containment changes nothing about its own layout. Layout containment, which
+     comes with it, makes the stage the containing block of its absolute children (the Inspect
+     layer); the stage fills `.canvasArea` exactly (measured in the browser harness: same box),
+     so they resolve to the same rectangle as before. */
   container-type: size;
 }
 
