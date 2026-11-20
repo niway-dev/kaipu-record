@@ -41,4 +41,5 @@ export const STUB_SETTINGS = {
   },
   microphone: null,
   editor: { hiddenTracks: [] as TrackKey[] },
+  captureWidget: { screenshotExpanded: false, recordingExpanded: false },
 } as const;

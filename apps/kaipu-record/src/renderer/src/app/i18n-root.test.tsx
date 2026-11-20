@@ -42,6 +42,7 @@ const SETTINGS: AppSettings = {
   },
   microphone: null,
   editor: { hiddenTracks: [] },
+  captureWidget: { screenshotExpanded: false, recordingExpanded: false },
 };
 
 describe("I18nRoot theme application", () => {

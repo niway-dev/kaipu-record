@@ -22,6 +22,10 @@ import {
 } from "./screenshot-capture";
 import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "../audio-settings";
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from "../editor-settings";
+import {
+  DEFAULT_CAPTURE_WIDGET_SETTINGS,
+  type CaptureWidgetSettings,
+} from "../capture-widget-settings";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
 
 /**
@@ -305,6 +309,12 @@ export interface AppSettings {
    * hid (ADR 0050). View state only; the preview and the export never read it.
    */
   editor: EditorSettings;
+  /**
+   * Whether the capture selector's toolbar is expanded (labels, switches, size readout) or
+   * compact (icons and key badges), remembered for screenshots and recordings apart. Toggled
+   * with the Control key on the overlay (NIW2-883).
+   */
+  captureWidget: CaptureWidgetSettings;
 }
 
 /**
@@ -341,6 +351,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   audio: DEFAULT_AUDIO_SETTINGS,
   microphone: null,
   editor: DEFAULT_EDITOR_SETTINGS,
+  captureWidget: DEFAULT_CAPTURE_WIDGET_SETTINGS,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */
