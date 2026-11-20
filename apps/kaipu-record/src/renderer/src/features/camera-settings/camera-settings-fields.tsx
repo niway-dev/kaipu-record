@@ -295,19 +295,17 @@ function CameraSourceList({
 
 export interface CameraBlockedCardProps {
   onOpenSystemSettings: () => void;
-  compact?: boolean;
 }
 
 /** In place of the settings while camera access is denied: why, and the way out. */
 export function CameraBlockedCard({
   onOpenSystemSettings,
-  compact = false,
 }: CameraBlockedCardProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   return (
-    <div className={styles.blocked} data-compact={compact || undefined}>
+    <div className={styles.blocked}>
       <span className={styles.blockedIcon} aria-hidden>
-        <Lock size={compact ? 16 : 20} />
+        <Lock size={20} />
       </span>
       <p className={styles.blockedTitle}>{t("blockedTitle")}</p>
       <p className={styles.blockedBody}>{t("blockedBody")}</p>

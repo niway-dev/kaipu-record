@@ -51,11 +51,6 @@
   color: #f88b85;
 }
 
-.blocked[data-compact] .blockedIcon {
-  width: 32px;
-  height: 32px;
-}
-
 .blockedTitle {
   margin: 0;
   font-size: var(--font-size-sm);
@@ -82,11 +77,6 @@
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
-}
-
-.blocked[data-compact] .blockedButton {
-  height: 26px;
-  font-size: 11px;
 }
 
 .mirror {
