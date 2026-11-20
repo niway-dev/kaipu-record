@@ -14,3 +14,11 @@
 .card[data-paused] * {
   animation-play-state: paused !important;
 }
+
+/* The mobile sticky CTA floats over the bottom of the viewport (about 70px tall, 20px up);
+   this lets a card's bottom edge scroll clear of it. */
+@media (width <= 640px) {
+  .card {
+    margin-bottom: 96px;
+  }
+}

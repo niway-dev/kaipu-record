@@ -153,12 +153,12 @@ export const ROADMAP_ITEMS = [
   { id: "videoZoom", area: "edit", icon: ZoomIn, mac: "shipped", win: "inProgress" },
   { id: "videoMute", area: "edit", icon: MicOff, mac: "shipped", win: "inProgress" },
   { id: "exportPresets", area: "edit", icon: Download, mac: "shipped", win: "inProgress" },
+  { id: "cameraMoves", area: "edit", icon: Camera, mac: "planned", win: "planned" },
 
   // Find
   { id: "library", area: "find", icon: Library, mac: "shipped", win: "inProgress" },
   { id: "captureTags", area: "find", icon: Tag, mac: "shipped", win: "inProgress" },
   { id: "photoZoom", area: "find", icon: Image, mac: "planned", win: "planned" },
-  { id: "cameraMoves", area: "edit", icon: Camera, mac: "planned", win: "planned" },
 
   // Private beta: merged and flagged on macOS, not in the download. Windows has no
   // build of these yet, so its cell is planned.

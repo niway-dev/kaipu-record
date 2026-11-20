@@ -3,7 +3,7 @@ title: Website refresh — Capture, live demos, export, beta roadmap
 description: UI-only refresh of kaipu.app so it shows today's capture flow, the desktop onboarding demos, the export presets, upcoming tools and a beta state on the roadmap, with a tighter mobile layout.
 ---
 
-- **Status:** proposed (2026-11-20), built in GSD. Tracker: [NIW2-897](https://linear.app/niway/issue/NIW2-897).
+- **Status:** in progress (2026-11-20), built in GSD. Tracker: [NIW2-897](https://linear.app/niway/issue/NIW2-897).
 - **ADRs:** none.
 
 ## Summary (one minute)
@@ -18,27 +18,27 @@ exist behind flags. Mobile gets single-column demo cards. Website UI only: no ba
 
 ## What changes
 
-| Thing | Today | After |
-| --- | --- | --- |
-| Home chapters | 01 Record, 02 Capture, 03 Edit, 04 Find | Capture (one widget for both), Edit, Share, Find |
-| Capture visual | Older mocks | The current capture widget, animated |
-| Product demos | Static mocks | The desktop onboarding demos, running on the web |
-| Export | One line in Edit | Its own section: GitHub · Slack · YouTube 1440p/4K · Reels 9:16 |
-| Upcoming tools | Not shown | "On the way" section, each tile marked Private beta |
-| Roadmap states | Shipped, In progress, Planned | Plus "Private beta" for flagged macOS features |
-| Mobile (≤ 640 px) | Two-column mocks squeezed | One full-width card per demo, compact sections |
+| Thing             | Today                                   | After                                                                                                                      |
+| ----------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Home chapters     | 01 Record, 02 Capture, 03 Edit, 04 Find | Capture (one widget for both), Edit, Share, Find                                                                           |
+| Capture visual    | Older mocks                             | The current capture widget, animated                                                                                       |
+| Product demos     | Static mocks                            | The desktop onboarding demos, running on the web                                                                           |
+| Export            | One line in Edit                        | Its own section: GitHub · Jira · Linear, Slack · Discord · Email, YouTube 16:9 · 1440p or 4K, Reels · TikTok · Shorts 9:16 |
+| Upcoming tools    | Not shown                               | "On the way" section, each tile carries its roadmap state badge (Private beta, or Planned for camera moves)                |
+| Roadmap states    | Shipped, In progress, Planned           | Plus "Private beta" for flagged macOS features                                                                             |
+| Mobile (≤ 640 px) | Two-column mocks squeezed               | One full-width card per demo, compact sections                                                                             |
 
 ## Decisions
 
-| # | Decision | Options considered | Chosen, and why | Assumed? | ADR |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Product name | Rename to "Kaipu Capture"; keep "Kaipu Record" and merge chapters | Keep the name, merge the chapters | No, owner confirmed in chat | none |
-| 2 | Label for flagged macOS features | "Beta"; "Coming soon"; "Private beta" | "Private beta": the code has no Labs page yet (ADR 0049 is design only), so no user can turn them on; "Private beta" is true and still says it exists | Yes, your call | none |
-| 3 | Which features get Private beta | Every flag; only flags with merged code | Merged and flagged: text recognition (OCR), inspect (measure, colors), image canvas (grid, move), clips levels, zoom filmstrip, local transcription, screenshots while recording | Yes, your call | none |
-| 4 | Camera moving over time | Private beta; Planned | Planned: the webcam track design is not fully merged | Yes, your call | none |
-| 5 | Demo source | Copy the demos into web-hono; share a package | Copy into `apps/web-hono/src/components/demos/` with a header naming the source: a shared package is a refactor beyond this PR (follow-up) | Yes, your call | none |
-| 6 | Copy languages | EN only; EN and ES | Both, the parity test requires it | No, owner said go | none |
-| 7 | Release | One PR | One PR: website only, no flags, revert is one commit | No, repository practice | none |
+| #   | Decision                         | Options considered                                                | Chosen, and why                                                                                                                                                                  | Assumed?                    | ADR  |
+| --- | -------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ---- |
+| 1   | Product name                     | Rename to "Kaipu Capture"; keep "Kaipu Record" and merge chapters | Keep the name, merge the chapters                                                                                                                                                | No, owner confirmed in chat | none |
+| 2   | Label for flagged macOS features | "Beta"; "Coming soon"; "Private beta"                             | "Private beta": the code has no Labs page yet (ADR 0049 is design only), so no user can turn them on; "Private beta" is true and still says it exists                            | Yes, your call              | none |
+| 3   | Which features get Private beta  | Every flag; only flags with merged code                           | Merged and flagged: text recognition (OCR), inspect (measure, colors), image canvas (grid, move), clips levels, zoom filmstrip, local transcription, screenshots while recording | Yes, your call              | none |
+| 4   | Camera moving over time          | Private beta; Planned                                             | Planned: the webcam track design is not fully merged                                                                                                                             | Yes, your call              | none |
+| 5   | Demo source                      | Copy the demos into web-hono; share a package                     | Copy into `apps/web-hono/src/components/demos/` with a header naming the source: a shared package is a refactor beyond this PR (follow-up)                                       | Yes, your call              | none |
+| 6   | Copy languages                   | EN only; EN and ES                                                | Both, the parity test requires it                                                                                                                                                | No, owner said go           | none |
+| 7   | Release                          | One PR                                                            | One PR: website only, no flags, revert is one commit                                                                                                                             | No, repository practice     | none |
 
 ## Out of scope
 

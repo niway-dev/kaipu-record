@@ -43,13 +43,19 @@ describe("web demos", () => {
     expect(running.vis("x", 10, 1)).not.toMatch(/paused/);
   });
 
-  it.each(["scene.tsx", "timeline.ts", "icons.tsx", "editor-demo.tsx", "share-demo.tsx"])(
-    "%s names the desktop file it was copied from",
-    (file) => {
-      const source = readFileSync(path.resolve(import.meta.dirname, file), "utf8");
-      expect(source).toContain(
-        `Ported from apps/kaipu-record/src/renderer/src/features/onboarding/demos/${file}`,
-      );
-    },
-  );
+  it.each([
+    "scene.tsx",
+    "timeline.ts",
+    "icons.tsx",
+    "editor-demo.tsx",
+    "share-demo.tsx",
+    "workspaces-demo.tsx",
+    "demo-text.ts",
+    "use-reduced-motion.ts",
+  ])("%s names the desktop file it was copied from", (file) => {
+    const source = readFileSync(path.resolve(import.meta.dirname, file), "utf8");
+    expect(source).toContain(
+      `Ported from apps/kaipu-record/src/renderer/src/features/onboarding/demos/${file}`,
+    );
+  });
 });

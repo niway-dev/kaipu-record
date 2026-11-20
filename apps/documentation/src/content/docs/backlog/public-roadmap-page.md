@@ -59,7 +59,7 @@ group reads "available somewhere today" and the two cells say where.
 ## How to update it
 
 1. Edit `ROADMAP_ITEMS` in `roadmap-config.ts` — add an entry, or change its `mac` / `win`
-   state between `shipped`, `inProgress` and `planned`. `note: true` adds a caveat line.
+   state between `shipped`, `beta`, `inProgress` and `planned`. `beta` means merged and flagged on macOS, not in the download. `note: true` adds a caveat line.
 2. Add `items.<id>.title` and `items.<id>.description` (and `items.<id>.note` when the row
    has one) to **both** `en.json` and `es.json`.
 3. A **planned** row needs a design doc under `backlog/` before anyone builds it, and a row
@@ -85,14 +85,15 @@ Shipped rows added on 2026-10-14 point at the doc that describes what the downlo
 
 ### Planned rows and their design docs
 
-| Id                 | Design doc                                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------------------------- |
-| Windows column     | [Windows beta — recording first, screenshots later](./windows-beta) — replaces the `windowsBeta` row |
-| `signedInstaller`  | Windows only: [Windows release design](/specs/2026-10-15-windows-release-design/), decision 4        |
-| `cloudUpload`      | [Cloud recordings upload](./cloud-recordings-upload) · [desktop sync gap](./desktop-cloud-sync-gap)  |
-| `photoZoom`        | [Zoom and pan in the image viewer](./image-viewer-zoom)                                              |
-| `watermarkUpgrade` | None yet — reworded on 2026-10-07 (below); needs a doc before building                               |
-| `brandIdentity`    | [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/)                            |
+| Id                 | Design doc                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows column     | [Windows beta — recording first, screenshots later](./windows-beta) — replaces the `windowsBeta` row                                               |
+| `signedInstaller`  | Windows only: [Windows release design](/specs/2026-10-15-windows-release-design/), decision 4                                                      |
+| `cloudUpload`      | [Cloud recordings upload](./cloud-recordings-upload) · [desktop sync gap](./desktop-cloud-sync-gap)                                                |
+| `photoZoom`        | [Zoom and pan in the image viewer](./image-viewer-zoom)                                                                                            |
+| `cameraMoves`      | [Camera sections](/specs/2026-11-15-camera-sections-first-version-design/) · [drag-first parts](/specs/2026-11-16-camera-parts-drag-first-design/) |
+| `watermarkUpgrade` | None yet — reworded on 2026-10-07 (below); needs a doc before building                                                                             |
+| `brandIdentity`    | [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/)                                                                          |
 
 Two guardrails make a half-finished edit fail loudly instead of shipping:
 
