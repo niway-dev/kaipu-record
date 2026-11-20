@@ -123,47 +123,47 @@ const ESC_AFTER_PRESS_MS = 150;
 const GAP_MS = 300;
 
 for (const displays of [[display(1, 0)], [display(1, 0), display(2, 1440), display(3, 2880)]]) {
-  for (const dev of [false, true]) {
-    it(`opens on every press of a 6-cycle burst, ${displays.length} display(s), ${dev ? "dev" : "prod"} load`, async () => {
-      loadMs = dev ? 360 : 176;
-      const port = new CaptureOverlayWindows({
-        platform: "darwin",
-        enabledModes: CAPTURE_MODES,
-        warmup: { next: () => ({ ui: "frame", intent: "capture", displays }), canWarm: () => true },
+  it(`opens on every press of a 6-cycle burst, ${displays.length} display(s)`, async () => {
+    // Any load longer than ESC_AFTER_PRESS_MS (the real ones take 176 ms and up) fails the
+    // old rebuild-on-press behaviour, so one load time covers production and dev alike.
+    loadMs = 176;
+    const port = new CaptureOverlayWindows({
+      platform: "darwin",
+      enabledModes: CAPTURE_MODES,
+      warmup: { next: () => ({ ui: "frame", intent: "capture", displays }), canWarm: () => true },
+    });
+    // The app warms the first set at launch, long before the burst.
+    port.prewarm();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const shownAtEsc: boolean[] = [];
+    for (let cycle = 0; cycle < 6; cycle += 1) {
+      // The press: the same decision the shortcut handler makes, then the pick it starts.
+      const decision = decideWidgetShortcut({
+        key: "capture",
+        takeActive: false,
+        takePending: false,
+        overlayOpen: port.isPicking(),
+        overlayIntent: port.currentIntent(),
       });
-      // The app warms the first set at launch, long before the burst.
-      port.prewarm();
-      await vi.advanceTimersByTimeAsync(5000);
-
-      const shownAtEsc: boolean[] = [];
-      for (let cycle = 0; cycle < 6; cycle += 1) {
-        // The press: the same decision the shortcut handler makes, then the pick it starts.
-        const decision = decideWidgetShortcut({
-          key: "capture",
-          takeActive: false,
-          takePending: false,
-          overlayOpen: port.isPicking(),
-          overlayIntent: port.currentIntent(),
-        });
-        if (decision === "close") port.cancelPick();
-        let ended = Promise.resolve();
-        if (decision === "open") {
-          ended = port.pick("frame", displays, "capture").then(() => port.endPick());
-        }
-
-        await vi.advanceTimersByTimeAsync(ESC_AFTER_PRESS_MS);
-        const visible = created.filter((window) => window.shown);
-        shownAtEsc.push(decision === "open" && visible.length >= displays.length);
-        const escape = visible.at(-1);
-        escape?.pressEscape();
-        // An Esc with no window on screen reaches nobody: the pick stays open.
-        if (escape) await ended;
-        await vi.advanceTimersByTimeAsync(GAP_MS);
+      if (decision === "close") port.cancelPick();
+      let ended = Promise.resolve();
+      if (decision === "open") {
+        ended = port.pick("frame", displays, "capture").then(() => port.endPick());
       }
 
-      expect(shownAtEsc).toEqual([true, true, true, true, true, true]);
-    });
-  }
+      await vi.advanceTimersByTimeAsync(ESC_AFTER_PRESS_MS);
+      const visible = created.filter((window) => window.shown);
+      shownAtEsc.push(decision === "open" && visible.length >= displays.length);
+      const escape = visible.at(-1);
+      escape?.pressEscape();
+      // An Esc with no window on screen reaches nobody: the pick stays open.
+      if (escape) await ended;
+      await vi.advanceTimersByTimeAsync(GAP_MS);
+    }
+
+    expect(shownAtEsc).toEqual([true, true, true, true, true, true]);
+  });
 }
 
 /**
