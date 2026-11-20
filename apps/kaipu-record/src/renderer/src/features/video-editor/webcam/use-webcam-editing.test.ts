@@ -117,13 +117,14 @@ describe("useWebcamEditing", () => {
       result: ReturnType<typeof setup>["result"],
       tab: WebcamPanelTab,
       sourceTime: number,
+      position?: WebcamLayout["position"],
     ): void => {
       const webcam = result.current.controller.scene.webcam!;
       const target = webcamResizeTarget(webcam, tab, sourceTime);
       const at = webcamResizeWriteTime(target, sourceTime);
       act(() => result.current.webcam.begin());
       for (const size of [0.3, 0.4]) {
-        act(() => result.current.webcam.liveLayout({ size }, at));
+        act(() => result.current.webcam.liveLayout(position ? { size, position } : { size }, at));
       }
       act(() => result.current.webcam.end());
     };
@@ -150,6 +151,36 @@ describe("useWebcamEditing", () => {
       expect(webcam.layout.size).toBe(0.4);
       expect(webcam.segments[0].layout).toEqual({ position: POSITION });
       act(() => result.current.controller.undo());
+      expect(result.current.controller.canUndo).toBe(false);
+    });
+
+    // The opposite-corner anchor moves the bubble while it grows: the page forwards both together.
+    const MOVED = { x: 0.7, y: 0.3 };
+
+    it('"This part" writes size and position into the same part, as one undo step', () => {
+      const { result } = setup(withPart({ position: POSITION }));
+      const globalLayout = result.current.controller.scene.webcam!.layout;
+      drag(result, "part", 6, MOVED);
+      const webcam = result.current.controller.scene.webcam!;
+      expect(webcam.segments[0].layout).toEqual({ position: MOVED, size: 0.4 });
+      expect(webcam.layout).toEqual(globalLayout);
+      act(() => result.current.controller.undo());
+      expect(result.current.controller.scene.webcam!.segments[0].layout).toEqual({
+        position: POSITION,
+      });
+      expect(result.current.controller.scene.webcam!.layout).toEqual(globalLayout);
+      expect(result.current.controller.canUndo).toBe(false);
+    });
+
+    it('"Whole video" writes size and position into the whole layout, as one undo step', () => {
+      const { result } = setup(withPart({}));
+      const before = result.current.controller.scene.webcam!.layout;
+      drag(result, "whole", 6, MOVED);
+      const webcam = result.current.controller.scene.webcam!;
+      expect(webcam.layout).toMatchObject({ size: 0.4, position: MOVED });
+      expect(webcam.segments[0].layout).toEqual({});
+      act(() => result.current.controller.undo());
+      expect(result.current.controller.scene.webcam!.layout).toEqual(before);
       expect(result.current.controller.canUndo).toBe(false);
     });
 

@@ -1156,10 +1156,7 @@ describe("WebcamLayer — corner resize", () => {
       10,
     );
     const { ref } = mainVideo(5);
-    const { handlers, container } = (() => {
-      const view = renderLayer({ videoRef: ref, selected: true, path: zoomed });
-      return view;
-    })();
+    const { handlers, container } = renderLayer({ videoRef: ref, selected: true, path: zoomed });
     loadWebcam(30);
     const slot = container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
     slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
@@ -1217,6 +1214,39 @@ describe("WebcamLayer — corner resize", () => {
     );
     expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+  });
+
+  it("ends the gesture once when resizing is switched off mid-drag", () => {
+    const { handlers, rerender, ref } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    rerender(
+      <WebcamLayer
+        videoRef={ref}
+        src="kaipu-media://webcam/rec-1"
+        startOffsetMs={0}
+        webcam={scene()}
+        path={flatPath}
+        cameraEnabled
+        frame={FRAME}
+        hidden={false}
+        interactive
+        selected
+        resizable={false}
+        dropAt={null}
+        {...handlers}
+      />,
+    );
+    expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+  });
+
+  it("ends the gesture once when the layer unmounts mid-drag", () => {
+    const { handlers, unmount } = resizeSetup();
+    fireEvent.pointerDown(handle("se"), { clientX: 600, clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(handle("se"), { clientX: 650, clientY: 650, pointerId: 1 });
+    unmount();
+    expect(handlers.onResizeEnd).toHaveBeenCalledTimes(1);
   });
 
   it("ignores a second pointer while one resize is live", () => {

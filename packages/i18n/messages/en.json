@@ -1883,7 +1883,6 @@
     "captureRecordingMissing": "Can't capture this frame: its recording is missing: {title}",
     "captureRecordingLoading": "A recording in this video is still loading. Capture the frame again in a moment.",
     "webcamLayerAria": "Webcam: drag to move it",
-    "webcamResizeHandleAria": "Resize the webcam",
     "mediaItemAria": "Floating image: drag to move it",
     "mediaResizeHandleAria": "Resize the floating image",
     "mediaPanelTitle": "Floating image",

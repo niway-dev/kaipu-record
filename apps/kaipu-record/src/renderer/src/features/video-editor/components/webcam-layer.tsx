@@ -716,7 +716,7 @@ export function WebcamLayer({
                 className={styles.handle}
                 data-corner={corner}
                 data-testid={`webcam-handle-${corner}`}
-                aria-label={t("webcamResizeHandleAria")}
+                aria-hidden="true"
                 onPointerDown={(event) => pressCorner(event, corner)}
                 onPointerMove={moveCorner}
                 onPointerUp={releaseCorner}

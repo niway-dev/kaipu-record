@@ -1883,7 +1883,6 @@
     "captureRecordingMissing": "No se puede capturar este fotograma: falta su grabación: {title}",
     "captureRecordingLoading": "Una grabación de este video aún se está cargando. Vuelve a capturar el fotograma en un momento.",
     "webcamLayerAria": "Cámara web: arrástrala para moverla",
-    "webcamResizeHandleAria": "Cambiar el tamaño de la cámara web",
     "mediaItemAria": "Imagen flotante: arrástrala para moverla",
     "mediaResizeHandleAria": "Cambiar el tamaño de la imagen flotante",
     "mediaPanelTitle": "Imagen flotante",
