@@ -3,7 +3,6 @@ import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { CaptureWidgetSettings } from "@shared/capture-widget-settings";
 import type { CaptureIntent } from "@shared/types/screenshot-capture";
 import {
-  getSettingsSnapshot,
   loadSettings,
   subscribeSettings,
   useSettings,
@@ -31,8 +30,9 @@ const keyFor = (intent: CaptureIntent): WidgetKey =>
  * Compact or expanded for the overlay's current intent, kept in `AppSettings.captureWidget`.
  * One overlay window per display mounts this: a toggle made in another window arrives as a
  * settings broadcast and this window follows it. A toggle made here shows at once and stands
- * until the store reports that value (main's echo), so a broadcast of an older change that is
- * still in flight cannot flip the toolbar back for a moment.
+ * until the store reports the value of each save it made (main broadcasts once per save, in
+ * order), so a broadcast of an older save that is still in flight cannot flip the toolbar for a
+ * moment, not even when the newest toggle goes back to the value the store already holds.
  */
 export function useWidgetExpanded(
   api: Pick<KaipuElectronAPI, "updateSettings">,
@@ -41,10 +41,18 @@ export function useWidgetExpanded(
   const key = keyFor(intent);
   const stored = useSettings(pickWidget, sameWidget);
   const [pending, setPendingState] = useState<Partial<CaptureWidgetSettings>>({});
-  // The same claims as `pending`, readable between renders: a second toggle that comes before
-  // React renders must see the first one's value, not the store's.
+  // The saves of each type that main has not echoed yet, oldest first. A type's claim is its
+  // newest save's value, and it ends only when the last of them is echoed. Kept in a ref so a
+  // second toggle that comes before React renders sees the first one's value, not the store's.
+  const saving = useRef<Partial<Record<WidgetKey, { id: number; value: boolean }[]>>>({});
+  const lastId = useRef(0);
   const claims = useRef<Partial<CaptureWidgetSettings>>({});
-  const setPending = useCallback((next: Partial<CaptureWidgetSettings>): void => {
+  const publishClaims = useCallback((): void => {
+    const next: Partial<CaptureWidgetSettings> = {};
+    for (const name of Object.keys(saving.current) as WidgetKey[]) {
+      const queue = saving.current[name];
+      if (queue?.length) next[name] = queue[queue.length - 1].value;
+    }
     claims.current = next;
     setPendingState(next);
   }, []);
@@ -52,27 +60,25 @@ export function useWidgetExpanded(
   const latest = useRef({ key, expanded });
   latest.current = { key, expanded };
   // Saves run one after another, so the store sees the toggles in the order they were made.
-  const saves = useRef<Promise<unknown>>(Promise.resolve());
-  // Which toggle owns each type's claim: a failed save only gives up a claim that is still its own.
-  const owners = useRef({ count: 0, byKey: {} as Partial<Record<WidgetKey, number>> });
+  const writes = useRef<Promise<unknown>>(Promise.resolve());
 
-  // Every value the store takes, not the rendered one: a pending toggle ends when the store
-  // reaches it.
+  // Every value the store takes, not the rendered one: the oldest save of a type ends when the
+  // store reaches its value. A value that is not that one (an older save's, another window's)
+  // changes nothing here.
   useEffect(
     () =>
       subscribeSettings((published) => {
-        const saved = published.captureWidget;
-        const current = claims.current;
-        let next = current;
-        for (const name of Object.keys(current) as WidgetKey[]) {
-          if (current[name] === saved?.[name]) {
-            if (next === current) next = { ...current };
-            delete next[name];
+        let changed = false;
+        for (const name of Object.keys(saving.current) as WidgetKey[]) {
+          const queue = saving.current[name];
+          if (queue?.length && queue[0].value === published.captureWidget?.[name]) {
+            queue.shift();
+            changed = true;
           }
         }
-        if (next !== current) setPending(next);
+        if (changed) publishClaims();
       }),
-    [setPending],
+    [publishClaims],
   );
 
   const toggle = useCallback((): void => {
@@ -80,29 +86,30 @@ export function useWidgetExpanded(
     const next = !was;
     // Updated here too, so two taps before a render still flip twice.
     latest.current = { key: current, expanded: next };
+    const mine = ++lastId.current;
+    (saving.current[current] ??= []).push({ id: mine, value: next });
+    publishClaims();
     // What the other capture type still has in flight: it goes into this save, so the store's
     // older snapshot cannot undo it.
-    const mine = ++owners.current.count;
-    owners.current.byKey[current] = mine;
     const others = { ...claims.current };
     delete others[current];
-    // Nothing stands over a value the store already holds: its later changes must show.
-    const held = getSettingsSnapshot()?.captureWidget?.[current] ?? false;
-    setPending(held === next ? others : { ...others, [current]: next });
     // The whole object is written back: the other capture type's value must stay.
-    saves.current = saves.current
+    writes.current = writes.current
       .then(() => loadSettings())
       .then((app) =>
         api.updateSettings({ captureWidget: { ...app.captureWidget, ...others, [current]: next } }),
       )
       .catch(() => {
-        // The save failed: show what the store holds again, unless a newer toggle has taken over.
-        if (owners.current.byKey[current] !== mine) return;
-        const rest = { ...claims.current };
-        delete rest[current];
-        setPending(rest);
+        // The save failed and main will not echo it: stop waiting for it. The type shows its
+        // newest save that is still out, or the stored value when none is.
+        const queue = saving.current[current];
+        const at = queue?.findIndex((save) => save.id === mine) ?? -1;
+        if (queue && at >= 0) {
+          queue.splice(at, 1);
+          publishClaims();
+        }
       });
-  }, [api, setPending]);
+  }, [api, publishClaims]);
 
   return { expanded, toggle };
 }

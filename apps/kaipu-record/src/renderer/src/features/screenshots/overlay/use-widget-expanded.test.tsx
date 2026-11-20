@@ -101,6 +101,30 @@ describe("useWidgetExpanded", () => {
     ]);
   });
 
+  it("going back to the stored value keeps the claim until the first save's echo has passed", async () => {
+    const ipc = installSettingsIpc(BASE);
+    const { result } = renderHook(() => useWidgetExpanded(api(), "capture"));
+    await loaded();
+
+    // Open, then closed again: the second tap asks for the value the store still holds.
+    act(() => {
+      result.current.toggle();
+      result.current.toggle();
+    });
+    expect(result.current.expanded).toBe(false);
+
+    // Main echoes the first save: the toolbar must not open for the moment before the second
+    // save's echo arrives.
+    act(() => ipc.broadcast(withWidget({ screenshotExpanded: true, recordingExpanded: false })));
+    expect(result.current.expanded).toBe(false);
+
+    act(() => ipc.broadcast(withWidget({ screenshotExpanded: false, recordingExpanded: false })));
+    expect(result.current.expanded).toBe(false);
+    // Both echoes are in: the store decides again.
+    act(() => ipc.broadcast(withWidget({ screenshotExpanded: true, recordingExpanded: false })));
+    expect(result.current.expanded).toBe(true);
+  });
+
   it("a failed save shows the stored value again instead of sticking", async () => {
     installSettingsIpc(BASE);
     const bridge = { updateSettings: vi.fn(async () => Promise.reject(new Error("write failed"))) };
