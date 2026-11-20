@@ -1,0 +1,16 @@
+/*
+ * A demo card is one full-width block. While it is off screen (data-paused) every
+ * animation inside it, including the cursor, the click rings and the audio bars, is
+ * paused, so a demo below the fold costs nothing. The animations live in inline
+ * styles and a generated <style>, so the pause has to be forced from here.
+ */
+.card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.card[data-paused] * {
+  animation-play-state: paused !important;
+}
