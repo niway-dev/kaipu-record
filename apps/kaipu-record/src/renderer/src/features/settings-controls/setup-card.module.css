@@ -20,7 +20,13 @@
   color: var(--accent-primary);
 }
 
+/* An open card that is OFF takes a neutral stronger border: the pink means ON only. */
 .card[data-open] {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.card[data-active][data-open] {
   background: rgba(246, 5, 92, 0.14);
   border-color: rgba(246, 5, 92, 0.6);
 }
@@ -44,8 +50,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 12px;
+  gap: 8px;
+  padding: 10px 8px 10px 10px;
   background: transparent;
   border: none;
   border-radius: var(--radius-md) 0 0 var(--radius-md);
@@ -111,8 +117,8 @@
   min-width: 32px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 0 0 12px;
+  gap: 4px;
+  padding: 0 0 0 8px;
   background: transparent;
   border: none;
   border-left: 1px solid var(--border);
@@ -134,7 +140,7 @@
 
 .chevron {
   flex: 0 0 auto;
-  margin-right: 12px;
+  margin-right: 8px;
   transition: transform 120ms ease;
 }
 
@@ -142,15 +148,18 @@
   transform: rotate(180deg);
 }
 
-/* Each zone lights up on its own, so the pointer shows which of the two a click will use. */
+/* Each zone lights up on its own, with a tint and a 1px ring, so the pointer shows which of the
+   two a click will use. The ring is inset, so it never moves the layout. */
 .toggle:hover:not(:disabled):not([aria-disabled="true"]),
 .device:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
 .card[data-active] .toggle:hover:not(:disabled),
 .card[data-active] .device:hover:not(:disabled) {
-  background: rgba(246, 5, 92, 0.08);
+  background: rgba(246, 5, 92, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(246, 5, 92, 0.55);
 }
 
 .toggle[aria-disabled="true"],
