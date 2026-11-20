@@ -16,8 +16,10 @@ export function resetAutoRetranscribe(): void {
 
 /**
  * Starts a transcription job by itself the first time `armed` is true for a claim key (the item
- * plus the media content that armed it), and never again for that key from the renderer: a cancel or a failure must not make the app retry in a loop. The claim is
- * given back only when nothing started (`null` or a refusal), so a later moment can try again.
+ * plus the media content that armed it), and never again for that key from the renderer: a cancel,
+ * a failure or a refusal must not make the app retry in a loop (an automatic `busy` refusal is quiet,
+ * so the control re-arms at once). The claim is given back only when nothing was attempted (`null`),
+ * so a later moment can try again.
  */
 export function useAutoRetranscribe(
   claimKey: string,
@@ -36,7 +38,7 @@ export function useAutoRetranscribe(
     latest
       .current()
       .then((outcome) => {
-        if (outcome === null || outcome.status === "refused") release();
+        if (outcome === null) release();
       })
       .catch(release);
   }, [armed, claimKey]);

@@ -66,25 +66,39 @@ describe("useAutoRetranscribe", () => {
     expect(start).toHaveBeenCalledTimes(2);
   });
 
-  it("gives the claim back when nothing started, so the next time it is armed it can try", async () => {
+  it("gives the claim back only when nothing was attempted, so the next time it is armed it can try", async () => {
     const start = vi
       .fn<() => Promise<StartOutcome | null>>()
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ status: "refused", reason: "busy" })
       .mockResolvedValue({ status: "done" });
     const { rerender } = renderHook(({ armed }) => useAutoRetranscribe("a", armed, start), {
       initialProps: { armed: true },
     });
     await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-    for (const calls of [2, 3]) {
-      rerender({ armed: false });
-      rerender({ armed: true });
-      await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(calls));
-    }
-    // The third attempt started a job, so the claim is kept.
+    rerender({ armed: false });
+    rerender({ armed: true });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    // The second attempt started a job, so the claim is kept.
     rerender({ armed: false });
     rerender({ armed: true });
     await Promise.resolve();
-    expect(start).toHaveBeenCalledTimes(3);
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the claim after a refusal, so a quiet busy refusal cannot re-arm into a loop", async () => {
+    const start = vi
+      .fn<() => Promise<StartOutcome | null>>()
+      .mockResolvedValue({ status: "refused", reason: "busy" });
+    const { rerender } = renderHook(({ armed }) => useAutoRetranscribe("a", armed, start), {
+      initialProps: { armed: true },
+    });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    for (let i = 0; i < 3; i++) {
+      rerender({ armed: false });
+      rerender({ armed: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+    expect(start).toHaveBeenCalledTimes(1);
   });
 });
