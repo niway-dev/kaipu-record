@@ -88,11 +88,6 @@ export function createControlTap(onTap: () => void): {
   };
 }
 
-/** The Record shortcut as the action bar and the hint pill print it: the same everywhere. */
-export function recordKeyLabel(_platform: KeyPlatform): string {
-  return "R";
-}
-
 /**
  * R with no modifier. Not ⌘R / Ctrl+R: outside dev, `optimizer.watchWindowShortcuts` (main
  * installs it on every window) cancels those in `before-input-event` so they cannot reload a

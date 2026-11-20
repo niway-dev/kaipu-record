@@ -5,7 +5,6 @@ import {
   copyKeyLabel,
   createControlTap,
   detectKeyPlatform,
-  recordKeyLabel,
   toggleForKey,
 } from "./overlay-keys";
 
@@ -81,11 +80,6 @@ describe("actionForKey", () => {
   it("⌘C copies only when the overlay opened to capture", () => {
     expect(actionForKey(key({ key: "c", metaKey: true }), "mac", "capture")).toBe("copy");
     expect(actionForKey(key({ key: "c", metaKey: true }), "mac", "record")).toBeNull();
-  });
-
-  it("prints the record key per platform", () => {
-    expect(recordKeyLabel("mac")).toBe("R");
-    expect(recordKeyLabel("other")).toBe("R");
   });
 });
 

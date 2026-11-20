@@ -40,10 +40,19 @@ export function useWidgetExpanded(
 ): WidgetExpanded {
   const key = keyFor(intent);
   const stored = useSettings(pickWidget, sameWidget);
-  const [pending, setPending] = useState<Partial<CaptureWidgetSettings>>({});
+  const [pending, setPendingState] = useState<Partial<CaptureWidgetSettings>>({});
+  // The same claims as `pending`, readable between renders: a second toggle that comes before
+  // React renders must see the first one's value, not the store's.
+  const claims = useRef<Partial<CaptureWidgetSettings>>({});
+  const setPending = useCallback((next: Partial<CaptureWidgetSettings>): void => {
+    claims.current = next;
+    setPendingState(next);
+  }, []);
   const expanded = pending[key] ?? stored?.[key] ?? false;
   const latest = useRef({ key, expanded });
   latest.current = { key, expanded };
+  // Saves run one after another, so the store sees the toggles in the order they were made.
+  const saves = useRef<Promise<unknown>>(Promise.resolve());
 
   // Every value the store takes, not the rendered one: a pending toggle ends when the store
   // reaches it.
@@ -51,18 +60,17 @@ export function useWidgetExpanded(
     () =>
       subscribeSettings((published) => {
         const saved = published.captureWidget;
-        setPending((current) => {
-          let next = current;
-          for (const name of Object.keys(current) as WidgetKey[]) {
-            if (current[name] === saved?.[name]) {
-              if (next === current) next = { ...current };
-              delete next[name];
-            }
+        const current = claims.current;
+        let next = current;
+        for (const name of Object.keys(current) as WidgetKey[]) {
+          if (current[name] === saved?.[name]) {
+            if (next === current) next = { ...current };
+            delete next[name];
           }
-          return next;
-        });
+        }
+        if (next !== current) setPending(next);
       }),
-    [],
+    [setPending],
   );
 
   const toggle = useCallback((): void => {
@@ -70,20 +78,27 @@ export function useWidgetExpanded(
     const next = !was;
     // Updated here too, so two taps before a render still flip twice.
     latest.current = { key: current, expanded: next };
+    // What the other capture type still has in flight: it goes into this save, so the store's
+    // older snapshot cannot undo it.
+    const others = { ...claims.current };
+    delete others[current];
     // Nothing stands over a value the store already holds: its later changes must show.
     const held = getSettingsSnapshot()?.captureWidget?.[current] ?? false;
-    setPending((previous) => {
-      const rest = { ...previous };
-      delete rest[current];
-      return held === next ? rest : { ...rest, [current]: next };
-    });
+    setPending(held === next ? others : { ...others, [current]: next });
     // The whole object is written back: the other capture type's value must stay.
-    void loadSettings()
+    saves.current = saves.current
+      .then(() => loadSettings())
       .then((app) =>
-        api.updateSettings({ captureWidget: { ...app.captureWidget, [current]: next } }),
+        api.updateSettings({ captureWidget: { ...app.captureWidget, ...others, [current]: next } }),
       )
-      .catch(() => {});
-  }, [api]);
+      .catch(() => {
+        // The save failed: show what the store holds again, unless a newer toggle has taken over.
+        if (claims.current[current] !== next) return;
+        const rest = { ...claims.current };
+        delete rest[current];
+        setPending(rest);
+      });
+  }, [api, setPending]);
 
   return { expanded, toggle };
 }

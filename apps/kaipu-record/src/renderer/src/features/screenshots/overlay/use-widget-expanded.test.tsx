@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@shared/types";
+import { getSettingsSnapshot } from "@renderer/features/settings/settings-store";
 import { installSettingsIpc } from "@renderer/test/settings-ipc";
 import { STUB_SETTINGS } from "@renderer/test/stub-settings";
 import { useWidgetExpanded } from "./use-widget-expanded";
@@ -13,12 +14,16 @@ const withWidget = (captureWidget: AppSettings["captureWidget"]): AppSettings =>
 
 const api = () => ({ updateSettings: vi.fn(async () => BASE) });
 
+/** The hook shows compact until the first read answers: tests wait for the loaded store. */
+const loaded = () => waitFor(() => expect(getSettingsSnapshot()).not.toBeNull());
+
 describe("useWidgetExpanded", () => {
   it("opens compact for both capture types when nothing is saved", async () => {
     installSettingsIpc(BASE);
     const shot = renderHook(() => useWidgetExpanded(api(), "capture"));
     const take = renderHook(() => useWidgetExpanded(api(), "record"));
-    await waitFor(() => expect(shot.result.current.expanded).toBe(false));
+    await loaded();
+    expect(shot.result.current.expanded).toBe(false);
     expect(take.result.current.expanded).toBe(false);
   });
 
@@ -35,7 +40,8 @@ describe("useWidgetExpanded", () => {
       withWidget({ screenshotExpanded: false, recordingExpanded: false }),
     );
     const { result } = renderHook(() => useWidgetExpanded(api(), "capture"));
-    await waitFor(() => expect(result.current.expanded).toBe(false));
+    await loaded();
+    expect(result.current.expanded).toBe(false);
 
     act(() => ipc.broadcast(withWidget({ screenshotExpanded: true, recordingExpanded: false })));
 
@@ -46,7 +52,8 @@ describe("useWidgetExpanded", () => {
     installSettingsIpc(withWidget({ screenshotExpanded: false, recordingExpanded: true }));
     const bridge = api();
     const { result } = renderHook(() => useWidgetExpanded(bridge, "capture"));
-    await waitFor(() => expect(result.current.expanded).toBe(false));
+    await loaded();
+    expect(result.current.expanded).toBe(false);
 
     act(() => result.current.toggle());
 
@@ -62,7 +69,8 @@ describe("useWidgetExpanded", () => {
     installSettingsIpc(BASE);
     const bridge = api();
     const { result } = renderHook(() => useWidgetExpanded(bridge, "record"));
-    await waitFor(() => expect(result.current.expanded).toBe(false));
+    await loaded();
+    expect(result.current.expanded).toBe(false);
 
     act(() => result.current.toggle());
 
@@ -77,7 +85,8 @@ describe("useWidgetExpanded", () => {
     installSettingsIpc(BASE);
     const bridge = api();
     const { result } = renderHook(() => useWidgetExpanded(bridge, "capture"));
-    await waitFor(() => expect(result.current.expanded).toBe(false));
+    await loaded();
+    expect(result.current.expanded).toBe(false);
 
     act(() => {
       result.current.toggle();
@@ -86,12 +95,73 @@ describe("useWidgetExpanded", () => {
 
     expect(result.current.expanded).toBe(false);
     await waitFor(() => expect(bridge.updateSettings).toHaveBeenCalledTimes(2));
+    expect(bridge.updateSettings.mock.calls).toEqual([
+      [{ captureWidget: { screenshotExpanded: true, recordingExpanded: false } }],
+      [{ captureWidget: { screenshotExpanded: false, recordingExpanded: false } }],
+    ]);
+  });
+
+  it("a failed save shows the stored value again instead of sticking", async () => {
+    installSettingsIpc(BASE);
+    const bridge = { updateSettings: vi.fn(async () => Promise.reject(new Error("write failed"))) };
+    const { result } = renderHook(() => useWidgetExpanded(bridge, "capture"));
+    await loaded();
+
+    act(() => result.current.toggle());
+    expect(result.current.expanded).toBe(true);
+
+    await waitFor(() => expect(result.current.expanded).toBe(false));
+    expect(bridge.updateSettings).toHaveBeenCalledTimes(1);
+    // The next tap starts from what is shown, so it asks for the value again.
+    act(() => result.current.toggle());
+    expect(result.current.expanded).toBe(true);
+  });
+
+  it("a failed save does not undo a newer toggle of the same type", async () => {
+    installSettingsIpc(BASE);
+    let failFirst: (error: Error) => void = () => {};
+    const updateSettings = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((_, reject) => (failFirst = reject)))
+      .mockImplementation(async () => BASE);
+    const { result } = renderHook(() => useWidgetExpanded({ updateSettings }, "capture"));
+    await loaded();
+
+    act(() => result.current.toggle());
+    act(() => result.current.toggle());
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    await act(async () => failFirst(new Error("write failed")));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
+    // Compact again: the second toggle is the claim that stands.
+    expect(result.current.expanded).toBe(false);
+  });
+
+  it("a toggle of the other type, made before the store echoes, keeps the first one's value", async () => {
+    installSettingsIpc(BASE);
+    const bridge = api();
+    const { result, rerender } = renderHook(
+      ({ intent }: { intent: "capture" | "record" }) => useWidgetExpanded(bridge, intent),
+      { initialProps: { intent: "capture" } },
+    );
+    await loaded();
+
+    act(() => result.current.toggle());
+    rerender({ intent: "record" });
+    act(() => result.current.toggle());
+
+    await waitFor(() => expect(bridge.updateSettings).toHaveBeenCalledTimes(2));
+    // The store never echoed the first save, and still holds both as false.
+    expect(bridge.updateSettings).toHaveBeenLastCalledWith({
+      captureWidget: { screenshotExpanded: true, recordingExpanded: true },
+    });
   });
 
   it("an older broadcast still in flight does not flip a fresh toggle back", async () => {
     const ipc = installSettingsIpc(BASE);
     const { result } = renderHook(() => useWidgetExpanded(api(), "capture"));
-    await waitFor(() => expect(result.current.expanded).toBe(false));
+    await loaded();
+    expect(result.current.expanded).toBe(false);
 
     act(() => result.current.toggle());
     // A broadcast of the value from before the toggle arrives late.
