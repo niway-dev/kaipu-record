@@ -70,52 +70,9 @@
   pointer-events: none;
 }
 
-/* Same look as the floating images' handles (media-layer.module.css): a 14px white square with
-   an accent border and a 26px grab area, inside the box corners so the frame edge cannot cut one
-   in half. The pointer arithmetic uses the press delta, not the handle's position. */
+/* The corner handle: the rules live in corner-handle.module.css, shared with the floating images. */
 .handle {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  box-sizing: border-box;
-  border: 2px solid var(--accent-primary);
-  border-radius: 3px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
-  pointer-events: auto;
-  touch-action: none;
-}
-
-/* A 26px grab area around the 14px square: 8px each side of the padding box (10px after the
-   2px border). */
-.handle::after {
-  content: "";
-  position: absolute;
-  inset: -8px;
-}
-
-.handle[data-corner="nw"] {
-  top: 2px;
-  left: 2px;
-  cursor: nwse-resize;
-}
-
-.handle[data-corner="ne"] {
-  top: 2px;
-  right: 2px;
-  cursor: nesw-resize;
-}
-
-.handle[data-corner="sw"] {
-  bottom: 2px;
-  left: 2px;
-  cursor: nesw-resize;
-}
-
-.handle[data-corner="se"] {
-  bottom: 2px;
-  right: 2px;
-  cursor: nwse-resize;
+  composes: handle from "./corner-handle.module.css";
 }
 
 /* "28% · L" while a corner is dragged: above the bubble, below it near the top of the frame. */

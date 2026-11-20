@@ -1,0 +1,49 @@
+/* The corner handle the floating images (media-layer.module.css) and the camera bubble
+   (webcam-layer.module.css) share, so a restyle reaches both: a 14px white square with an accent
+   border, inside the box corners so a frame or picture edge cannot cut one in half. Each module
+   composes `handle` into its own class; the pointer arithmetic uses the box and the press delta,
+   not the handle's position. */
+.handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--accent-primary);
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* A 26px grab area around the 14px square. The pseudo-element is placed against the handle's
+   padding box, 10px once the 2px border is taken off, so 8px each side makes 26px. */
+.handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.handle[data-corner="nw"] {
+  top: 2px;
+  left: 2px;
+  cursor: nwse-resize;
+}
+
+.handle[data-corner="ne"] {
+  top: 2px;
+  right: 2px;
+  cursor: nesw-resize;
+}
+
+.handle[data-corner="sw"] {
+  bottom: 2px;
+  left: 2px;
+  cursor: nesw-resize;
+}
+
+.handle[data-corner="se"] {
+  bottom: 2px;
+  right: 2px;
+  cursor: nwse-resize;
+}
