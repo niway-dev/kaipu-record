@@ -2,6 +2,7 @@ import type { Display } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import { CAPTURE_MODES } from "@shared/types/screenshot-capture";
+import type { FrameMemoryUpdate } from "./capture-overlay-windows";
 
 const created: Array<{ options: Record<string, unknown>; window: FakeWindow }> = [];
 const ipcListeners = new Map<
@@ -148,7 +149,7 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
     }
   });
 
-  it("loads the overlay render target with everything the renderer needs in the query", () => {
+  it("loads the overlay render target with the geometry the renderer needs in the query", () => {
     void overlays().pick("frame", [left, right]);
 
     expect(created[0].window.loadFile).toHaveBeenCalledWith(
@@ -156,27 +157,28 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
       {
         search:
           "?window=capture-overlay&display=1&ui=frame&index=1&count=2" +
-          "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1,2&frame=2",
+          "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1,2&scale=2&spare=1",
       },
     );
     expect(created[1].window.loadFile.mock.calls[0][1]).toEqual({
       search:
         "?window=capture-overlay&display=2&ui=frame&index=2&count=2" +
-        "&bounds=1440,0,1440,900&work=1440,25,1440,875&ids=1,2&frame=2",
+        "&bounds=1440,0,1440,900&work=1440,25,1440,875&ids=1,2&scale=1&spare=1",
     });
   });
 
-  it("tells the renderer it was opened to record, and says nothing for a screenshot", () => {
-    void overlays().pick("frame", [left], "record");
-    // The scale feeds the record intent's size readout, in device pixels.
-    expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).toContain(
-      "&intent=record&scale=2",
+  it("leaves the mode, intent and frame display out of the query: they arrive as state", () => {
+    void overlays().pick("screen", [left], "record");
+    const search = String(created[0].window.loadFile.mock.calls[0]?.[1]?.search);
+    expect(search).not.toContain("frame=");
+    expect(search).not.toContain("intent");
+    expect(search).toContain("ui=frame");
+    expect(created[0].window.webContents.send).not.toHaveBeenCalled();
+    created[0].window.paint();
+    expect(created[0].window.webContents.send).toHaveBeenCalledWith(
+      IPC_CHANNELS.screenshotOverlayState,
+      expect.objectContaining({ mode: "screen", intent: "record" }),
     );
-
-    created.length = 0;
-    void overlays().pick("frame", [left]);
-    expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).not.toContain("intent");
-    expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).not.toContain("scale");
   });
 
   it("writes negative origins as-is, for a display left of the primary", () => {
@@ -184,8 +186,8 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
 
     expect(created[0].window.loadFile.mock.calls[0][1]).toEqual({
       search:
-        "?window=capture-overlay&display=3&ui=screen&index=1&count=1" +
-        "&bounds=-1920,0,1440,900&work=-1920,25,1440,875&ids=3",
+        "?window=capture-overlay&display=3&ui=frame&index=1&count=1" +
+        "&bounds=-1920,0,1440,900&work=-1920,25,1440,875&ids=3&scale=2&spare=1",
     });
   });
 
@@ -194,8 +196,8 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
 
     expect(created[0].window.loadFile.mock.calls[0][1]).toEqual({
       search:
-        "?window=capture-overlay&display=1&ui=screen&index=1&count=1" +
-        "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1&internal=1",
+        "?window=capture-overlay&display=1&ui=frame&index=1&count=1" +
+        "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1&internal=1&scale=2&spare=1",
     });
   });
 
@@ -558,6 +560,7 @@ describe("CaptureOverlayWindows: answers", () => {
 
     for (const window of [first, second]) {
       expect(window.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.screenshotOverlayState, {
+        session: expect.any(Number),
         mode: "screen",
         intent: "capture",
         hoverDisplayId: 2,
@@ -578,7 +581,7 @@ describe("CaptureOverlayWindows: answers", () => {
 
     const states = second.webContents.send.mock.calls
       .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
-      .map(([, state]) => state);
+      .map(([, { session: _session, ...state }]) => state);
     expect(states).toEqual([
       { mode: "screen", intent: "capture", hoverDisplayId: 1, frameDisplayId: null, windows: null },
       { mode: "screen", intent: "capture", hoverDisplayId: 2, frameDisplayId: null, windows: null },
@@ -587,6 +590,7 @@ describe("CaptureOverlayWindows: answers", () => {
     // The hovered display's own window can still clear it.
     second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: null });
     expect(second.webContents.send).toHaveBeenLastCalledWith(IPC_CHANNELS.screenshotOverlayState, {
+      session: expect.any(Number),
       mode: "screen",
       intent: "capture",
       hoverDisplayId: null,
@@ -599,7 +603,7 @@ describe("CaptureOverlayWindows: answers", () => {
     const states = (window: FakeWindow) =>
       window.webContents.send.mock.calls
         .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
-        .map(([, state]) => state);
+        .map(([, { session: _session, ...state }]) => state);
     const pickFrame = (cursor: { x: number; y: number }, primaryDisplayId: number | null = 1) => {
       const port = new CaptureOverlayWindows({
         enabledModes: CAPTURE_MODES,
@@ -695,6 +699,7 @@ describe("CaptureOverlayWindows: answers", () => {
         expect(window.webContents.send).toHaveBeenLastCalledWith(
           IPC_CHANNELS.screenshotOverlayState,
           {
+            session: expect.any(Number),
             mode: "frame",
             intent: "capture",
             hoverDisplayId: null,
@@ -799,7 +804,7 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
   const states = (window: FakeWindow) =>
     window.webContents.send.mock.calls
       .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
-      .map(([, state]) => state as Record<string, unknown>);
+      .map(([, { session: _session, ...state }]) => state as Record<string, unknown>);
 
   function pickWith(
     ui: "frame" | "window" | "screen",
@@ -1946,5 +1951,543 @@ describe("CaptureOverlayWindows: content protection during a take (NIW2-688)", (
     );
     expect(preventDefault).toHaveBeenCalled();
     await expect(picked).resolves.toEqual({ kind: "cancelled" });
+  });
+});
+
+describe("CaptureOverlayWindows: windows kept for the next pick (NIW2-878)", () => {
+  function kept(options: { canWarm?: () => boolean } = {}) {
+    const canWarm = vi.fn(options.canWarm ?? (() => true));
+    const port = new CaptureOverlayWindows({
+      platform: "darwin",
+      enabledModes: CAPTURE_MODES,
+      warmup: {
+        next: () => ({ ui: "frame", intent: "record", displays: [left, right] }),
+        canWarm,
+      },
+      warmDelayMs: 2000,
+      warmRetryMs: 500,
+    });
+    return { port, canWarm };
+  }
+
+  /** Open a pick on both displays and paint every window, as the real windows do. */
+  function openPick(port: InstanceType<typeof CaptureOverlayWindows>) {
+    const picked = port.pick("frame", [left, right], "capture");
+    for (const { window } of created) window.paint();
+    return picked;
+  }
+
+  const stateSent = (window: FakeWindow) =>
+    window.webContents.send.mock.calls.filter(
+      ([channel]) => channel === IPC_CHANNELS.screenshotOverlayState,
+    );
+
+  it("keeps the same windows hidden after Esc and shows them for the next pick, at any gap", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    port.cancelPick();
+    await expect(picked).resolves.toEqual({ kind: "cancelled" });
+
+    port.endPick();
+
+    // Nothing was destroyed and the windows left the screen (and every Space).
+    for (const { window } of created) {
+      expect(window.destroy).not.toHaveBeenCalled();
+      expect(window.hide).toHaveBeenCalled();
+      expect(window.setVisibleOnAllWorkspaces).toHaveBeenLastCalledWith(false, {
+        visibleOnFullScreen: false,
+        skipTransformProcessType: true,
+      });
+    }
+    const windows = created.map(({ window }) => window);
+
+    // A press 300 ms later, long before any 2 s reload would have run.
+    vi.advanceTimersByTime(300);
+    created.forEach(({ window }) => window.show.mockClear());
+    created.forEach(({ window }) => window.showInactive.mockClear());
+    void port.pick("frame", [left, right], "capture");
+
+    expect(created).toHaveLength(2);
+    expect(created.map(({ window }) => window)).toEqual(windows);
+    // Every kept window is shown, not just one of them.
+    for (const window of windows) {
+      expect(window.show.mock.calls.length + window.showInactive.mock.calls.length).toBeGreaterThan(
+        0,
+      );
+    }
+    for (const window of windows) expect(window.loadFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the windows after an answer too, without waiting for a reload", async () => {
+    vi.useFakeTimers();
+    const { port, canWarm } = kept({ canWarm: () => false });
+    const picked = openPick(port);
+    created[0]!.window.send(IPC_CHANNELS.screenshotOverlayAnswer, {
+      kind: "rect",
+      mode: "frame",
+      action: "copy",
+      displayId: 1,
+      rect: { x: 10, y: 10, width: 100, height: 80 },
+    });
+    await expect(picked).resolves.toMatchObject({ kind: "rect" });
+    const hidden = port.hideAll();
+    await vi.advanceTimersByTimeAsync(HIDDEN_ACK_CAP_MS);
+    await hidden;
+    port.endPick();
+
+    // A take is pending (`canWarm` says no): nothing new loads, the kept windows serve.
+    vi.advanceTimersByTime(60_000);
+    expect(created).toHaveLength(2);
+    expect(canWarm).not.toHaveBeenCalled();
+    for (const { window } of created) expect(window.destroy).not.toHaveBeenCalled();
+    void port.pick("frame", [left, right], "capture");
+    expect(created).toHaveLength(2);
+  });
+
+  it("starts every reused pick as a new session, and tells the window to forget the last one", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const first = openPick(port);
+    const firstSession = (stateSent(created[0]!.window).at(-1)![1] as { session: number }).session;
+    port.cancelPick();
+    await first;
+    port.endPick();
+    expect(created[0]!.window.webContents.send).toHaveBeenCalledWith(
+      IPC_CHANNELS.screenshotOverlayReset,
+    );
+
+    void port.pick("frame", [left, right], "record");
+    const secondSession = (stateSent(created[0]!.window).at(-1)![1] as { session: number }).session;
+    expect(typeof firstSession).toBe("number");
+    expect(secondSession).not.toBe(firstSession);
+  });
+
+  it("ignores an answer a window of the previous pick sends late", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const first = openPick(port);
+    const firstSession = (stateSent(created[0]!.window).at(-1)![1] as { session: number }).session;
+    port.cancelPick();
+    await first;
+    port.endPick();
+    const second = port.pick("frame", [left, right], "capture");
+    let settled = false;
+    void second.then(() => (settled = true));
+
+    created[0]!.window.send(IPC_CHANNELS.screenshotOverlayAnswer, {
+      kind: "rect",
+      mode: "frame",
+      action: "copy",
+      displayId: 1,
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      session: firstSession,
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+  });
+
+  it("destroys the windows instead of keeping them when the displays changed during the pick", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    screenListeners.get("display-metrics-changed")?.({}, left);
+    port.cancelPick();
+    await picked;
+
+    port.endPick();
+
+    for (const { window } of created) expect(window.destroy).toHaveBeenCalledTimes(1);
+    // A new set loads after the usual delay, as before.
+    vi.advanceTimersByTime(2000);
+    expect(created).toHaveLength(4);
+  });
+
+  it("destroys the kept windows when the displays change, and loads new ones", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    port.cancelPick();
+    await picked;
+    port.endPick();
+
+    screenListeners.get("display-added")?.({}, right);
+
+    for (const { window } of created) expect(window.destroy).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(2000);
+    expect(created).toHaveLength(4);
+  });
+
+  it("refreshSpares() (a language or theme change) reloads kept windows too", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    port.cancelPick();
+    await picked;
+    port.endPick();
+
+    port.refreshSpares();
+
+    for (const { window } of created) expect(window.destroy).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(2000);
+    expect(created).toHaveLength(4);
+  });
+
+  it("drops every kept window when one crashes, and loads a pick's own", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    port.cancelPick();
+    await picked;
+    port.endPick();
+
+    created[1]!.window.crashRenderer();
+
+    for (const { window } of created) expect(window.destroy).toHaveBeenCalledTimes(1);
+    void port.pick("frame", [left, right], "capture");
+    expect(created).toHaveLength(4);
+  });
+
+  it("does not keep the windows of a pick whose window failed to load", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    created[0]!.window.emitContents("did-fail-load", {}, -105, "", "", true);
+    await picked;
+    port.endPick();
+
+    for (const { window } of created) expect(window.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("a kept set for other displays is thrown away by the next pick", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    port.cancelPick();
+    await picked;
+    port.endPick();
+
+    void port.pick("frame", [left], "capture");
+
+    expect(created).toHaveLength(3);
+    for (const { window } of created.slice(0, 2)) expect(window.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispose() destroys kept windows, and endPick() after it creates nothing", async () => {
+    vi.useFakeTimers();
+    const { port } = kept();
+    const picked = openPick(port);
+    port.cancelPick();
+    await picked;
+    port.endPick();
+
+    port.dispose();
+    port.endPick();
+    vi.advanceTimersByTime(60_000);
+
+    for (const { window } of created) expect(window.destroy).toHaveBeenCalledTimes(1);
+    expect(created).toHaveLength(2);
+  });
+
+  it("loads fresh pick windows with the neutral query, so any window can be reused", () => {
+    void overlays().pick("frame", [left, right], "record");
+    for (const { window } of created) {
+      const search = String(window.loadFile.mock.calls[0]?.[1]?.search);
+      expect(search).toContain("&spare=1");
+      expect(search).not.toContain("frame=");
+      expect(search).not.toContain("intent");
+    }
+  });
+});
+
+describe("CaptureOverlayWindows: the frame opens where it was last used (NIW2-878)", () => {
+  function remembering(
+    last: Partial<Record<"capture" | "record", number>> = {},
+    cursor = { x: 100, y: 100 },
+  ) {
+    const save = vi.fn<(updates: FrameMemoryUpdate[]) => void>();
+    const lastDisplay = vi.fn((intent: "capture" | "record") => last[intent] ?? null);
+    const port = new CaptureOverlayWindows({
+      enabledModes: CAPTURE_MODES,
+      platform: "darwin",
+      cursorPoint: () => cursor,
+      primaryDisplayId: () => 1,
+      frameMemory: { lastDisplay, save },
+    });
+    return { port, save, lastDisplay };
+  }
+
+  /** The display the frame was put on, as the first window's state says. */
+  function openOn(port: InstanceType<typeof CaptureOverlayWindows>, intent: "capture" | "record") {
+    const picked = port.pick("frame", [left, right], intent);
+    for (const { window } of created) window.paint();
+    const sent = created[0]!.window.webContents.send.mock.calls
+      .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+      .at(-1)![1] as { frameDisplayId: number | null };
+    return { picked, frameDisplayId: sent.frameDisplayId };
+  }
+
+  it("opens on the display last used for that intent, wherever the pointer is", () => {
+    const { port } = remembering({ capture: 2, record: 1 }, { x: 100, y: 100 });
+    expect(openOn(port, "capture").frameDisplayId).toBe(2);
+  });
+
+  it("remembers the screenshot frame and the recording area apart", () => {
+    const { port } = remembering({ capture: 2, record: 1 }, { x: 2000, y: 100 });
+    expect(openOn(port, "record").frameDisplayId).toBe(1);
+  });
+
+  it("falls back to the display under the pointer when the last one is gone", () => {
+    const { port } = remembering({ capture: 9 }, { x: 1500, y: 100 });
+    expect(openOn(port, "capture").frameDisplayId).toBe(2);
+  });
+
+  it("falls back to the primary display when nothing is remembered and the pointer is elsewhere", () => {
+    const { port } = remembering({}, { x: 99999, y: 99999 });
+    expect(openOn(port, "capture").frameDisplayId).toBe(1);
+  });
+
+  it("leaves the keyboard on the frame's display, not the pointer's", () => {
+    const { port } = remembering({ capture: 2 }, { x: 100, y: 100 });
+    openOn(port, "capture");
+    expect(created[1]!.window.show).toHaveBeenCalled();
+    expect(created[0]!.window.show).not.toHaveBeenCalled();
+  });
+
+  describe("saving on close", () => {
+    const rect = { x: 10, y: 20, width: 300, height: 200 };
+    // Reports carry the pick's session, as the overlay's own do.
+    const currentSession = (): number =>
+      (
+        created[0]!.window.webContents.send.mock.calls
+          .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+          .at(-1)![1] as { session: number }
+      ).session;
+    const reportFrom = (window: FakeWindow, payload: Record<string, unknown>) =>
+      window.send(IPC_CHANNELS.screenshotOverlayFrame, { session: currentSession(), ...payload });
+
+    it("saves nothing while the frame moves or is resized, only when the widget closes", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+      reportFrom(created[0]!.window, { displayId: 1, rect: { ...rect, width: 320 } });
+      expect(save).not.toHaveBeenCalled();
+
+      port.cancelPick();
+      await picked;
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+
+    it("saves the display and the last reported rectangle once, for the intent it closed in", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "record");
+      reportFrom(created[0]!.window, { displayId: 1, rect, ratio: "16:9" });
+      reportFrom(created[0]!.window, {
+        displayId: 1,
+        rect: { ...rect, width: 320 },
+        ratio: "16:9",
+      });
+
+      created[0]!.window.emitContents(
+        "before-input-event",
+        { preventDefault: vi.fn() },
+        { type: "keyDown", key: "Escape" },
+      );
+      await picked;
+
+      expect(save).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledWith([
+        {
+          intent: "record",
+          displayId: 1,
+          areas: [{ displayId: 1, rect: { ...rect, width: 320 }, ratio: "16:9" }],
+        },
+      ]);
+    });
+
+    it("saves the display the frame was moved to, and the rectangle of the display it was drawn on", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+      created[1]!.window.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 2 });
+
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledWith([
+        { intent: "capture", displayId: 2, areas: [{ displayId: 1, rect }] },
+      ]);
+    });
+
+    it("saves the rectangle of every display it was drawn on, not only the last one", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      const second = { ...rect, width: 640 };
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+      created[1]!.window.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 2 });
+      reportFrom(created[1]!.window, { displayId: 2, rect: second });
+
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledWith([
+        {
+          intent: "capture",
+          displayId: 2,
+          areas: [
+            { displayId: 1, rect },
+            { displayId: 2, rect: second },
+          ],
+        },
+      ]);
+    });
+
+    it("saves a rectangle under the intent it was drawn in, whatever intent the pick closes in", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+
+      port.switchIntent("record");
+      const recorded = { ...rect, width: 480 };
+      reportFrom(created[0]!.window, { displayId: 1, rect: recorded, ratio: "16:9" });
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledWith([
+        { intent: "capture", displayId: 1, areas: [{ displayId: 1, rect }] },
+        {
+          intent: "record",
+          displayId: 1,
+          areas: [{ displayId: 1, rect: recorded, ratio: "16:9" }],
+        },
+      ]);
+    });
+
+    it("never hands a screenshot rectangle to the recording area when the pick closes in Record", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+
+      port.switchIntent("record");
+      port.cancelPick();
+      await picked;
+
+      const updates = save.mock.calls[0]![0];
+      expect(updates.find((update) => update.intent === "record")?.areas).toEqual([]);
+    });
+
+    it("writes nothing more when the overlay is already saving the confirmed frame", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+      // The overlay says so right before its own settings write; Esc then lands in main.
+      reportFrom(created[0]!.window, { displayId: 1, rect, confirming: true });
+
+      created[0]!.window.emitContents(
+        "before-input-event",
+        { preventDefault: vi.fn() },
+        { type: "keyDown", key: "Escape" },
+      );
+      await picked;
+
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it("ignores a frame report that names no pick", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+
+      created[0]!.window.send(IPC_CHANNELS.screenshotOverlayFrame, { displayId: 1, rect });
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledWith([{ intent: "capture", displayId: 1, areas: [] }]);
+    });
+
+    it("saves the display alone when the frame was never changed", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledWith([{ intent: "capture", displayId: 1, areas: [] }]);
+    });
+
+    it("saves nothing for a pick closed in Screen mode with no frame", async () => {
+      const { port, save } = remembering();
+      const picked = port.pick("screen", [left, right], "capture");
+      for (const { window } of created) window.paint();
+
+      port.cancelPick();
+      await picked;
+
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it("leaves a confirmed frame to the overlay, which writes it with its answer", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      reportFrom(created[0]!.window, { displayId: 1, rect });
+
+      created[0]!.window.send(IPC_CHANNELS.screenshotOverlayAnswer, {
+        kind: "rect",
+        mode: "frame",
+        action: "copy",
+        displayId: 1,
+        rect,
+      });
+      await picked;
+
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it("remembers the display a Screen answer chose, for the intent of its action", async () => {
+      const { port, save } = remembering();
+      const picked = port.pick("screen", [left, right], "capture");
+      for (const { window } of created) window.paint();
+
+      created[1]!.window.send(IPC_CHANNELS.screenshotOverlayAnswer, {
+        kind: "display",
+        mode: "screen",
+        action: "record",
+        displayId: 2,
+      });
+      await picked;
+
+      expect(save).toHaveBeenCalledWith([{ intent: "record", displayId: 2, areas: [] }]);
+    });
+
+    it("ignores a report for a display that is not picked, a bad rectangle or an old pick", async () => {
+      const { port, save } = remembering();
+      const { picked } = openOn(port, "capture");
+      const session = (
+        created[0]!.window.webContents.send.mock.calls.at(-1)![1] as { session: number }
+      ).session;
+
+      reportFrom(created[0]!.window, { displayId: 99, rect });
+      reportFrom(created[0]!.window, { displayId: 1, rect: { x: 0, y: 0, width: 0, height: 5 } });
+      reportFrom(created[0]!.window, { displayId: 1, rect, session: session + 1 });
+      port.cancelPick();
+      await picked;
+
+      expect(save).toHaveBeenCalledWith([{ intent: "capture", displayId: 1, areas: [] }]);
+    });
+
+    it("does not let a failing save break the close", async () => {
+      const { port, save } = remembering();
+      save.mockImplementation(() => {
+        throw new Error("disk full");
+      });
+      const { picked } = openOn(port, "capture");
+
+      port.cancelPick();
+
+      await expect(picked).resolves.toEqual({ kind: "cancelled" });
+    });
   });
 });

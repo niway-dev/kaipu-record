@@ -189,8 +189,11 @@ interface OverlayPort {
   pick(ui: "area" | "screen" | "frame", displays: Display[]): Promise<OverlayAnswer>;
   /** Hide every overlay; resolves once they are off screen (hidden, one tick, one renderer frame, 250 ms cap). */
   hideAll(): Promise<void>;
-  /** Destroy every overlay and end the session; safe to call twice. */
-  destroyAll(): void;
+  /**
+   * End the session. Keeps the windows, hidden, for the next pick unless they cannot serve one
+   * (see "Windows are kept between picks" below); safe to call twice.
+   */
+  endPick(): void;
 }
 type OverlayAnswer =
   | { kind: "rect"; displayId: number; rect: CaptureRect /* DIP, display-relative */ }
@@ -199,7 +202,7 @@ type OverlayAnswer =
 ```
 
 `pick` never hides or destroys on its own; the provider calls `hideAll()` before grabbing
-pixels and `destroyAll()` in a `finally`.
+pixels and `endPick()` in a `finally`.
 
 Implemented by `CaptureOverlayWindows` in `src/main/screenshots/capture-overlay-windows.ts`:
 one `BrowserWindow` per display with `frame: false, transparent: true, resizable: false,
@@ -211,13 +214,68 @@ overlay opens over a full-screen app without blanking the menu bar. Esc anywhere
 `requestAnimationFrame` round-trip in the renderer, which is what "waits one frame" means in
 decision 5.
 
-Renderer: `?window=capture-overlay&display=<id>&ui=<mode>&index=<n>&count=<n>&bounds=<x,y,w,h>&work=<x,y,w,h>&ids=<id,id,...>[&frame=<id>]` (built by `overlayQuery`; `bounds` and `work` are absolute DIP, `ids` is the ordered display list so the digit keys agree across overlays; `frame` is Frame-only: the display that starts with the frame, so the first paint is right) in `main.tsx`, a `CaptureOverlay`
+Renderer: `?window=capture-overlay&display=<id>&ui=frame&index=<n>&count=<n>&bounds=<x,y,w,h>&work=<x,y,w,h>&ids=<id,id,...>[&internal=1]&scale=<n>&spare=1` (built by `overlaySpareQuery`; `bounds` and `work` are absolute DIP, `ids` is the ordered display list so the digit keys agree across overlays; `ui=frame` is only a placeholder and `frame` is never written: the mode, intent and frame display reach every window as `screenshot:overlay-state`, see "Windows are kept between picks") in `main.tsx`, a `CaptureOverlay`
 component in `features/screenshots/overlay/` with three children: `AreaDrag`, `ScreenChooser`,
 `FrameBox` (reusing `clampCrop`, `moveCrop`, `resizeCrop`, `hitCropHandle` from
-`annotations/crop.ts`). It talks to main over two channels: `screenshot:overlay-answer`
-(renderer → main) and `screenshot:overlay-state` (main → every overlay: `{ hoverDisplayId, frameDisplayId }`, so the
+`annotations/crop.ts`). It talks to main over these channels: `screenshot:overlay-answer`
+(renderer → main) and `screenshot:overlay-state` (main → every overlay: `{ session, mode, intent, hoverDisplayId, frameDisplayId, windows, cursor }`, so the
 chooser highlights only one display and only one display shows the frame), plus
-`screenshot:overlay-frame-display` (renderer → main) to move the frame.
+`screenshot:overlay-frame-display` (renderer → main) to move the frame, `screenshot:overlay-frame` (renderer → main, `{ displayId, rect, ratio?, session?, confirming? }`
+when the box settles; a report with no session is dropped) and `screenshot:overlay-reset` (main → a kept window).
+
+### Windows are kept between picks (NIW2-878)
+
+Status: implemented on the branch for NIW2-878; the Mac mini latency re-run (AC8) is not part of it.
+
+This replaces the first design, where a pick's windows were destroyed when it ended and each
+spare was a fresh window used once. That cost a full renderer load (about 176 ms in production,
+about 360 ms in dev, over a second with three displays) on any press that came before the
+next spare was ready, and an Esc sent in that gap reached no window.
+
+- `endPick()` hides the pick's windows, takes them out of every Space, sends
+  `screenshot:overlay-reset`, and keeps them as the spares for the same displays. The next
+  `pick()` shows them synchronously, so every press opens as fast as the spare path.
+- A kept window is reused, so the renderer must start every pick clean: the state of a pick
+  carries a `session` id, the renderer remounts the overlay when it changes, and main drops an
+  answer or frame report whose session is not the current one.
+- Windows are still destroyed and reloaded when they cannot serve a pick: the displays
+  changed, the language or theme changed (`refreshSpares`), a window crashed or failed to
+  load (`dropSpareFor`), or the app is quitting (`dispose`). A change that lands mid-pick marks
+  the windows stale, so they are destroyed when that pick ends instead of kept.
+- No window is created while a take is pending or running (`canWarm`).
+- The frame opens on the display it was last used on, remembered apart for a screenshot and
+  a recording (`AppSettings.lastFrameDisplay`), then the pointer display, then the primary.
+  The rectangle is saved with the existing `screenshotFrame` / `recordingArea` memory, once, when
+  the widget closes (Esc, a second press) and when a frame is confirmed. Nothing is written
+  while a box is dragged or resized: the overlay reports the settled box to main, which holds
+  the latest one per display and per intent (the intent showing when the report arrived), so a
+  screenshot rectangle never lands in `recordingArea` after a P / V switch, and a rectangle drawn
+  on one display is kept after the frame moved to another. Both intents and all displays of a
+  close go out in one settings write. A confirm writes its own frame from the overlay; it
+  reports `confirming` just before, so an Esc that lands in main during that write saves nothing
+  more.
+- One capture right after another opens at once. The capture handler's re-entrancy guard
+  covers the pick and the grab only (a per-capture token, so a capture that ends cannot release
+  the next one's guard): when the provider returns the pick has ended, so a press while the shot
+  is still being saved opens its own overlay instead of being answered `cancelled`. What the
+  previous capture still does (save, copy, toast) is chained, because both share the
+  hidden-window state, the toast, the camera bubble and the kept quiet bytes. The new capture
+  hides its windows (`beforeCapture`, which also dismisses the previous toast and clears the
+  kept bytes) only when its shot is about to be taken, or when its pick answers `record`, and
+  only after the previous capture has finished. Windows are restored once, by the newest
+  capture: a capture that finishes while a newer pick is open ends `handedOver`, which restores
+  nothing (the main window stays hidden, the take's Esc stays released, `capturing` stays true,
+  the camera bubble stays hidden), so the overlay is never covered and Esc only cancels the
+  selection. It still shows its toast, which stays up while the new pick is open and is
+  dismissed when the new shot is about to be taken. The newest capture runs the real
+  `afterCapture` in its own `finally`, also when its pick was cancelled and it hid nothing, and
+  its `beforeCapture` keeps the visibility the first capture recorded. A newest capture that
+  took nothing ends the way the handed-over capture did (a quiet capture keeps the main window
+  hidden, as it does when no press overlapped), not as a plain cancel. If a save never
+  finishes, later captures open but wait at the hide step. Each toast shows on the display its
+  own pick answered on: the seam is `onQuietCapture(payload, displayId)`, called once per
+  capture with that capture's display (`null` when no overlay answered, which falls back to the
+  display of the cursor), so a newer pick answering on another display moves nothing.
 
 ### Entry points and shortcuts
 

@@ -4,11 +4,13 @@ import {
   ENABLED_CAPTURE_MODES,
   isRecordAction,
   type CaptureAction,
+  type CaptureRect,
   type CaptureIntent,
   type CaptureMode,
   type OverlayAnswer,
   type OverlayState,
   type RecordingRatio,
+  type TaggedOverlayAnswer,
   type RememberedArea,
 } from "@shared/types/screenshot-capture";
 import { useTranslations } from "@kaipu/i18n";
@@ -51,6 +53,11 @@ async function bestEffort(work: Promise<void>, ms: number): Promise<void> {
   }
 }
 
+/** `answer`, marked with the pick it answers when main said which (absent from older senders). */
+function tagged(answer: OverlayAnswer, session: number | undefined): TaggedOverlayAnswer {
+  return session === undefined ? answer : { ...answer, session };
+}
+
 /** The slice of the preload bridge the overlay uses; tests pass a fake. */
 export type CaptureOverlayApi = Pick<
   KaipuElectronAPI,
@@ -73,6 +80,11 @@ export type SendAnswer = (answer: OverlayAnswer, beforeSend?: () => Promise<void
 
 interface CaptureOverlayProps {
   query: OverlayQuery;
+  /**
+   * The state main's first message of this pick carried (`CaptureOverlayHost` read it): the
+   * overlay paints it at once instead of waiting for the state request to be answered.
+   */
+  initialState?: OverlayState;
   api?: CaptureOverlayApi;
   /** Which key copies (⌘C or Ctrl+C); detected from the browser when omitted. */
   platform?: KeyPlatform;
@@ -97,6 +109,7 @@ interface CaptureOverlayProps {
  */
 export function CaptureOverlay({
   query: loadedQuery,
+  initialState,
   api = window.electronAPI,
   platform: platformProp,
   enabledModes = ENABLED_CAPTURE_MODES,
@@ -104,10 +117,11 @@ export function CaptureOverlay({
   const bridge = api.captureOverlay;
   // A window loaded ahead of its pick (`spare=1`) paints nothing until main's first state
   // arrives; that state also says which intent it opened for.
-  const [received, setReceived] = useState(!loadedQuery.spare);
-  const [openedIntent, setOpenedIntent] = useState<CaptureIntent | null>(
-    loadedQuery.spare ? null : loadedQuery.intent,
-  );
+  const [received, setReceived] = useState(!loadedQuery.spare || initialState !== undefined);
+  const [openedIntent, setOpenedIntent] = useState<CaptureIntent | null>(() => {
+    if (!loadedQuery.spare) return loadedQuery.intent;
+    return initialState ? (initialState.intent ?? "capture") : null;
+  });
   // What the children read: the loaded query, with the intent the pick opened for.
   const query = useMemo<OverlayQuery>(
     () => ({ ...loadedQuery, intent: openedIntent ?? loadedQuery.intent }),
@@ -131,12 +145,18 @@ export function CaptureOverlay({
   );
   const persisting = useRef(false);
   // Seeded from the URL query so the first paint is right; main's broadcast keeps it live.
-  const [state, setState] = useState<OverlayState>(() => ({
-    mode: query.ui,
-    hoverDisplayId: null,
-    frameDisplayId: query.frame,
-    windows: null,
-  }));
+  const [state, setState] = useState<OverlayState>(
+    () =>
+      initialState ?? {
+        mode: query.ui,
+        hoverDisplayId: null,
+        frameDisplayId: query.frame,
+        windows: null,
+      },
+  );
+  // The pick this state belongs to; the answer carries it (see `TaggedOverlayAnswer`).
+  const sessionRef = useRef(state.session);
+  sessionRef.current = state.session;
   const mode = state.mode;
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -185,7 +205,7 @@ export function CaptureOverlay({
       if (answered.current) return;
       if (!beforeSend) {
         answered.current = true;
-        bridge.answer(answer);
+        bridge.answer(tagged(answer, sessionRef.current));
         return;
       }
       // A second confirm while the first is persisting is ignored; Esc is not.
@@ -196,7 +216,7 @@ export function CaptureOverlay({
         // Esc got in while the frame was being remembered: that cancel already went out.
         if (answered.current) return;
         answered.current = true;
-        bridge.answer(answer);
+        bridge.answer(tagged(answer, sessionRef.current));
       })();
     },
     [bridge],
@@ -459,6 +479,7 @@ export function CaptureOverlay({
         frameDisplayId={state.frameDisplayId}
         chrome={chrome}
         send={request}
+        session={state.session}
       />
     );
   return (
@@ -490,12 +511,14 @@ function FrameMode({
   frameDisplayId,
   chrome,
   send,
+  session,
 }: {
   query: OverlayQuery;
   api: CaptureOverlayApi;
   frameDisplayId: number | null;
   chrome: OverlayChrome;
   send: SendAnswer;
+  session: number | undefined;
 }): React.JSX.Element {
   const bridge = api.captureOverlay;
 
@@ -519,7 +542,7 @@ function FrameMode({
       </div>
     );
   }
-  return <ActiveFrame query={query} api={api} chrome={chrome} send={send} />;
+  return <ActiveFrame query={query} api={api} chrome={chrome} send={send} session={session} />;
 }
 
 function MoveFrameHint(): React.JSX.Element {
@@ -536,11 +559,13 @@ function ActiveFrame({
   api,
   chrome,
   send,
+  session,
 }: {
   query: OverlayQuery;
   api: CaptureOverlayApi;
   chrome: OverlayChrome;
   send: SendAnswer;
+  session: number | undefined;
 }): React.JSX.Element {
   const key = String(query.displayId);
   // A recording area and a screenshot frame are remembered apart (ADR 0030): the overlay
@@ -562,6 +587,20 @@ function ActiveFrame({
       live = false;
     };
   }, [api, key, memory]);
+
+  // Reported, never saved here: main keeps the latest and writes it once if the pick closes.
+  const settled = useCallback(
+    (rect: CaptureRect, ratio?: RecordingRatio, confirming?: true) => {
+      api.captureOverlay.reportFrame({
+        displayId: query.displayId,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        ...(ratio ? { ratio } : {}),
+        ...(session === undefined ? {} : { session }),
+        ...(confirming ? { confirming } : {}),
+      });
+    },
+    [api, query.displayId, session],
+  );
 
   const confirm = useCallback(
     (rect: RememberedArea, action: CaptureAction, ratio?: RecordingRatio) => {
@@ -585,17 +624,35 @@ function ActiveFrame({
           ...withRatio,
         },
         async () => {
+          // Main saves nothing for a close (Esc) that lands during this write.
+          settled(plain, ratio, true);
           // The window's copy, which main's broadcast keeps current, carries the other displays'
           // rectangles, so they are kept; a save from another display in the same few ms could be lost.
+          // The display it was confirmed on is the one this intent reopens on (NIW2-878); one
+          // patch, so confirming is still one settings write.
           const current = await loadSettings();
-          await api.updateSettings({ [into]: { ...current[into], [key]: stored } });
+          await api.updateSettings({
+            [into]: { ...current[into], [key]: stored },
+            lastFrameDisplay: {
+              ...current.lastFrameDisplay,
+              [isRecordAction(action) ? "record" : "capture"]: query.displayId,
+            },
+          });
         },
       );
     },
-    [api, key, query.displayId, send],
+    [api, key, query.displayId, send, settled],
   );
 
   // The dim sheet shows while the settings load (a few ms), so the window never flashes.
   if (remembered === undefined) return <div className={styles.sheet} />;
-  return <FrameBox query={query} remembered={remembered} chrome={chrome} onConfirm={confirm} />;
+  return (
+    <FrameBox
+      query={query}
+      remembered={remembered}
+      chrome={chrome}
+      onConfirm={confirm}
+      onSettled={settled}
+    />
+  );
 }

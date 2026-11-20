@@ -46,6 +46,8 @@ export interface CaptureWindowHooksDeps {
  *   comes back minimized, because a hidden window has no taskbar button.
  * - `recording`: the overlay started a take; the window stays hidden (the countdown is drawn
  *   on the chosen region) and comes back when the take stops, like any recording.
+ * - `handedOver`: a newer pick opened while this capture was saving; nothing is restored and
+ *   `capturing` stays set, because the newest capture inherits the restore (NIW2-878).
  *
  * A window that was hidden stays hidden on every path.
  */
@@ -64,10 +66,12 @@ export function createCaptureWindowHooks(
   return {
     isCapturing: () => capturing,
     beforeCapture: () => {
+      const window = liveWindow();
+      // Still capturing: a hand-over left the first capture's windows hidden, so what is
+      // visible now says nothing about what the user had before.
+      if (!capturing) wasVisible = window?.isVisible() ?? false;
       capturing = true;
       deps.suspendTakeEscape?.();
-      const window = liveWindow();
-      wasVisible = window?.isVisible() ?? false;
       // Failure: the last quiet capture's toast is always on top and would land in this shot.
       deps.dismissToast();
       deps.hideCapturePanel();
@@ -77,6 +81,8 @@ export function createCaptureWindowHooks(
       deps.hideCameraBubble();
     },
     afterCapture: (ending: CaptureEnding) => {
+      // A newer pick is open: it inherits the hidden windows, the held Esc and `capturing`.
+      if (ending === "handedOver") return;
       capturing = false;
       deps.resumeTakeEscape?.();
       if (wasVisible && ending === "cancelled") deps.showMainWindow();

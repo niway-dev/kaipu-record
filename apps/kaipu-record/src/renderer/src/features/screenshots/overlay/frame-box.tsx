@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { clampFrameToDisplay } from "@shared/capture-geometry";
 import type {
@@ -118,6 +118,12 @@ interface FrameBoxProps {
    * overlay opened to record, the ratio the box was locked to.
    */
   onConfirm(rect: CaptureRect, action: CaptureAction, ratio?: RecordingRatio): void;
+  /**
+   * The box settled: a drag ended with a different rectangle, or a ratio chip was chosen. Never
+   * called while a drag is in progress, so a listener can treat each call as one final value
+   * (NIW2-878: main keeps the latest and saves it once if the pick closes).
+   */
+  onSettled?(rect: CaptureRect, ratio?: RecordingRatio): void;
 }
 
 /**
@@ -133,6 +139,7 @@ export function FrameBox({
   remembered,
   chrome,
   onConfirm,
+  onSettled,
 }: FrameBoxProps): React.JSX.Element {
   const t = useTranslations("screenshots");
   const area = useMemo(() => workAreaInWindow(query), [query]);
@@ -163,6 +170,31 @@ export function FrameBox({
   confirm.current = onConfirm;
   const platform = chrome.platform;
   const intent = chrome.intent;
+
+  // Reported once per settle, from an effect so it sees the render that holds the final box.
+  // The tick moves only when a drag really ended or a ratio was chosen: a drag cut short by a
+  // key (restored to its origin) and a click that did not move the box report nothing.
+  const [settleTick, setSettleTick] = useState(0);
+  const settled = useRef(onSettled);
+  settled.current = onSettled;
+  // `recording` is read through a ref, not listed in the deps: a P / V switch after a settle
+  // must not re-run the effect, or main (which attributes a report to the intent it holds when
+  // it arrives) would save the unchanged box under the new intent.
+  const recordingNow = useRef(recording);
+  recordingNow.current = recording;
+  const reported = useRef<{ rect: CaptureRect; ratio?: RecordingRatio }>({
+    rect: frame,
+    ratio: recording ? ratio : undefined,
+  });
+  useEffect(() => {
+    if (settleTick === 0) return;
+    const rect = latest.current;
+    const nextRatio = recordingNow.current ? latestRatio.current : undefined;
+    const before = reported.current;
+    if (sameRect(before.rect, rect) && before.ratio === nextRatio) return;
+    reported.current = { rect, ratio: nextRatio };
+    settled.current?.(rect, nextRatio);
+  }, [settleTick]);
 
   // A layout effect, not a passive one: the listener is attached in the commit that paints
   // the box, so a box that says "Enter to capture" always hears Enter. A passive effect
@@ -261,6 +293,7 @@ export function FrameBox({
   };
 
   const endDrag = (): void => {
+    if (drag.current) setSettleTick((tick) => tick + 1);
     drag.current = null;
   };
 
@@ -276,6 +309,7 @@ export function FrameBox({
   const chooseRatio = (next: RecordingRatio): void => {
     setRatio(next);
     setFrame((current) => fitRatio(current, next, area));
+    setSettleTick((tick) => tick + 1);
   };
 
   return (
@@ -339,6 +373,10 @@ export function FrameBox({
       />
     </div>
   );
+}
+
+function sameRect(a: CaptureRect, b: CaptureRect): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 /** Big enough to record (ADR 0030): at least `MIN_AREA_SIZE` DIP on each side. */

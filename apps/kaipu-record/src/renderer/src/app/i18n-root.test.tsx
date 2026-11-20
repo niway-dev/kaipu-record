@@ -22,6 +22,7 @@ const SETTINGS: AppSettings = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  lastFrameDisplay: {},
   recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,
