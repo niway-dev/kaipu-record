@@ -386,11 +386,11 @@ span.inputName {
   flex: none;
 }
 
-/* Cancel is pushed to the right end of the row, just before the confirm button. */
+/* Cancel sits just before the confirm button. The widget is as wide as its row, so there is no
+   free space to push it anywhere. */
 .cancel {
   height: 40px;
   padding: 0 12px;
-  margin-left: auto;
   border-color: var(--widget-line);
   background: transparent;
 }
