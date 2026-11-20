@@ -5,8 +5,8 @@ description: The /roadmap page that shows what Kaipu Record already ships and wh
 
 # Public roadmap page
 
-> **Status: 🟢 Ready to validate.** Redesigned on 2026-10-18 with a state per platform
-> (see [refresh log](#refresh-log)). The page builds clean; it has not been reviewed in
+> **Status: 🟢 Ready to validate.** Redesigned on 2026-10-18 with a state per platform,
+> and given a private beta state on 2026-11-20 (see [refresh log](#refresh-log)). The page builds clean; it has not been reviewed in
 > production or on a real device yet.
 
 A public roadmap at `https://kaipu.app/roadmap`: one row per feature, with a **macOS** and a
