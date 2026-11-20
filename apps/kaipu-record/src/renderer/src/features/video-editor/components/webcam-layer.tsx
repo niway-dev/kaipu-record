@@ -424,6 +424,7 @@ export function WebcamLayer({
   onResize,
   onResizeEnd,
   resizeAnchor = "opposite",
+  resizable = true,
 }: Omit<WebcamSyncInput, "path"> & {
   path: CameraPath;
   /** False while a drawing tool is armed, so a stroke can start over the bubble. */
@@ -454,6 +455,8 @@ export function WebcamLayer({
    * around its centre, for when the position the drag would write is not the one on screen.
    */
   resizeAnchor?: "opposite" | "center";
+  /** False when a corner drag could only edit something other than what the panel shows. */
+  resizable?: boolean;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const sync = useWebcamSync({
@@ -510,7 +513,7 @@ export function WebcamLayer({
 
   // The handles exist only for the selected bubble while the Select tool is active: they take
   // pointers, and a stroke that starts over one must reach the layer below.
-  const showHandles = selected && interactive;
+  const showHandles = selected && interactive && resizable;
 
   // Before paint, so a drop never shows the old place for a frame: the held place follows
   // the card's, and the scene's own place comes back when the card is gone or answered.

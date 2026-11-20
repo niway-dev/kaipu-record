@@ -4,6 +4,7 @@ import { WEBCAM_DEFAULTS, type WebcamScene, type WebcamSegment } from "./webcam-
 import {
   resizeWebcamFromCorner,
   webcamResizeTarget,
+  webcamResizeWriteTime,
   webcamSizeLabel,
   type WebcamResizeStart,
 } from "./webcam-resize";
@@ -141,9 +142,9 @@ describe("resizeWebcamFromCorner limits", () => {
     expect(px(next.position)).toEqual({ x: 460, y: 460 });
   });
 
-  it("re-clamps the centre when the anchored box would leave the frame", () => {
-    // Flush against the right edge, growing from the bottom-right corner towards the top-left
-    // keeps the anchor; growing to the right (se of a left-anchored box) cannot.
+  it("keeps the anchored corner when the grown box fits inside the frame", () => {
+    // A circle at the bottom-right of the frame grows to the top-left from its (1000, 1000)
+    // corner: the 900 px box centred at (550, 550) fits, so the clamp changes nothing.
     const next = resizeWebcamFromCorner({
       start: { ...circle, rect: { x: 800, y: 800, width: 200, height: 200 } },
       corner: "nw",
@@ -152,18 +153,21 @@ describe("resizeWebcamFromCorner limits", () => {
       frame: FRAME,
     });
     expect(next.size).toBe(0.9);
-    // Anchored at (1000, 1000) the centre would be (550, 550): inside, so it stays there.
     expect(px(next.position)).toEqual({ x: 550, y: 550 });
-    const out = resizeWebcamFromCorner({
+  });
+
+  it("re-clamps the centre when the anchored box would leave the frame", () => {
+    // Growing to the bottom-right from the (800, 800) corner would centre a 500 px box at
+    // (1050, 1050), past the frame's edge, so the centre is pulled back to (750, 750).
+    const next = resizeWebcamFromCorner({
       start: { ...circle, rect: { x: 800, y: 800, width: 200, height: 200 } },
       corner: "se",
       deltaX: 300,
       deltaY: 300,
       frame: FRAME,
     });
-    // Anchored at (800, 800) a 500 px box would be centred at (1050, 1050): pulled back.
-    expect(out.size).toBe(0.5);
-    expect(px(out.position)).toEqual({ x: 750, y: 750 });
+    expect(next.size).toBe(0.5);
+    expect(px(next.position)).toEqual({ x: 750, y: 750 });
   });
 });
 
@@ -270,11 +274,16 @@ describe("webcamResizeTarget", () => {
     expect(webcamResizeTarget(scene(override()), "part", 3)).toEqual({
       whole: false,
       anchor: "opposite",
+      handles: true,
     });
   });
 
   it("edits the whole video on the Whole video tab", () => {
-    expect(webcamResizeTarget(scene(), "whole", 3)).toEqual({ whole: true, anchor: "opposite" });
+    expect(webcamResizeTarget(scene(), "whole", 3)).toEqual({
+      whole: true,
+      anchor: "opposite",
+      handles: true,
+    });
   });
 
   it("grows around the centre when a part's own position hides the whole video's", () => {
@@ -283,11 +292,15 @@ describe("webcamResizeTarget", () => {
       "whole",
       3,
     );
-    expect(target).toEqual({ whole: true, anchor: "center" });
+    expect(target).toEqual({ whole: true, anchor: "center", handles: true });
   });
 
-  it("keeps the corner anchor when the part at the playhead has no position of its own", () => {
-    expect(webcamResizeTarget(scene(override()), "whole", 3).anchor).toBe("opposite");
+  it("keeps the corner anchor when the part at the playhead owns nothing", () => {
+    expect(webcamResizeTarget(scene(override()), "whole", 3)).toEqual({
+      whole: true,
+      anchor: "opposite",
+      handles: true,
+    });
   });
 
   it("keeps the corner anchor outside the part's range", () => {
@@ -297,5 +310,53 @@ describe("webcamResizeTarget", () => {
       9,
     );
     expect(target.anchor).toBe("opposite");
+  });
+
+  // A part's own size or shape wins over the whole video's, so a whole-video size would change
+  // nothing on screen. The drag writes to the part instead, where the user sees it resize.
+  it("writes to the part on the Whole video tab when the part owns its size", () => {
+    expect(webcamResizeTarget(scene(override({ size: 0.4 })), "whole", 3)).toEqual({
+      whole: false,
+      anchor: "opposite",
+      handles: true,
+    });
+  });
+
+  it("writes to the part on the Whole video tab when the part owns its shape", () => {
+    expect(webcamResizeTarget(scene(override({ shape: "rounded" })), "whole", 3)).toEqual({
+      whole: false,
+      anchor: "opposite",
+      handles: true,
+    });
+  });
+
+  it("does not move a part outside its range to the part's layout", () => {
+    expect(webcamResizeTarget(scene(override({ size: 0.4 })), "whole", 9).whole).toBe(true);
+  });
+
+  describe("on This part with a part shown that is not at the playhead", () => {
+    it("offers no handles: the drag would edit what the bubble shows, not the shown part", () => {
+      const shown = override();
+      const other: WebcamSegment = { id: "part-2", mode: "override", start: 10, end: 12 };
+      expect(webcamResizeTarget(scene(shown, other), "part", 11, shown).handles).toBe(false);
+      expect(webcamResizeTarget(scene(shown, other), "part", 15, shown).handles).toBe(false);
+    });
+
+    it("offers them when the shown part is the one at the playhead", () => {
+      const shown = override();
+      expect(webcamResizeTarget(scene(shown), "part", 3, shown).handles).toBe(true);
+    });
+
+    it("offers them on the Whole video tab whatever part is shown", () => {
+      const shown = override();
+      expect(webcamResizeTarget(scene(shown), "whole", 9, shown).handles).toBe(true);
+    });
+  });
+});
+
+describe("webcamResizeWriteTime", () => {
+  it("is null for a whole-video write and the playhead for a part write", () => {
+    expect(webcamResizeWriteTime({ whole: true, anchor: "opposite", handles: true }, 3)).toBeNull();
+    expect(webcamResizeWriteTime({ whole: false, anchor: "opposite", handles: true }, 3)).toBe(3);
   });
 });

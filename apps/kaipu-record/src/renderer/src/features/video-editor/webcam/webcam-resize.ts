@@ -24,6 +24,7 @@ import {
   webcamSizePreset,
   type WebcamLayout,
   type WebcamScene,
+  type WebcamSegment,
 } from "./webcam-model";
 
 /** The Camera panel's two tabs: the part at the playhead, or the look every stretch shares. */
@@ -133,21 +134,56 @@ export function webcamSizeLabel(size: number): string {
   return preset ? `${percent} · ${preset}` : percent;
 }
 
+/** Where a corner drag writes and how it anchors; see {@link webcamResizeTarget}. */
+export interface WebcamResizeTarget {
+  /** True: the whole video's layout. False: the part in force at the playhead. */
+  whole: boolean;
+  anchor: "opposite" | "center";
+  /** False when a drag could only edit something other than what the panel shows. */
+  handles: boolean;
+}
+
 /**
- * Where a corner drag writes, from the Camera panel's tab. "This part" edits the part at the
- * playhead (or the whole video's layout where none is in force, which is what the bubble shows
- * there); "Whole video" edits the whole video's layout.
+ * Where a corner drag writes, from the Camera panel's tab (and the part it shows, `shown`).
+ * "This part" edits the part at the playhead (or the whole video's layout where none is in
+ * force, which is what the bubble shows there); "Whole video" edits the whole video's layout.
  *
- * With "Whole video" open while a part at the playhead has a position of its own, the bubble is
- * drawn at that position and a new whole-video position would change nothing on screen, so the
- * drag grows around the centre instead of anchoring a corner it could not hold.
+ * With "This part" open on a part that is not the one in force at the playhead (a part picked
+ * on the lane, then the playhead moved away), the bubble is drawn from some other layout, so a
+ * drag would edit that layout while the panel's part stays unchanged: there are no handles.
+ *
+ * With "Whole video" open while the part at the playhead has a SIZE or SHAPE of its own, a
+ * whole-video size would change nothing on screen, so the drag writes to that part instead,
+ * where the bubble visibly resizes. With only a position of its own, the bubble is drawn at the
+ * part's position and a new whole-video position would change nothing, so the drag grows around
+ * the centre instead of anchoring a corner it could not hold.
  */
 export function webcamResizeTarget(
   webcam: WebcamScene,
   tab: WebcamPanelTab,
   sourceTime: number | null,
-): { whole: boolean; anchor: "opposite" | "center" } {
-  if (tab === "part") return { whole: false, anchor: "opposite" };
-  const covered = webcamOverrideAt(webcam, sourceTime)?.layout?.position !== undefined;
-  return { whole: true, anchor: covered ? "center" : "opposite" };
+  shown: WebcamSegment | null = null,
+): WebcamResizeTarget {
+  const inForce = webcamOverrideAt(webcam, sourceTime);
+  if (tab === "part") {
+    const stray = shown !== null && inForce?.id !== shown.id;
+    return { whole: false, anchor: "opposite", handles: !stray };
+  }
+  const layout = inForce?.layout;
+  if (layout?.size !== undefined || layout?.shape !== undefined) {
+    return { whole: false, anchor: "opposite", handles: true };
+  }
+  return {
+    whole: true,
+    anchor: layout?.position !== undefined ? "center" : "opposite",
+    handles: true,
+  };
+}
+
+/** The source time a corner drag's patch is written at: null is the whole video's layout. */
+export function webcamResizeWriteTime(
+  target: WebcamResizeTarget,
+  sourceTime: number | null,
+): number | null {
+  return target.whole ? null : sourceTime;
 }

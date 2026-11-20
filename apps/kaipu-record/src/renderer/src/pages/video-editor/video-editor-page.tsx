@@ -104,6 +104,7 @@ import {
 import { webcamHideBlock } from "@renderer/features/video-editor/webcam/webcam-edits";
 import {
   webcamResizeTarget,
+  webcamResizeWriteTime,
   type WebcamPanelTab,
 } from "@renderer/features/video-editor/webcam/webcam-resize";
 import type { WebcamRecordings } from "@renderer/features/video-editor/webcam/webcam-sync";
@@ -2142,8 +2143,8 @@ function VideoEditor({
   // The Camera panel's open tab: a corner drag on the bubble edits what that tab edits.
   const [webcamTab, setWebcamTab] = useState<WebcamPanelTab>("whole");
   const webcamResize = scene.webcam
-    ? webcamResizeTarget(scene.webcam, webcamTab, hideAt)
-    : { whole: true, anchor: "opposite" as const };
+    ? webcamResizeTarget(scene.webcam, webcamTab, hideAt, selectedWebcamSegment)
+    : { whole: true, anchor: "opposite" as const, handles: true };
   const hideWebcamBlock = hasWebcam
     ? webcamHideBlock(scene, hideAt, clipBounds(axis, { sourceStart: hideAt ?? 0 }))
     : null;
@@ -2642,10 +2643,11 @@ function VideoEditor({
                     onResizeBegin={webcamEdits.begin}
                     // One undo step per drag: live preview, committed by `end` (like a slider).
                     onResize={(patch, sourceTime) =>
-                      webcamEdits.liveLayout(patch, webcamResize.whole ? null : sourceTime)
+                      webcamEdits.liveLayout(patch, webcamResizeWriteTime(webcamResize, sourceTime))
                     }
                     onResizeEnd={webcamEdits.end}
                     resizeAnchor={webcamResize.anchor}
+                    resizable={webcamResize.handles}
                   />
                 )
               }

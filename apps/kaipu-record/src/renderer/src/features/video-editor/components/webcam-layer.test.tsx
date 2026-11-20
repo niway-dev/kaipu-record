@@ -1018,10 +1018,26 @@ describe("WebcamLayer — corner resize", () => {
     expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
   });
 
-  it("hides the handles with the bubble inside a hidden segment", () => {
-    resizeSetup({}, scene({ segments: [{ id: "h", mode: "hidden", start: 0, end: 5 }] }));
+  it("hides the handles when the playhead moves from the bubble into a hidden segment", () => {
+    const { el } = resizeSetup(
+      {},
+      scene({ segments: [{ id: "h", mode: "hidden", start: 3, end: 5 }] }),
+    );
+    const overlay = screen.getByTestId("webcam-resize-overlay");
+    // Visible first: the overlay only shows once the bubble is drawn, so the next step has
+    // something to hide (it starts hidden, and a hidden segment alone would leave it that way).
+    expect(overlay.style.display).toBe("");
+    act(() => setTime(el, 4));
     expect(bubble().style.display).toBe("none");
-    expect(screen.getByTestId("webcam-resize-overlay").style.display).toBe("none");
+    expect(overlay.style.display).toBe("none");
+    act(() => setTime(el, 1));
+    expect(overlay.style.display).toBe("");
+  });
+
+  it("draws no handles when the page says this bubble cannot be resized now", () => {
+    resizeSetup({ resizable: false });
+    expect(screen.queryByTestId("webcam-handle-se")).toBeNull();
+    expect(screen.queryByTestId("webcam-resize-overlay")).toBeNull();
   });
 
   it("reports the new size and centre live, one begin and one end", () => {
