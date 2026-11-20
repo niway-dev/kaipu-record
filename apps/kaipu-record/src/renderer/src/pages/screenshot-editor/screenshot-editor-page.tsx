@@ -52,6 +52,7 @@ import {
   unpackRgb,
   useColors,
   useInspect,
+  visiblePixelWindow,
 } from "@renderer/features/screenshots/inspect";
 import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
 import { CaptureTitleInput } from "@renderer/features/screenshots/capture-title-input";
@@ -132,6 +133,7 @@ import { isTextField, readFromMain } from "@renderer/features/editor/use-paste-t
 import { useFlag } from "@renderer/features/analytics/use-flag";
 import {
   redactionRectsInPixels,
+  selectableWords,
   useRecognizedText,
   distinctLineCount,
   TextNotice,
@@ -475,7 +477,19 @@ function ScreenshotEditorBody({
     },
   });
   // The colors panel (NIW2-704) counts Inspect's decoded pixels in a worker.
-  const colors = useColors({ active: inspect.active, buffer: inspect.buffer });
+  // Only the pixels the base shows count: a cropped base's hidden part is not in the colors.
+  const colorsWindow = useMemo(
+    () =>
+      inspect.buffer && scene.baseCrop
+        ? visiblePixelWindow(inspect.buffer, scene.baseCrop)
+        : undefined,
+    [inspect.buffer, scene.baseCrop],
+  );
+  const colors = useColors({
+    active: inspect.active,
+    buffer: inspect.buffer,
+    window: colorsWindow,
+  });
   const [zoom, setZoom] = useState(1);
   // Text recognition (NIW2-705, behind `image-text`). Latched at mount like `canvasMode`:
   // a shot never gains or loses the tool halfway through an edit.
@@ -550,13 +564,23 @@ function ScreenshotEditorBody({
     h: imgRef.current?.naturalHeight || doc?.pixelHeight || source.height || 0,
   });
   const [natural, setNatural] = useState<PixelSize | null>(null);
-  // The words a person can select: those no redaction of this session (saved or not) covers.
+  // The words a person can select: those no redaction of this session (saved or not) covers
+  // and that lie inside the part of the base that shows (a cropped-out word is never offered).
   const visibleWords = useMemo(() => {
     if (recognized.status !== "ready" || !natural || natural.w <= 0 || natural.h <= 0) return [];
-    return wordsOutsideRects(
+    return selectableWords(
       recognized.words,
-      redactionRectsInPixels(scene.annotations, natural, scene.basePlacement),
+      scene.annotations,
+      natural,
+      scene.basePlacement,
+      scene.baseCrop,
     );
+  }, [recognized, natural, scene.annotations, scene.basePlacement, scene.baseCrop]);
+  // The same words with the crop ignored: a redaction's margin must still stop at a word the
+  // crop hides, because the baked asset keeps that word's pixels.
+  const marginWords = useMemo(() => {
+    if (recognized.status !== "ready" || !natural || natural.w <= 0 || natural.h <= 0) return [];
+    return selectableWords(recognized.words, scene.annotations, natural, scene.basePlacement);
   }, [recognized, natural, scene.annotations, scene.basePlacement]);
   const textSelection = useTextSelection(visibleWords);
   const textActive = textEnabled && tools.tool === "selectText";
@@ -594,7 +618,9 @@ function ScreenshotEditorBody({
       textEnabled && natural && natural.w > 0 && natural.h > 0
         ? {
             words: textSelection.ordered,
+            marginWords,
             natural,
+            basePlacement: scene.basePlacement,
             selected: textSelection.selectedSet,
             select: textSelection.select,
             clear: textSelection.clear,
@@ -603,6 +629,8 @@ function ScreenshotEditorBody({
     [
       textEnabled,
       natural,
+      scene.basePlacement,
+      marginWords,
       textSelection.ordered,
       textSelection.selectedSet,
       textSelection.select,

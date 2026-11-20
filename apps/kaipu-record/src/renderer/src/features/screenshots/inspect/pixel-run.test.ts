@@ -141,3 +141,28 @@ describe("wheelSteps", () => {
     expect(wheelSteps(5, { deltaX: 0, deltaY: 0, deltaMode: 0 })).toEqual({ steps: 0, rest: 5 });
   });
 });
+
+describe("scanRun on a cropped base (NIW2-876, AC1)", () => {
+  // A uniform white row of 20 px whose crop shows pixels 5..14 only: the cropped-out pixels
+  // continue the same color, so only the window can stop the run.
+  const row = image([Array.from({ length: 20 }, () => W)]);
+  const win = { x0: 5, y0: 0, x1: 15, y1: 1 };
+
+  it("stops at the visible edge instead of measuring cropped-out pixels", () => {
+    expect(scanRun(row, 10, 0, "x", 0, false, win)).toEqual({ axis: "x", from: 5, to: 15, at: 0 });
+  });
+
+  it("stops at the visible edge on the outer scan too", () => {
+    expect(scanRun(row, 10, 0, "x", 0, true, win)).toEqual({ axis: "x", from: 5, to: 15, at: 0 });
+  });
+
+  it("stops at the visible top and bottom on the vertical axis", () => {
+    const col = image(Array.from({ length: 20 }, () => [W]));
+    const vwin = { x0: 0, y0: 2, x1: 1, y1: 14 };
+    expect(scanRun(col, 0, 8, "y", 0, false, vwin)).toEqual({ axis: "y", from: 2, to: 14, at: 0 });
+  });
+
+  it("reports nothing for a start pixel the crop hides", () => {
+    expect(scanRun(row, 2, 0, "x", 0, false, win)).toBeNull();
+  });
+});

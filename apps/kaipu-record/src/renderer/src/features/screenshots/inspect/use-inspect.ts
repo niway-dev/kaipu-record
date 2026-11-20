@@ -16,6 +16,7 @@ import {
   type BaseView,
   type PixelBuffer,
   type ProbeTile,
+  visiblePixelWindow,
 } from "./pixel-buffer";
 import {
   clampTolerance,
@@ -360,7 +361,10 @@ export function useInspect({
     const px = isPointVisible(img, pointer.clientX, pointer.clientY)
       ? clientToBasePixel(pointer.clientX, pointer.clientY, anchor, buf, view)
       : null;
-    const color = px && sampleAt(buf, px.x, px.y);
+    // A cropped base keeps the whole asset decoded: the readout, the loupe and the ruler read
+    // only the part that shows.
+    const win = visiblePixelWindow(buf, view.baseCrop);
+    const color = px && sampleAt(buf, px.x, px.y, win);
     if (!px || !color) {
       publish(null);
       setLoupe(null);
@@ -378,12 +382,12 @@ export function useInspect({
       clientX: pointer.clientX,
       clientY: pointer.clientY,
     });
-    setLoupe(loupePixels(buf, px.x, px.y, LOUPE_RADIUS));
+    setLoupe(loupePixels(buf, px.x, px.y, LOUPE_RADIUS, win));
     // The run is scanned on the decoded pixels, so zoom and pan never change its length:
     // they only move where the line is drawn.
     const axis = rulerRef.current;
     const outer = outerLockedRef.current || shiftRef.current;
-    const found = axis ? scanRun(buf, px.x, px.y, axis, toleranceRef.current, outer) : null;
+    const found = axis ? scanRun(buf, px.x, px.y, axis, toleranceRef.current, outer, win) : null;
     publishRun(
       found
         ? { run: found, length: runLength(found), outer, line: runLine(found, rect, buf) }

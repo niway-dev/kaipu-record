@@ -1,10 +1,12 @@
 export {
+  assetRectToWorld,
   blockRedactionRect,
   pixelRectToNorm,
   nearestBlock,
   nearestWord,
   textBlocks,
   redactionRectsInPixels,
+  selectableWords,
   wordBoxNorm,
   wordRange,
   type NormPoint,

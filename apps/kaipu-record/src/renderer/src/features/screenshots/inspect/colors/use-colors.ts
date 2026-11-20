@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
-import type { PixelBuffer } from "../pixel-buffer";
+import type { PixelBuffer, PixelWindow } from "../pixel-buffer";
 import {
   AnalyzerDisposed,
   createColorsAnalyzer,
+  sameWindow,
   type ColorsAnalyzer,
   type LocatedImage,
 } from "./colors-client";
@@ -33,6 +34,8 @@ interface Options {
   active: boolean;
   /** Inspect's decoded pixels (shared, never decoded again here). */
   buffer: PixelBuffer | null;
+  /** The part of the buffer that shows (a cropped base); absent = all of it. Counted only. */
+  window?: PixelWindow;
 }
 
 export const sameTarget = (a: LocateTarget | null, b: LocateTarget | null): boolean =>
@@ -46,7 +49,7 @@ export const sameTarget = (a: LocateTarget | null, b: LocateTarget | null): bool
  * and stopped when Inspect exits, the image changes or the editor unmounts, so the worker's
  * copy of the pixels lives only while it can be used.
  */
-export function useColors({ active, buffer }: Options): ColorsController {
+export function useColors({ active, buffer, window: win }: Options): ColorsController {
   const t = useTranslations("screenshots");
   // Read through a ref: a new `t` must not restart counting nor change the controller.
   const tRef = useRef(t);
@@ -103,17 +106,23 @@ export function useColors({ active, buffer }: Options): ColorsController {
     stop();
   }, [active, stop]);
 
-  // A different (or dropped) buffer: the old counts describe another image.
+  // A different (or dropped) buffer, or another visible window (the crop moved): the old counts
+  // describe other pixels.
   useEffect(() => {
-    if (analyzer.current && analyzer.current.buffer !== buffer) stop();
-  }, [buffer, stop]);
+    const current = analyzer.current;
+    if (current && (current.buffer !== buffer || !sameWindow(current.window, win))) stop();
+  }, [buffer, win, stop]);
 
   // Open on a decoded buffer: count it, once per buffer.
   useEffect(() => {
     if (!open || !active || !buffer || analyzer.current) return;
-    const current = createColorsAnalyzer(buffer, (done) => {
-      if (analyzer.current === current) setProgress(done);
-    });
+    const current = createColorsAnalyzer(
+      buffer,
+      (done) => {
+        if (analyzer.current === current) setProgress(done);
+      },
+      win,
+    );
     analyzer.current = current;
     setProgress(0);
     setStatus("counting");
@@ -136,7 +145,7 @@ export function useColors({ active, buffer }: Options): ColorsController {
         });
       },
     );
-  }, [open, active, buffer]);
+  }, [open, active, buffer, win]);
 
   const locate = useCallback(
     (target: LocateTarget | null): void => {
