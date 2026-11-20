@@ -497,6 +497,56 @@ describe("with a real vault", () => {
       }
     });
 
+    it("refuses a second automatic begin for the same content, and records nothing new", async () => {
+      await addMedia("c-twice");
+      await seedTranscript("c-twice", "an-older-hash");
+      const beginsBefore = service.begin.mock.calls.length;
+      const first = await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, {
+        ...REQUEST,
+        id: "c-twice",
+        automatic: true,
+      });
+      expect(first).toMatchObject({ status: "accepted" });
+      const second = await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, {
+        ...REQUEST,
+        id: "c-twice",
+        automatic: true,
+      });
+      expect(second).toEqual({ status: "refused", reason: "busy" });
+      expect(service.begin.mock.calls.length - beginsBefore).toBe(1);
+    });
+
+    it("two simultaneous automatic begins for the same content start one job", async () => {
+      await addMedia("c-race");
+      await seedTranscript("c-race", "an-older-hash");
+      const beginsBefore = service.begin.mock.calls.length;
+      const req = { ...REQUEST, id: "c-race", automatic: true };
+      const results = await Promise.all([
+        call(IPC_CHANNELS.transcriptionJobBegin, STAMP, req),
+        call(IPC_CHANNELS.transcriptionJobBegin, STAMP, req),
+      ]);
+      expect(results.filter((r) => (r as { status: string }).status === "accepted")).toHaveLength(
+        1,
+      );
+      expect(service.begin.mock.calls.length - beginsBefore).toBe(1);
+    });
+
+    it("records the content the job was admitted with, not what the file became afterwards", async () => {
+      const item = await addMedia("c-moved");
+      await seedTranscript("c-moved", "an-older-hash");
+      const admitted = await sha256FileBase64(item.filePath);
+      service.begin.mockImplementationOnce(async () => {
+        await writeFile(item.filePath, "the file moved on while the job was admitted");
+        return { status: "accepted", jobId: "job-moved" };
+      });
+      await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, {
+        ...REQUEST,
+        id: "c-moved",
+        automatic: true,
+      });
+      expect((await vault.sidecar("c-moved")).autoRetranscribedSha256).toBe(admitted);
+    });
+
     it("a manual begin does not use up the automatic attempt", async () => {
       await addMedia("c-manual");
       await seedTranscript("c-manual", "an-older-hash");

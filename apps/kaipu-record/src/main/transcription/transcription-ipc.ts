@@ -261,14 +261,56 @@ function checkTranscriptFreshness(id: string): Promise<TranscriptFreshnessResult
 }
 
 /**
- * An automatic job is recorded against the media's content hash once it is accepted, so a run
- * that fails or is cancelled does not start again on the next open. The job just hashed the
- * media through the cache, so this reads the stamp rather than the file.
+ * An automatic job is recorded against the content hash it was admitted with, so a run that
+ * fails or is cancelled does not start again on the next open. The hash is the one taken before
+ * the job began: hashing again here could record content the job never transcribed.
  */
-async function recordAutomaticAttempt(id: string): Promise<void> {
+async function recordAutomaticAttempt(id: string, contentSha256: string): Promise<void> {
+  await currentVault().writeMeta(id, { autoRetranscribedSha256: contentSha256 });
+}
+
+/** Automatic begins in flight, `${workspace}:${item}:${hash}`, so two windows cannot both start. */
+const automaticInFlight = new Set<string>();
+
+async function beginAutomatic(
+  service: TranscriptionService,
+  parsed: ReturnType<typeof parseRequest>,
+): Promise<TranscriptionBeginResult> {
   const vault = currentVault();
-  const hashed = await vault.ensureContentHash(id);
-  if (hashed) await vault.writeMeta(id, { autoRetranscribedSha256: hashed.contentSha256 });
+  // The service checks the asset id and the kind. An item that is gone, or media that cannot be
+  // hashed, gets the service's own refusal or failure: there is no content to record against.
+  const item = await vault.describe(parsed.id);
+  if (!item) return service.begin(parsed);
+  let hash: string;
+  try {
+    hash = await hashMediaThroughCache({ id: item.id, mediaPath: item.filePath });
+  } catch {
+    return service.begin(parsed);
+  }
+  const key = `${activeWorkspace().id}:${parsed.id}:${hash}`;
+  // No await between the check and the add: the claim is atomic within this process.
+  if (automaticInFlight.has(key)) return { status: "refused", reason: "busy" };
+  automaticInFlight.add(key);
+  try {
+    const sidecar = await vault.sidecar(parsed.id).catch(() => null);
+    if (sidecar?.autoRetranscribedSha256 === hash) return { status: "refused", reason: "busy" };
+    const result = await service.begin(parsed);
+    if (result.status === "accepted") {
+      // The job already holds the slot: the renderer must get its id even when the record
+      // cannot be written.
+      try {
+        await recordAutomaticAttempt(parsed.id, hash);
+      } catch (error) {
+        console.warn(
+          `transcription: could not record the automatic attempt for ${parsed.id}`,
+          error,
+        );
+      }
+    }
+    return result;
+  } finally {
+    automaticInFlight.delete(key);
+  }
 }
 
 export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): TranscriptionService {
@@ -305,20 +347,8 @@ export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): Transcript
       const parsed = parseRequest(request);
       if (pinned) return pinned.begin(parsed);
       if (override) return { status: "refused", reason: "unavailable" };
-      const result = await service.begin(parsed);
-      if (parsed.automatic && result.status === "accepted") {
-        // The job already holds the slot: the renderer must get its id even when the record
-        // cannot be written.
-        try {
-          await recordAutomaticAttempt(parsed.id);
-        } catch (error) {
-          console.warn(
-            `transcription: could not record the automatic attempt for ${parsed.id}`,
-            error,
-          );
-        }
-      }
-      return result;
+      if (parsed.automatic) return beginAutomatic(service, parsed);
+      return service.begin(parsed);
     }),
   );
   ipcMain.handle(IPC_CHANNELS.transcriptionJobChunk, (_event, jobId: unknown, pcm: unknown) => {

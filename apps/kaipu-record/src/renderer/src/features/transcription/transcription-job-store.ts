@@ -88,7 +88,9 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
  * never rejects. A job already running answers `refused: busy` without calling main and records
  * nothing: the controls already show that state. Main's `busy` and `invalid-item` refusals are
  * recorded as the item's failure, so the click that was refused says why; its `unavailable` and
- * `model-missing` refusals mean the model status is stale, so they refresh it instead.
+ * `model-missing` refusals mean the model status is stale, so they refresh it instead. An
+ * automatic start that main refuses as `busy` (another window already took this content) records
+ * nothing: nobody clicked, so there is nothing to explain.
  */
 export async function startTranscription(args: {
   itemId: string;
@@ -158,7 +160,9 @@ export async function startTranscription(args: {
     failures:
       outcome.status === "failed"
         ? { ...snapshot.failures, [itemId]: outcome.failure }
-        : outcome.status === "refused" && REFUSAL_FAILURE[outcome.reason] !== undefined
+        : outcome.status === "refused" &&
+            REFUSAL_FAILURE[outcome.reason] !== undefined &&
+            !(automatic && outcome.reason === "busy")
           ? { ...snapshot.failures, [itemId]: REFUSAL_FAILURE[outcome.reason]! }
           : snapshot.failures,
     doneCounts:

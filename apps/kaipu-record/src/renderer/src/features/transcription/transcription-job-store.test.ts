@@ -152,6 +152,16 @@ describe("transcription job store", () => {
     },
   );
 
+  it("an automatic start that main refuses as busy records no failure", async () => {
+    run.mockResolvedValueOnce({ status: "refused", reason: "busy" });
+
+    await expect(startTranscription({ ...ARGS, automatic: true })).resolves.toEqual({
+      status: "refused",
+      reason: "busy",
+    });
+    expect(getSnapshot().failures).toEqual({});
+  });
+
   it.each(["unavailable", "model-missing"] as const)(
     "a %s refusal means the model status is stale: it refreshes the status and records no failure",
     async (reason) => {
