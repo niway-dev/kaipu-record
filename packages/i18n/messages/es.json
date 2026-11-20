@@ -252,7 +252,6 @@
     "deviceDefault": "Cámara predeterminada",
     "deviceUnnamed": "Cámara {index}",
     "source": "Fuente",
-    "cardDetail": "{camera} · {shape}, {size}",
     "offNote": "La cámara está apagada. Se aplican al encenderla.",
     "liveNote": "Los cambios se aplican en vivo y se verán en la grabación.",
     "mirrorTitle": "Espejar mi video",

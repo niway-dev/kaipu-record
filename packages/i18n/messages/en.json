@@ -252,7 +252,6 @@
     "deviceDefault": "Default camera",
     "deviceUnnamed": "Camera {index}",
     "source": "Source",
-    "cardDetail": "{camera} · {shape}, {size}",
     "offNote": "Camera is off. These apply when you turn it on.",
     "liveNote": "Changes apply live and will show in the recording.",
     "mirrorTitle": "Mirror my video",
