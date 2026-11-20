@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useRouteContext } from "@tanstack/react-router";
 
+import { CHAPTERS, type Chapters } from "./chapters";
 import { ChapterStrip } from "./chapter-strip";
 import { Rail } from "./rail";
 import { StickyCta } from "./sticky-cta";
@@ -26,20 +27,23 @@ export function HomeShell({
   children,
   page = "home",
   chapterNav = true,
+  chapters = CHAPTERS,
 }: {
   children: ReactNode;
   /** Which marketing page this is — the top bar marks it as current. */
   page?: MarketingPage;
   /** The chapter rail and mobile strip; off for a page without the four chapters. */
   chapterNav?: boolean;
+  /** The chapters the rail and strip list; the features page passes its own four. */
+  chapters?: Chapters;
 }) {
   const { landingTheme } = useRouteContext({ from: "__root__" });
 
   return (
     <div data-kl data-kl-theme={landingTheme}>
       <TopNav page={page} />
-      {chapterNav && <ChapterStrip />}
-      {chapterNav && <Rail />}
+      {chapterNav && <ChapterStrip chapters={chapters} />}
+      {chapterNav && <Rail chapters={chapters} />}
       <main>{children}</main>
       <StickyCta />
     </div>

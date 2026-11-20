@@ -357,23 +357,15 @@
     "homeEyebrow": "Kaipu, en cuatro momentos",
     "homeHeroSerif": "Sigue con lo tuyo.",
     "homeChapter1Label": "Graba",
-    "homeChapter1Sub": "Pantalla · voz · cámara",
-    "homeChapter1Title": "Muestra lo que pasó.",
-    "homeChapter1Serif": "Una toma. Sin preparar nada.",
-    "homeChapter1Body": "Pantalla, tu voz, el audio del sistema y una cámara flotante — desde la barra de menú o con un atajo. Pausa, sigue, detén. Ya está guardado.",
-    "homeChapter1Pill1": "Barra de menú",
-    "homeChapter1Pill2": "⌘⇧2",
-    "homeChapter1Pill3": "Cámara flotante",
-    "homeChapter1Pill4": "Audio del sistema",
     "homeChapter2Label": "Captura",
-    "homeChapter2Sub": "Capturas que explican",
-    "homeChapter2Title": "A veces una captura lo dice todo.",
-    "homeChapter2Serif": "Señálalo. Literalmente.",
-    "homeChapter2Body": "Dibuja un marco o elige una pantalla y agrega cajas, flechas y notas a mano. Difumina lo que no se debe ver y ponlo sobre un fondo limpio.",
-    "homeChapter2Pill1": "Marco · Pantalla",
-    "homeChapter2Pill2": "Cajas y flechas",
-    "homeChapter2Pill3": "Difuminado",
-    "homeChapter2Pill4": "Copiar en un clic",
+    "homeChapter2Sub": "Capturas · grabaciones",
+    "homeChapter2Title": "Captura lo que pasó.",
+    "homeChapter2Serif": "Una captura o una toma. Un solo widget.",
+    "homeChapter2Body": "Una sola barra para las dos cosas. Cambia entre Captura y Grabación, dibuja un marco o elige una pantalla, y captura. Las grabaciones llevan tu voz, el audio del sistema y una cámara flotante. Las capturas aceptan cajas, flechas, notas y difuminado.",
+    "homeChapter2Pill1": "Captura · Grabación",
+    "homeChapter2Pill2": "⌘⇧1 · ⌘⇧2",
+    "homeChapter2Pill3": "Marco · Pantalla",
+    "homeChapter2Pill4": "Cámara flotante",
     "homeChapter3Label": "Edita",
     "homeChapter3Sub": "Lo justo y necesario",
     "homeChapter3Title": "Un ajuste pequeño. Una idea más clara.",
@@ -465,7 +457,73 @@
     "originKhipuBody": "El sistema andino de registro de información con cuerdas y nudos.",
     "originBody": "Kaipu une las dos ideas: conservar lo que está pasando para explicarlo, compartirlo y volver a encontrarlo.",
     "originNote": "Kaipu es una construcción de marca nuestra inspirada en esas dos ideas, no una traducción literal del quechua.",
-    "footerSignature": "Esto, registrado."
+    "footerSignature": "Esto, registrado.",
+    "homeChapter5Label": "Comparte",
+    "homeChapter5Sub": "El archivo justo para cada lugar",
+    "homeChapter5Title": "Envíalo a donde va.",
+    "homeChapter5Serif": "Liviano para el hilo. Completo para el canal.",
+    "homeChapter5Body": "Elige un destino y Kaipu exporta un archivo a su medida: una copia pequeña que se reproduce dentro de un pull request, calidad completa para YouTube, un corte vertical para Reels. El original nunca cambia.",
+    "homeChapter5Pill1": "GitHub · Jira · Linear",
+    "homeChapter5Pill2": "Slack · Discord · Correo",
+    "homeChapter5Pill3": "YouTube 16:9 · 1440p o 4K",
+    "homeChapter5Pill4": "Reels · TikTok · Shorts 9:16",
+    "homeOnTheWayEyebrow": "En camino",
+    "homeOnTheWayTitle": "Viene más.",
+    "homeOnTheWaySerif": "La mayor parte ya está en beta privada.",
+    "homeOnTheWayBody": "La mayoría de estas herramientas está en beta privada en macOS y algunas siguen planeadas. Ninguna está en la descarga todavía, y las fechas no son promesas.",
+    "homeOnTheWayOcrTitle": "Reconocimiento de texto",
+    "homeOnTheWayOcrBody": "Selecciona el texto dentro de una captura y cópialo, u oculta una línea en un clic.",
+    "homeOnTheWayMeasureTitle": "Medir ancho y alto",
+    "homeOnTheWayMeasureBody": "Una regla que mide y fija tramos de píxeles, con una lupa para ver el detalle.",
+    "homeOnTheWayColorsTitle": "Tomar colores",
+    "homeOnTheWayColorsBody": "El color bajo el cursor en hex, rgb, hsl u oklch, y un panel que ubica cada color.",
+    "homeOnTheWayGridTitle": "Cuadrícula y mover en la imagen",
+    "homeOnTheWayGridBody": "Un lienzo amplio: desplaza, acerca, mueve cosas y dibuja fuera de la imagen.",
+    "homeOnTheWayCameraTitle": "Cámara que se mueve con el tiempo",
+    "homeOnTheWayCameraBody": "Tu cámara flotante cambia de lugar y de tamaño mientras avanza el video. Planeado, aún no está construido.",
+    "homeOnTheWayCta": "Ver la hoja de ruta completa",
+    "homeWidgetLabel": "El widget de captura",
+    "homeWidgetScreenshot": "Captura",
+    "homeWidgetRecording": "Grabación",
+    "homeWidgetFrame": "Marco",
+    "homeWidgetScreen": "Pantalla",
+    "homeWidgetFree": "Libre",
+    "homeWidgetCopy": "Copiar",
+    "homeWidgetCapture": "Capturar",
+    "homeWidgetRecord": "Grabar",
+    "demos": {
+      "edAnnotation": "Empieza aquí",
+      "edBeatPoint": "Señala cosas",
+      "edBeatPrivate": "Oculta lo privado",
+      "edBeatSections": "Secciones",
+      "edBeatZoom": "El zoom llega a tu clic",
+      "edSectionDemo": "DEMO",
+      "edSectionIntro": "INTRO",
+      "edSectionWrapUp": "CIERRE",
+      "shareBeatGithub": "GitHub: pequeño y en línea",
+      "shareBeatOriginal": "El original nunca cambia",
+      "shareBeatYoutube": "YouTube: calidad completa",
+      "shareDestChat": "Slack · Discord · Correo",
+      "shareDestChatDesc": "Ligero, se reproduce en el chat",
+      "shareDestGithubDesc": "Copia pequeña que se reproduce en línea",
+      "shareDestVerticalDesc": "9:16 vertical",
+      "shareDestYoutubeDesc": "16:9 · 1440p o 4K",
+      "shareFullNote": "Calidad completa, 1440p o 4K.",
+      "shareLightNote": "Ligero. Se reproduce directo en el pull request.",
+      "shareOriginalCaption": "Grabación de Kaipu · 0:18 · original",
+      "shareQuestion": "¿A dónde va?",
+      "wsBeatPersonal": "Personal: esta Mac",
+      "wsBeatSaved": "Guardado en el Drive de la empresa",
+      "wsBeatSwitch": "Cambia a Trabajo",
+      "wsClient": "Cliente",
+      "wsFolderClient": "Cliente / Demos",
+      "wsFolderWork": "Trabajo / Grabaciones",
+      "wsNewRecording": "NUEVA GRABACIÓN",
+      "wsPersonal": "Personal",
+      "wsSaved": "GUARDADO",
+      "wsThisMac": "Esta Mac",
+      "wsWork": "Trabajo"
+    }
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",
@@ -2628,11 +2686,13 @@
     },
     "status": {
       "shipped": "Lanzado",
+      "beta": "Beta privada",
       "inProgress": "En progreso",
       "planned": "Planeado"
     },
     "groupHint": {
       "shipped": "Disponible hoy en al menos una plataforma. Las celdas dicen en cuál.",
+      "beta": "Construido y en prueba privada. Todavía no está en la descarga.",
       "shippedOne": "Ya está en la app que descargas.",
       "inProgress": "Se está construyendo o portando ahora mismo.",
       "planned": "Lo siguiente. El orden es una prioridad, no una promesa."
@@ -2666,6 +2726,7 @@
     "legend": {
       "title": "Cómo leerlo",
       "shipped": "en la versión actual",
+      "beta": "construido, en prueba privada",
       "inProgress": "en construcción o en portación",
       "planned": "en la lista, sin fecha"
     },
@@ -2812,6 +2873,38 @@
         "title": "Instalador firmado",
         "description": "Una versión en la que tu sistema confía desde el inicio, sin avisos de seguridad al abrirla por primera vez.",
         "note": "Las versiones de macOS ya están firmadas y notarizadas por Apple. La primera beta de Windows sale sin firmar; abajo están los pasos para su aviso."
+      },
+      "textRecognition": {
+        "title": "Reconocimiento de texto (OCR)",
+        "description": "Selecciona y copia el texto dentro de una captura, u oculta una línea reconocida en un clic. Se reconoce en tu Mac y nada sale de ella."
+      },
+      "imageInspect": {
+        "title": "Medir y tomar colores",
+        "description": "Mide el ancho y el alto de cualquier cosa en una captura con una regla que fija tramos de píxeles, y lee el color bajo el cursor en hex, rgb, hsl u oklch."
+      },
+      "imageCanvas": {
+        "title": "Cuadrícula y mover en la imagen",
+        "description": "Un lienzo amplio para el editor de imágenes: desplaza, acerca, mueve cosas sobre una cuadrícula y dibuja fuera de la imagen."
+      },
+      "clipLevels": {
+        "title": "Niveles de clips y Agregar desde la Biblioteca",
+        "description": "Pon imágenes y videos sobre el metraje en sus propios niveles de la línea de tiempo, y agrega elementos de la Biblioteca a la secuencia."
+      },
+      "zoomFilmstrip": {
+        "title": "Tira de miniaturas que sigue el zoom",
+        "description": "Las miniaturas de la línea de tiempo siguen tu zoom, así ves los fotogramas correctos justo donde cortas."
+      },
+      "localTranscription": {
+        "title": "Transcripción local",
+        "description": "Transcribe una grabación en tu Mac y sigue la transcripción en un panel lateral que acompaña tus ediciones."
+      },
+      "screenshotsWhileRecording": {
+        "title": "Capturas mientras grabas",
+        "description": "Toma una captura durante una toma sin detenerla. Captura el objetivo de la grabación y nunca abre el editor."
+      },
+      "cameraMoves": {
+        "title": "Cámara que se mueve con el tiempo",
+        "description": "La cámara flotante cambia de lugar y de tamaño a lo largo del video, en su propia pista. Planeado: el diseño aún no está construido."
       }
     }
   },

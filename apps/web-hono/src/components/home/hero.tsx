@@ -91,7 +91,7 @@ export function Hero() {
               <Mail size={17} aria-hidden />
               {t("homeHeroCtaMobile")}
             </a>
-            <a href="#record" className={styles.ctaSecondary}>
+            <a href="#capture" className={styles.ctaSecondary}>
               <Play size={15} aria-hidden />
               {t("homeHeroCtaSecondary")}
             </a>
