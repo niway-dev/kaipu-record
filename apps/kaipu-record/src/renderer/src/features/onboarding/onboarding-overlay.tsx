@@ -173,6 +173,13 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
     window.electronAPI.requestCaptureScreenshot();
   }, [onClose]);
 
+  // Without a capture: the main window (Library, Settings) is the way in for someone who
+  // only wants to look around first.
+  const finishAndOpenApp = useCallback(() => {
+    onClose();
+    window.electronAPI.openMainWindow();
+  }, [onClose]);
+
   return (
     <div
       {...uiArea("onboarding.root")}
@@ -209,7 +216,11 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
           )}
           {stepId === "privacy" && <PrivacyStep />}
           {stepId === "done" && (
-            <DoneStep onRecord={finishAndRecord} onScreenshot={finishAndScreenshot} />
+            <DoneStep
+              onRecord={finishAndRecord}
+              onScreenshot={finishAndScreenshot}
+              onOpenApp={finishAndOpenApp}
+            />
           )}
         </div>
 

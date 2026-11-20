@@ -79,6 +79,28 @@
   background: var(--bg-hover);
 }
 
+/* A quiet text button under the two main actions: a way out, not a third choice. */
+.openApp {
+  margin-top: 16px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.openApp:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
 .hint,
 .hintMuted {
   font-family: var(--font-mono);

@@ -433,6 +433,21 @@ describe("OnboardingOverlay", () => {
     expect(requestCaptureScreenshot).toHaveBeenCalledWith();
   });
 
+  it("You're set: Open the app closes onboarding and opens the main window, with no capture", async () => {
+    const { requestRecordSelector, requestCaptureScreenshot } = mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue(granted),
+    });
+    const openMainWindow = window.electronAPI.openMainWindow as ReturnType<typeof vi.fn>;
+    const onClose = vi.fn();
+    render(<OnboardingOverlay onClose={onClose} />);
+    await toDone();
+    fireEvent.click(screen.getByRole("button", { name: /open the app/i }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(openMainWindow).toHaveBeenCalledOnce();
+    expect(requestRecordSelector).not.toHaveBeenCalled();
+    expect(requestCaptureScreenshot).not.toHaveBeenCalled();
+  });
+
   it("a dot jumps back to an earlier step", async () => {
     mockElectronAPI({ checkPermissions: vi.fn().mockResolvedValue(granted) });
     render(<OnboardingOverlay onClose={vi.fn()} />);

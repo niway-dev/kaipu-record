@@ -34,10 +34,12 @@ interface DoneStepProps {
   onRecord: () => void;
   /** Closes the onboarding and opens the capture widget for a screenshot. */
   onScreenshot: () => void;
+  /** Closes the onboarding and opens the main window, where the settings live. */
+  onOpenApp: () => void;
 }
 
-/** You're set: where Kaipu lives, and two ways out. */
-export function DoneStep({ onRecord, onScreenshot }: DoneStepProps): React.JSX.Element {
+/** You're set: where Kaipu lives, and three ways out (record, screenshot, or open the app). */
+export function DoneStep({ onRecord, onScreenshot, onOpenApp }: DoneStepProps): React.JSX.Element {
   const t = useTranslations("onboarding");
   const windows = isWindowsHost();
   // The live bindings, never literals: the user can rebind them on the Shortcuts page.
@@ -69,6 +71,9 @@ export function DoneStep({ onRecord, onScreenshot }: DoneStepProps): React.JSX.E
           {shortcuts && <kbd className={styles.hintMuted}>{shortcuts.captureScreenshot}</kbd>}
         </button>
       </div>
+      <button type="button" className={styles.openApp} onClick={onOpenApp}>
+        {t("doneOpenApp")}
+      </button>
     </div>
   );
 }
