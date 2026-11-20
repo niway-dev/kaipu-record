@@ -13,6 +13,7 @@ import { OnTheWay } from "@/components/home/on-the-way";
 import { DemoCard } from "@/components/demos";
 import { Files } from "@/components/home/files";
 import { Closing } from "@/components/home/closing";
+import styles from "@/components/home/find-chapter.module.css";
 import { pageHead, softwareJsonLd } from "@/lib/seo";
 import { getHomeRedirect } from "@/server-functions/get-home-redirect";
 
@@ -69,7 +70,7 @@ function HomePage() {
       </LazyHydrate>
       <LazyHydrate>
         <Chapter id="find" tint="c4" number="04" icon={Search} keyPrefix="homeChapter4">
-          <div style={{ display: "grid", gap: 20, minWidth: 0 }}>
+          <div className={styles.find}>
             <DemoCard id="workspaces" />
             <MockFind />
           </div>

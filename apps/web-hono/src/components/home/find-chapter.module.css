@@ -1,0 +1,6 @@
+/* The Find chapter stacks the workspaces demo above the library mock. */
+.find {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
