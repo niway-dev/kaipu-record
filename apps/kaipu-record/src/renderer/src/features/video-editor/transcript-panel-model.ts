@@ -27,6 +27,8 @@ export type PanelView =
       unresolved: boolean;
       /** Why the last attempt to transcribe again failed, when it did. */
       failure: StartFailure | null;
+      /** A job is re-transcribing this out-of-date transcript; the words stay while it runs. */
+      rerun: { phase: string; segmentsDone: number; segmentsTotal: number } | null;
     }
   | { kind: "failed"; reason: StartFailure | "invalid" }
   | { kind: "idle" }
@@ -42,7 +44,13 @@ export function viewState(view: PanelView): string {
     case "running":
       return "transcribing";
     case "words":
-      return view.stale ? "stale" : view.unresolved ? "unresolved" : "done";
+      return view.stale
+        ? view.rerun
+          ? "staleRerunning"
+          : "stale"
+        : view.unresolved
+          ? "unresolved"
+          : "done";
     default:
       return view.kind;
   }
@@ -60,7 +68,9 @@ export interface PanelViewInput {
 /**
  * The first matching rule wins:
  *
- * 1. A job for this video is running: its progress, whatever a file on disk says.
+ * 1. A job for this video is running: its progress, whatever a file on disk says. The one
+ *    exception is an out-of-date transcript: its old words stay readable and the progress
+ *    shows beside them, so a re-transcribe never blanks the panel.
  * 2. The transcript file is being read: loading.
  * 3. A transcript exists: its words, marked stale and/or with unresolved stretches. A failed
  *    attempt to transcribe again shows inside that view, so the old words stay readable.
@@ -70,6 +80,20 @@ export interface PanelViewInput {
 export function panelView(input: PanelViewInput): PanelView {
   const { transcript, control, hasAudio } = input;
   if (control.kind === "running") {
+    const progress = {
+      phase: control.phase,
+      segmentsDone: control.segmentsDone,
+      segmentsTotal: control.segmentsTotal,
+    };
+    if (transcript.state === "ready" && transcript.stale) {
+      return {
+        kind: "words",
+        stale: true,
+        unresolved: transcript.unresolvedCount > 0,
+        failure: null,
+        rerun: progress,
+      };
+    }
     return {
       kind: "running",
       phase: control.phase,
@@ -84,6 +108,7 @@ export function panelView(input: PanelViewInput): PanelView {
       stale: transcript.stale,
       unresolved: transcript.unresolvedCount > 0,
       failure: control.kind === "failed" ? control.failure : null,
+      rerun: null,
     };
   }
   if (transcript.state === "invalid") return { kind: "failed", reason: "invalid" };

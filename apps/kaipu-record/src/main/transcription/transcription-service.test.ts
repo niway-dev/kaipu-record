@@ -1305,6 +1305,14 @@ describe("commit", () => {
     expect(await runToEnd(h)).toMatchObject({ phase: "failed", failure: "item-changed" });
   });
 
+  it("hashes the resolved item, so the caller can serve the hash from its cache", async () => {
+    const h = makeHarness();
+    await startJob(h);
+    expect(h.deps.hashMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ id: REQUEST.id, mediaPath: h.state.mediaPath }),
+    );
+  });
+
   it("refuses to begin when the media vanished before it could be hashed", async () => {
     const h = makeHarness();
     vi.mocked(h.deps.hashMedia).mockRejectedValue(

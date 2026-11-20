@@ -32,6 +32,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, RenameResult } from "./library-storage";
 import type { CanvasReadResult, CanvasSavePayload } from "./screenshot-canvas";
 import type {
+  TranscriptFreshnessResult,
   TranscriptReadResult,
   TranscriptionBeginResult,
   TranscriptionJobProgress,
@@ -816,6 +817,7 @@ export interface KaipuElectronAPI {
   cancelTranscription(jobId: string): Promise<void>;
   onTranscriptionJobProgress(callback: (progress: TranscriptionJobProgress) => void): () => void;
   readTranscript(id: string): Promise<TranscriptReadResult>;
+  checkTranscriptFreshness(id: string): Promise<TranscriptFreshnessResult>;
   /**
    * Ask where to put a text file (a native save dialog seeded with `suggestedName`.`extension`)
    * and write `text` there as UTF-8. Never rejects for the user's choices: it resolves `cancelled`

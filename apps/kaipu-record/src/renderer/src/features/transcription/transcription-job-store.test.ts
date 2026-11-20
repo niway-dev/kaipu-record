@@ -93,6 +93,20 @@ describe("transcription job store", () => {
     expect(getSnapshot().doneCounts).toEqual({ "item-1": 1 });
   });
 
+  it("passes the automatic mark to the job only when set", async () => {
+    const first = controlledJob();
+    const manual = startTranscription(ARGS);
+    expect(run.mock.calls[0]![0].automatic).toBeUndefined();
+    first.finish(progress("done"));
+    await manual;
+
+    const second = controlledJob();
+    const automatic = startTranscription({ ...ARGS, automatic: true });
+    expect(run.mock.calls[1]![0].automatic).toBe(true);
+    second.finish(progress("done"));
+    await automatic;
+  });
+
   it("notifies subscribers and stops after unsubscribe", async () => {
     const job = controlledJob();
     const listener = vi.fn();
@@ -137,6 +151,16 @@ describe("transcription job store", () => {
       expect(refreshStatus).not.toHaveBeenCalled();
     },
   );
+
+  it("an automatic start that main refuses as busy records no failure", async () => {
+    run.mockResolvedValueOnce({ status: "refused", reason: "busy" });
+
+    await expect(startTranscription({ ...ARGS, automatic: true })).resolves.toEqual({
+      status: "refused",
+      reason: "busy",
+    });
+    expect(getSnapshot().failures).toEqual({});
+  });
 
   it.each(["unavailable", "model-missing"] as const)(
     "a %s refusal means the model status is stale: it refreshes the status and records no failure",

@@ -11,6 +11,7 @@ import type { TranscriptApi } from "@renderer/features/transcription/use-transcr
 import type { LayoutEntry } from "./timeline";
 import { uiArea } from "@renderer/lib/ui-area";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { resetAutoRetranscribe } from "@renderer/features/transcription/use-auto-retranscribe";
 import { TranscriptPanel, type TranscriptPanelProps } from "./transcript-panel";
 
 const analytics = vi.hoisted(() => ({ reportError: vi.fn() }));
@@ -60,23 +61,39 @@ function doc(over: Partial<TranscriptDocument> = {}): TranscriptDocument {
   };
 }
 
-const READY = (over: Partial<TranscriptDocument> = {}, stale = false): TranscriptApi => ({
+const READY = (
+  over: Partial<TranscriptDocument> = {},
+  stale = false,
+  autoRetranscribe = false,
+  mediaContentSha256: string | null = null,
+): TranscriptApi => ({
   state: "ready",
   transcript: doc(over),
   stale,
+  freshness: stale ? "stale" : "fresh",
+  autoRetranscribe,
+  mediaContentSha256,
   refresh: vi.fn(async () => {}),
 });
 const NO_TRANSCRIPT: TranscriptApi = {
   state: "none",
   transcript: null,
   stale: false,
+  freshness: "fresh",
+  autoRetranscribe: false,
   refresh: vi.fn(async () => {}),
 };
 
 const start = vi.fn(async () => null);
 const cancel = vi.fn();
-function control(state: TranscribeControlState): void {
-  hooks.control.mockReturnValue({ state, start, cancel });
+function control(state: TranscribeControlState, canStartAutomatically?: boolean): void {
+  hooks.control.mockReturnValue({
+    state,
+    start,
+    cancel,
+    canStartAutomatically:
+      canStartAutomatically ?? (state.kind === "idle" || state.kind === "done"),
+  });
 }
 
 const MODEL: TranscriptionModelInfo = {
@@ -153,6 +170,8 @@ function setup(over: Partial<TranscriptPanelProps> = {}): TranscriptPanelProps {
 const panel = (): HTMLElement => screen.getByTestId("transcript-panel");
 
 beforeEach(() => {
+  resetAutoRetranscribe();
+  start.mockResolvedValue(null as never);
   hooks.transcript.mockReturnValue(READY());
   control({ kind: "done" });
   modelStatus({ state: "missing" });
@@ -277,6 +296,21 @@ describe("TranscriptPanel — states", () => {
     expect(start).toHaveBeenCalledOnce();
   });
 
+  it("tells the control when the transcript is out of date, so a job done this session cannot hide it", () => {
+    hooks.transcript.mockReturnValue(READY({}, true));
+    control({ kind: "idle" });
+    setup();
+    expect(hooks.control).toHaveBeenLastCalledWith(
+      expect.objectContaining({ transcriptStale: true }),
+    );
+    cleanup();
+    hooks.transcript.mockReturnValue(READY({}, false));
+    setup();
+    expect(hooks.control).toHaveBeenLastCalledWith(
+      expect.objectContaining({ transcriptStale: false }),
+    );
+  });
+
   it.each([
     ["busy-elsewhere", { kind: "busy-elsewhere" } as const, /Another video is being transcribed/],
     ["model-downloading", { kind: "model-downloading" } as const, /speech model is downloading/],
@@ -322,6 +356,98 @@ describe("TranscriptPanel — states", () => {
       "The transcription engine stopped before it finished.",
     );
     expect(screen.getByTestId("transcript-list")).toBeInTheDocument();
+  });
+
+  it("stale and allowed to run by itself: starts one automatic job, once", async () => {
+    // A started job (not null or a refusal), so the claim is kept.
+    start.mockResolvedValue({ status: "done" } as never);
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-1"));
+    control({ kind: "idle" });
+    const props = baseProps();
+    // Two panels for the same item (the editor and an embedded one) both see the same state.
+    const first = render(<TranscriptPanel {...props} />);
+    render(<TranscriptPanel {...props} />);
+    await act(async () => {});
+    first.rerender(<TranscriptPanel {...props} />);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith({ automatic: true });
+  });
+
+  it("starts again for the same item when the recording changed to new content", async () => {
+    start.mockResolvedValue({ status: "done" } as never);
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-1"));
+    control({ kind: "idle" });
+    const props = baseProps();
+    const { rerender } = render(<TranscriptPanel {...props} />);
+    await act(async () => {});
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-2"));
+    rerender(<TranscriptPanel {...props} />);
+    await act(async () => {});
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  it("stale after a job finished in this session: still starts the automatic job", async () => {
+    // The control reads `done` for the item after any job this session, even if the media was
+    // replaced since; main allows the attempt, so the panel must not wait for `idle`.
+    start.mockResolvedValue({ status: "done" } as never);
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-2"));
+    control({ kind: "done" });
+    render(<TranscriptPanel {...baseProps()} />);
+    await act(async () => {});
+    expect(start).toHaveBeenCalledWith({ automatic: true });
+  });
+
+  it("stale and allowed, but a job is running: does not start", async () => {
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-3"));
+    control({ kind: "running", phase: "transcribing", segmentsDone: 1, segmentsTotal: 4 } as never);
+    render(<TranscriptPanel {...baseProps()} />);
+    await act(async () => {});
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("stale but main did not allow an automatic run: waits for the button", () => {
+    hooks.transcript.mockReturnValue(READY({}, true, false));
+    control({ kind: "idle" });
+    setup();
+    expect(start).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Transcribe again" })).toBeEnabled();
+  });
+
+  it.each([
+    [
+      "a job is already running",
+      { kind: "running", phase: "starting", segmentsDone: 0, segmentsTotal: 0 },
+    ],
+    ["another video is being transcribed", { kind: "busy-elsewhere" }],
+    ["the model is missing", { kind: "needs-model" }],
+  ] as [string, TranscribeControlState][])(
+    "stale and allowed, but %s: does not start",
+    (_name, state) => {
+      hooks.transcript.mockReturnValue(READY({}, true, true));
+      control(state);
+      setup();
+      expect(start).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stale and allowed, but the video has no audio: does not start", () => {
+    hooks.transcript.mockReturnValue(READY({}, true, true));
+    control({ kind: "idle" });
+    setup({ hasAudio: false });
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("re-transcribing an out-of-date transcript: old words stay, progress and Cancel sit in the banner", () => {
+    hooks.transcript.mockReturnValue(READY({}, true, true));
+    control({ kind: "running", phase: "transcribing", segmentsDone: 2, segmentsTotal: 5 });
+    setup();
+    expect(panel()).toHaveAttribute("data-state", "staleRerunning");
+    expect(screen.getByTestId("transcript-list")).toHaveTextContent("Hello brave new world.");
+    const banner = screen.getByTestId("transcript-stale");
+    expect(within(banner).getByTestId("transcript-progress")).toHaveAttribute("aria-valuenow", "2");
+    expect(within(banner).queryByRole("button", { name: "Transcribe again" })).toBeNull();
+    fireEvent.click(within(banner).getByRole("button", { name: "Cancel" }));
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("failed: the reason and Try again", () => {

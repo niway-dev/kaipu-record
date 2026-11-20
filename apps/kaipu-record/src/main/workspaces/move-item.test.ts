@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sha256FileBase64 } from "../library/content-hash";
@@ -152,6 +162,18 @@ describe("moveItem — same volume", () => {
     expect(await readdir(journalDir)).toEqual([]);
   });
 
+  it("stamps the linked file after the source name is gone, so the next transcript open does not re-hash", async () => {
+    const item = await seedItem(src.directory);
+    // The source has a cached hash, so the move can stamp the target without hashing.
+    await new LibraryVault(src.directory).ensureContentHash(item.id);
+    const outcome = await moveItem({ source: src, target: dst, id: item.id }, deps());
+    expect(outcome).toMatchObject({ ok: true, mode: "linked" });
+    // Unlinking the source name changes the shared inode's ctime; the stamp must match that.
+    expect(await new LibraryVault(dst.directory).cachedContentHash("Demo")).toMatchObject({
+      status: "hit",
+    });
+  });
+
   it("gives a colliding stem a suffix and never overwrites the item already there", async () => {
     const item = await seedItem(src.directory);
     await writeFile(join(dst.directory, "Demo.mp4"), "someone else");
@@ -220,6 +242,43 @@ describe("moveItem — across volumes (EXDEV)", () => {
     expect(meta).toMatchObject({ sourceSizeBytes: now.size, sourceMtimeMs: now.mtimeMs });
     // No staging left behind.
     expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual([]);
+  });
+
+  it("a copy that keeps its mtime still gets the stamp of the new file, so it is not re-hashed", async () => {
+    const item = await seedItem(src.directory);
+    // A whole second, so restoring it through utimes reads back exactly.
+    const kept = 1_700_000_000;
+    await utimes(join(src.directory, "Demo.mp4"), kept, kept);
+    const outcome = await moveItem(
+      { source: src, target: dst, id: item.id },
+      deps({
+        fs: { link: exdev },
+        hooks: {
+          // The copy is made with a new mtime; put the source's back, as a tool that keeps it would.
+          after: async (step) => {
+            if (step !== "media-verified") return;
+            const staged = join(dst.directory, ".kaipu", "tmp");
+            for (const dir of await readdir(staged)) {
+              await utimes(join(staged, dir, "Demo.mp4"), kept, kept);
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, mode: "copied" });
+    const now = await stat(join(dst.directory, "Demo.mp4"));
+    // The mtime is the one the source had, so the early return for "unchanged" is taken, and the
+    // stamp was still rewritten for the new file (its own ctime and inode).
+    expect(now.mtimeMs).toBe(kept * 1000);
+    const vault = new LibraryVault(dst.directory);
+    const sidecar = await vault.sidecar("Demo");
+    expect(sidecar).toMatchObject({
+      hashedSizeBytes: now.size,
+      hashedMtimeMs: now.mtimeMs,
+      hashedCtimeMs: now.ctimeMs,
+      hashedIno: now.ino,
+    });
+    expect(await vault.cachedContentHash("Demo")).toMatchObject({ status: "hit" });
   });
 
   it("aborts on a checksum mismatch and leaves the source untouched", async () => {

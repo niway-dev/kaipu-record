@@ -42,6 +42,23 @@ describe("panelView", () => {
     expect(viewState(view)).toBe("transcribing");
   });
 
+  it("keeps the old words visible while a job re-transcribes an out-of-date transcript", () => {
+    const view = panelView(
+      input(
+        { state: "ready", stale: true },
+        { kind: "running", phase: "transcribing", segmentsDone: 1, segmentsTotal: 4 },
+      ),
+    );
+    expect(view).toEqual({
+      kind: "words",
+      stale: true,
+      unresolved: false,
+      failure: null,
+      rerun: { phase: "transcribing", segmentsDone: 1, segmentsTotal: 4 },
+    });
+    expect(viewState(view)).toBe("staleRerunning");
+  });
+
   it("is loading while the file is read", () => {
     expect(panelView(input({ state: "loading" }, { kind: "idle" })).kind).toBe("loading");
   });

@@ -1,8 +1,8 @@
 /**
  * IPC for local transcription (NIW2-818 M1). Every argument comes from the renderer, so each is
  * checked here before the service sees it. `transcriptionJobBegin` and
- * `transcriptionReadTranscript` act on a library item: they run inside the workspace gate and
- * under one vault lease, like the other item handlers. The rest are app-wide or address a job
+ * `transcriptionReadTranscript` and `transcriptionCheckFreshness` act on a library item: they
+ * run inside the workspace gate and under one vault lease, like the other item handlers. The rest are app-wide or address a job
  * by the id main gave it.
  */
 import { join } from "node:path";
@@ -13,12 +13,13 @@ import type {
   TranscriptionJobProgress,
   TranscriptionJobRequest,
   TranscriptionModelDownloadResult,
+  TranscriptFreshnessResult,
   TranscriptReadResult,
 } from "@shared/types/transcription";
 import { sha256FileBase64 } from "../library/content-hash";
 import { broadcast, broadcastLibraryChanged, currentVault, scopedAdmitted } from "../library";
 import { withItemLock } from "../library/item-lock";
-import { META_DIR, isPlainItemId } from "../library/library-vault";
+import { FileChangedWhileHashingError, META_DIR, isPlainItemId } from "../library/library-vault";
 import { activeWorkspace } from "../workspaces";
 import { PinnedJobs } from "./dev-job-pin";
 import { applyTranscriptionOverride, type TranscriptionOverride } from "./dev-override";
@@ -30,6 +31,7 @@ import { readTranscriptFile } from "./transcript-file";
 import {
   MAX_CHUNK_BYTES,
   TranscriptionService,
+  type ResolvedItem,
   type TranscriptionVault,
 } from "./transcription-service";
 
@@ -82,6 +84,29 @@ export function broadcastJobProgress(progress: TranscriptionJobProgress): void {
   if (progress.phase === "done") broadcastLibraryChanged();
 }
 
+/**
+ * The media hash a job stores. It goes through the vault's content-hash cache, so the job leaves
+ * the stamp behind and the transcript it writes opens warm (NIW2-891). The cache re-hashes the
+ * real content whenever the stamp does not match. A file that keeps changing while it is hashed
+ * is hashed plainly once, as before the cache: the job still needs a number, and the transcript
+ * reads as out of date if the file moved on.
+ */
+export async function hashMediaThroughCache(
+  item: Pick<ResolvedItem, "id" | "mediaPath">,
+): Promise<string> {
+  try {
+    const hashed = await currentVault().ensureContentHash(item.id);
+    if (hashed) return hashed.contentSha256;
+  } catch {
+    // The cache could not answer (the file kept changing, or the sidecar cannot be written on a
+    // read-only vault): hash plainly, as before the cache. A file that is gone fails with ENOENT.
+    return sha256FileBase64(item.mediaPath);
+  }
+  throw Object.assign(new Error(`transcription: media of "${item.id}" is gone`), {
+    code: "ENOENT",
+  });
+}
+
 function createService(deps: TranscriptionIpcDeps): TranscriptionService {
   const engineStore = new EngineStore({ rootDir: deps.engineRoot });
   return new TranscriptionService({
@@ -90,7 +115,7 @@ function createService(deps: TranscriptionIpcDeps): TranscriptionService {
     modelStore: new ModelStore({ rootDir: deps.modelsRoot }),
     openVault: openTranscriptionVault,
     runBatch,
-    hashMedia: sha256FileBase64,
+    hashMedia: hashMediaThroughCache,
     now: () => new Date(),
     broadcastJob: broadcastJobProgress,
     broadcastModel: (progress) => broadcast(IPC_CHANNELS.transcriptionModelProgress, progress),
@@ -120,11 +145,15 @@ function parseRequest(value: unknown): TranscriptionJobRequest {
   ) {
     throw new Error("transcription: invalid duration");
   }
+  if (request.automatic !== undefined && typeof request.automatic !== "boolean") {
+    throw new Error("transcription: invalid automatic flag");
+  }
   return {
     id,
     assetId: parseId(request.assetId, "asset id"),
     modelId: parseId(request.modelId, "model id"),
     durationMs,
+    ...(request.automatic === true ? { automatic: true } : {}),
   };
 }
 
@@ -147,31 +176,145 @@ function parseFailReason(value: unknown): "no-audio" | "decode-failed" | undefin
   throw new Error("transcription: invalid fail reason");
 }
 
+/** `[transcript-timing]` lines: the base point for how long opening a transcript takes. */
+function logTiming(what: string, started: number, outcome: string): void {
+  console.info(
+    `[transcript-timing] ${what} ${Math.round(performance.now() - started)}ms ${outcome}`,
+  );
+}
+
 /**
- * The file's words, with `stale` when the recording's content no longer matches the one that was
- * transcribed. The hash is computed on each call and kept nowhere. That streams the whole file while
- * the library gate is held, so the cost grows with the recording's size; a (size, mtime) precheck
- * that skips the hash is the known follow-up, left out because the media hash is what marks a
- * transcript stale.
+ * The file's words and what the cache already says about them. The media is never read here:
+ * when the vault's content-hash cache matches the file the verdict is exact (`fresh` or
+ * `stale`), otherwise it is `checking` and `checkTranscriptFreshness` settles it. A full hash
+ * of a 15 GB recording took 7 to 22 seconds, and the words themselves read in 13 ms.
  */
 async function readTranscript(id: string): Promise<TranscriptReadResult> {
   if (!isPlainItemId(id)) throw new Error("transcription: invalid item id");
+  const started = performance.now();
   const vault = currentVault();
   const read = await readTranscriptFile(vault.companionPaths(id).transcript);
   if (!read.ok) return { status: read.reason === "not-found" ? "none" : "invalid" };
-  let hash: string;
-  try {
-    hash = await sha256FileBase64(await vault.filePath(id));
-  } catch (error) {
-    // A transcript with no recording beside it belongs to nothing the app shows.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { status: "none" };
-    throw error;
-  }
+  const cached = await vault.cachedContentHash(id);
+  // A transcript with no recording beside it belongs to nothing the app shows.
+  if (cached.status === "missing") return { status: "none" };
+  const hit = cached.status === "hit";
+  const stale = hit && cached.contentSha256 !== read.transcript.media.contentHash;
+  logTiming(`read ${id}`, started, `cache=${hit ? "hit" : "miss"}`);
   return {
     status: "ready",
     transcript: read.transcript,
-    stale: hash !== read.transcript.media.contentHash,
+    stale,
+    freshness: !hit ? "checking" : stale ? "stale" : "fresh",
   };
+}
+
+const UNKNOWN: TranscriptFreshnessResult = { verdict: "unknown", autoRetranscribe: false };
+
+/** The checks in flight, so two windows (or two hooks) asking about one item share one hash. */
+const checksInFlight = new Map<string, Promise<TranscriptFreshnessResult>>();
+
+async function checkFreshness(id: string): Promise<TranscriptFreshnessResult> {
+  const vault = currentVault();
+  const read = await readTranscriptFile(vault.companionPaths(id).transcript);
+  if (!read.ok) return UNKNOWN;
+  let contentSha256: string;
+  try {
+    const hashed = await vault.ensureContentHash(id);
+    if (!hashed) return UNKNOWN;
+    contentSha256 = hashed.contentSha256;
+  } catch (error) {
+    if (!(error instanceof FileChangedWhileHashingError)) {
+      console.warn(`[transcript-timing] check ${id} could not hash the media`, error);
+    }
+    return UNKNOWN;
+  }
+  // The hash can take seconds, and a job may rewrite the transcript meanwhile: judge against
+  // the transcript as it is now, not the one read before hashing.
+  const current = await readTranscriptFile(vault.companionPaths(id).transcript);
+  if (!current.ok) return UNKNOWN;
+  if (contentSha256 === current.transcript.media.contentHash) {
+    return { verdict: "fresh", autoRetranscribe: false };
+  }
+  const sidecar = await vault.sidecar(id).catch(() => null);
+  return {
+    verdict: "stale",
+    autoRetranscribe: sidecar !== null && sidecar.autoRetranscribedSha256 !== contentSha256,
+    mediaContentSha256: contentSha256,
+  };
+}
+
+/**
+ * Settles a `checking` read: the media hash comes from the cache, or is computed once and
+ * cached. Concurrent calls for one item share one promise.
+ */
+function checkTranscriptFreshness(id: string): Promise<TranscriptFreshnessResult> {
+  if (!isPlainItemId(id)) throw new Error("transcription: invalid item id");
+  const key = `${activeWorkspace().id}:${id}`;
+  const running = checksInFlight.get(key);
+  if (running) return running;
+  const started = performance.now();
+  const promise = checkFreshness(id)
+    .then((result) => {
+      logTiming(`check ${id}`, started, `result=${result.verdict}`);
+      return result;
+    })
+    .finally(() => checksInFlight.delete(key));
+  checksInFlight.set(key, promise);
+  return promise;
+}
+
+/**
+ * An automatic job is recorded against the content hash it was admitted with, so a run that
+ * fails or is cancelled does not start again on the next open. The hash is the one taken before
+ * the job began: hashing again here could record content the job never transcribed.
+ */
+async function recordAutomaticAttempt(id: string, contentSha256: string): Promise<void> {
+  await currentVault().writeMeta(id, { autoRetranscribedSha256: contentSha256 });
+}
+
+/** Automatic begins in flight, `${workspace}:${item}:${hash}`, so two windows cannot both start. */
+const automaticInFlight = new Set<string>();
+
+async function beginAutomatic(
+  service: TranscriptionService,
+  parsed: ReturnType<typeof parseRequest>,
+): Promise<TranscriptionBeginResult> {
+  const vault = currentVault();
+  // The service checks the asset id and the kind. An item that is gone, or media that cannot be
+  // hashed, gets the service's own refusal or failure: there is no content to record against.
+  const item = await vault.describe(parsed.id);
+  if (!item) return service.begin(parsed);
+  let hash: string;
+  try {
+    hash = await hashMediaThroughCache({ id: item.id, mediaPath: item.filePath });
+  } catch {
+    return service.begin(parsed);
+  }
+  const key = `${activeWorkspace().id}:${parsed.id}:${hash}`;
+  // No await between the check and the add: the claim is atomic within this process.
+  if (automaticInFlight.has(key)) return { status: "refused", reason: "busy" };
+  automaticInFlight.add(key);
+  try {
+    const sidecar = await vault.sidecar(parsed.id).catch(() => null);
+    if (sidecar?.autoRetranscribedSha256 === hash) return { status: "refused", reason: "busy" };
+    const result = await service.begin(parsed);
+    if (result.status === "accepted") {
+      // The job already holds the slot: the renderer must get its id even when the record
+      // cannot be written.
+      try {
+        await recordAutomaticAttempt(parsed.id, hash);
+      } catch (error) {
+        console.warn(
+          `transcription: could not record the automatic attempt for ${parsed.id}`,
+          error,
+        );
+      }
+    }
+    return result;
+  } finally {
+    automaticInFlight.delete(key);
+  }
 }
 
 export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): TranscriptionService {
@@ -207,7 +350,9 @@ export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): Transcript
     scopedAdmitted("library", async (request: unknown): Promise<TranscriptionBeginResult> => {
       const parsed = parseRequest(request);
       if (pinned) return pinned.begin(parsed);
-      return override ? { status: "refused", reason: "unavailable" } : service.begin(parsed);
+      if (override) return { status: "refused", reason: "unavailable" };
+      if (parsed.automatic) return beginAutomatic(service, parsed);
+      return service.begin(parsed);
     }),
   );
   ipcMain.handle(IPC_CHANNELS.transcriptionJobChunk, (_event, jobId: unknown, pcm: unknown) => {
@@ -230,6 +375,10 @@ export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): Transcript
   ipcMain.handle(
     IPC_CHANNELS.transcriptionReadTranscript,
     scopedAdmitted("library", (id: unknown) => readTranscript(parseId(id, "item id"))),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.transcriptionCheckFreshness,
+    scopedAdmitted("library", (id: unknown) => checkTranscriptFreshness(parseId(id, "item id"))),
   );
 
   return service;

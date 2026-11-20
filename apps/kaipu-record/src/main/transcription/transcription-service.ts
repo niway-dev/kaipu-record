@@ -93,8 +93,11 @@ export interface TranscriptionServiceDeps {
   /** The vault of the active workspace. Called from `begin`, inside the workspace gate. */
   openVault: () => TranscriptionVault;
   runBatch: (options: RunBatchOptions) => Promise<CliResult[]>;
-  /** base64 sha256 of a media file (`content-hash.ts`). */
-  hashMedia: (path: string) => Promise<string>;
+  /**
+   * base64 sha256 of an item's media. The item, not a bare path, so the caller can serve it from
+   * the vault's hash cache and leave a stamp behind (NIW2-891).
+   */
+  hashMedia: (item: ResolvedItem) => Promise<string>;
   now: () => Date;
   broadcastJob: (progress: TranscriptionJobProgress) => void;
   broadcastModel: (progress: TranscriptionModelProgress) => void;
@@ -536,7 +539,7 @@ export class TranscriptionService {
       if (!item) return { status: "refused", reason: "invalid-item" };
       let contentHash: string;
       try {
-        contentHash = await this.deps.hashMedia(item.mediaPath);
+        contentHash = await this.deps.hashMedia(item);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           return { status: "refused", reason: "invalid-item" };

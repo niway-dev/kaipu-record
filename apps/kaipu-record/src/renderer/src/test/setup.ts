@@ -355,6 +355,10 @@ window.electronAPI = {
   cancelTranscription: async () => {},
   onTranscriptionJobProgress: () => () => {},
   readTranscript: async () => ({ status: "none" as const }),
+  checkTranscriptFreshness: async () => ({
+    verdict: "fresh" as const,
+    autoRetranscribe: false,
+  }),
   saveTextFile: async () => ({ status: "cancelled" as const }),
   readClipboardImage: async () => null,
   peekClipboardImage: async () => null,

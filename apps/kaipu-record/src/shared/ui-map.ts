@@ -202,7 +202,7 @@ export const UI_MAP = {
       // The Transcript tab (NIW2-870): the editor's TranscriptPanel beside the detail video, behind
       // the `transcription` flag; the states are the panel's own views, see `viewState`.
       transcriptPanel: {
-        states: ["idle", "needsModel", "transcribing", "done", "stale"],
+        states: ["idle", "needsModel", "transcribing", "done", "stale", "staleRerunning"],
         gatedBy: [{ flag: "transcription" }],
       },
       // VersionsList: the original alone; with its edited project; with the copies made from
@@ -322,7 +322,8 @@ export const UI_MAP = {
       // and opens its offer; `downloading` shows the offer's progress; `transcribing` the job's
       // progress with Cancel; `done` the paragraphs; `unresolved` the same with the stretches the
       // engine could not recognise marked and a note; `stale` a banner over the old words after
-      // the recording changed; `failed` the reason and Try again (also an unreadable file);
+      // the recording changed; `staleRerunning` the same banner while the automatic re-run (or
+      // Transcribe again) works: progress and Cancel replace its button; `failed` the reason and Try again (also an unreadable file);
       // `noAudio` a video without an audio track; `unavailable` an engine that cannot run here;
       // `busy` another video's job holds the engine; `loading` while the file is read.
       transcriptPanel: {
@@ -334,6 +335,7 @@ export const UI_MAP = {
           "done",
           "unresolved",
           "stale",
+          "staleRerunning",
           "failed",
           "noAudio",
           "unavailable",

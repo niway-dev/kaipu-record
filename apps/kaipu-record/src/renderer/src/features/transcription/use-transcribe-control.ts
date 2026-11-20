@@ -25,12 +25,26 @@ export interface TranscribeControlItem {
   transcribedAt: number | null;
   /** `true` when the caller has read that a transcript file exists and has no timestamp for it. */
   hasTranscript?: boolean;
+  /**
+   * `true` when the caller has read that the transcript is out of date. A job that finished this
+   * session then proves nothing about the current content, so the control reads as if there were
+   * no transcript: a failure shows and a retry stays possible.
+   */
+  transcriptStale?: boolean;
 }
 
 export interface TranscribeControl {
   state: TranscribeControlState;
-  /** Starts a job when the control allows it; resolves `null` and does nothing otherwise. */
-  start(): Promise<StartOutcome | null>;
+  /**
+   * Starts a job when the control allows it; resolves `null` and does nothing otherwise.
+   * `automatic` marks a job the app starts by itself, so main can keep its loop guard.
+   */
+  start(options?: { automatic?: boolean }): Promise<StartOutcome | null>;
+  /**
+   * `true` when an automatic start would run now: the control is free (idle, or done with a job
+   * this session) and nothing blocks a new job (another job, a download, a missing model).
+   */
+  canStartAutomatically: boolean;
   cancel(): void;
   /**
    * The model status this control reads, with its download, cancel and refresh calls, so the
@@ -57,41 +71,60 @@ export function useTranscribeControl(item: TranscribeControlItem): TranscribeCon
   );
 
   const defaultModel = status?.models.find((m) => m.id === status.defaultModelId);
-  const state = transcribeControlState({
+  const input = {
     flagOn,
     hasLocalMedia: item.mediaUrl !== null,
     availability: status?.availability ?? null,
     defaultModelReady: status ? defaultModel?.status.state === "ready" : null,
     downloading: defaultModel?.status.state === "downloading",
     transcript:
-      item.transcribedAt !== null || item.hasTranscript === true || doneThisSession
+      item.transcriptStale !== true &&
+      (item.transcribedAt !== null || item.hasTranscript === true || doneThisSession)
         ? "ready"
         : "none",
     running,
     busyElsewhere,
     failure,
-  });
+  } as const;
+  const state = transcribeControlState(input);
+  // `done` ranks above the states that block a new job, so ask what the control would be with no
+  // transcript at all: only `idle` means nothing stands in the way.
+  const canStartAutomatically =
+    (state.kind === "idle" || state.kind === "done") &&
+    transcribeControlState({ ...input, transcript: "none" }).kind === "idle";
 
   // `start` reads the latest values at call time so a click handler captured before a render
   // cannot start a job from a state that has since changed.
-  const latest = useRef({ state, item, modelId: status?.defaultModelId ?? null });
-  latest.current = { state, item, modelId: status?.defaultModelId ?? null };
+  const latest = useRef({
+    state,
+    canStartAutomatically,
+    item,
+    modelId: status?.defaultModelId ?? null,
+  });
+  latest.current = { state, canStartAutomatically, item, modelId: status?.defaultModelId ?? null };
 
-  const start = useCallback(async (): Promise<StartOutcome | null> => {
-    const { state: current, item: target, modelId } = latest.current;
-    if (!STARTABLE.has(current.kind) || modelId === null || target.mediaUrl === null) return null;
-    return startTranscription({
-      itemId: target.id,
-      assetId: target.assetId,
-      modelId,
-      mediaUrl: target.mediaUrl,
-      durationMs: target.durationMs,
-    });
-  }, []);
+  const start = useCallback(
+    async (options?: { automatic?: boolean }): Promise<StartOutcome | null> => {
+      const { state: current, canStartAutomatically: free, item: target, modelId } = latest.current;
+      // An automatic start may also follow a job that finished this session: the media can have
+      // been replaced since, and main's own guard decides whether this content may run again.
+      const startable = options?.automatic === true ? free : STARTABLE.has(current.kind);
+      if (!startable || modelId === null || target.mediaUrl === null) return null;
+      return startTranscription({
+        itemId: target.id,
+        assetId: target.assetId,
+        modelId,
+        mediaUrl: target.mediaUrl,
+        durationMs: target.durationMs,
+        ...(options?.automatic ? { automatic: true } : {}),
+      });
+    },
+    [],
+  );
 
   const cancel = useCallback((): void => {
     if (latest.current.state.kind === "running") cancelRunningTranscription();
   }, []);
 
-  return { state, start, cancel, offer };
+  return { state, start, cancel, offer, canStartAutomatically };
 }

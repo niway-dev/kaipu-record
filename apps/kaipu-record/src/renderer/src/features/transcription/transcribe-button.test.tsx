@@ -53,6 +53,7 @@ function setControl(
     state,
     start: fns.start,
     cancel: fns.cancel,
+    canStartAutomatically: false,
     offer: {
       status: statusOf(model),
       failures,

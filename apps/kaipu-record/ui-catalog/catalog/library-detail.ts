@@ -179,6 +179,32 @@ export const libraryDetail = catalog(
       ready: { video: "paused-at-start" },
       gates: [transcribeOn],
     },
+    "transcript-stale-rerunning": {
+      profile: "transcription-job-running-transcripts",
+      how: "With a transcript beside “Onboarding flow” that was written for an earlier version of the recording and a job pinned at 3 of 12 parts (no engine runs), open it, click the Transcript tab and then Transcribe again: the out-of-date banner stays over the old words and now carries the progress bar with Cancel. The state cancels the job afterwards.",
+      steps: [
+        detail(ASSETS.onboardingFlow),
+        transcriptTab,
+        inTranscript({ css: "[data-w]" }),
+        inTranscript(transcriptButton("Transcribe again")),
+        {
+          click: {
+            area: "libraryDetail.transcriptPanel",
+            part: transcriptButton("Transcribe again"),
+          },
+        },
+        inTranscript({ role: "progressbar" }),
+        inTranscript({ text: "3 of 12 parts" }),
+        inTranscript({ text: "This transcript is out of date" }),
+      ],
+      demonstrates: ["libraryDetail.transcriptPanel:staleRerunning"],
+      ready: { video: "paused-at-start" },
+      gates: [transcribeOn],
+      after: [
+        { click: { area: "libraryDetail.transcriptPanel", part: transcriptButton("Cancel") } },
+        inTranscript(transcriptButton("Transcribe again")),
+      ],
+    },
     "transcribe-model-dialog": {
       profile: "transcription-missing",
       how: "With the speech model pinned as not installed, open “Walkthrough 1” and click Transcribe: the dialog offers the download. The state closes it with Not now.",
