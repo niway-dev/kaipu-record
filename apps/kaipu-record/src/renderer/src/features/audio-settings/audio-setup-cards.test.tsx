@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import type { Microphone } from "@renderer/features/recording/types";
 import {
-  MicPanelDrawer,
+  MicPanelPopover,
   MicToggleSplit,
-  SystemAudioPanelDrawer,
+  SystemAudioPanelPopover,
   SystemAudioToggleSplit,
   useAudioControl,
 } from "./audio-controls";
@@ -62,8 +62,7 @@ function CardHarness({
         onToggle={onToggleAudio}
         unavailable={unavailable}
       />
-      <MicPanelDrawer
-        variant="page"
+      <MicPanelPopover
         control={mic}
         on={micOn}
         isRecording={isRecording}
@@ -71,7 +70,7 @@ function CardHarness({
         selectedMicrophone={selected}
         onSelectMicrophone={() => {}}
       />
-      <SystemAudioPanelDrawer variant="page" control={audio} micOn={micOn} />
+      <SystemAudioPanelPopover control={audio} micOn={micOn} />
     </div>
   );
 }
@@ -130,28 +129,27 @@ describe("Microphone and System audio cards", () => {
     const device = screen.getByRole("button", { name: /^System audio settings/ });
     expect(device).toBeEnabled();
     await userEvent.click(device);
-    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
   });
 
   it("opens one panel at a time from the chevrons", async () => {
     render(<CardHarness />);
     await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
-    expect(screen.getByRole("region", { name: "Microphone settings" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Microphone settings" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
-    expect(screen.queryByRole("region", { name: "Microphone settings" })).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Microphone settings" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
-describe("the two-column panels", () => {
-  it("microphone: INPUT with the devices, SOUND with the level and the noise switch", async () => {
+describe("the popovers", () => {
+  it("microphone: the devices, the level and the noise switch, with no section labels", async () => {
     render(<CardHarness />);
     await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
-    const panel = screen.getByRole("region", { name: "Microphone settings" });
-    expect(within(panel).getByText("Input", { selector: "span" })).toBeInTheDocument();
-    expect(within(panel).getByText("Sound")).toBeInTheDocument();
+    const panel = screen.getByRole("dialog", { name: "Microphone settings" });
+    expect(within(panel).queryByText("Sound")).not.toBeInTheDocument();
     expect(within(panel).getByRole("radio", { name: /Yeti Nano/ })).toBeInTheDocument();
     expect(within(panel).getByRole("slider", { name: "Input level" })).toBeInTheDocument();
     expect(
@@ -162,7 +160,7 @@ describe("the two-column panels", () => {
   it("microphone, idle: no header, since the setup card already names the microphone", async () => {
     render(<CardHarness />);
     await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
-    const panel = screen.getByRole("region", { name: "Microphone settings" });
+    const panel = screen.getByRole("dialog", { name: "Microphone settings" });
     expect(within(panel).queryByText("Microphone")).not.toBeInTheDocument();
     expect(within(panel).queryByText("Live")).not.toBeInTheDocument();
   });
@@ -170,22 +168,18 @@ describe("the two-column panels", () => {
   it("microphone, recording: only the Live tag shows, with no panel title", async () => {
     render(<CardHarness isRecording />);
     await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
-    const panel = screen.getByRole("region", { name: "Microphone settings" });
+    const panel = screen.getByRole("dialog", { name: "Microphone settings" });
     expect(within(panel).getByText("Live")).toBeInTheDocument();
     expect(within(panel).queryByText("Microphone")).not.toBeInTheDocument();
   });
 
-  it("system audio: WHAT TO CAPTURE with the choices, MIX with ducking and volume", async () => {
+  it("system audio: ducking and volume, and no One app option", async () => {
     render(<CardHarness />);
     await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
-    const panel = screen.getByRole("region", { name: "System audio settings" });
-    expect(within(panel).getByText("What to capture")).toBeInTheDocument();
-    expect(within(panel).getByText("Mix")).toBeInTheDocument();
-    expect(within(panel).getByRole("radio", { name: "All sound" })).toBeInTheDocument();
-    expect(within(panel).getByRole("radio", { name: /One app/ })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    const panel = screen.getByRole("dialog", { name: "System audio settings" });
+    expect(within(panel).queryByText("What to capture")).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("radio")).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/One app/)).not.toBeInTheDocument();
     expect(
       within(panel).getByRole("switch", { name: "Lower it while I talk" }),
     ).toBeInTheDocument();

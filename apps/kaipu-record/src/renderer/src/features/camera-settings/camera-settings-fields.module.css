@@ -1,6 +1,5 @@
-/* Shared by the popover (full) and the drawer (compact). The device chip is last in
-   the DOM (Tab order) but drawn in the container's header: the container is
-   `position: relative` and sets --camera-settings-header-top. */
+/* The camera popover's content. It has to stay near 400 px tall so it fits under or over
+   its card in a 1280x800 window without scrolling as a whole. */
 
 .fields {
   display: flex;
@@ -8,121 +7,9 @@
   gap: 8px;
 }
 
-.fields[data-compact] {
-  gap: 6px;
-}
-
-.label {
-  margin-top: 4px;
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-label);
-  letter-spacing: 0;
-  color: var(--text-4);
-}
-
-.chips {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.chip {
-  flex: 1 1 0%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 8px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
-  appearance: none;
-  cursor: pointer;
-}
-
-.chips[data-compact] .chip {
-  height: 26px;
-  padding: 0 4px;
-  font-size: 11px;
-}
-
-.chip:hover {
-  color: var(--text-primary);
-}
-
-.chip[aria-checked="true"] {
-  background: rgba(246, 5, 92, 0.12);
-  border-color: rgba(246, 5, 92, 0.32);
-  color: var(--accent-primary);
-}
-
-.chip[aria-disabled="true"] {
-  color: var(--text-muted);
-  cursor: default;
-}
-
-.chip:focus-visible,
-.device:focus-visible,
 .blockedButton:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
-}
-
-.slider {
-  position: relative;
-  padding-top: 4px;
-}
-
-.slider input[type="range"] {
-  width: 100%;
-  margin: 0;
-  accent-color: var(--accent-primary);
-  cursor: pointer;
-}
-
-.slider input[type="range"]:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.ticks {
-  position: relative;
-  height: 6px;
-  /* The native thumb is ~16 px: inset so a tick sits under the thumb's center. */
-  margin: 0 8px;
-}
-
-.tick {
-  position: absolute;
-  top: 0;
-  width: 1px;
-  height: 6px;
-  background: var(--text-muted);
-  transform: translateX(-50%);
-}
-
-.tick[data-current] {
-  background: var(--accent-primary);
-}
-
-.range {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--text-muted);
 }
 
 .note {
@@ -142,29 +29,6 @@
   border: 1px solid rgba(246, 5, 92, 0.24);
   border-radius: var(--radius-sm);
   padding: 6px 8px;
-}
-
-.device {
-  position: absolute;
-  top: var(--camera-settings-header-top, 12px);
-  right: var(--camera-settings-header-right, 12px);
-  max-width: 128px;
-  height: 24px;
-  padding: 0 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  font-family: var(--font-family);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-
-.fields[data-compact] .device {
-  max-width: 120px;
-  height: 22px;
-  font-size: 10px;
 }
 
 .blocked {
@@ -229,11 +93,6 @@
   margin-top: 4px;
 }
 
-/* The corner slider, right under the Shape chips it belongs to. */
-.corners {
-  margin-top: -2px;
-}
-
 .framing {
   display: flex;
   flex-direction: column;
@@ -250,17 +109,13 @@
 /* A 4:3 box: the dot is where the visible window sits inside the camera image. */
 .pad {
   position: relative;
-  width: 96px;
+  width: 80px;
   aspect-ratio: 4 / 3;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   touch-action: none;
   cursor: crosshair;
-}
-
-.fields[data-compact] .pad {
-  width: 64px;
 }
 
 .pad:focus-visible {
@@ -305,57 +160,23 @@
   border-radius: 4px;
 }
 
-/* The Capture page's layout: SOURCE beside SHAPE and SIZE, then everything else under both. */
-.fields[data-columns] {
-  gap: 12px;
-}
-
-.columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  column-gap: 20px;
-  row-gap: 12px;
-}
-
-.column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* The drawer is a size container: one column when it is narrower than 520 px. */
-@container (max-width: 519px) {
-  .columns {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.fields[data-columns] .label {
-  margin-top: 0;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-.below {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.below > .mirror,
-.below > .corners {
-  margin-top: 0;
-}
-
+/* Five rows show; more scroll inside the list. 5 x 28 px rows + 4 x 2 px gaps. */
 .sources {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+}
+
+.sources[data-scrolls] {
+  max-height: calc(5 * 28px + 4 * 2px);
+  overflow-y: auto;
+}
+
+.help {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
 }
 
 .source {
@@ -363,8 +184,8 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 32px;
-  padding: 4px 8px;
+  min-height: 28px;
+  padding: 2px 8px;
   box-sizing: border-box;
   background: var(--bg-input);
   border: 1px solid var(--border);

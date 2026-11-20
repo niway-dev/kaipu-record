@@ -12,14 +12,14 @@ import { CountdownOverlay } from "@renderer/features/recording/components/countd
 import { ScreenSourceSelector } from "@renderer/features/recording/components/screen-source-selector";
 import { PermissionNotice } from "@renderer/features/recording/components/permission-notice";
 import {
-  CameraPanelDrawer,
+  CameraPanelPopover,
   CameraPanelTile,
   useCameraControl,
 } from "@renderer/features/camera-settings";
 import {
-  MicPanelDrawer,
+  MicPanelPopover,
   MicToggleSplit,
-  SystemAudioPanelDrawer,
+  SystemAudioPanelPopover,
   SystemAudioToggleSplit,
   useAudioControl,
   useAudioSettings,
@@ -139,8 +139,7 @@ export function RecordPage(): React.JSX.Element {
   const isSystemAudioUnavailable = isRecording && activity.systemAudioAvailable === false;
 
   // Mic, Audio and Camera: setup cards in the row (name, current choice, switch, chevron), one
-  // inline panel open at a time, right under the row in the page's flow (the content area
-  // scrolls, so a tall panel pushes instead of being clipped).
+  // popover open at a time, anchored to its card and floating over the page (nothing moves).
   const [mic, systemAudio, camera] = exclusive([
     useAudioControl(audioStore),
     useAudioControl(audioStore),
@@ -189,9 +188,8 @@ export function RecordPage(): React.JSX.Element {
           />
         }
       />
-      <MicPanelDrawer
-        ui={uiArea("record.micSettings")}
-        variant="page"
+      <MicPanelPopover
+        ui={uiArea("record.micPopover")}
         control={mic}
         on={setup.isMicrophoneEnabled}
         isRecording={isBusy}
@@ -199,15 +197,13 @@ export function RecordPage(): React.JSX.Element {
         selectedMicrophone={setup.selectedMicrophone}
         onSelectMicrophone={setup.selectMicrophone}
       />
-      <SystemAudioPanelDrawer
-        ui={uiArea("record.audioSettings")}
-        variant="page"
+      <SystemAudioPanelPopover
+        ui={uiArea("record.audioPopover")}
         control={systemAudio}
         micOn={setup.isMicrophoneEnabled}
       />
-      <CameraPanelDrawer
-        ui={uiArea("record.cameraSettings")}
-        variant="page"
+      <CameraPanelPopover
+        ui={uiArea("record.cameraPopover")}
         control={camera}
         on={setup.isCameraEnabled}
         isRecording={isBusy}

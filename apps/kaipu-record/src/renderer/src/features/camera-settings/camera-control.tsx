@@ -1,8 +1,7 @@
 import React, { type RefObject } from "react";
 import { CameraSetupCard } from "./camera-setup-card";
 import { CameraToggleSplit } from "./camera-toggle-split";
-import type { SettingsDrawerVariant } from "../settings-controls/settings-drawer";
-import { CameraSettingsDrawer } from "./camera-settings-drawer";
+import { CameraPopover } from "./camera-popover";
 import { useSettingsDisclosure } from "../settings-controls/use-settings-disclosure";
 import { useCameraSettings, type CameraSettingsStore } from "./use-camera-settings";
 import type { UiAreaProps } from "@renderer/lib/ui-area";
@@ -17,7 +16,7 @@ export interface CameraControl {
   blocked: boolean;
 }
 
-/** State the split tile and its settings drawer share. */
+/** State the split tile and its settings popover share. */
 export function useCameraControl(): CameraControl {
   const store = useCameraSettings();
   const disclosure = useSettingsDisclosure();
@@ -31,10 +30,10 @@ interface CameraControlProps {
 }
 
 /**
- * The split tile goes in the row, the drawer right under the row (in the page's flow, so it
- * pushes the content). They share `control`. The tile is compact for the capture panel and
- * full-size on the Record page (`compact={false}`). `card` is the Capture page's setup card:
- * name, camera · shape, size, a switch and a chevron.
+ * The split tile goes in the row; its settings open as a popover anchored to it. They share
+ * `control`. The tile is compact for the capture panel and full-size on the Record page
+ * (`compact={false}`). `card` is the Capture page's setup card: name, camera, a switch and a
+ * chevron.
  */
 export function CameraPanelTile({
   control,
@@ -80,27 +79,25 @@ export function CameraPanelTile({
   );
 }
 
-export function CameraPanelDrawer({
+/** The camera popover, bound to the control its card (or the widget's cell) shares. */
+export function CameraPanelPopover({
   control,
   on,
   isRecording,
-  variant = "panel",
   ui,
 }: Omit<CameraControlProps, "onToggle"> & {
   control: CameraControl;
-  variant?: SettingsDrawerVariant;
   ui?: UiAreaProps;
 }): React.JSX.Element | null {
   return (
-    <CameraSettingsDrawer
+    <CameraPopover
       id={control.settingsId}
       open={control.open}
       onClose={control.close}
-      chevronRef={control.chevronRef}
+      anchorRef={control.chevronRef}
       store={control.store}
       cameraOn={on}
       isRecording={isRecording}
-      variant={variant}
       ui={ui}
     />
   );

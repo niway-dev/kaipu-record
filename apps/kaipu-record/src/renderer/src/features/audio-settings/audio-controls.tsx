@@ -1,15 +1,14 @@
-import React, { type Ref, type RefObject } from "react";
+import React, { type Ref } from "react";
 import { Mic, Volume2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { Microphone } from "@renderer/features/recording/types";
-import { SettingsDrawer, type SettingsDrawerVariant } from "../settings-controls/settings-drawer";
+import { SettingsPopover } from "../settings-controls/settings-popover";
 import { SetupCard } from "../settings-controls/setup-card";
 import { ToggleSplit } from "../settings-controls/toggle-split";
 import {
   useSettingsDisclosure,
   type SettingsDisclosure,
 } from "../settings-controls/use-settings-disclosure";
-import { useSettingsFocus } from "../settings-controls/use-settings-focus";
 import { MicSettingsContent } from "./mic-settings-content";
 import { SystemAudioSettingsContent } from "./system-audio-settings-content";
 import { spreadLevels, useMicLevelMeter } from "./use-mic-level-meter";
@@ -17,7 +16,7 @@ import { useTakeMicLevels } from "./use-take-mic-levels";
 import type { AudioSettingsStore } from "./use-audio-settings";
 import type { UiAreaProps } from "@renderer/lib/ui-area";
 
-/** State the Mic (or Audio) split tile and its settings drawer share. */
+/** State the Mic (or Audio) split tile and its settings popover share. */
 export interface AudioControl extends SettingsDisclosure {
   store: AudioSettingsStore;
 }
@@ -44,22 +43,16 @@ interface MicBodyProps extends MicDevices {
   control: AudioControl;
   micOn: boolean;
   isRecording: boolean;
-  compact?: boolean;
-  columns?: boolean;
-  firstRef: RefObject<HTMLElement | null>;
 }
 
 /**
- * The mic settings plus where their meter reads from. Mounted only while the drawer is open, so the pre-take meter (it opens the device) runs exactly that long: open,
+ * The mic settings plus where their meter reads from. Mounted only while the popover is open, so the pre-take meter (it opens the device) runs exactly that long: open,
  * mic on, not recording. During a take the engine's mic levels feed it instead (their own channel, only while mounted).
  */
 function MicSettingsBody({
   control,
   micOn,
   isRecording,
-  compact,
-  columns,
-  firstRef,
   microphones,
   selectedMicrophone,
   onSelectMicrophone,
@@ -80,9 +73,6 @@ function MicSettingsBody({
       onChange={control.store.update}
       isRecording={isRecording}
       levels={levels}
-      compact={compact}
-      columns={columns}
-      firstRef={firstRef}
     />
   );
 }
@@ -155,45 +145,33 @@ export function MicToggleSplit({
 }
 
 /**
- * The Mic settings drawer, right under the tile row, in the page's flow so it pushes the
- * content instead of being clipped. `variant="panel"` is the capture panel's compact
- * drawer; `"page"` is the Record page's wide one (two columns).
+ * The Mic settings popover, anchored to its card (the Capture page) or its cell (the capture
+ * widget).
  */
-export function MicPanelDrawer({
+export function MicPanelPopover({
   control,
   on,
   isRecording,
-  variant = "panel",
   ui,
   ...devices
 }: MicDevices & {
   control: AudioControl;
   on: boolean;
   isRecording: boolean;
-  variant?: SettingsDrawerVariant;
   ui?: UiAreaProps;
 }): React.JSX.Element | null {
   const t = useTranslations("micSettings");
-  const { firstRef, onKeyDown } = useSettingsFocus(control.open, control.chevronRef, control.close);
   return (
-    <SettingsDrawer
+    <SettingsPopover
       id={control.settingsId}
       label={t("title")}
       open={control.open}
-      variant={variant}
-      onKeyDown={onKeyDown}
+      anchorRef={control.chevronRef}
+      onClose={control.close}
       ui={ui}
     >
-      <MicSettingsBody
-        control={control}
-        micOn={on}
-        isRecording={isRecording}
-        compact={variant === "panel"}
-        columns={variant === "page"}
-        firstRef={firstRef}
-        {...devices}
-      />
-    </SettingsDrawer>
+      <MicSettingsBody control={control} micOn={on} isRecording={isRecording} {...devices} />
+    </SettingsPopover>
   );
 }
 
@@ -262,37 +240,31 @@ export function SystemAudioToggleSplit({
   );
 }
 
-/** The Audio settings drawer; same `variant` as `MicPanelDrawer`. */
-export function SystemAudioPanelDrawer({
+/** The Audio settings popover, anchored to its card. */
+export function SystemAudioPanelPopover({
   control,
   micOn,
-  variant = "panel",
   ui,
 }: {
   control: AudioControl;
   micOn: boolean;
-  variant?: SettingsDrawerVariant;
   ui?: UiAreaProps;
 }): React.JSX.Element | null {
   const t = useTranslations("systemAudioSettings");
-  const { firstRef, onKeyDown } = useSettingsFocus(control.open, control.chevronRef, control.close);
   return (
-    <SettingsDrawer
+    <SettingsPopover
       id={control.settingsId}
       label={t("title")}
       open={control.open}
-      variant={variant}
-      onKeyDown={onKeyDown}
+      anchorRef={control.chevronRef}
+      onClose={control.close}
       ui={ui}
     >
       <SystemAudioSettingsContent
         audio={control.store.audio}
         onChange={control.store.update}
         micOn={micOn}
-        compact={variant === "panel"}
-        columns={variant === "page"}
-        firstRef={firstRef}
       />
-    </SettingsDrawer>
+    </SettingsPopover>
   );
 }

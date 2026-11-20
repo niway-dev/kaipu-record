@@ -1,7 +1,7 @@
 export {
-  MicPanelDrawer,
+  MicPanelPopover,
   MicToggleSplit,
-  SystemAudioPanelDrawer,
+  SystemAudioPanelPopover,
   SystemAudioToggleSplit,
   useAudioControl,
   type AudioControl,

@@ -105,12 +105,12 @@ export const UI_MAP = {
         states: ["on", "off", "toggleHover", "deviceHover"],
         gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }, { permission: "microphone" }],
       },
-      micSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
+      micPopover: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
       audio: {
         states: ["on", "off", "unavailable"],
         gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }],
       },
-      audioSettings: {
+      audioPopover: {
         states: ["open"],
         gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }],
       },
@@ -118,7 +118,7 @@ export const UI_MAP = {
         states: ["on", "off", "blocked"],
         gatedBy: [{ recordingSetting: "isCameraEnabled" }, { permission: "camera" }],
       },
-      cameraSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isCameraEnabled" }] },
+      cameraPopover: { states: ["open"], gatedBy: [{ recordingSetting: "isCameraEnabled" }] },
       // Drawn only when the input is on and its permission is denied.
       micNotice: {
         states: ["denied"],

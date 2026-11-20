@@ -72,6 +72,7 @@ export function SetupCard({
   return (
     <div
       {...ui}
+      data-settings-anchor=""
       className={styles.card}
       data-active={on || undefined}
       data-open={open || undefined}

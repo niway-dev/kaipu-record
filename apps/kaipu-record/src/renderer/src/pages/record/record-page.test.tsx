@@ -324,7 +324,7 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     expect(screen.getByText("System audio")).toBeInTheDocument();
     expect(screen.getByText("All sound")).toBeInTheDocument();
     expect(screen.getByText("Camera")).toBeInTheDocument();
-    expect(await screen.findByText("Default camera · circle, M")).toBeInTheDocument();
+    expect(await screen.findByText("Default camera")).toBeInTheDocument();
 
     const mic = screen.getByRole("switch", { name: "Microphone" });
     expect(mic).toHaveAttribute("aria-checked", "true");
@@ -332,29 +332,26 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     expect(toggleMicrophone).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
     expect(toggleCamera).toHaveBeenCalledOnce();
-    // The switch only flips the setting: no panel opens.
-    expect(screen.queryByRole("region")).toBeNull();
+    // The switch only flips the setting: no popover opens.
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("opens the Camera card's panel via its chevron in the idle layout", () => {
+  it("opens the Camera card's popover via its chevron in the idle layout", () => {
     renderAt(undefined);
     fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
-    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
   });
 
-  it("opens the Mic and Audio drawers in the page's flow, one at a time", async () => {
+  it("opens the Mic and Audio popovers over the page, one at a time", async () => {
     renderAt(undefined);
     await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
-    const mic = screen.getByRole("region", { name: "Microphone settings" });
+    const mic = screen.getByRole("dialog", { name: "Microphone settings" });
     expect(mic).toBeInTheDocument();
-    // In flow, not a floating dialog: it lives in the same block as the tile row.
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(mic.parentElement).toContainElement(
-      screen.getByRole("button", { name: /^Microphone settings/ }),
-    );
+    // Floating over the page, not in its flow: nothing under the row moves.
+    expect(mic.parentElement).toBe(document.body);
     await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
-    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Microphone settings" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Microphone settings" })).toBeNull();
   });
 
   it("locks the Mic and Camera settings during the countdown and while starting", async () => {
@@ -496,7 +493,7 @@ describe("RecordPage while a take runs", () => {
     expect(line.closest("[data-disabled]")).not.toBeNull();
   });
 
-  it("keeps the setup row live: the switches still flip and the panels still open", async () => {
+  it("keeps the setup row live: the switches still flip and the popovers still open", async () => {
     toggleMicrophone.mockClear();
     toggleCamera.mockClear();
     renderAt(undefined);
@@ -505,7 +502,7 @@ describe("RecordPage while a take runs", () => {
     await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
     expect(toggleCamera).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
-    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
   });
 
   it("drops the old separate recording layout: no locked source card, no stop hint", () => {

@@ -1,99 +1,104 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CameraPanelDrawer, CameraPanelTile, useCameraControl } from "./camera-control";
+import type { CameraBubbleSettings } from "@shared/camera-bubble";
+import { CameraPanelPopover, CameraPanelTile, useCameraControl } from "./camera-control";
 
 const original = { ...window.electronAPI };
 afterEach(() => {
   Object.assign(window.electronAPI, original);
 });
 
-/** The Record page's shape: the full-size tile and the wide drawer. */
-function PageHarness({
-  on = true,
-  isRecording = false,
-}: {
-  on?: boolean;
-  isRecording?: boolean;
-}): React.JSX.Element {
-  const control = useCameraControl();
-  return (
-    <div>
-      <CameraPanelTile compact={false} control={control} on={on} onToggle={() => {}} />
-      <CameraPanelDrawer variant="page" control={control} on={on} isRecording={isRecording} />
-    </div>
-  );
-}
-
-/** The Capture page's setup row: the Camera card and its two-column panel. */
+/** The Capture page's setup row: the Camera card and its popover. */
 function CardHarness({
   on = true,
+  isRecording = false,
   onToggle = () => {},
 }: {
   on?: boolean;
+  isRecording?: boolean;
   onToggle?: () => void;
 }): React.JSX.Element {
   const control = useCameraControl();
   return (
-    <div>
+    <div data-testid="row">
       <CameraPanelTile card compact={false} control={control} on={on} onToggle={onToggle} />
-      <CameraPanelDrawer variant="page" control={control} on={on} isRecording={false} />
+      <CameraPanelPopover control={control} on={on} isRecording={isRecording} />
     </div>
   );
 }
 
-function PanelHarness({ isRecording = false }: { isRecording?: boolean }): React.JSX.Element {
-  const control = useCameraControl();
-  return (
-    <div>
-      <CameraPanelTile control={control} on onToggle={() => {}} />
-      <CameraPanelDrawer control={control} on isRecording={isRecording} />
-      <button type="button">Start Recording</button>
-    </div>
-  );
-}
+const DEFAULT_BUBBLE: CameraBubbleSettings = {
+  shape: "circle",
+  cornerRadius: 0.18,
+  size: 240,
+  deviceId: null,
+  mirrored: true,
+  framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+};
 
-describe("Camera drawer (Record page, page variant)", () => {
-  it("opens a drawer with focus on the chosen camera, and Esc returns focus to the chevron", async () => {
-    render(<PageHarness />);
+describe("Camera popover (Capture page)", () => {
+  it("opens a popover with focus on the chosen camera, and Esc returns focus to the chevron", async () => {
+    render(<CardHarness />);
     const chevron = screen.getByRole("button", { name: /^Camera settings/ });
     await userEvent.click(chevron);
 
-    const drawer = screen.getByRole("region", { name: "Camera settings" });
-    expect(chevron).toHaveAttribute("aria-controls", drawer.id);
+    const popover = screen.getByRole("dialog", { name: "Camera settings" });
+    expect(chevron).toHaveAttribute("aria-controls", popover.id);
+    expect(chevron).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("radio", { name: "Default camera" })).toHaveFocus();
 
     await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(chevron).toHaveFocus();
     expect(chevron).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("persists a change through the settings IPC", async () => {
+  it("floats over the page: nothing is added to the row's flow", async () => {
+    render(<CardHarness />);
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
+    const popover = screen.getByRole("dialog", { name: "Camera settings" });
+    expect(screen.getByTestId("row")).not.toContainElement(popover);
+    expect(popover.parentElement).toBe(document.body);
+  });
+
+  it("closes from the chevron and on a press outside", async () => {
+    render(
+      <>
+        <CardHarness />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const chevron = screen.getByRole("button", { name: /^Camera settings/ });
+    await userEvent.click(chevron);
+    await userEvent.click(chevron);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(chevron);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("persists a change through the settings IPC, with no Done button", async () => {
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
-    render(<PageHarness />);
+    render(<CardHarness />);
     await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
-    await userEvent.click(screen.getByRole("radio", { name: "Square" }));
+    await userEvent.click(screen.getByRole("switch", { name: "Mirror my video" }));
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: {
-          shape: "rounded",
-          cornerRadius: 0.18,
-          size: 240,
-          deviceId: null,
-          mirrored: true,
-          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
-        },
+        cameraBubble: { ...DEFAULT_BUBBLE, mirrored: false },
       }),
     );
+    expect(screen.queryByRole("button", { name: /done/i })).not.toBeInTheDocument();
   });
 
   it("replaces the settings with the blocked card while access is denied", async () => {
     window.electronAPI.getCameraAccessStatus = async () => "blocked";
     const openSystemSettings = vi.fn(async () => {});
     window.electronAPI.openSystemSettings = openSystemSettings;
-    render(<PageHarness on={false} />);
+    render(<CardHarness on={false} />);
     await screen.findByText("BLOCKED");
 
     await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
@@ -103,40 +108,23 @@ describe("Camera drawer (Record page, page variant)", () => {
     await userEvent.click(button);
     expect(openSystemSettings).toHaveBeenCalledWith("camera");
   });
-});
-
-describe("Camera drawer (capture panel)", () => {
-  it("expands inline, keeps the Tab order inside the panel, and closes on Esc", async () => {
-    render(<PanelHarness />);
-    const chevron = screen.getByRole("button", { name: /^Camera settings/ });
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
-
-    await userEvent.click(chevron);
-    const drawer = screen.getByRole("region", { name: "Camera settings" });
-    expect(drawer).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Circle" })).toHaveFocus();
-    // Compact chips, short labels: the Custom chip never shows the long "Custom · N px".
-    expect(screen.queryByText(/Custom ·/)).not.toBeInTheDocument();
-
-    await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
-    expect(chevron).toHaveFocus();
-  });
-
-  it("closes from the chevron", async () => {
-    render(<PanelHarness />);
-    const chevron = screen.getByRole("button", { name: /^Camera settings/ });
-    await userEvent.click(chevron);
-    await userEvent.click(chevron);
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
-  });
 
   it("shows the live note during a recording", async () => {
-    render(<PanelHarness isRecording />);
+    render(<CardHarness isRecording />);
     await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     expect(screen.getByRole("status")).toHaveTextContent(
       "Changes apply live and will show in the recording.",
     );
+  });
+
+  it("closes when the window loses focus", async () => {
+    render(<CardHarness />);
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
+    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
+    act(() => {
+      fireEvent.blur(window);
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -149,65 +137,45 @@ describe("useCameraSettings before the saved value loads", () => {
         release = () =>
           resolve({
             ...saved,
-            cameraBubble: {
-              shape: "rounded",
-              cornerRadius: 0.18,
-              size: 240,
-              deviceId: "cam-9",
-              mirrored: true,
-              framing: { enabled: false, zoom: 1, x: 0, y: 0 },
-            },
+            cameraBubble: { ...DEFAULT_BUBBLE, deviceId: "cam-9" },
           });
       });
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
-    render(<PageHarness />);
+    render(<CardHarness />);
     fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "300" } });
+    fireEvent.click(screen.getByRole("switch", { name: "Mirror my video" }));
     // Nothing written while the saved value is unknown.
     expect(updateSettings).not.toHaveBeenCalled();
 
     await act(async () => release!());
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: {
-          shape: "rounded",
-          cornerRadius: 0.18,
-          size: 300,
-          deviceId: "cam-9",
-          mirrored: true,
-          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
-        },
+        cameraBubble: { ...DEFAULT_BUBBLE, deviceId: "cam-9", mirrored: false },
       }),
     );
   });
 });
 
 describe("useCameraSettings throttling", () => {
-  it("sends a burst of slider changes as few writes, ending on the last value", async () => {
+  const framingOn = { enabled: true, zoom: 1, x: 0, y: 0 };
+
+  it("sends a burst of zoom changes as few writes, ending on the last value", async () => {
     vi.useFakeTimers();
     try {
       const updateSettings = vi.fn(async () => ({}) as never);
       window.electronAPI.updateSettings = updateSettings;
-      render(<PageHarness />);
+      render(<CardHarness />);
       fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
-      const slider = screen.getByRole("slider");
-      for (const value of ["250", "260", "270", "280"]) {
-        fireEvent.change(slider, { target: { value } });
-      }
+      fireEvent.click(screen.getByRole("switch", { name: "Framing" }));
+      const slider = screen.getByRole("slider", { name: "Zoom" });
+      for (let step = 0; step < 4; step += 1) fireEvent.keyDown(slider, { key: "ArrowRight" });
       await act(async () => {
         vi.advanceTimersByTime(100);
       });
-      expect(updateSettings.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(updateSettings.mock.calls.length).toBeLessThanOrEqual(3);
       expect(updateSettings).toHaveBeenLastCalledWith({
-        cameraBubble: {
-          shape: "circle",
-          cornerRadius: 0.18,
-          size: 280,
-          deviceId: null,
-          mirrored: true,
-          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
-        },
+        cameraBubble: { ...DEFAULT_BUBBLE, framing: { ...framingOn, zoom: 1.2 } },
       });
     } finally {
       vi.useRealTimers();
@@ -219,25 +187,19 @@ describe("useCameraSettings throttling", () => {
     try {
       const updateSettings = vi.fn(async () => ({}) as never);
       window.electronAPI.updateSettings = updateSettings;
-      const { unmount } = render(<PageHarness />);
+      const { unmount } = render(<CardHarness />);
       await act(async () => {
         await Promise.resolve();
       });
       fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
-      const slider = screen.getByRole("slider");
-      fireEvent.change(slider, { target: { value: "250" } });
+      fireEvent.click(screen.getByRole("switch", { name: "Framing" }));
+      const slider = screen.getByRole("slider", { name: "Zoom" });
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
       // Within the throttle window: the second value is still waiting on the timer.
-      fireEvent.change(slider, { target: { value: "300" } });
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
       unmount();
       expect(updateSettings).toHaveBeenLastCalledWith({
-        cameraBubble: {
-          shape: "circle",
-          cornerRadius: 0.18,
-          size: 300,
-          deviceId: null,
-          mirrored: true,
-          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
-        },
+        cameraBubble: { ...DEFAULT_BUBBLE, framing: { ...framingOn, zoom: 1.1 } },
       });
     } finally {
       vi.useRealTimers();
@@ -245,29 +207,17 @@ describe("useCameraSettings throttling", () => {
   });
 });
 
-describe("window blur", () => {
-  it("closes an open camera drawer when the window loses focus", async () => {
-    render(<PageHarness />);
-    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
-    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
-    act(() => {
-      fireEvent.blur(window);
-    });
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
-  });
-});
-
 describe("Camera card (Capture page)", () => {
-  it("shows the camera, shape and size, and flips the camera from its switch", async () => {
+  it("shows the camera only, and flips the camera from its switch", async () => {
     const onToggle = vi.fn();
     render(<CardHarness onToggle={onToggle} />);
-    expect(await screen.findByText("Default camera · circle, M")).toBeInTheDocument();
+    expect(await screen.findByText("Default camera")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
     expect(onToggle).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("opens the two-column panel from its chevron and picks a camera through the same setting", async () => {
+  it("opens the popover from its chevron and picks a camera through the same setting", async () => {
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
     const media = navigator.mediaDevices;
@@ -289,7 +239,7 @@ describe("Camera card (Capture page)", () => {
           cameraBubble: expect.objectContaining({ deviceId: "cam-2" }),
         }),
       );
-      expect(await screen.findByText("FaceTime HD Camera · circle, M")).toBeInTheDocument();
+      expect(screen.getAllByText("FaceTime HD Camera").length).toBeGreaterThan(0);
     } finally {
       Object.defineProperty(navigator, "mediaDevices", { value: media, configurable: true });
     }

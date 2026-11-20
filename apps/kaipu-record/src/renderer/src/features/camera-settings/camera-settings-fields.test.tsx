@@ -33,162 +33,120 @@ function renderFields(overrides: Partial<React.ComponentProps<typeof CameraSetti
   return { onChange };
 }
 
-describe("CameraSettingsFields — shape", () => {
-  it("is a radiogroup with one tab stop that ←/→ move", async () => {
-    const { onChange } = renderFields();
-    const group = screen.getByRole("radiogroup", { name: "Shape" });
-    const circle = screen.getByRole("radio", { name: "Circle" });
-    const rounded = screen.getByRole("radio", { name: "Square" });
-    expect(group).toBeInTheDocument();
-    expect(circle).toHaveAttribute("aria-checked", "true");
-    expect(circle).toHaveAttribute("tabindex", "0");
-    expect(rounded).toHaveAttribute("tabindex", "-1");
-
-    circle.focus();
-    await userEvent.keyboard("{ArrowRight}");
-    expect(onChange).toHaveBeenLastCalledWith({ shape: "rounded" });
-    expect(rounded).toHaveFocus();
-    // The value is still "circle" (controlled, unchanged): ← wraps back to the last option.
-    circle.focus();
-    await userEvent.keyboard("{ArrowLeft}");
-    expect(onChange).toHaveBeenLastCalledWith({ shape: "rectangle" });
-    expect(screen.getByRole("radio", { name: "Rectangle" })).toHaveFocus();
-    expect(onChange).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("CameraSettingsFields — corners", () => {
-  it("has no corner slider for the circle", () => {
-    renderFields();
+describe("CameraSettingsFields — what it no longer offers (NIW2-892)", () => {
+  it("has no Shape, Size or Corners control before recording", () => {
+    renderFields({ bubble: { ...bubble, shape: "rounded" } });
+    expect(screen.queryByRole("radiogroup", { name: "Shape" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Size" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: "Bubble size" })).not.toBeInTheDocument();
     expect(screen.queryByRole("slider", { name: "Corners" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Shape")).not.toBeInTheDocument();
+    expect(screen.queryByText("Size")).not.toBeInTheDocument();
   });
 
-  it.each(["rounded", "rectangle"] as const)(
-    "offers 0–50 %% for the %s, and steps it by keyboard",
-    async (shape) => {
-      const { onChange } = renderFields({ bubble: { ...bubble, shape } });
-      const slider = screen.getByRole("slider", { name: "Corners" });
-      expect(slider).toHaveAttribute("aria-valuemin", "0");
-      expect(slider).toHaveAttribute("aria-valuemax", "50");
-      expect(slider).toHaveAttribute("aria-valuetext", "18%");
-      slider.focus();
-      await userEvent.keyboard("{End}");
-      expect(onChange).toHaveBeenLastCalledWith({ cornerRadius: 0.5 });
-      await userEvent.keyboard("{Home}");
-      expect(onChange).toHaveBeenLastCalledWith({ cornerRadius: 0 });
-    },
-  );
+  it("never writes shape, size or cornerRadius", async () => {
+    const { onChange } = renderFields();
+    await userEvent.click(screen.getByRole("radio", { name: "FaceTime HD" }));
+    await userEvent.click(screen.getByRole("switch", { name: "Mirror my video" }));
+    await userEvent.click(screen.getByRole("switch", { name: "Framing" }));
+    for (const [patch] of onChange.mock.calls) {
+      expect(patch).not.toHaveProperty("shape");
+      expect(patch).not.toHaveProperty("size");
+      expect(patch).not.toHaveProperty("cornerRadius");
+    }
+  });
+
+  it("explains that the camera records on its own and is shaped in the editor", () => {
+    renderFields();
+    expect(
+      screen.getByText(
+        "Your camera records as its own full-quality video. Change its shape, size and position in the editor after you record.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
 
-describe("CameraSettingsFields — size", () => {
-  it("names each chip with its preset and pixels", () => {
+describe("CameraSettingsFields — cameras", () => {
+  it("lists the cameras as radios, default camera first, and no dropdown", () => {
     renderFields();
-    expect(screen.getByRole("radio", { name: "Medium, 240 pixels" })).toHaveAttribute(
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    const group = screen.getByRole("radiogroup", { name: "Camera device" });
+    const names = Array.from(group.querySelectorAll('[role="radio"]')).map((r) => r.textContent);
+    expect(names).toEqual(["Default camera", "FaceTime HD", "Camera 2"]);
+    expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
-    expect(screen.getByRole("radio", { name: "Small, 160 pixels" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Large, 360 pixels" })).toBeInTheDocument();
   });
 
-  it("maps a chip to its preset size", async () => {
+  it("writes the deviceId of the picked camera, or null for the default", async () => {
     const { onChange } = renderFields();
-    await userEvent.click(screen.getByRole("radio", { name: "Large, 360 pixels" }));
-    expect(onChange).toHaveBeenCalledWith({ size: 360 });
-  });
-
-  it("reads Custom and is not clickable while the size is a preset", async () => {
-    const { onChange } = renderFields();
-    const custom = screen.getByRole("radio", { name: "Custom" });
-    expect(custom).toHaveAttribute("aria-disabled", "true");
-    await userEvent.click(custom);
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("shows a custom size on the Custom chip and checks it", () => {
-    renderFields({ bubble: { ...bubble, size: 300 } });
-    const custom = screen.getByRole("radio", { name: "Custom, 300 pixels" });
-    expect(custom).toHaveAttribute("aria-checked", "true");
-    expect(custom).toHaveTextContent("Custom · 300 px");
-  });
-
-  it("skips the disabled Custom chip with the arrow keys", async () => {
-    const { onChange } = renderFields({ bubble: { ...bubble, size: 360 } });
-    screen.getByRole("radio", { name: "Large, 360 pixels" }).focus();
-    await userEvent.keyboard("{ArrowRight}");
-    expect(onChange).toHaveBeenLastCalledWith({ size: 160 });
-  });
-
-  it("from the checked Custom chip, ← goes to the last preset and → to the first", async () => {
-    const { onChange } = renderFields({ bubble: { ...bubble, size: 300 } });
-    screen.getByRole("radio", { name: "Custom, 300 pixels" }).focus();
-    await userEvent.keyboard("{ArrowLeft}");
-    expect(onChange).toHaveBeenLastCalledWith({ size: 360 });
-    screen.getByRole("radio", { name: "Custom, 300 pixels" }).focus();
-    await userEvent.keyboard("{ArrowRight}");
-    expect(onChange).toHaveBeenLastCalledWith({ size: 160 });
-  });
-});
-
-describe("CameraSettingsFields — slider", () => {
-  it("spans 120–480 and describes its value", () => {
-    renderFields({ bubble: { ...bubble, size: 300 } });
-    const slider = screen.getByRole("slider", { name: "Bubble size" });
-    expect(slider).toHaveAttribute("min", "120");
-    expect(slider).toHaveAttribute("max", "480");
-    expect(slider).toHaveAttribute("aria-valuetext", "300 pixels, Custom");
-  });
-
-  it("names the preset it sits on", () => {
-    renderFields();
-    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "240 pixels, Medium");
-  });
-
-  it("moves 10 px with ←/→ and 40 px with Shift, stopping on a preset", () => {
-    const { onChange } = renderFields({ bubble: { ...bubble, size: 300 } });
-    const slider = screen.getByRole("slider");
-    fireEvent.keyDown(slider, { key: "ArrowRight" });
-    expect(onChange).toHaveBeenLastCalledWith({ size: 310 });
-    fireEvent.keyDown(slider, { key: "ArrowLeft", shiftKey: true });
-    expect(onChange).toHaveBeenLastCalledWith({ size: 260 });
-    fireEvent.keyDown(slider, { key: "ArrowRight", shiftKey: true });
-    // 300 + 40 = 340 does not cross a preset; from 330 it would stop on 360.
-    expect(onChange).toHaveBeenLastCalledWith({ size: 340 });
-  });
-
-  it("follows a drag", () => {
-    const { onChange } = renderFields();
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "410" } });
-    expect(onChange).toHaveBeenLastCalledWith({ size: 410 });
-  });
-});
-
-describe("CameraSettingsFields — device and notes", () => {
-  it("lists the cameras, naming the unnamed ones, and picks one", async () => {
-    const { onChange } = renderFields();
-    const select = screen.getByRole("combobox", { name: "Camera device" });
-    expect(screen.getByRole("option", { name: "Default camera" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "FaceTime HD" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Camera 2" })).toBeInTheDocument();
-    await userEvent.selectOptions(select, "cam-1");
+    await userEvent.click(screen.getByRole("radio", { name: "FaceTime HD" }));
     expect(onChange).toHaveBeenLastCalledWith({ deviceId: "cam-1" });
-    await userEvent.selectOptions(select, "");
+    await userEvent.click(screen.getByRole("radio", { name: "Default camera" }));
     expect(onChange).toHaveBeenLastCalledWith({ deviceId: null });
   });
 
-  it("comes last in the Tab order", async () => {
+  it("checks the chosen camera", () => {
+    renderFields({ bubble: { ...bubble, deviceId: "cam-2" } });
+    expect(screen.getByRole("radio", { name: "Camera 2" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  it("keys rows apart even when a camera's deviceId is the word default", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderFields({ cameras: [{ deviceId: "default", label: "Virtual camera" }] });
+    const group = screen.getByRole("radiogroup", { name: "Camera device" });
+    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(2);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("keeps a remembered camera that is unplugged as the checked row", () => {
+    renderFields({ bubble: { ...bubble, deviceId: "cam-gone" } });
+    const missing = screen.getByRole("radio", { name: "Camera 3" });
+    expect(missing).toHaveAttribute("aria-checked", "true");
+    expect(missing).toHaveAttribute("data-missing", "true");
+  });
+
+  it("moves the selection with the arrow keys, with one tab stop", async () => {
+    const { onChange } = renderFields();
+    const first = screen.getByRole("radio", { name: "Default camera" });
+    expect(first).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "FaceTime HD" })).toHaveAttribute("tabindex", "-1");
+    first.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(onChange).toHaveBeenLastCalledWith({ deviceId: "cam-1" });
+    expect(screen.getByRole("radio", { name: "FaceTime HD" })).toHaveFocus();
+  });
+
+  it("scrolls inside its own box, never the popover, when there are more than five", () => {
+    renderFields({
+      cameras: Array.from({ length: 7 }, (_, i) => ({ deviceId: `c${i}`, label: `Cam ${i}` })),
+    });
+    const group = screen.getByRole("radiogroup", { name: "Camera device" });
+    expect(group).toHaveAttribute("data-scrolls", "true");
+  });
+
+  it("does not scroll with five rows or fewer", () => {
     renderFields();
-    screen.getByRole("radio", { name: "Circle" }).focus();
+    expect(screen.getByRole("radiogroup", { name: "Camera device" })).not.toHaveAttribute(
+      "data-scrolls",
+    );
+  });
+});
+
+describe("CameraSettingsFields — order and notes", () => {
+  it("Tab goes cameras, then Mirror my video, then Framing", async () => {
+    renderFields();
+    screen.getByRole("radio", { name: "Default camera" }).focus();
     await userEvent.tab();
-    expect(screen.getByRole("radio", { name: "Medium, 240 pixels" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("slider")).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("switch", { name: "Mirror image" })).toHaveFocus();
+    expect(screen.getByRole("switch", { name: "Mirror my video" })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole("switch", { name: "Framing" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("combobox")).toHaveFocus();
   });
 
   it("says when the camera is off", () => {
@@ -225,47 +183,38 @@ describe("CameraBlockedCard", () => {
 });
 
 describe("CameraSettingsFields — mirror", () => {
-  it("shows a Mirror image switch with its hint, on by default", () => {
+  it("shows a Mirror my video switch with its hint, on by default", () => {
     renderFields();
-    const mirror = screen.getByRole("switch", { name: "Mirror image" });
+    const mirror = screen.getByRole("switch", { name: "Mirror my video" });
     expect(mirror).toHaveAttribute("aria-checked", "true");
     expect(mirror).toHaveAccessibleDescription(
       "Turn off when the camera faces away from you, so text reads correctly",
     );
   });
 
-  it("writes mirrored: false when switched off, and true when switched on", async () => {
+  it("writes mirrored: false when switched off", async () => {
     const { onChange } = renderFields();
-    await userEvent.click(screen.getByRole("switch", { name: "Mirror image" }));
+    await userEvent.click(screen.getByRole("switch", { name: "Mirror my video" }));
     expect(onChange).toHaveBeenLastCalledWith({ mirrored: false });
   });
 
   it("reflects an off setting and turns it back on", async () => {
     const { onChange } = renderFields({ bubble: { ...bubble, mirrored: false } });
-    const mirror = screen.getByRole("switch", { name: "Mirror image" });
+    const mirror = screen.getByRole("switch", { name: "Mirror my video" });
     expect(mirror).toHaveAttribute("aria-checked", "false");
     await userEvent.click(mirror);
     expect(onChange).toHaveBeenLastCalledWith({ mirrored: true });
   });
 
-  it("is also there in the compact variant, and mid-take", () => {
-    renderFields({ compact: true, isRecording: true });
-    expect(screen.getByRole("switch", { name: "Mirror image" })).not.toHaveAttribute(
+  it("works mid-take", () => {
+    renderFields({ isRecording: true });
+    expect(screen.getByRole("switch", { name: "Mirror my video" })).not.toHaveAttribute(
       "aria-disabled",
     );
   });
-});
 
-describe("CameraSettingsFields — compact (capture panel)", () => {
-  it("drops the Size chips and slider; the full variant keeps them", () => {
-    renderFields({ compact: true });
-    expect(screen.queryByRole("radiogroup", { name: "Size" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("slider", { name: /size/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeInTheDocument();
-  });
-
-  it("keeps the switch hints as descriptions and tooltips, not visible lines", () => {
-    renderFields({ compact: true });
+  it("keeps the hints as descriptions and tooltips, not visible lines", () => {
+    renderFields();
     const framing = screen.getByRole("switch", { name: "Framing" });
     expect(framing).toHaveAccessibleDescription("Zoom in and move the image inside the bubble");
     expect(framing.closest("[title]")).toHaveAttribute(
@@ -295,8 +244,8 @@ describe("CameraSettingsFields — framing", () => {
     });
   });
 
-  it("shows the zoom slider and the position pad when on, in both variants, mid-take", () => {
-    renderFields({ bubble: { ...bubble, framing: on }, compact: true, isRecording: true });
+  it("shows the zoom slider and the position pad when on, mid-take", () => {
+    renderFields({ bubble: { ...bubble, framing: on }, isRecording: true });
     expect(screen.getByRole("slider", { name: "Zoom" })).toHaveAttribute("aria-valuetext", "150%");
     expect(screen.getByLabelText("Image position")).toHaveAttribute("aria-valuetext", "Centered");
   });
@@ -366,91 +315,5 @@ describe("CameraSettingsFields — framing", () => {
     expect(onChange).toHaveBeenLastCalledWith({
       framing: { enabled: true, zoom: 1, x: 0, y: 0 },
     });
-  });
-});
-
-describe("CameraSettingsFields — the page's two columns", () => {
-  it("lists the cameras as radios, default camera first, and no dropdown", () => {
-    renderFields({ columns: true });
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    const group = screen.getByRole("radiogroup", { name: "Camera device" });
-    const names = Array.from(group.querySelectorAll('[role="radio"]')).map((r) => r.textContent);
-    expect(names).toEqual(["Default camera", "FaceTime HD", "Camera 2"]);
-    expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-  });
-
-  it("writes the same deviceId the dropdown wrote", async () => {
-    const { onChange } = renderFields({ columns: true });
-    await userEvent.click(screen.getByRole("radio", { name: "FaceTime HD" }));
-    expect(onChange).toHaveBeenLastCalledWith({ deviceId: "cam-1" });
-    await userEvent.click(screen.getByRole("radio", { name: "Default camera" }));
-    expect(onChange).toHaveBeenLastCalledWith({ deviceId: null });
-  });
-
-  it("checks the chosen camera", () => {
-    renderFields({ columns: true, bubble: { ...bubble, deviceId: "cam-2" } });
-    expect(screen.getByRole("radio", { name: "Camera 2" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
-  });
-
-  it("keys rows apart even when a camera's deviceId is the word default", () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    renderFields({
-      columns: true,
-      cameras: [{ deviceId: "default", label: "Virtual camera" }],
-    });
-    const group = screen.getByRole("radiogroup", { name: "Camera device" });
-    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(2);
-    expect(error).not.toHaveBeenCalled();
-    error.mockRestore();
-  });
-
-  it("keeps a remembered camera that is unplugged as the checked row", () => {
-    renderFields({ columns: true, bubble: { ...bubble, deviceId: "cam-gone" } });
-    const missing = screen.getByRole("radio", { name: "Camera 3" });
-    expect(missing).toHaveAttribute("aria-checked", "true");
-    expect(missing).toHaveAttribute("data-missing", "true");
-  });
-
-  it("moves the selection with the arrow keys, with one tab stop", async () => {
-    const { onChange } = renderFields({ columns: true });
-    const first = screen.getByRole("radio", { name: "Default camera" });
-    expect(first).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("radio", { name: "FaceTime HD" })).toHaveAttribute("tabindex", "-1");
-    first.focus();
-    await userEvent.keyboard("{ArrowDown}");
-    expect(onChange).toHaveBeenLastCalledWith({ deviceId: "cam-1" });
-    expect(screen.getByRole("radio", { name: "FaceTime HD" })).toHaveFocus();
-  });
-
-  it("labels the columns SOURCE and SHAPE + SIZE, and keeps every control below", () => {
-    renderFields({
-      columns: true,
-      bubble: { ...bubble, shape: "rounded", framing: { enabled: true, zoom: 1.5, x: 0, y: 0 } },
-    });
-    expect(screen.getByText("Source")).toBeInTheDocument();
-    expect(screen.getByText("Shape")).toBeInTheDocument();
-    expect(screen.getByText("Size")).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: "Size" })).toBeInTheDocument();
-    expect(screen.getByRole("slider", { name: "Bubble size" })).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Mirror image" })).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Framing" })).toBeInTheDocument();
-    expect(screen.getByRole("slider", { name: "Corners" })).toBeInTheDocument();
-    expect(screen.getByRole("slider", { name: "Zoom" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
-  });
-
-  it("still says when the camera is off", () => {
-    renderFields({ columns: true, cameraOn: false });
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Camera is off. These apply when you turn it on.",
-    );
   });
 });
