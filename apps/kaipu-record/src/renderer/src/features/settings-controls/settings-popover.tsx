@@ -113,6 +113,10 @@ export function SettingsPopover({
     target.focus();
   }, [open]);
 
+  // The chevron as it is when asked: its element can be replaced while the popover is open (the
+  // widget draws a different button for its compact and expanded looks).
+  const focusChevron = useCallback((): void => anchorRef.current?.focus(), [anchorRef]);
+
   // Back to the chevron when it closes while focus was inside (the popover's own elements are
   // gone by then, so focus fell to the body). A press that moved focus elsewhere keeps it there.
   useEffect(() => {
@@ -120,11 +124,11 @@ export function SettingsPopover({
     return () => {
       const active = document.activeElement;
       if (focusedInside.current && (active === null || active === document.body)) {
-        anchorRef.current?.focus();
+        focusChevron();
       }
       focusedInside.current = false;
     };
-  }, [open, anchorRef]);
+  }, [open, focusChevron]);
 
   useEffect(() => {
     if (!open) return;
@@ -133,7 +137,7 @@ export function SettingsPopover({
       event.preventDefault();
       event.stopPropagation();
       onClose();
-      anchorRef.current?.focus();
+      focusChevron();
     };
     const onPointerDown = (event: PointerEvent): void => {
       const target = event.target as Node;
@@ -147,7 +151,7 @@ export function SettingsPopover({
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [open, onClose, anchorRef, anchorElement]);
+  }, [open, onClose, focusChevron, anchorElement]);
 
   if (!open) return null;
 
