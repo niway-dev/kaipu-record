@@ -234,7 +234,9 @@ describe("moveItem — across volumes (EXDEV)", () => {
 
   it("a copy that keeps its mtime still gets the stamp of the new file, so it is not re-hashed", async () => {
     const item = await seedItem(src.directory);
-    const before = await stat(join(src.directory, "Demo.mp4"));
+    // A whole second, so restoring it through utimes reads back exactly.
+    const kept = 1_700_000_000;
+    await utimes(join(src.directory, "Demo.mp4"), kept, kept);
     const outcome = await moveItem(
       { source: src, target: dst, id: item.id },
       deps({
@@ -245,11 +247,7 @@ describe("moveItem — across volumes (EXDEV)", () => {
             if (step !== "media-verified") return;
             const staged = join(dst.directory, ".kaipu", "tmp");
             for (const dir of await readdir(staged)) {
-              await utimes(
-                join(staged, dir, "Demo.mp4"),
-                before.atimeMs / 1000,
-                before.mtimeMs / 1000,
-              );
+              await utimes(join(staged, dir, "Demo.mp4"), kept, kept);
             }
           },
         },
@@ -259,7 +257,7 @@ describe("moveItem — across volumes (EXDEV)", () => {
     const now = await stat(join(dst.directory, "Demo.mp4"));
     // The mtime is the one the source had, so the early return for "unchanged" is taken, and the
     // stamp was still rewritten for the new file (its own ctime and inode).
-    expect(now.mtimeMs).toBe(before.mtimeMs);
+    expect(now.mtimeMs).toBe(kept * 1000);
     const vault = new LibraryVault(dst.directory);
     const sidecar = await vault.sidecar("Demo");
     expect(sidecar).toMatchObject({

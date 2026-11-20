@@ -473,6 +473,8 @@ describe("with a real vault", () => {
     it("returns the accepted job even when the automatic attempt cannot be recorded", async () => {
       await addMedia("c-readonly");
       await seedTranscript("c-readonly", "an-older-hash");
+      // Warm the hash cache first, so the write that fails is the attempt's own record.
+      await checkFreshness("c-readonly");
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const write = vi
         .spyOn(LibraryVault.prototype, "writeMeta")
@@ -484,7 +486,10 @@ describe("with a real vault", () => {
           automatic: true,
         });
         expect(result).toEqual({ status: "accepted", jobId: "job-1" });
-        expect(write).toHaveBeenCalled();
+        expect(write).toHaveBeenCalledWith(
+          "c-readonly",
+          expect.objectContaining({ autoRetranscribedSha256: expect.any(String) }),
+        );
         expect(warn).toHaveBeenCalled();
       } finally {
         write.mockRestore();
