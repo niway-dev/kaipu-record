@@ -1483,9 +1483,7 @@
       "shortMoreSettings": "More",
       "toastOn": "{input} on",
       "toastOff": "{input} off",
-      "chooseDevice": "Choose {input} device",
-      "noDevices": "No devices found",
-      "unnamedDevice": "Unnamed device"
+      "chooseDevice": "Choose {input} device"
     }
   },
   "videoEditor": {

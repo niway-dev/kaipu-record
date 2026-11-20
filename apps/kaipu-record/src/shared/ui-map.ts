@@ -819,6 +819,10 @@ export const UI_MAP = {
           { recordingSetting: "isCameraEnabled" },
         ],
       },
+      // The Microphone and Camera chevrons open the same popovers as the Capture page's cards
+      // (NIW2-892), anchored to the widget and flipped above it when it sits at the bottom.
+      micPopover: { states: ["open"] },
+      cameraPopover: { states: ["open"] },
       // The display badge of Screen mode: number, name, size.
       screenCard: { states: ["default", "highlighted"] },
       windowPicker: { states: ["noWindow", "hovered"] },

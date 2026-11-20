@@ -1483,9 +1483,7 @@
       "shortMoreSettings": "Más",
       "toastOn": "{input} activado",
       "toastOff": "{input} desactivado",
-      "chooseDevice": "Elegir dispositivo de {input}",
-      "noDevices": "No se encontraron dispositivos",
-      "unnamedDevice": "Dispositivo sin nombre"
+      "chooseDevice": "Elegir dispositivo de {input}"
     }
   },
   "videoEditor": {

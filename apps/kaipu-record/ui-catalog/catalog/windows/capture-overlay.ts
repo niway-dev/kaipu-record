@@ -123,6 +123,42 @@ export const captureOverlay = catalog(
       ready: { area: "captureOverlay.captureWidget" },
       after: [cancel],
     },
+    // The Microphone and Camera chevrons open the Capture page's popovers over the toolbar. The
+    // toolbar is docked at the bottom, so the popover flips above it. Esc closes the popover
+    // first, so `cancel` (which waits for the overlay to close) still ends the state.
+    "record-mic-popover": {
+      profile: "recording",
+      steps: [
+        record("frame"),
+        { waitFor: { window: "capture-overlay" } },
+        {
+          click: {
+            area: "captureOverlay.captureWidget",
+            part: { role: "button", name: "Choose Microphone device" },
+          },
+        },
+      ],
+      demonstrates: ["captureOverlay.micPopover:open"],
+      ready: { area: "captureOverlay.micPopover" },
+      requires: { microphone: true },
+      after: [{ press: "Escape", on: "capture-overlay" }, cancel],
+    },
+    "record-camera-popover": {
+      profile: "recording",
+      steps: [
+        record("frame"),
+        { waitFor: { window: "capture-overlay" } },
+        {
+          click: {
+            area: "captureOverlay.captureWidget",
+            part: { role: "button", name: "Choose Camera device" },
+          },
+        },
+      ],
+      demonstrates: ["captureOverlay.cameraPopover:open"],
+      ready: { area: "captureOverlay.cameraPopover" },
+      after: [{ press: "Escape", on: "capture-overlay" }, cancel],
+    },
     "frame-at-bottom": {
       profile: "recording",
       how: "Open the overlay on a frame and drag the box down until it reaches the bottom of the work area: the widget jumps to the top.",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   AppWindow,
   Camera,
@@ -26,7 +26,13 @@ import {
 } from "@shared/types/screenshot-capture";
 import type { OverlayChrome } from "./overlay-chrome";
 import { controlKeyLabel, copyKeyLabel, type InputToggleKey } from "./overlay-keys";
-import type { WidgetDevice, WidgetDevices } from "./use-widget-devices";
+import type { WidgetDevices } from "./use-widget-devices";
+import {
+  WidgetCameraPopover,
+  WidgetMicPopover,
+  type WidgetPopoverProps,
+} from "./widget-input-popovers";
+import { useCloseOnWindowBlur } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { COMPACT_LEVEL, fitLevel, widgetLook } from "./widget-fit";
 import { widgetFitWidth, widgetPlacement, type WidgetEdge } from "./widget-placement";
 import styles from "./capture-widget.module.css";
@@ -88,6 +94,9 @@ const INPUTS = [
   hint: string;
   state: "microphone" | "systemAudio" | "camera";
 }[];
+
+/** The inputs that have a settings popover; System audio has none in the widget. */
+type InputPopover = "microphone" | "camera";
 
 function Kbd({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
@@ -283,6 +292,18 @@ export function CaptureWidget({
       : t("widget.noCountdown");
   // Dimmed and out of the tab order while the countdown runs; Cancel and the confirm button stay.
   const lock = counting || undefined;
+  // The Microphone or Camera popover that is open: one at a time, and none while the countdown
+  // runs (then Esc belongs to the overlay), when the intent or the toolbar's look changes (the
+  // cell it hangs from moves) or when the window loses focus.
+  const [openInput, setOpenInput] = useState<InputPopover | null>(null);
+  const closeInput = useCallback(() => setOpenInput(null), []);
+  useCloseOnWindowBlur(openInput !== null, closeInput);
+  useEffect(() => {
+    if (counting || !recording) setOpenInput(null);
+  }, [counting, recording]);
+  useEffect(() => {
+    setOpenInput(null);
+  }, [expanded]);
 
   return (
     <>
@@ -466,15 +487,15 @@ export function CaptureWidget({
                 const Icon = blocked ? Lock : icon;
                 const name = blocked ? tCamera("blockedTile") : t(label);
                 const shownName = look.shortNames && short && !blocked ? t(short) : name;
-                const picks: WidgetDevice[] | null =
+                const popover = state === "systemAudio" ? null : state;
+                const renderPopover =
                   state === "microphone"
-                    ? (devices?.microphones ?? [])
+                    ? (props: WidgetPopoverProps) => (
+                        <WidgetMicPopover {...props} devices={devices} />
+                      )
                     : state === "camera"
-                      ? (devices?.cameras ?? [])
+                      ? (props: WidgetPopoverProps) => <WidgetCameraPopover {...props} />
                       : null;
-                const selected = state === "microphone" ? devices?.microphoneId : devices?.cameraId;
-                const select =
-                  state === "microphone" ? devices?.selectMicrophone : devices?.selectCamera;
                 return (
                   <InputCell
                     key={key}
@@ -483,7 +504,6 @@ export function CaptureWidget({
                     on={on}
                     blocked={blocked}
                     halo={chrome.toast?.input === key ? chrome.toast.id : null}
-                    edge={placement.edge}
                     icon={<Icon size={15} aria-hidden />}
                     name={name}
                     shownName={shownName}
@@ -493,9 +513,9 @@ export function CaptureWidget({
                       blocked ? tCamera("blocked") : on ? t("overlay.on") : t("overlay.off")
                     }
                     disabled={cannotToggle}
-                    devices={picks}
-                    selectedDevice={selected ?? null}
-                    onSelectDevice={select}
+                    popover={renderPopover}
+                    open={popover !== null && openInput === popover}
+                    onOpenChange={(open) => setOpenInput(open ? popover : null)}
                     onToggle={() => chrome.toggles?.toggle(key)}
                     locked={counting}
                   />
@@ -681,9 +701,10 @@ function RatioMenu({
 
 /**
  * One input of the recording toolbar. Compact: an icon chip that toggles, with its key badge,
- * and a small chevron for the device menu (microphone and camera). Expanded: its name (with a
- * device chevron for the microphone and the camera), an On/Off word, a switch and its key. The
+ * and a small chevron for the settings popover (microphone and camera). Expanded: its name (with
+ * a chevron for the microphone and the camera), an On/Off word, a switch and its key. The
  * toggle's `aria-pressed` carries the state; the halo shows for `TOAST_MS` after a key toggle.
+ * The popover is the Capture page's own, drawn in the body and anchored to this cell.
  */
 function InputCell({
   state,
@@ -691,7 +712,6 @@ function InputCell({
   on,
   blocked,
   halo,
-  edge,
   icon,
   name,
   shownName,
@@ -699,9 +719,9 @@ function InputCell({
   hint,
   stateWord,
   disabled,
-  devices,
-  selectedDevice,
-  onSelectDevice,
+  popover,
+  open,
+  onOpenChange,
   onToggle,
   locked,
 }: {
@@ -710,7 +730,6 @@ function InputCell({
   on: boolean;
   blocked: boolean;
   halo: number | null;
-  edge: WidgetEdge;
   icon: React.ReactNode;
   /** The accessible name, always the full one. */
   name: string;
@@ -721,16 +740,17 @@ function InputCell({
   hint: string;
   stateWord: string;
   disabled: boolean;
-  devices: WidgetDevice[] | null;
-  selectedDevice: string | null;
-  onSelectDevice?(id: string): void;
+  /** The settings popover this input opens, or `null` when it has none. */
+  popover: ((props: WidgetPopoverProps) => React.ReactNode) | null;
+  open: boolean;
+  onOpenChange(open: boolean): void;
   onToggle(): void;
   /** While the countdown runs the cell is neither clickable nor focusable. */
   locked: boolean;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
-  const [open, setOpen] = useState(false);
-  const cell = useRef<HTMLDivElement | null>(null);
+  const chevronRef = useRef<HTMLButtonElement | null>(null);
+  const popoverId = useId();
   const [lit, setLit] = useState(false);
   useEffect(() => {
     // Another input's toggle ends this one's halo at once: its timer is cancelled below.
@@ -739,16 +759,16 @@ function InputCell({
     const timer = setTimeout(() => setLit(false), TOAST_MS);
     return () => clearTimeout(timer);
   }, [halo]);
-  // Not while the countdown runs: then Esc belongs to the overlay, which stops the count.
-  useDismissMenu(cell, open && !locked, () => setOpen(false));
   const chooseDevice = (
     <button
+      ref={chevronRef}
       type="button"
       className={expanded ? styles.inputName : styles.inputChevron}
-      aria-haspopup="menu"
+      aria-haspopup="dialog"
       aria-expanded={open}
+      aria-controls={open ? popoverId : undefined}
       aria-label={t("widget.chooseDevice", { input: name })}
-      onClick={() => setOpen((current) => !current)}
+      onClick={() => onOpenChange(!open)}
     >
       {expanded && icon}
       {expanded && shownName}
@@ -757,7 +777,8 @@ function InputCell({
   );
   return (
     <div
-      ref={cell}
+      // What the popover is placed against (the cell, not just the chevron).
+      data-settings-anchor=""
       className={styles.input}
       inert={locked || undefined}
       data-compact={!expanded || undefined}
@@ -767,7 +788,7 @@ function InputCell({
       data-testid={`input-${state}`}
     >
       {expanded &&
-        (devices ? (
+        (popover ? (
           chooseDevice
         ) : (
           <span className={styles.inputName}>
@@ -794,38 +815,14 @@ function InputCell({
         )}
         <Kbd>{hint}</Kbd>
       </button>
-      {!expanded && devices && chooseDevice}
-      {open && devices && (
-        <ul
-          role="menu"
-          className={styles.menu}
-          data-edge={edge}
-          aria-label={name}
-          // Enter on a menu item picks the device; it must not also reach the overlay's
-          // window-level Enter, which starts the recording.
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.stopPropagation();
-          }}
-        >
-          {devices.length === 0 && <li className={styles.menuEmpty}>{t("widget.noDevices")}</li>}
-          {devices.map((device) => (
-            <li key={device.id} role="none">
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={device.id === selectedDevice}
-                className={styles.menuItem}
-                onClick={() => {
-                  onSelectDevice?.(device.id);
-                  setOpen(false);
-                }}
-              >
-                {device.label || t("widget.unnamedDevice")}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {!expanded && popover && chooseDevice}
+      {open &&
+        popover?.({
+          id: popoverId,
+          anchorRef: chevronRef,
+          onClose: () => onOpenChange(false),
+          on,
+        })}
     </div>
   );
 }
