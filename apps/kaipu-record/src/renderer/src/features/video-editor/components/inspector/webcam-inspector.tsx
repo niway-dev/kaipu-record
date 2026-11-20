@@ -36,6 +36,7 @@ import {
   WEBCAM_MOTION_BUTTONS,
   WEBCAM_SIZE_PRESETS,
   WEBCAM_SIZE_PRESET_IDS,
+  WEBCAM_SHRINK_ON_SCALE,
   WEBCAM_SLIDE_MS_PRESETS,
   WEBCAM_TRANSITION_DEFAULTS,
   webcamSizePreset,
@@ -278,7 +279,7 @@ function WholeVideoControls({
           checked={shrinking}
           onChange={(event) =>
             commit({
-              scaleDuringZoom: event.currentTarget.checked ? WEBCAM_DEFAULTS.scaleDuringZoom : 1,
+              scaleDuringZoom: event.currentTarget.checked ? WEBCAM_SHRINK_ON_SCALE : 1,
             })
           }
         />

@@ -58,7 +58,7 @@ describe("seedWebcamScene", () => {
         position: { x: 0.18, y: 0.82 },
         mirrored: false,
         framing: { zoom: 1.5, x: 0.25, y: -0.5 },
-        scaleDuringZoom: 0.7,
+        scaleDuringZoom: 1,
         shadow: true,
       },
       segments: [],

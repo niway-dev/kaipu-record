@@ -66,7 +66,13 @@ const cover: Redaction = {
 };
 
 const webcam: WebcamScene = {
-  layout: { ...WEBCAM_DEFAULTS, shape: "circle", shadow: false, mirrored: false },
+  layout: {
+    ...WEBCAM_DEFAULTS,
+    shape: "circle",
+    shadow: false,
+    mirrored: false,
+    scaleDuringZoom: 0.7,
+  },
   segments: [],
 };
 

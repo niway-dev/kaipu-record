@@ -492,11 +492,22 @@ describe("Whole video", () => {
     expect(edits.commitLayout).toHaveBeenCalledWith({ shadow: true }, null);
   });
 
+  it("shrink during zoom is off for a new session and its checkbox turns it on at 0.7", () => {
+    const edits = makeEdits();
+    expect(WEBCAM_DEFAULTS.scaleDuringZoom).toBe(1);
+    renderPanel({ edits, segment: null, range: null });
+    openWholeVideo();
+    expect(screen.getByRole("checkbox", { name: "Shrink during zoom" })).not.toBeChecked();
+    expect(screen.queryByRole("slider", { name: "Size during zoom" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Shrink during zoom" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith({ scaleDuringZoom: 0.7 }, null);
+  });
+
   it("shrink during zoom: off is 1, on restores 0.7 and shows its slider", () => {
     const edits = makeEdits();
     const { unmount } = render(
       <WebcamPanel
-        webcam={sceneOf()}
+        webcam={sceneOf({ scaleDuringZoom: 0.7 })}
         segment={null}
         range={null}
         playhead={0}
@@ -520,7 +531,7 @@ describe("Whole video", () => {
 
   it("the size-during-zoom slider still works: a keyboard step commits, a drag is one gesture", () => {
     const edits = makeEdits();
-    renderPanel({ edits });
+    renderPanel({ edits, webcam: sceneOf({ scaleDuringZoom: 0.7 }) });
     openWholeVideo();
     const slider = screen.getByRole("slider", { name: "Size during zoom" });
     fireEvent.change(slider, { target: { value: "0.5" } });

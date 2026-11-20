@@ -1457,7 +1457,7 @@ describe("VideoEditorPage — webcam track", () => {
         scene: {
           ...scene,
           webcam: {
-            layout: { ...WEBCAM_DEFAULTS },
+            layout: { ...WEBCAM_DEFAULTS, scaleDuringZoom: 0.7 },
             segments: [{ id: "cam-ov", start: 5, end: 8, mode: "override", layout: {} }],
           },
         },

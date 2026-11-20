@@ -33,7 +33,7 @@ export interface WebcamLayout {
   mirrored: boolean;
   /** Same ranges as `CameraBubbleSettings.framing`; zoom 1 and pan 0 show the whole image. */
   framing: { zoom: number; x: number; y: number };
-  /** 1 = same size inside a zoom; 0.7 = Cap's default. */
+  /** 1 = same size inside a zoom (the default); below 1 the bubble shrinks inside a zoom. */
   scaleDuringZoom: number;
   shadow: boolean;
 }
@@ -174,6 +174,9 @@ export const WEBCAM_MOTION_BUTTONS = [
   "linear",
 ] as const satisfies readonly WebcamEasing[];
 
+/** What "Shrink during zoom" sets when the user turns it on (the default is off: 1). */
+export const WEBCAM_SHRINK_ON_SCALE = 0.7;
+
 /** The bubble's default look: bottom-left, where the recorder starts it. */
 export const WEBCAM_DEFAULTS: WebcamLayout = {
   shape: "circle",
@@ -182,7 +185,7 @@ export const WEBCAM_DEFAULTS: WebcamLayout = {
   position: { x: 0.12, y: 0.82 },
   mirrored: true,
   framing: { zoom: 1, x: 0, y: 0 },
-  scaleDuringZoom: 0.7,
+  scaleDuringZoom: 1,
   shadow: true,
 };
 

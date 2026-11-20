@@ -12,7 +12,13 @@ import type { PreviewMedia } from "../playback-media";
 const FRAME = { width: 1000, height: 1000 };
 const flatPath: CameraPath = buildCameraPath([], null, 30);
 const scene = (patch: Partial<WebcamScene> = {}): WebcamScene => ({
-  layout: { ...WEBCAM_DEFAULTS, size: 0.2, position: { x: 0.5, y: 0.5 } },
+  layout: {
+    ...WEBCAM_DEFAULTS,
+    size: 0.2,
+    position: { x: 0.5, y: 0.5 },
+    // The default is no shrink (1); the shrink tests need it on.
+    scaleDuringZoom: 0.7,
+  },
   segments: [],
   ...patch,
 });
@@ -240,7 +246,7 @@ describe("WebcamLayer", () => {
     const { ref } = mainVideo(5);
     const { rerender } = renderLayer({ videoRef: ref, path: zoomed });
     loadWebcam(30);
-    // scaleDuringZoom 0.7 (the default) at a settled 2× zoom: 20 % × 0.7.
+    // scaleDuringZoom 0.7 (set by this file's scene) at a settled 2× zoom: 20 % × 0.7.
     expect(parseFloat(bubble().style.width)).toBeCloseTo(14, 0);
     rerender(
       <WebcamLayer
