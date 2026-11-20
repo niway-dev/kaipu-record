@@ -1189,6 +1189,24 @@ describe("FrameBox drawing on the dim sheet", () => {
     expect(api.updateSettings).not.toHaveBeenCalled();
   });
 
+  it("switching intent after a drag does not report the unchanged box again under the new intent (NIW2-878)", async () => {
+    const { sheet, api } = await setup();
+    const report = api.captureOverlay.reportFrame;
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
+    await waitFor(() => expect(report).toHaveBeenCalledOnce());
+
+    // Main attributes a report to the intent it holds when the report arrives: a second one
+    // here would save the screenshot's box as the recording area (and the reverse).
+    press("v");
+    await flush();
+    press("p");
+    await flush();
+    expect(report).toHaveBeenCalledOnce();
+  });
+
   it("reports nothing for a click that did not move the box, or a drag a key cut short", async () => {
     const { sheet, api } = await setup();
     const report = api.captureOverlay.reportFrame;

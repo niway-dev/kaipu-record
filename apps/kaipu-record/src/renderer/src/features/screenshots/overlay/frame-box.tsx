@@ -177,6 +177,11 @@ export function FrameBox({
   const [settleTick, setSettleTick] = useState(0);
   const settled = useRef(onSettled);
   settled.current = onSettled;
+  // `recording` is read through a ref, not listed in the deps: a P / V switch after a settle
+  // must not re-run the effect, or main (which attributes a report to the intent it holds when
+  // it arrives) would save the unchanged box under the new intent.
+  const recordingNow = useRef(recording);
+  recordingNow.current = recording;
   const reported = useRef<{ rect: CaptureRect; ratio?: RecordingRatio }>({
     rect: frame,
     ratio: recording ? ratio : undefined,
@@ -184,12 +189,12 @@ export function FrameBox({
   useEffect(() => {
     if (settleTick === 0) return;
     const rect = latest.current;
-    const nextRatio = recording ? latestRatio.current : undefined;
+    const nextRatio = recordingNow.current ? latestRatio.current : undefined;
     const before = reported.current;
     if (sameRect(before.rect, rect) && before.ratio === nextRatio) return;
     reported.current = { rect, ratio: nextRatio };
     settled.current?.(rect, nextRatio);
-  }, [settleTick, recording]);
+  }, [settleTick]);
 
   // A layout effect, not a passive one: the listener is attached in the commit that paints
   // the box, so a box that says "Enter to capture" always hears Enter. A passive effect
