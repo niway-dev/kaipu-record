@@ -382,7 +382,7 @@ describe("a window reused by many picks (NIW2-878)", () => {
     const { api, answer } = fakeApi({ "42": frame }, { ...FRAME_ON_42, session: 7 });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
-    fireEvent.click(within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "1:1" }));
+    chooseRatio("1:1");
     const box = frameGeometry();
     await waitFor(() => expect(api.captureOverlay.reportFrame).toHaveBeenCalledOnce());
     expect(api.captureOverlay.reportFrame).toHaveBeenCalledWith({
@@ -2975,7 +2975,7 @@ describe("CaptureOverlay — the ratio menu works in both intents, in Frame only
       <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={shot.api} />,
     );
     await screen.findByTestId("capture-frame");
-    fireEvent.click(within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "1:1" }));
+    chooseRatio("1:1");
     const box = frameGeometry();
     await waitFor(() => expect(shot.api.captureOverlay.reportFrame).toHaveBeenCalledOnce());
     expect(shot.api.captureOverlay.reportFrame).toHaveBeenCalledWith({
@@ -2997,9 +2997,7 @@ describe("CaptureOverlay — the ratio menu works in both intents, in Frame only
     );
     await screen.findByTestId("capture-frame");
     await waitFor(() => expect(frameGeometry()).toEqual(area));
-    fireEvent.click(
-      within(screen.getByTestId("ratio-chips")).getByRole("button", { name: "16:9" }),
-    );
+    chooseRatio("16:9");
     await waitFor(() => expect(rec.api.captureOverlay.reportFrame).toHaveBeenCalledOnce());
     expect(rec.api.captureOverlay.reportFrame).toHaveBeenCalledWith({
       displayId: 42,
