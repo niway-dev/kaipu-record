@@ -5,11 +5,21 @@ const micOff: Step = { call: "updateRecordingSettings", args: [{ isMicrophoneEna
 const audioOn: Step = { call: "updateRecordingSettings", args: [{ isSystemAudioEnabled: true }] };
 const cameraOn: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: true }] };
 const cameraOff: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: false }] };
-// The Microphone card's device line fills in once the microphones are listed; the zone's
-// accessible name carries it ("Microphone settings: <device>"). A hover shot waits for that,
-// so a late re-render cannot drop the pointer's hover after it landed.
+// The Microphone card's right zone is named "Microphone settings: <device line>". Before the
+// microphones are listed the line is blank (no suffix) and then, with an empty list, "No
+// microphones found" (`micSettings.noDevices` in en.json): a real device is any other suffix.
+// A hover shot waits for one so a late re-render of the device line cannot drop the pointer's
+// hover after it landed. The profile runs with a fake audio input ("Fake Audio Input 1"), so
+// the wait is met by that one device; a runner with no microphone times out, which is right,
+// because these states `require` one.
+const MIC_EMPTY_LIST = "No microphones found";
 const micDevicesListed: Step = {
-  waitFor: { area: "record.mic", part: { css: '[aria-label^="Microphone settings: "]' } },
+  waitFor: {
+    area: "record.mic",
+    part: {
+      css: `[aria-label^="Microphone settings: "]:not([aria-label$=": ${MIC_EMPTY_LIST}"])`,
+    },
+  },
 };
 const micZoneHovered = (zone: "switch" | "button"): Target => ({
   area: "record.mic",
