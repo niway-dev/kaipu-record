@@ -503,7 +503,9 @@ export function LibraryDetailPage(): React.JSX.Element {
               }}
             />
           </div>
-          {master && (
+          {/* "Edits are exported as copies" is a recording's rule: a screenshot is edited in place,
+              with its history in the canvas document. */}
+          {master && !isScreenshot && (
             <span
               className={styles.infoWrap}
               onMouseEnter={() => setInfoOpen(true)}
@@ -744,6 +746,7 @@ export function LibraryDetailPage(): React.JSX.Element {
                 key={video.assetId}
                 src={video.thumbnailUrl}
                 onCopy={localId ? copyScreenshot : undefined}
+                onEdit={localId ? editScreenshot : undefined}
                 onNaturalSize={(width, height) =>
                   setShotSize({ assetId: video.assetId, width, height })
                 }
