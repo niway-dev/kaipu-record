@@ -278,7 +278,7 @@ describe("webcamResizeTarget", () => {
     });
   });
 
-  it("offers handles and writes the whole layout on This part with no part shown", () => {
+  it("offers handles and targets the playhead on This part with no part shown", () => {
     expect(webcamResizeTarget(scene(), "part", 3, null)).toEqual({
       whole: false,
       anchor: "opposite",

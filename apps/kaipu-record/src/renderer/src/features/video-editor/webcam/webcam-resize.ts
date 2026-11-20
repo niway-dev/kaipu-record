@@ -136,7 +136,7 @@ export function webcamSizeLabel(size: number): string {
 
 /** Where a corner drag writes and how it anchors; see {@link webcamResizeTarget}. */
 export interface WebcamResizeTarget {
-  /** True: the whole video's layout. False: the part in force at the playhead. */
+  /** True: the whole video's layout. False: at the playhead (the part in force there, else the whole). */
   whole: boolean;
   anchor: "opposite" | "center";
   /** False when a drag could only edit something other than what the panel shows. */
