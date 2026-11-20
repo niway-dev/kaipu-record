@@ -205,7 +205,8 @@ export const UI_MAP = {
         states: ["idle", "needsModel", "transcribing", "done", "stale", "staleRerunning"],
         gatedBy: [{ flag: "transcription" }],
       },
-      // VersionsList: the original alone; with its edited project; with the copies made from
+      // VersionsList: the original alone (no row, a line saying it is the original); with its
+      // edited project; with the copies made from
       // it; a copy viewed on its own page (the Viewing pill sits on that row); a copy being
       // made; a copy whose original was deleted.
       versions: {

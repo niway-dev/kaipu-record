@@ -1702,6 +1702,13 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
   describe("original info tip", () => {
     const infoName = "Your original stays unchanged. Edits are exported as copies.";
 
+    it("is not offered on a screenshot, which is edited in place", async () => {
+      list(screenshotItem);
+      renderWithState("/library/shot-1");
+      await waitForLoaded();
+      expect(screen.queryByRole("button", { name: infoName })).toBeNull();
+    });
+
     it("shows its text on keyboard focus, on click, and hides on Escape", async () => {
       list(exportedOnlyItem);
       renderDetail("asset-b");

@@ -819,6 +819,7 @@
     "heavyBannerBodyNoGithub": "Prepara una copia liviana — de unos {estimate}, con texto que sigue legible. El original queda tal como está.",
     "masterTag": "Máster · calidad completa",
     "masterTagHint": "Tu grabación original, en calidad completa. Las copias se hacen a partir de ella.",
+    "masterTagHintScreenshot": "Tu captura original, en calidad completa. El editor guarda su historial de cambios.",
     "copyRes1440": "1440p",
     "copyRes4k": "4K",
     "savedNoticeTitle": "Guardado en tu Biblioteca.",
@@ -1010,6 +1011,9 @@
     "versionsExportedCopy": "Copia exportada",
     "versionsEmpty": "Aún no hay copias. Elige un lugar en “¿A dónde va?” para crear una.",
     "versionsEmptyPlain": "Aún no hay copias.",
+    "versionsOnlyOriginal": "Este es el original. Elige un destino en “¿A dónde va?” para crear una copia.",
+    "versionsOnlyOriginalPlain": "Este es el original. Las copias que guardes aparecerán aquí.",
+    "versionsOnlyOriginalScreenshot": "Este es el original. Los cambios se guardan sobre él y el editor guarda su historial.",
     "shotZoomOut": "Alejar",
     "shotZoomIn": "Acercar",
     "shotZoomFit": "Ajustar"

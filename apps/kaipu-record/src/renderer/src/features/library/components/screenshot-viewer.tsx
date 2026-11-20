@@ -1,4 +1,4 @@
-import { Check, Copy, ImageOff, Minus, Plus } from "lucide-react";
+import { Check, Copy, ImageOff, Minus, Pencil, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import styles from "./screenshot-viewer.module.css";
@@ -12,9 +12,11 @@ interface ScreenshotViewerProps {
   src?: string | null;
   /** Called once the image has loaded, with its natural pixel size. */
   onNaturalSize?(width: number, height: number): void;
-  /** Copies the image to the clipboard; resolves true when it did. Given, a copy button shows
-   *  over the image's top-right corner on hover (and on keyboard focus). */
+  /** Copies the image to the clipboard; resolves true when it did. Given, a labelled Copy
+   *  button stays over the image's top-right corner. */
   onCopy?(): Promise<boolean>;
+  /** Opens the image in the editor. Given, an edit button sits left of Copy. */
+  onEdit?(): void;
 }
 
 /** How long the copy button keeps its check mark after a copy. */
@@ -22,11 +24,12 @@ const COPIED_MS = 1500;
 
 /** Saved-screenshot viewer for the library detail page — the image-kind counterpart
  *  of RecordingPlayer. Shows the stored PNG (served via kaipu-media://screenshot/id),
- *  with zoom controls under it: `−`, Fit and `+`, and an optional copy button over it. */
+ *  with zoom controls under it: `−`, Fit and `+`, and optional Edit and Copy buttons over it. */
 export function ScreenshotViewer({
   src,
   onNaturalSize,
   onCopy,
+  onEdit,
 }: ScreenshotViewerProps): React.JSX.Element {
   const t = useTranslations("prepare");
   const tLibrary = useTranslations("library");
@@ -110,21 +113,38 @@ export function ScreenshotViewer({
             </div>
           )}
         </div>
-        {shown && onCopy && (
-          <button
-            type="button"
-            className={styles.copyButton}
-            data-copied={copied ? "true" : "false"}
-            aria-label={tLibrary("copyImage")}
-            title={tLibrary("copyImage")}
-            onClick={() => void copy()}
-          >
-            {copied ? (
-              <Check size={14} strokeWidth={2} aria-hidden />
-            ) : (
-              <Copy size={14} strokeWidth={1.8} aria-hidden />
+        {shown && (onCopy || onEdit) && (
+          <div className={styles.tools}>
+            {onEdit && (
+              <button
+                type="button"
+                className={styles.toolButton}
+                data-icon-only="true"
+                aria-label={tLibrary("editImage")}
+                title={tLibrary("editImage")}
+                onClick={onEdit}
+              >
+                <Pencil size={14} strokeWidth={1.8} aria-hidden />
+              </button>
             )}
-          </button>
+            {onCopy && (
+              <button
+                type="button"
+                className={styles.toolButton}
+                data-copied={copied ? "true" : "false"}
+                aria-label={tLibrary("copyImage")}
+                title={tLibrary("copyImage")}
+                onClick={() => void copy()}
+              >
+                {copied ? (
+                  <Check size={14} strokeWidth={2} aria-hidden />
+                ) : (
+                  <Copy size={14} strokeWidth={1.8} aria-hidden />
+                )}
+                {copied ? tLibrary("copied") : tLibrary("copy")}
+              </button>
+            )}
+          </div>
         )}
       </div>
       {shown && (

@@ -72,6 +72,13 @@ describe("VideoRow", () => {
     expect(screen.getByText("Recording")).toBeInTheDocument();
   });
 
+  it("tags an original screenshot as the master and keeps its Screenshot badge", () => {
+    renderRow({ video: makeVideo({ kind: "screenshot", durationSeconds: 0 }) });
+    const tag = screen.getByText("Master · full quality");
+    expect(tag.closest("[title]")?.getAttribute("title")).toMatch(/original screenshot/);
+    expect(screen.getByText("Screenshot")).toBeInTheDocument();
+  });
+
   it("Export a copy opens Export without opening the row (NIW2-585)", () => {
     const onPrepare = vi.fn();
     const { onNavigate } = renderRow({ onPrepare });

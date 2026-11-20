@@ -111,40 +111,44 @@
   outline-offset: 1px;
 }
 
-/* Hidden until the pointer is over the image (or focus is on the button), so the shot reads
-   clean at rest. Dark glass so it stays legible over light and dark screenshots alike. */
-.copyButton {
+/* Edit and Copy over the image's top-right corner. Always shown: hidden until hover, the
+   copy button went unnoticed. Dark glass so they stay legible over light and dark shots. */
+.tools {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.toolButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
+  gap: 6px;
   height: 30px;
+  padding: 0 10px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(10, 10, 12, 0.72);
   backdrop-filter: blur(6px);
   color: #fff;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  opacity: 0;
-  transition:
-    opacity 120ms ease,
-    background-color 120ms ease;
+  transition: background-color 120ms ease;
 }
 
-.stage:hover .copyButton,
-.copyButton:focus-visible,
-.copyButton[data-copied="true"] {
-  opacity: 1;
+.toolButton[data-icon-only="true"] {
+  width: 30px;
+  padding: 0;
 }
 
-.copyButton:hover {
+.toolButton:hover {
   background: rgba(10, 10, 12, 0.88);
 }
 
-.copyButton:focus-visible {
+.toolButton:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
 }
