@@ -17,6 +17,12 @@
  * edge); the scene is not touched until the pointer is released, when `onDrop` reports the
  * normalized centre once. A press that moves under 3 px is a click and selects the bubble.
  *
+ * The SELECTED bubble also gets four corner handles (NIW2-888), in an overlay that mirrors the
+ * bubble's box so the bubble's own outline, clip and pointer handling never touch them.
+ * Dragging a corner reports the new size (and centre) live through `onResize`, between
+ * `onResizeBegin` and `onResizeEnd`, so the page makes it one undo step like a slider; the math
+ * is `resizeWebcamFromCorner`. A chip next to the bubble reads the size while it changes.
+ *
  * `WebcamPlaybackLayer` is the same drawing without the editing: the Library's original
  * player puts the face where it was recorded with it.
  */
@@ -32,7 +38,17 @@ import {
   webcamClipPath,
   webcamStateRect,
 } from "../webcam/webcam-layout";
-import { webcamEndSeconds, webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
+import {
+  webcamEndSeconds,
+  webcamStateAt,
+  type WebcamLayout,
+  type WebcamScene,
+} from "../webcam/webcam-model";
+import {
+  resizeWebcamFromCorner,
+  webcamSizeLabel,
+  type WebcamResizeStart,
+} from "../webcam/webcam-resize";
 import {
   type WebcamRecordings,
   webcamFileAt,
@@ -41,6 +57,7 @@ import {
   webcamSeekLead,
   webcamTimeFor,
 } from "../webcam/webcam-sync";
+import { CORNERS, type Corner } from "../media-box-drag";
 import styles from "./webcam-layer.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
@@ -48,6 +65,9 @@ type Point = { x: number; y: number };
 
 /** A press that moves less than this many screen pixels is a click, not a drag. */
 const CLICK_SLOP_PX = 3;
+
+/** Pointer travel, in client px, before a press on a corner handle becomes a resize. */
+const RESIZE_THRESHOLD_PX = 2;
 
 /** jsdom and a rejected play() (interrupted by a seek) must not surface as errors. */
 function safePlay(video: HTMLVideoElement): void {
@@ -120,11 +140,18 @@ function useWebcamSync({
   const boxRef = useRef<HTMLDivElement | null>(null);
   const clipRef = useRef<HTMLDivElement | null>(null);
   const camRef = useRef<HTMLVideoElement | null>(null);
+  // The editor's handles and size chip: a box with the bubble's own, positioned with it.
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const lastTime = useRef(0);
   // The webcam file that has decoded a frame: the box shows from then on, through seeks.
   const paintedSrc = useRef<string | null>(null);
   // Where the bubble is drawn right now: the editor's drag starts from it.
-  const drawn = useRef<{ center: Point; box: { width: number; height: number } } | null>(null);
+  const drawn = useRef<{
+    center: Point;
+    box: { width: number; height: number };
+    /** What a corner drag starts from: the box in frame units and the layout and zoom behind it. */
+    resize: WebcamResizeStart;
+  } | null>(null);
   // When the webcam's seek in flight started (performance.now()), and how long the last one
   // took, in seconds: the lead the next seek during playback is given.
   const seekStartedAt = useRef<number | null>(null);
@@ -178,6 +205,7 @@ function useWebcamSync({
     }
     if (!state || !rect) {
       box.style.display = "none";
+      if (overlayRef.current) overlayRef.current.style.display = "none";
       drawn.current = null;
       if (!cam.paused) safePause(cam);
       return;
@@ -189,6 +217,14 @@ function useWebcamSync({
     box.style.top = `${(rect.y / frame.height) * 100}%`;
     box.style.width = `${(rect.width / frame.width) * 100}%`;
     box.style.height = `${(rect.height / frame.height) * 100}%`;
+    const overlay = overlayRef.current;
+    if (overlay) {
+      overlay.style.display = "";
+      overlay.style.left = box.style.left;
+      overlay.style.top = box.style.top;
+      overlay.style.width = box.style.width;
+      overlay.style.height = box.style.height;
+    }
     box.dataset.shadow = String(layout.shadow);
     if (clipRef.current)
       clipRef.current.style.clipPath = webcamClipPath(layout.shape, layout.cornerRadius);
@@ -200,6 +236,7 @@ function useWebcamSync({
         y: (rect.y + rect.height / 2) / frame.height,
       },
       box: { width: rect.width, height: rect.height },
+      resize: { layout, rect: { ...rect }, cameraScale: scale },
     };
     // While a seek is in flight, currentTime already reads the pending target and the main
     // clock keeps moving: re-seeking on every frame would cancel each seek with the next one
@@ -312,7 +349,7 @@ function useWebcamSync({
     }
     resync();
   };
-  return { boxRef, clipRef, camRef, lastTime, drawn, held, resync, onSeeked };
+  return { boxRef, clipRef, camRef, overlayRef, lastTime, drawn, held, resync, onSeeked };
 }
 
 /** The webcam file inside the bubble's shape: the part both layers render the same way. */
@@ -383,6 +420,10 @@ export function WebcamLayer({
   onSelect,
   onDrop,
   onHeldChange,
+  onResizeBegin,
+  onResize,
+  onResizeEnd,
+  resizeAnchor = "opposite",
 }: Omit<WebcamSyncInput, "path"> & {
   path: CameraPath;
   /** False while a drawing tool is armed, so a stroke can start over the bubble. */
@@ -399,6 +440,20 @@ export function WebcamLayer({
   onDrop(position: Point, sourceTime: number): void;
   /** The bubble is held (a drag started) or let go: the editor's paused marks step aside. */
   onHeldChange?(held: boolean): void;
+  /** A corner drag started moving: the page opens one undo step. */
+  onResizeBegin(): void;
+  /**
+   * The layout fields a corner drag changes, live: always `size`, and `position` when the corner
+   * opposite the dragged one is anchored. `sourceTime` is the frame the drag started on.
+   */
+  onResize(patch: Partial<WebcamLayout>, sourceTime: number): void;
+  /** The drag ended, aborted ones included; closes the undo step opened by `onResizeBegin`. */
+  onResizeEnd(): void;
+  /**
+   * `opposite` keeps the corner across from the dragged one fixed. `center` grows the bubble
+   * around its centre, for when the position the drag would write is not the one on screen.
+   */
+  resizeAnchor?: "opposite" | "center";
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const sync = useWebcamSync({
@@ -413,7 +468,7 @@ export function WebcamLayer({
     frame,
     hidden,
   });
-  const { boxRef, lastTime, drawn, held, resync } = sync;
+  const { boxRef, overlayRef, lastTime, drawn, held, resync } = sync;
   const drag = useRef<{
     x: number;
     y: number;
@@ -428,20 +483,129 @@ export function WebcamLayer({
   // The bubble is held for the page once it has moved past the click slop: a plain click
   // (which only selects) must not pause a playing video or hide the marks.
   const [moved, setMoved] = useState(false);
+  // A corner drag: the pointer that owns it, where it started and what it started from.
+  const resize = useRef<{
+    corner: Corner;
+    pointerId: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    start: WebcamResizeStart;
+    sourceTime: number;
+    anchor: "opposite" | "center";
+    began: boolean;
+  } | null>(null);
+  // The size the drag has reached, for the chip; null while no resize is moving.
+  const [resizeSize, setResizeSize] = useState<number | null>(null);
+  const resizing = resizeSize !== null;
+  // The chip goes below the bubble when the bubble is too near the top of the frame for it.
+  const [chipBelow, setChipBelow] = useState(false);
   const heldChange = useRef(onHeldChange);
   heldChange.current = onHeldChange;
+  const isHeld = moved || resizing;
   useEffect(() => {
-    heldChange.current?.(moved);
-  }, [moved]);
+    heldChange.current?.(isHeld);
+  }, [isHeld]);
+
+  // The handles exist only for the selected bubble while the Select tool is active: they take
+  // pointers, and a stroke that starts over one must reach the layer below.
+  const showHandles = selected && interactive;
 
   // Before paint, so a drop never shows the old place for a frame: the held place follows
   // the card's, and the scene's own place comes back when the card is gone or answered.
   useLayoutEffect(() => {
     held.current = dropAt;
     resync();
-    // Keyed on what changes the place; `resync` is a fresh closure on every render.
+    // Keyed on what changes the place; `resync` is a fresh closure on every render. The overlay
+    // is positioned by `resync`, so it is placed the moment the handles appear.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dropAt, webcam]);
+  }, [dropAt, webcam, showHandles]);
+
+  // The latest callback, for the drag's end paths that run outside the render that set it.
+  const latestResizeEnd = useRef(onResizeEnd);
+  latestResizeEnd.current = onResizeEnd;
+  const finishResize = (): void => {
+    const d = resize.current;
+    if (!d) return;
+    resize.current = null;
+    if (!d.began) return;
+    setResizeSize(null);
+    latestResizeEnd.current();
+  };
+  // The bubble was deselected, a drawing tool was armed or the layer left mid-drag: end it here,
+  // because the handle that held the pointer capture is gone and will never report.
+  useEffect(() => {
+    if (!showHandles) finishResize();
+    // `finishResize` reads refs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHandles]);
+  useEffect(
+    () => () => {
+      const d = resize.current;
+      resize.current = null;
+      if (d?.began) latestResizeEnd.current();
+    },
+    [],
+  );
+
+  const pressCorner = (event: React.PointerEvent<HTMLElement>, corner: Corner): void => {
+    // Left button only, and one pointer at a time: a second finger must not replace a live drag.
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    if (resize.current) return;
+    const slot = boxRef.current?.parentElement?.getBoundingClientRect();
+    const from = drawn.current;
+    if (!slot || slot.width === 0 || slot.height === 0 || !from) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    resize.current = {
+      corner,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      width: slot.width,
+      height: slot.height,
+      start: from.resize,
+      sourceTime: lastTime.current,
+      anchor: resizeAnchor,
+      began: false,
+    };
+    setChipBelow(from.center.y - from.box.height / 2 / frame.height < 0.12);
+  };
+
+  const moveCorner = (event: React.PointerEvent<HTMLElement>): void => {
+    const d = resize.current;
+    if (!d || d.pointerId !== event.pointerId) return;
+    const dx = event.clientX - d.x;
+    const dy = event.clientY - d.y;
+    if (!d.began) {
+      if (Math.hypot(dx, dy) < RESIZE_THRESHOLD_PX) return;
+      d.began = true;
+      onResizeBegin();
+    }
+    // Client px to frame units: the slot fills the output frame, whatever size it is drawn at.
+    const next = resizeWebcamFromCorner({
+      start: d.start,
+      corner: d.corner,
+      deltaX: (dx / d.width) * frame.width,
+      deltaY: (dy / d.height) * frame.height,
+      frame,
+      anchor: d.anchor,
+    });
+    setResizeSize(next.size);
+    onResize(d.anchor === "opposite" ? next : { size: next.size }, d.sourceTime);
+  };
+
+  const releaseCorner = (event: React.PointerEvent<HTMLElement>): void => {
+    if (resize.current?.pointerId !== event.pointerId) return;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    finishResize();
+  };
+
+  // Cancel and lost capture arrive per pointer: only the owner's ends the drag.
+  const abortCorner = (event: React.PointerEvent<HTMLElement>): void => {
+    if (resize.current?.pointerId === event.pointerId) finishResize();
+  };
 
   // Same abort contract as the camera box: a drag can end without a pointerup. The bubble
   // goes back to the card's dropped place when one is open, else to the scene's.
@@ -534,6 +698,40 @@ export function WebcamLayer({
       >
         <WebcamMedia sync={sync} src={src} />
       </div>
+      {/* Preview-only DOM: the export draws from the scene, never from this overlay. */}
+      {(showHandles || resizing) && (
+        <div
+          ref={overlayRef}
+          className={styles.overlay}
+          style={{ display: "none" }}
+          data-testid="webcam-resize-overlay"
+        >
+          {showHandles &&
+            CORNERS.map((corner) => (
+              <span
+                key={corner}
+                className={styles.handle}
+                data-corner={corner}
+                data-testid={`webcam-handle-${corner}`}
+                aria-label={t("webcamResizeHandleAria")}
+                onPointerDown={(event) => pressCorner(event, corner)}
+                onPointerMove={moveCorner}
+                onPointerUp={releaseCorner}
+                onPointerCancel={abortCorner}
+                onLostPointerCapture={abortCorner}
+              />
+            ))}
+          {resizeSize !== null && (
+            <span
+              className={styles.sizeChip}
+              data-below={String(chipBelow)}
+              data-testid="webcam-size-chip"
+            >
+              {webcamSizeLabel(resizeSize)}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

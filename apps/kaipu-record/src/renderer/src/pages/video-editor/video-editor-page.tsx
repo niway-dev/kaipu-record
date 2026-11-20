@@ -102,6 +102,10 @@ import {
   type WebcamSegment,
 } from "@renderer/features/video-editor/webcam/webcam-model";
 import { webcamHideBlock } from "@renderer/features/video-editor/webcam/webcam-edits";
+import {
+  webcamResizeTarget,
+  type WebcamPanelTab,
+} from "@renderer/features/video-editor/webcam/webcam-resize";
 import type { WebcamRecordings } from "@renderer/features/video-editor/webcam/webcam-sync";
 import {
   webcamInspectorTarget,
@@ -2135,6 +2139,11 @@ function VideoEditor({
   const selectedWebcamSegment = webcamTarget?.kind === "segment" ? webcamTarget.segment : null;
   // The rail's "Hide camera from here" is disabled where it cannot hide, and says why.
   const hideAt = sourceTimeAtTimeline(layout, playback.timelineTime);
+  // The Camera panel's open tab: a corner drag on the bubble edits what that tab edits.
+  const [webcamTab] = useState<WebcamPanelTab>("whole");
+  const webcamResize = scene.webcam
+    ? webcamResizeTarget(scene.webcam, webcamTab, hideAt)
+    : { whole: true, anchor: "opposite" as const };
   const hideWebcamBlock = hasWebcam
     ? webcamHideBlock(scene, hideAt, clipBounds(axis, { sourceStart: hideAt ?? 0 }))
     : null;
@@ -2630,6 +2639,13 @@ function VideoEditor({
                     dropAt={webcamDrop.card?.position ?? null}
                     onDrop={webcamDrop.drop}
                     onHeldChange={handleWebcamHeld}
+                    onResizeBegin={webcamEdits.begin}
+                    // One undo step per drag: live preview, committed by `end` (like a slider).
+                    onResize={(patch, sourceTime) =>
+                      webcamEdits.liveLayout(patch, webcamResize.whole ? null : sourceTime)
+                    }
+                    onResizeEnd={webcamEdits.end}
+                    resizeAnchor={webcamResize.anchor}
                   />
                 )
               }

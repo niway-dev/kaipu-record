@@ -61,3 +61,81 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* The editor's corner handles and size chip (NIW2-888). A sibling of the bubble that mirrors its
+   box (the layer sets left, top, width and height with the bubble's), so the bubble's outline
+   filter, clip and drag never reach it. The box takes no pointer; only a handle does. */
+.overlay {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Same look as the floating images' handles (media-layer.module.css): a 14px white square with
+   an accent border and a 26px grab area, inside the box corners so the frame edge cannot cut one
+   in half. The pointer arithmetic uses the press delta, not the handle's position. */
+.handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--accent-primary);
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* A 26px grab area around the 14px square: 8px each side of the padding box (10px after the
+   2px border). */
+.handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.handle[data-corner="nw"] {
+  top: 2px;
+  left: 2px;
+  cursor: nwse-resize;
+}
+
+.handle[data-corner="ne"] {
+  top: 2px;
+  right: 2px;
+  cursor: nesw-resize;
+}
+
+.handle[data-corner="sw"] {
+  bottom: 2px;
+  left: 2px;
+  cursor: nesw-resize;
+}
+
+.handle[data-corner="se"] {
+  bottom: 2px;
+  right: 2px;
+  cursor: nwse-resize;
+}
+
+/* "28% · L" while a corner is dragged: above the bubble, below it near the top of the frame. */
+.sizeChip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 75%);
+  color: #fff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sizeChip[data-below="true"] {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
