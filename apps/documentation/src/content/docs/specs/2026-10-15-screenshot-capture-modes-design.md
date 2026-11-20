@@ -269,9 +269,13 @@ next spare was ready, and an Esc sent in that gap reached no window.
   selection. It still shows its toast, which stays up while the new pick is open and is
   dismissed when the new shot is about to be taken. The newest capture runs the real
   `afterCapture` in its own `finally`, also when its pick was cancelled and it hid nothing, and
-  its `beforeCapture` keeps the visibility the first capture recorded. If a save never
-  finishes, later captures open but wait at the hide step. The previous toast may appear on the
-  display the new pick chose, because the toast seam keeps one picked display.
+  its `beforeCapture` keeps the visibility the first capture recorded. A newest capture that
+  took nothing ends the way the handed-over capture did (a quiet capture keeps the main window
+  hidden, as it does when no press overlapped), not as a plain cancel. If a save never
+  finishes, later captures open but wait at the hide step. Each toast shows on the display its
+  own pick answered on: the seam is `onQuietCapture(payload, displayId)`, called once per
+  capture with that capture's display (`null` when no overlay answered, which falls back to the
+  display of the cursor), so a newer pick answering on another display moves nothing.
 
 ### Entry points and shortcuts
 
