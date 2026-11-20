@@ -1028,12 +1028,17 @@ function ScreenshotEditorBody({
   // what Copy and Save use, PDF what Export writes. Only ever invoked once
   // `imageReady` is true (see the guards below), which itself can only happen once
   // `image` has resolved, so the non-null assert is safe.
-  const exportInput = async (snap: Scene): Promise<ExportInput> => ({
-    scene: snap,
-    bytes: await image!.getBytes(),
-    displayedW: imgRef.current?.clientWidth ?? 0,
-    ...(canvasMode ? { canvas: true, assets: assetsRef.current } : {}),
-  });
+  const exportInput = async (snap: Scene): Promise<ExportInput> => {
+    // Read with the snapshot, before the await: a padding change during the byte read
+    // resizes the displayed image and would pair the old scene with the new width.
+    const displayedW = imgRef.current?.clientWidth ?? 0;
+    return {
+      scene: snap,
+      bytes: await image!.getBytes(),
+      displayedW,
+      ...(canvasMode ? { canvas: true, assets: assetsRef.current } : {}),
+    };
+  };
   const exportAs = async (format: ExportFormat, snap: Scene): Promise<ArrayBuffer> =>
     exportScene(format, await exportInput(snap));
 
