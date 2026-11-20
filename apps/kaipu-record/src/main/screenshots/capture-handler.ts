@@ -88,9 +88,12 @@ interface CaptureHandlerDeps {
   thumbnail(png: Buffer): string;
   /**
    * Seam for the capture toast (ticket 06): called once after each quiet capture.
+   * `displayId` is the display this capture's own pick answered on (the recording target's
+   * during a take), or null when no overlay answered (the instant capture). It travels with
+   * the capture because the next pick may answer before this capture's toast is shown.
    * Default no-op, so quiet capture works without a toast window.
    */
-  onQuietCapture?(payload: CaptureToastPayload): void;
+  onQuietCapture?(payload: CaptureToastPayload, displayId: number | null): void;
   /**
    * The user chose what to record on the overlay (ADR 0030): Record (`start`) or Use
    * selection. Main sets the recording target and, for Record, starts the take. Optional,
@@ -225,6 +228,8 @@ export function createCaptureHandler(
       hooksReady.catch(() => {});
       return hooksReady;
     };
+    // The display this capture's own pick answered on, for its toast (see `onQuietCapture`).
+    let pickedDisplayId: number | null = null;
     let result: ProviderResult = { kind: "cancelled" };
     let answer: CaptureResult = { kind: "cancelled" };
     let failed = false;
@@ -232,13 +237,20 @@ export function createCaptureHandler(
     let recordStarted = false;
     try {
       // Inside the try: a throw while hiding windows must still release the guard.
-      let overlay = deps.overlay;
+      let overlay: OverlayPort = {
+        ...deps.overlay,
+        pick: async (...args) => {
+          const picked = await deps.overlay.pick(...args);
+          pickedDisplayId = picked.kind === "cancelled" ? null : picked.displayId;
+          return picked;
+        },
+      };
       if (after) {
         // The previous capture is still saving. The overlay opens now, but this capture's
         // windows are hidden (which also dismisses the previous toast) only when its shot is
         // about to be taken, and then only after the previous capture has finished.
         overlay = {
-          ...deps.overlay,
+          ...overlay,
           hideAll: async () => {
             await hide();
             return deps.overlay.hideAll();
@@ -249,6 +261,7 @@ export function createCaptureHandler(
         deps.windows.beforeCapture();
       }
       const recordingTarget = duringTake ? await deps.recordingTarget?.() : undefined;
+      if (recordingTarget) pickedDisplayId = recordingTarget.displayId;
       // Never open a selector over a take, even if its source can no longer be resolved.
       try {
         result =
@@ -271,7 +284,7 @@ export function createCaptureHandler(
         // remembers the mode the user captured in.
         // The instant shortcut is an exception: it never becomes the current mode.
         if (!duringTake && intent !== "instant") remember(deps, result.mode);
-        answer = await finish(deps, result, workspace, policy, duringTake, insert);
+        answer = await finish(deps, result, workspace, policy, duringTake, insert, pickedDisplayId);
       } else if (result.kind === "record" && insert) {
         // The overlay's Record switch, from the editor's Add image: an insert only adds a
         // picture, so it never starts a recording. Answered as a cancel.
@@ -400,6 +413,7 @@ async function finish(
   policy: CapturePolicy | null,
   duringTake: boolean,
   insert: boolean,
+  pickedDisplayId: number | null,
 ): Promise<CaptureResult> {
   const { png } = shot;
   const { width, height } = deps.measure(png);
@@ -458,22 +472,25 @@ async function finish(
   const notifyQuiet = (saved: SavedScreenshotRef | null, copied: boolean): void => {
     try {
       const confirmation = shot.action === "copy" && copied && saved !== null;
-      deps.onQuietCapture?.({
-        // During a take the notice wins: it tells the user the shot was taken.
-        ...(duringTake
-          ? { presentation: "taken" as const }
-          : confirmation
-            ? { presentation: "copied" as const }
-            : {}),
-        thumbnail: deps.thumbnail(png),
-        width,
-        height,
-        mode: shot.mode,
-        saved,
-        copied,
-        workspace,
-        policy,
-      });
+      deps.onQuietCapture?.(
+        {
+          // During a take the notice wins: it tells the user the shot was taken.
+          ...(duringTake
+            ? { presentation: "taken" as const }
+            : confirmation
+              ? { presentation: "copied" as const }
+              : {}),
+          thumbnail: deps.thumbnail(png),
+          width,
+          height,
+          mode: shot.mode,
+          saved,
+          copied,
+          workspace,
+          policy,
+        },
+        pickedDisplayId,
+      );
     } catch (error) {
       // A broken toast must never turn a finished capture into an error.
       console.error("screenshot capture toast failed", error);

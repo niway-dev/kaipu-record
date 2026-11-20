@@ -9,7 +9,6 @@ import {
   isEnabledCaptureMode,
   type CaptureIntent,
   type CaptureMode,
-  type OverlayAnswer,
 } from "@shared/types/screenshot-capture";
 import {
   assertExportPayload,
@@ -134,9 +133,6 @@ export function prewarmCaptureOverlay(busy: () => boolean): void {
 /** Whether a take is active or pending (`capture-while-recording`); main wires the hub in. */
 let takeInProgress: () => boolean = () => false;
 
-/** Told every overlay answer, so the toast lands on the display the shot came from. */
-let observePick: (answer: OverlayAnswer) => void = () => {};
-
 /**
  * The overlay windows, created on first use: `BrowserWindow` and `screen` need a ready
  * app, and most sessions never open an overlay. Before `ready` a pick answers `cancelled`.
@@ -144,9 +140,7 @@ let observePick: (answer: OverlayAnswer) => void = () => {};
 const overlay: OverlayPort = {
   pick: async (ui, displays, intent) => {
     if (!app.isReady()) return { kind: "cancelled" };
-    const answer = await overlayWindowsInstance().pick(ui, displays, intent);
-    observePick(answer);
-    return answer;
+    return overlayWindowsInstance().pick(ui, displays, intent);
   },
   hideAll: async () => overlayWindows?.hideAll(),
   endPick: () => overlayWindows?.endPick(),
@@ -221,7 +215,6 @@ export function registerScreenshotHandlers(
     // No overlay answered (the instant capture): the display under the pointer.
     () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id,
   );
-  observePick = toastSeam.onPick;
   const windows = toastSeam.windows;
   const handleCapture = createCaptureHandler({
     platform: process.platform,
@@ -265,17 +258,7 @@ export function registerScreenshotHandlers(
     onQuietCapture: toastSeam.onQuietCapture,
     onRecordTarget,
     duringTake: duringTakeCapture,
-    recordingTarget: async () => {
-      const target = await recordingTarget?.();
-      if (target)
-        toastSeam.onPick({
-          kind: "display",
-          displayId: target.displayId,
-          mode: "screen",
-          action: "capture",
-        });
-      return target ?? null;
-    },
+    recordingTarget: async () => (await recordingTarget?.()) ?? null,
   });
   // The whole capture is one admission (maintenance mode, NIW2-561): taken before the app
   // hides or any pixel is grabbed, held through the vault write. The hotkey goes through

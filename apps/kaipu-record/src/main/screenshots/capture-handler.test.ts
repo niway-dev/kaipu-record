@@ -13,6 +13,7 @@ import {
   type ProviderResult,
   type ScreenshotCaptureProvider,
 } from "./screenshot-capture";
+import { deferToastUntilAfterCapture } from "./toast-after-capture";
 
 const overlay: OverlayPort = {
   pick: async () => ({ kind: "cancelled" }),
@@ -495,6 +496,85 @@ describe("createCaptureHandler", () => {
       await second;
     });
 
+    it("puts each capture's toast on the display its own pick answered on, even when the next pick answers first", async () => {
+      // The real toast seam on the real handler: pick 2 answers while shot 1 is still saving,
+      // so the toast of shot 1 is shown after pick 2's answer, and shot 2's own
+      // `beforeCapture` runs after its pick.
+      const showToast = vi.fn();
+      const seam = deferToastUntilAfterCapture(
+        { beforeCapture: () => {}, afterCapture: () => {}, reveal: () => {} },
+        showToast,
+        () => 7,
+      );
+      const answers = [3, 5].map(
+        (displayId) =>
+          ({
+            kind: "display",
+            mode: "screen",
+            action: "capture",
+            displayId,
+          }) as const,
+      );
+      let releaseSave!: () => void;
+      let confirm!: () => void;
+      const confirmed = new Promise<void>((resolve) => (confirm = resolve));
+      let next = 0;
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.pick("screen", []);
+          await port.hideAll();
+          return shot;
+        })
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.pick("screen", []);
+          await confirmed;
+          await port.hideAll();
+          return shot;
+        });
+      const saveToVault = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => (releaseSave = () => resolve({ id: "s1", assetId: "a1" }))),
+        )
+        .mockResolvedValue({ id: "s2", assetId: "a2" });
+      const handler = createCaptureHandler({
+        platform: "darwin",
+        provider: { capture, supports: () => true, supportedModes: () => [] },
+        overlay: {
+          pick: async () => answers[next++]!,
+          hideAll: async () => {},
+          endPick: () => {},
+        },
+        windows: seam.windows,
+        measure: () => ({ width: 3, height: 2 }),
+        displayCount: () => 2,
+        track: () => {},
+        rememberMode: () => {},
+        settings: () => prefs,
+        saveToVault,
+        copyToClipboard: () => {},
+        thumbnail: () => "data:image/png;base64,thumb",
+        onQuietCapture: seam.onQuietCapture,
+      });
+
+      const first = handler({ mode: "screen" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "screen" });
+      await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2));
+      await tick(); // pick 2 has answered
+      releaseSave();
+      await first;
+      expect(showToast).toHaveBeenCalledOnce();
+      expect(showToast.mock.calls[0]![0]).toMatchObject({ displayId: 3 });
+
+      confirm();
+      await second;
+      expect(showToast).toHaveBeenCalledTimes(2);
+      expect(showToast.mock.calls[1]![0]).toMatchObject({ displayId: 5 });
+    });
+
     it("restores the windows once, in the new capture, when the new pick is cancelled without a shot", async () => {
       const log: string[] = [];
       let releaseSave!: () => void;
@@ -651,6 +731,7 @@ describe("createCaptureHandler", () => {
           saved: { id: "screenshot-1", assetId: "asset-1" },
           copied: false,
         }),
+        null,
       );
       // Saved, so the card opens the vault item: no bytes are kept.
       expect(takeLastQuietCapture()).toBeNull();
@@ -671,6 +752,7 @@ describe("createCaptureHandler", () => {
       expect(await handler({ mode: "frame" })).toMatchObject({ after: "quiet", copied: true });
       expect(onQuietCapture).toHaveBeenCalledWith(
         expect.objectContaining({ presentation: "copied" }),
+        null,
       );
     });
 
@@ -715,6 +797,7 @@ describe("createCaptureHandler", () => {
       expect(windows.afterCapture).toHaveBeenCalledWith("quiet");
       expect(onQuietCapture).toHaveBeenCalledWith(
         expect.objectContaining({ saved: null, copied: true }),
+        null,
       );
       expect(takeLastQuietCapture()?.png).toEqual(Buffer.from([9, 8, 7]));
     });
@@ -758,17 +841,20 @@ describe("createCaptureHandler", () => {
     it("hands the toast hook an image confirmation per successful Copy", async () => {
       const { handler, onQuietCapture } = setup(shot("copy"));
       await handler({ mode: "frame" });
-      expect(onQuietCapture).toHaveBeenCalledExactlyOnceWith({
-        presentation: "copied",
-        thumbnail: "data:image/png;base64,thumb",
-        width: 3,
-        height: 2,
-        mode: "frame",
-        saved: { id: "screenshot-1", assetId: "asset-1" },
-        copied: true,
-        workspace: { id: "ws-work", name: "Work" },
-        policy: { workspaceId: "ws-work", screenshotCopy: "manual" },
-      });
+      expect(onQuietCapture).toHaveBeenCalledExactlyOnceWith(
+        {
+          presentation: "copied",
+          thumbnail: "data:image/png;base64,thumb",
+          width: 3,
+          height: 2,
+          mode: "frame",
+          saved: { id: "screenshot-1", assetId: "asset-1" },
+          copied: true,
+          workspace: { id: "ws-work", name: "Work" },
+          policy: { workspaceId: "ws-work", screenshotCopy: "manual" },
+        },
+        null,
+      );
     });
 
     it("binds the capture to the workspace active when it started (the save, the bytes, the toast)", async () => {
@@ -780,6 +866,7 @@ describe("createCaptureHandler", () => {
       expect(saveToVault.mock.calls[0]![2]).toBe("ws-work");
       expect(onQuietCapture).toHaveBeenCalledWith(
         expect.objectContaining({ workspace: { id: "ws-work", name: "Work" } }),
+        null,
       );
       expect(takeLastQuietCapture()?.workspaceId).toBe("ws-work");
     });
@@ -838,6 +925,7 @@ describe("createCaptureHandler", () => {
             workspace: { id: "ws-work", name: "Work" },
             policy: { workspaceId: "ws-work", screenshotCopy: "auto" },
           }),
+          null,
         );
         expect(out).toMatchObject({
           policy: { workspaceId: "ws-work", screenshotCopy: "auto" },
@@ -893,7 +981,7 @@ describe("createCaptureHandler", () => {
       saveToVault.mockRejectedValueOnce(new Error("disk full"));
       const out = await handler({ mode: "window" });
       expect(out).toMatchObject({ after: "quiet", saved: null, copied: true });
-      expect(onQuietCapture).toHaveBeenCalledWith(expect.objectContaining({ saved: null }));
+      expect(onQuietCapture).toHaveBeenCalledWith(expect.objectContaining({ saved: null }), null);
       // Copied but not saved is not a "Copied" confirmation: the card must keep Save.
       expect(onQuietCapture.mock.calls[0]?.[0]).not.toHaveProperty("presentation");
       expect(takeLastQuietCapture()).toEqual({
@@ -974,6 +1062,7 @@ describe("createCaptureHandler — a screenshot during a take (NIW2-688)", () =>
         presentation: "taken",
         saved: { id: "screenshot-1", assetId: "asset-1" },
       }),
+      2,
     );
     expect(windows.afterCapture).toHaveBeenCalledWith("quiet");
   });
@@ -1016,6 +1105,7 @@ describe("createCaptureHandler — a screenshot during a take (NIW2-688)", () =>
     expect(answer).toMatchObject({ kind: "captured", after: "quiet", saved: null });
     expect(onQuietCapture).toHaveBeenCalledWith(
       expect.objectContaining({ presentation: "taken", saved: null }),
+      2,
     );
     expect(takeLastQuietCapture()).not.toBeNull();
   });

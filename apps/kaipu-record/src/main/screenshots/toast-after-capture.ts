@@ -1,4 +1,4 @@
-import type { CaptureToastPayload, OverlayAnswer } from "@shared/types/screenshot-capture";
+import type { CaptureToastPayload } from "@shared/types/screenshot-capture";
 import type { CaptureWindowHooks } from "./capture-handler";
 import type { CaptureToastShowRequest } from "./capture-toast-window";
 
@@ -11,8 +11,9 @@ import type { CaptureToastShowRequest } from "./capture-toast-window";
  * `beforeCapture` only hides the main window (`BrowserWindow.hide()`, not `app.hide()`),
  * so the app itself is never hidden and the toast can show while that window stays hidden.
  *
- * The display comes from the overlay's answer; a capture that opened no overlay
- * (the instant capture) uses `fallbackDisplayId`.
+ * The display is the one this capture's own pick answered on, handed in with the payload
+ * (not read from shared state: the next pick may answer before this toast is shown); a
+ * capture that opened no overlay (the instant capture) uses `fallbackDisplayId`.
  */
 export function deferToastUntilAfterCapture(
   windows: CaptureWindowHooks,
@@ -20,18 +21,16 @@ export function deferToastUntilAfterCapture(
   fallbackDisplayId: () => number,
 ): {
   windows: CaptureWindowHooks;
-  onQuietCapture(payload: CaptureToastPayload): void;
-  onPick(answer: OverlayAnswer): void;
+  onQuietCapture(payload: CaptureToastPayload, displayId: number | null): void;
 } {
-  let pending: CaptureToastPayload | null = null;
-  let pickedDisplayId: number | null = null;
+  let pending: { payload: CaptureToastPayload; displayId: number | null } | null = null;
 
   const flush = (): void => {
-    const payload = pending;
+    const held = pending;
     pending = null;
-    if (!payload) return;
+    if (!held) return;
     try {
-      showToast({ ...payload, displayId: pickedDisplayId ?? fallbackDisplayId() });
+      showToast({ ...held.payload, displayId: held.displayId ?? fallbackDisplayId() });
     } catch (error) {
       // A broken toast must never turn a finished capture into an error.
       console.error("screenshot capture toast failed", error);
@@ -42,7 +41,6 @@ export function deferToastUntilAfterCapture(
     windows: {
       beforeCapture: () => {
         pending = null;
-        pickedDisplayId = null;
         windows.beforeCapture();
       },
       afterCapture: (ending) => {
@@ -54,11 +52,8 @@ export function deferToastUntilAfterCapture(
       },
       reveal: () => windows.reveal(),
     },
-    onQuietCapture: (payload) => {
-      pending = payload;
-    },
-    onPick: (answer) => {
-      pickedDisplayId = answer.kind === "cancelled" ? null : answer.displayId;
+    onQuietCapture: (payload, displayId) => {
+      pending = { payload, displayId };
     },
   };
 }
