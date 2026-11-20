@@ -74,7 +74,8 @@ Defaulted on 2026-10-30; each is taken as written unless its "revisit if" trigge
    UNEDITED and the original file has no face. Revisit if testers read the held frame as "the
    webcam broke".
 3. **`scaleDuringZoom`.** Defaulted: in v1, an inspector toggle, on at 0.7 (Cap's default; Tella
-   ships it on). Revisit if it reads as the bubble "breathing" on short zooms — then it eases
+   ships it on). _Update 2026-11-19 (NIW2-884): off by default — the layout starts at 1 and the
+   toggle sets 0.7._ Revisit if it reads as the bubble "breathing" on short zooms — then it eases
    on the camera path's scale, which it already samples.
 4. **Position model.** Defaulted: free drag plus nine presets in the inspector (Tella's grid);
    no automatic snapping. Revisit if free positions drift off-frame in Fit exports.
@@ -457,7 +458,7 @@ export interface WebcamLayout {
   position: { x: number; y: number };
   mirrored: boolean;
   framing: { zoom: number; x: number; y: number }; // same ranges as CameraBubbleSettings.framing
-  /** 1 = same size inside a zoom; 0.7 = Cap's default. */
+  /** 1 = same size inside a zoom (the default since NIW2-884); 0.7 is what the toggle sets. */
   scaleDuringZoom: number;
   shadow: boolean;
 }

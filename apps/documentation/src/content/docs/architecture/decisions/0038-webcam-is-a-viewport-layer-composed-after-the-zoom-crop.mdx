@@ -108,3 +108,10 @@ layouts (Cap's style segments, Tella's layout sections, Screen Studio's layout t
   layout property, drawn before the crop, without changing the viewport default.
 - The preview's two-element sync fails on hardware: switch the preview to the lockstep decoder
   and record the measurement.
+
+## Update 2026-11-19: shrink during zoom is off by default
+
+Since NIW2-884 (owner decision, 2026-11-19) a new session starts with `scaleDuringZoom` at 1:
+the bubble keeps its size inside a zoom. The Camera panel's "Shrink during zoom" checkbox turns
+it on at 0.7. Saved sessions keep the value they stored. The decision above is unchanged: the
+layer, its geometry and the shared `webcamRect` are the same, only the default differs.
