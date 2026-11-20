@@ -365,6 +365,25 @@ describe("TranscriptPanel — states", () => {
     expect(start).toHaveBeenCalledTimes(2);
   });
 
+  it("stale after a job finished in this session: still starts the automatic job", async () => {
+    // The control reads `done` for the item after any job this session, even if the media was
+    // replaced since; main allows the attempt, so the panel must not wait for `idle`.
+    start.mockResolvedValue({ status: "done" } as never);
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-2"));
+    control({ kind: "done" });
+    render(<TranscriptPanel {...baseProps()} />);
+    await act(async () => {});
+    expect(start).toHaveBeenCalledWith({ automatic: true });
+  });
+
+  it("stale and allowed, but a job is running: does not start", async () => {
+    hooks.transcript.mockReturnValue(READY({}, true, true, "hash-3"));
+    control({ kind: "running", phase: "transcribing", segmentsDone: 1, segmentsTotal: 4 } as never);
+    render(<TranscriptPanel {...baseProps()} />);
+    await act(async () => {});
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("stale but main did not allow an automatic run: waits for the button", () => {
     hooks.transcript.mockReturnValue(READY({}, true, false));
     control({ kind: "idle" });

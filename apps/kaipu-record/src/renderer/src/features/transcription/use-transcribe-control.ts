@@ -83,7 +83,11 @@ export function useTranscribeControl(item: TranscribeControlItem): TranscribeCon
   const start = useCallback(
     async (options?: { automatic?: boolean }): Promise<StartOutcome | null> => {
       const { state: current, item: target, modelId } = latest.current;
-      if (!STARTABLE.has(current.kind) || modelId === null || target.mediaUrl === null) return null;
+      // An automatic start may also follow a job that finished this session: the media can have
+      // been replaced since, and main's own guard decides whether this content may run again.
+      const startable =
+        STARTABLE.has(current.kind) || (options?.automatic === true && current.kind === "done");
+      if (!startable || modelId === null || target.mediaUrl === null) return null;
       return startTranscription({
         itemId: target.id,
         assetId: target.assetId,

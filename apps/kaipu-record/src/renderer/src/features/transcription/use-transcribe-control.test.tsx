@@ -218,6 +218,33 @@ describe("useTranscribeControl", () => {
     });
   });
 
+  it("an automatic start works after a job finished this session, a manual one does not", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const { result } = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+    const first = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start();
+      first.finish(progress("a", "done"));
+      await outcome;
+    });
+    await waitFor(() => expect(result.current.state.kind).toBe("done"));
+
+    await act(async () => {
+      expect(await result.current.start()).toBeNull();
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+
+    const second = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start({ automatic: true });
+      second.finish(progress("a", "done"));
+      await outcome;
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls[1]![0].automatic).toBe(true);
+  });
+
   it("start is a no-op when a transcript already exists", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
     const { result } = renderHook(() => useTranscribeControl({ ...ITEM, transcribedAt: 123 }));

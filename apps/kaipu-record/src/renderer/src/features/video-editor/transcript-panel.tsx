@@ -106,7 +106,7 @@ export function TranscriptPanel({
     transcript.state === "ready" &&
       transcript.stale &&
       transcript.autoRetranscribe &&
-      control.state.kind === "idle" &&
+      (control.state.kind === "idle" || control.state.kind === "done") &&
       hasAudio !== false,
     () => control.start({ automatic: true }),
   );
