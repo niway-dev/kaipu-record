@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { SettingsPopover } from "./settings-popover";
 
 function Harness({ startOpen = true }: { startOpen?: boolean }): React.JSX.Element {
@@ -131,6 +131,49 @@ describe("SettingsPopover", () => {
     window.removeEventListener("keydown", onWindowKey);
     expect(onWindowKey).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("any key inside it stays out of the window handlers (bare 1/2/3 would switch the capture mode)", () => {
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    render(<Harness />);
+
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Two" }), { key: "2" });
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Two" }), { key: "Tab" });
+
+    window.removeEventListener("keydown", onWindowKey);
+    expect(onWindowKey).not.toHaveBeenCalled();
+  });
+
+  it("closes when focus moves to an element outside it and its card, and does not steal focus back", () => {
+    render(<Harness />);
+    const elsewhere = screen.getByTestId("elsewhere");
+
+    act(() => elsewhere.focus());
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it("stays open when focus moves to its chevron or to another control inside it", () => {
+    render(<Harness />);
+
+    act(() => screen.getByRole("button", { name: "chevron" }).focus());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    act(() => screen.getByRole("radio", { name: "One" }).focus());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("a press outside closes it and leaves focus where the press put it", () => {
+    render(<Harness />);
+    const elsewhere = screen.getByTestId("elsewhere");
+    // The press lands on an outside element that already holds focus (focus did not move).
+    fireEvent.pointerDown(elsewhere);
+    act(() => elsewhere.focus());
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(elsewhere).toHaveFocus();
+    expect(screen.getByRole("button", { name: "chevron" })).not.toHaveFocus();
   });
 
   it("closes on a press outside it, but not on a press inside it or on its own card", () => {

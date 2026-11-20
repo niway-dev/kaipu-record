@@ -4,6 +4,7 @@ import React, {
   useLayoutEffect,
   useRef,
   useState,
+  type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -40,7 +41,8 @@ const FOCUSABLE =
  * Closing: Esc (from anywhere, taken before the window's own handlers: the first Esc closes the
  * popover, the next one cancels a capture), a press outside it and its card, and the owner's
  * `onClose` (the chevron, a window blur). Focus moves into it on open and back to the chevron on
- * close. Enter inside it stops here: the overlay's window-level Enter would start the recording.
+ * close, unless the close came from focus moving elsewhere. Keys inside it stop here: the overlay's
+ * window-level Enter would start the recording and a bare 1/2/3 would switch the capture mode.
  */
 export function SettingsPopover({
   id,
@@ -155,8 +157,18 @@ export function SettingsPopover({
 
   if (!open) return null;
 
+  // Every key inside it stays inside: the overlay's bare 1/2/3, M, A, W and Enter are window-level
+  // shortcuts that must not fire while the owner works in the popover (Esc closed it above).
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === "Enter") event.stopPropagation();
+    event.stopPropagation();
+  };
+
+  // Tab out of the popover (it is portalled to the body, so it is not on the way) closes it.
+  // Focus going to nowhere is a window blur, which the owner's own rule already handles.
+  const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
+    const next = event.relatedTarget as Node | null;
+    if (!next || event.currentTarget.contains(next) || anchorElement()?.contains(next)) return;
+    onClose();
   };
 
   return createPortal(
@@ -177,6 +189,7 @@ export function SettingsPopover({
       onFocus={() => {
         focusedInside.current = true;
       }}
+      onBlur={onBlur}
       onKeyDown={onKeyDown}
     >
       {children}

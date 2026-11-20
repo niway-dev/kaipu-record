@@ -3368,6 +3368,26 @@ describe("CaptureOverlay — the settings popovers", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["Microphone", "Choose Microphone device", /USB mic/],
+    ["Camera", "Choose Camera device", /Cam Link/],
+  ] as const)(
+    "a bare 2 typed inside the %s popover does not change the capture mode",
+    async (_name, chevronName, radio) => {
+      devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
+      devices.cameras = [{ deviceId: "cam-link", label: "Cam Link" }];
+      const { setMode } = await renderRecording();
+
+      fireEvent.click(screen.getByRole("button", { name: chevronName }));
+      const row = await screen.findByRole("radio", { name: radio });
+      row.focus();
+      fireEvent.keyDown(row, { key: "2" });
+      await flush();
+
+      expect(setMode).not.toHaveBeenCalled();
+    },
+  );
+
   it("Esc closes an open settings popover first and does not cancel the capture", async () => {
     devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
     const { answer } = await renderRecording();
