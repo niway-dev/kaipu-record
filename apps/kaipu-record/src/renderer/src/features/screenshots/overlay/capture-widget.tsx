@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AppWindow,
   Camera,
@@ -27,6 +27,7 @@ import {
 import type { OverlayChrome } from "./overlay-chrome";
 import { controlKeyLabel, copyKeyLabel, type InputToggleKey } from "./overlay-keys";
 import type { WidgetDevice, WidgetDevices } from "./use-widget-devices";
+import { COMPACT_LEVEL, fitLevel, widgetLook } from "./widget-fit";
 import { widgetFitWidth, widgetPlacement, type WidgetEdge } from "./widget-placement";
 import styles from "./capture-widget.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -35,6 +36,7 @@ import { uiArea } from "@renderer/lib/ui-area";
 export const TOAST_MS = 1500;
 /** The widget's height before it has been measured (one row and its padding). */
 const FIRST_HEIGHT_DIP = 60;
+const NO_WIDTHS: readonly number[] = [];
 
 const MODE_ICON: Record<CaptureMode, LucideIcon> = {
   frame: Frame,
@@ -57,6 +59,7 @@ const INPUTS = [
     key: "isMicrophoneEnabled",
     icon: Mic,
     label: "overlay.toggleMicrophone",
+    short: "widget.shortMicrophone",
     hint: "M",
     state: "microphone",
   },
@@ -64,6 +67,7 @@ const INPUTS = [
     key: "isSystemAudioEnabled",
     icon: Volume2,
     label: "overlay.toggleSystemAudio",
+    short: "widget.shortSystemAudio",
     hint: "A",
     state: "systemAudio",
   },
@@ -71,6 +75,7 @@ const INPUTS = [
     key: "isCameraEnabled",
     icon: Camera,
     label: "overlay.toggleCamera",
+    short: null,
     hint: "W",
     state: "camera",
   },
@@ -78,6 +83,8 @@ const INPUTS = [
   key: InputToggleKey;
   icon: LucideIcon;
   label: string;
+  /** The shorter name for a tight row, or null when the name is already short. */
+  short: string | null;
   hint: string;
   state: "microphone" | "systemAudio" | "camera";
 }[];
@@ -167,30 +174,68 @@ export function CaptureWidget({
   // True from a mouse press on the widget until the next Tab: focus then came from the pointer.
   const pointerFocus = useRef(false);
   const [box, setBox] = useState({ width: 0, height: FIRST_HEIGHT_DIP, measured: false });
+  const measureBox = useCallback((): number => {
+    const element = root.current;
+    if (!element) return 0;
+    const rect = element.getBoundingClientRect();
+    const height = Math.ceil(rect.height);
+    const width = Math.ceil(rect.width);
+    setBox((current) => {
+      const next = {
+        width: width > 0 ? width : current.width,
+        height: height > 0 ? height : current.height,
+        measured: true,
+      };
+      return next.width === current.width && next.height === current.height && current.measured
+        ? current
+        : next;
+    });
+    return width;
+  }, []);
   useLayoutEffect(() => {
     const element = root.current;
-    if (!element) return;
-    const measure = (): void => {
-      const rect = element.getBoundingClientRect();
-      const height = Math.ceil(rect.height);
-      const width = Math.ceil(rect.width);
-      setBox((current) => {
-        const next = {
-          width: width > 0 ? width : current.width,
-          height: height > 0 ? height : current.height,
-          measured: true,
-        };
-        return next.width === current.width && next.height === current.height && current.measured
-          ? current
-          : next;
-      });
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      measureBox();
+    });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [measureBox]);
+
+  // Expanded is always one row. The row is as wide as its content (it never wraps), so how much
+  // of the expanded look fits is found by trying it: render at a level, measure the width, and
+  // step to a narrower level while the row is wider than the work area allows. Every step is a
+  // layout effect, so it settles before the first paint. The widths measured stand for as long
+  // as nothing that changes the row's content does (`fitKey`); the first level tried is then
+  // the full one again, so a wider display gets its labels back.
+  const available = widgetFitWidth(area);
+  const wanted = chrome.expanded;
+  const [fit, setFit] = useState<{ key: string; widths: readonly number[] }>({
+    key: "",
+    widths: [],
+  });
+  const fitKey = [
+    available,
+    chrome.intent,
+    chrome.mode,
+    wanted,
+    chrome.modes.includes("window"),
+    display !== undefined,
+    t("widget.screenshot"),
+  ].join("|");
+  const widths = fit.key === fitKey ? fit.widths : NO_WIDTHS;
+  const level = wanted ? fitLevel(available, widths) : COMPACT_LEVEL;
+  useLayoutEffect(() => {
+    const width = measureBox();
+    if (!wanted || width === 0 || widths[level] === width) return;
+    setFit((current) => {
+      const known = current.key === fitKey ? [...current.widths] : [];
+      known[level] = width;
+      return { key: fitKey, widths: known };
+    });
+    // `box.width` is a dependency so a width the observer reports (a font loading, say) is
+    // recorded too. The guard above makes the loop end: a level's width is stored once per value.
+  }, [wanted, widths, level, fitKey, measureBox, box.width]);
 
   const placement = widgetPlacement(selection, area, box.height, box.width);
   // The edge the widget enters from: where it is docked once its height is known, kept for the
@@ -202,7 +247,8 @@ export function CaptureWidget({
     if (box.measured) setEnterFrom((current) => current ?? placement.edge);
   }, [box.measured, placement.edge]);
 
-  const expanded = chrome.expanded;
+  const look = widgetLook(level);
+  const expanded = look.expanded;
   const recording = chrome.intent === "record";
   const counting = chrome.countdown !== null;
   const platform = chrome.platform;
@@ -246,14 +292,14 @@ export function CaptureWidget({
         data-testid="capture-widget"
         data-edge={placement.edge}
         data-enter={enterFrom ?? undefined}
-        data-expanded={expanded || undefined}
+        data-expanded={wanted || undefined}
+        data-fit={wanted ? level : undefined}
         data-intent={chrome.intent}
         data-counting={counting || undefined}
         className={styles.widget}
         style={{
           left: placement.left,
           top: placement.top,
-          maxWidth: widgetFitWidth(area),
         }}
         {...keepPointer}
         onPointerDown={(event) => {
@@ -355,7 +401,7 @@ export function CaptureWidget({
                 </button>
               );
             })}
-            {expanded && !windowOffered && (
+            {expanded && look.windowSoon && !windowOffered && (
               <button
                 type="button"
                 className={styles.segment}
@@ -383,10 +429,12 @@ export function CaptureWidget({
               <Monitor size={15} aria-hidden />
               {display.name}
               <span className={styles.displaySize}>{display.resolution}</span>
-              {expanded && <span className={styles.displaySize}>{display.kind}</span>}
+              {look.readout && expanded && (
+                <span className={styles.displaySize}>{display.kind}</span>
+              )}
             </span>
           )}
-          {expanded && (
+          {expanded && look.readout && (
             <span className={styles.readout} data-testid="size-readout" inert={lock}>
               {size.width} × {size.height}
               <span className={styles.unit}> px</span>
@@ -397,13 +445,14 @@ export function CaptureWidget({
 
           {recording ? (
             <>
-              {INPUTS.map(({ key, icon, label, hint, state }) => {
+              {INPUTS.map(({ key, icon, label, short, hint, state }) => {
                 const toggles = chrome.toggles;
                 const on = toggles?.[state] ?? false;
                 const blocked = state === "camera" && Boolean(toggles?.cameraBlocked);
                 const cannotToggle = blocked && !on;
                 const Icon = blocked ? Lock : icon;
                 const name = blocked ? tCamera("blockedTile") : t(label);
+                const shownName = look.shortNames && short && !blocked ? t(short) : name;
                 const picks: WidgetDevice[] | null =
                   state === "microphone"
                     ? (devices?.microphones ?? [])
@@ -424,6 +473,8 @@ export function CaptureWidget({
                     edge={placement.edge}
                     icon={<Icon size={15} aria-hidden />}
                     name={name}
+                    shownName={shownName}
+                    showStateWord={look.stateWords}
                     hint={hint}
                     stateWord={
                       blocked ? tCamera("blocked") : on ? t("overlay.on") : t("overlay.off")
@@ -446,7 +497,8 @@ export function CaptureWidget({
                 onClick={chrome.onMoreSettings}
               >
                 <SlidersHorizontal size={15} aria-hidden />
-                {expanded && t("widget.moreSettings")}
+                {expanded &&
+                  t(look.shortNames ? "widget.shortMoreSettings" : "widget.moreSettings")}
               </button>
             </>
           ) : (
@@ -459,7 +511,7 @@ export function CaptureWidget({
               onClick={() => onAction("copy")}
             >
               <Copy size={15} aria-hidden />
-              {expanded && t("widget.copyToClipboard")}
+              {expanded && t(look.shortNames ? "widget.shortCopy" : "widget.copyToClipboard")}
               <Kbd>{copyKeyLabel(platform)}</Kbd>
             </button>
           )}
@@ -626,6 +678,8 @@ function InputCell({
   edge,
   icon,
   name,
+  shownName,
+  showStateWord,
   hint,
   stateWord,
   disabled,
@@ -642,7 +696,12 @@ function InputCell({
   halo: number | null;
   edge: WidgetEdge;
   icon: React.ReactNode;
+  /** The accessible name, always the full one. */
   name: string;
+  /** What the expanded row prints: `name`, or its short form when the row is tight. */
+  shownName: string;
+  /** The On / Off word beside the switch; dropped when the row is tight. */
+  showStateWord: boolean;
   hint: string;
   stateWord: string;
   disabled: boolean;
@@ -675,7 +734,7 @@ function InputCell({
       onClick={() => setOpen((current) => !current)}
     >
       {expanded && icon}
-      {expanded && name}
+      {expanded && shownName}
       <ChevronDown size={13} aria-hidden />
     </button>
   );
@@ -696,7 +755,7 @@ function InputCell({
         ) : (
           <span className={styles.inputName}>
             {icon}
-            {name}
+            {shownName}
           </span>
         ))}
       <button
@@ -710,7 +769,7 @@ function InputCell({
       >
         {expanded ? (
           <>
-            <span className={styles.stateWord}>{stateWord}</span>
+            {showStateWord && <span className={styles.stateWord}>{stateWord}</span>}
             <span className={styles.switch} aria-hidden />
           </>
         ) : (

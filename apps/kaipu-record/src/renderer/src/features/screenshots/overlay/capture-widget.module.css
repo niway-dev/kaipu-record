@@ -28,9 +28,11 @@
   --widget-accent-ring: rgba(246, 5, 92, 0.5);
 
   position: absolute;
+  /* Above the overlay's "DISPLAY N" corner label (z-index 1), which a wide toolbar can reach. */
+  z-index: 2;
   box-sizing: border-box;
-  /* As wide as its row; the component caps it at the work area minus its margins, and the row
-     wraps when expanded does not fit. */
+  /* As wide as its row. The row never wraps: the component steps expanded down to a narrower
+     look (widget-fit.ts) until the row fits the work area minus its margins. */
   width: max-content;
   padding: 8px 10px;
   border: 1px solid var(--widget-line);
@@ -48,7 +50,7 @@
 
 .row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
   gap: 8px;

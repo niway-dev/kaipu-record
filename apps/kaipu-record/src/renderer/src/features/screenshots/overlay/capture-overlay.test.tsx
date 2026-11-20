@@ -3636,3 +3636,105 @@ describe("CaptureOverlay — the toolbar enters from the edge it is docked to", 
     expect(reduced).not.toContain("translate");
   });
 });
+
+describe("CaptureOverlay — expanded is always one row (NIW2-883)", () => {
+  const area = { x: 100, y: 120, width: 640, height: 360 };
+  // jsdom lays nothing out, so the widget's width is faked per fit level: the full recording row
+  // is wider than a MacBook, and each level gives up some of it.
+  const WIDTH_BY_LEVEL = [1890, 1770, 1660, 1460, 1400, 900];
+
+  function renderRecording(workWidth: number) {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const level = Number(this.getAttribute("data-fit") ?? NaN);
+        const width =
+          this.getAttribute("data-testid") === "capture-widget"
+            ? (WIDTH_BY_LEVEL[level] ?? 900)
+            : 0;
+        return {
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: width,
+          bottom: 60,
+          width,
+          height: width ? 60 : 0,
+          toJSON: () => ({}),
+        };
+      },
+    );
+    const { api } = fakeApi({ "42": area }, FRAME_ON_42, { "42": area }, EXPANDED);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", {
+          intent: "record",
+          bounds: { x: 0, y: 0, width: workWidth, height: 1000 },
+          work: { x: 0, y: 25, width: workWidth, height: 975 },
+        })}
+        api={api}
+        platform="mac"
+      />,
+    );
+  }
+  const widget = (): HTMLElement => screen.getByTestId("capture-widget");
+
+  it("keeps the full row on a display that fits it", async () => {
+    renderRecording(2000);
+    await screen.findByTestId("capture-frame");
+    await waitFor(() => expect(widget()).toHaveAttribute("data-fit", "0"));
+    expect(screen.getByTestId("size-readout")).toBeInTheDocument();
+  });
+
+  it("at 1920 drops the Window chip first, and keeps the readout", async () => {
+    renderRecording(1920);
+    await screen.findByTestId("capture-frame");
+    await waitFor(() => expect(widget()).toHaveAttribute("data-fit", "1"));
+    expect(screen.getByTestId("size-readout")).toBeInTheDocument();
+  });
+
+  it("at 1512 shortens the names and drops the readout before it gives up expanded", async () => {
+    renderRecording(1512);
+    await screen.findByTestId("capture-frame");
+    await waitFor(() => expect(widget()).toHaveAttribute("data-fit", "3"));
+    expect(screen.queryByTestId("size-readout")).toBeNull();
+    // Short on the row, full for a screen reader.
+    const mic = within(screen.getByTestId("input-microphone"));
+    expect(mic.getByRole("button", { name: "Microphone" })).toBeInTheDocument();
+    expect(screen.getByTestId("input-microphone")).toHaveTextContent("Mic");
+    expect(screen.getByTestId("input-microphone")).not.toHaveTextContent("Microphone");
+    expect(screen.getByTestId("input-systemAudio")).toHaveTextContent("Audio");
+    expect(screen.getByTestId("input-systemAudio")).not.toHaveTextContent("System audio");
+    // Still the expanded toolbar: the user's choice stands.
+    expect(widget()).toHaveAttribute("data-expanded", "true");
+    expect(screen.getByTestId("widget-expand")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("at 1440 and 1280 falls back to the compact look, and keeps the expanded choice", async () => {
+    for (const width of [1440, 1280]) {
+      renderRecording(width);
+      await screen.findByTestId("capture-frame");
+      await waitFor(() => expect(widget()).toHaveAttribute("data-fit", "5"));
+      expect(screen.queryByTestId("size-readout")).toBeNull();
+      expect(screen.getByTestId("input-microphone")).not.toHaveTextContent("Mic");
+      expect(widget()).toHaveAttribute("data-expanded", "true");
+      cleanup();
+      resetSettingsStoreForTests();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("a compact toolbar never measures levels", async () => {
+    const { api } = fakeApi({ "42": area }, FRAME_ON_42, { "42": area });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record" })}
+        api={api}
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    expect(widget()).not.toHaveAttribute("data-fit");
+  });
+});

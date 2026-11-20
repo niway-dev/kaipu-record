@@ -15,9 +15,13 @@ const collapseSaved: Step = {
   args: [{ captureWidget: { screenshotExpanded: false, recordingExpanded: false } }],
   on: "main",
 };
-// The size readout exists only in the expanded toolbar.
+// The expand button reports the toolbar's state. The size readout is not a marker: a display too
+// narrow for the full row drops it, and the toolbar is still expanded.
 const expandedShown: Step = {
-  waitFor: { area: "captureOverlay.captureWidget", part: { css: '[data-testid="size-readout"]' } },
+  waitFor: {
+    area: "captureOverlay.captureWidget",
+    part: { css: '[data-testid="widget-expand"][aria-expanded="true"]' },
+  },
 };
 // The countdown state needs a count long enough to be seen, and puts the setting back.
 const COUNTDOWN_SECONDS = 5;
