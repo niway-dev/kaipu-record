@@ -56,7 +56,7 @@ describe("initialScene — webcam", () => {
       mirrored: false,
       size: 0.3,
       position: { x: 0.9, y: 0.85 },
-      scaleDuringZoom: 0.7,
+      scaleDuringZoom: 1,
     });
   });
 });

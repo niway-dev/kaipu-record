@@ -1,11 +1,12 @@
 /**
- * The Camera panel of the inspector (camera parts, drag-first). Two tabs:
+ * The Camera panel of the inspector (camera parts, drag-first). Two tabs; it opens on "This
+ * part" when there is a part under the playhead or selected, else on "Whole video":
  *
  * - "This part": the part under the playhead or selected on the Camera lane (its range, where
  *   the camera comes from and goes to, how it arrives, when it ends, "Remove this part"), or,
  *   with no part there, a sentence and no button: a part is made by dragging the bubble.
  * - "Whole video": the original position and the look every stretch shares (shape, corners,
- *   size as S, M or L, mirror, shadow, shrink during a zoom).
+ *   size as S, M or L plus a slider, mirror, shadow, shrink during a zoom).
  *
  * A selected hidden range has no tabs: what it is, and "Show the camera again".
  *
@@ -31,11 +32,11 @@ import type { WebcamEditing } from "../../webcam/use-webcam-editing";
 import { webcamOwnLook } from "../../webcam/webcam-edits";
 import type { FrameSize } from "../../webcam/webcam-layout";
 import {
-  WEBCAM_DEFAULTS,
   WEBCAM_LIMITS,
   WEBCAM_MOTION_BUTTONS,
   WEBCAM_SIZE_PRESETS,
   WEBCAM_SIZE_PRESET_IDS,
+  WEBCAM_SHRINK_ON_SCALE,
   WEBCAM_SLIDE_MS_PRESETS,
   WEBCAM_TRANSITION_DEFAULTS,
   webcamSizePreset,
@@ -245,7 +246,8 @@ function WholeVideoControls({
           onCommit={(cornerRadius) => commit({ cornerRadius })}
         />
       )}
-      {/* A size saved outside the three keeps playing and shows no button pressed. */}
+      {/* A size saved outside the three keeps playing and shows no button pressed; the slider
+          below shows and edits it. */}
       <Choices
         label={t("webcamSize")}
         options={WEBCAM_SIZE_PRESET_IDS.map((id) => ({
@@ -255,6 +257,18 @@ function WholeVideoControls({
         }))}
         current={webcamSizePreset(layout.size)}
         onPick={(id) => commit({ size: WEBCAM_SIZE_PRESETS[id] })}
+      />
+      <HistorySlider
+        label={t("webcamSizeSlider")}
+        value={layout.size}
+        min={WEBCAM_LIMITS.minSize}
+        max={WEBCAM_LIMITS.maxSize}
+        step={0.01}
+        format={(v) => `${Math.round(v * 100)}%`}
+        onBegin={edits.begin}
+        onLive={(size) => live({ size })}
+        onEnd={edits.end}
+        onCommit={(size) => commit({ size })}
       />
       <label className={webcamStyles.toggle}>
         <input
@@ -278,7 +292,7 @@ function WholeVideoControls({
           checked={shrinking}
           onChange={(event) =>
             commit({
-              scaleDuringZoom: event.currentTarget.checked ? WEBCAM_DEFAULTS.scaleDuringZoom : 1,
+              scaleDuringZoom: event.currentTarget.checked ? WEBCAM_SHRINK_ON_SCALE : 1,
             })
           }
         />
@@ -532,7 +546,7 @@ export interface WebcamPanelProps {
 
 /**
  * The panel. The page keys it by the selection, so picking another part on the lane opens it on
- * "This part" again; the tab the user chose stays while the playhead crosses parts.
+ * "This part" again (and a selection with no part opens "Whole video"); the tab the user chose stays while the playhead crosses parts.
  */
 export function WebcamPanel({
   webcam,
@@ -545,7 +559,10 @@ export function WebcamPanel({
   onRemoved,
 }: WebcamPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  const [tab, setTab] = useState<Tab>("part");
+  // "This part" opens only when it has content: a part under the playhead or selected. With
+  // none it would only say "No change at 0:00", so the panel opens on "Whole video". The page
+  // keys the panel by the selection, so a new selection evaluates this again.
+  const [tab, setTab] = useState<Tab>(segment && range ? "part" : "whole");
   const tabButtons = useRef<Record<Tab, HTMLButtonElement | null>>({ part: null, whole: null });
   if (segment?.mode === "hidden" && range) {
     return <HiddenRangePanel segment={segment} range={range} edits={edits} onRemoved={onRemoved} />;

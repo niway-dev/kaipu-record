@@ -79,6 +79,24 @@ const openWholeVideo = (): void => {
 };
 
 describe("the Camera panel's tabs", () => {
+  it("opens on Whole video when there is no part, and on This part when there is one", () => {
+    const { unmount } = render(<WebcamPanel {...panelProps({ segment: null, range: null })} />);
+    expect(screen.getByRole("tab", { name: "Whole video" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByText(/No change at/)).toBeNull();
+    unmount();
+    render(<WebcamPanel {...panelProps()} />);
+    expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("still lets the user open This part with no part, and shows the empty sentence", () => {
+    render(<WebcamPanel {...panelProps({ segment: null, range: null, playhead: 0 })} />);
+    fireEvent.click(screen.getByRole("tab", { name: "This part" }));
+    expect(screen.getByText(/No change at 0:00/)).toBeInTheDocument();
+  });
+
   it("opens on This part and switches to Whole video and back", () => {
     renderPanel();
     expect(screen.getByRole("heading", { name: "Camera" })).toBeInTheDocument();
@@ -407,6 +425,8 @@ describe("a part saved with its own look", () => {
       const segment = webcam.segments[0] ?? null;
       return (
         <WebcamPanel
+          // The page keys the panel by the selection; so does this harness.
+          key={segment?.id ?? "none"}
           webcam={webcam}
           segment={segment}
           range={segment ? { from: segment.start, to: segment.end } : null}
@@ -440,6 +460,7 @@ describe("a part saved with its own look", () => {
 describe("This part, with no part there", () => {
   it("says there is no change at the playhead and offers no button", () => {
     renderPanel({ segment: null, range: null, playhead: 4 });
+    fireEvent.click(screen.getByRole("tab", { name: "This part" }));
     expect(screen.getByText("No change at 0:04")).toBeInTheDocument();
     expect(screen.getByText(/Drag the bubble and Kaipu asks/)).toBeInTheDocument();
     const body = screen.getByRole("tabpanel");
@@ -450,6 +471,39 @@ describe("This part, with no part there", () => {
 });
 
 describe("Whole video", () => {
+  it("has a continuous Size slider next to S, M and L that follows the presets", () => {
+    const edits = makeEdits();
+    const { unmount } = render(
+      <WebcamPanel {...panelProps({ edits, segment: null, range: null })} />,
+    );
+    openWholeVideo();
+    const slider = screen.getByRole("slider", { name: "Camera size" });
+    expect(slider).toHaveAttribute("min", "0.12");
+    expect(slider).toHaveAttribute("max", "0.9");
+    expect(slider).toHaveValue(String(WEBCAM_DEFAULTS.size));
+    expect(screen.getByRole("button", { name: "M" })).toHaveAttribute("aria-pressed", "true");
+    // A keyboard step is one commit; a drag is one gesture.
+    fireEvent.change(slider, { target: { value: "0.4" } });
+    expect(edits.commitLayout).toHaveBeenCalledWith({ size: 0.4 }, null);
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.5" } });
+    fireEvent.pointerUp(slider);
+    expect(edits.begin).toHaveBeenCalledOnce();
+    expect(edits.liveLayout).toHaveBeenCalledWith({ size: 0.5 }, null);
+    expect(edits.end).toHaveBeenCalledOnce();
+    // S commits the preset size.
+    fireEvent.click(screen.getByRole("button", { name: "S" }));
+    expect(edits.commitLayout).toHaveBeenLastCalledWith({ size: 0.15 }, null);
+    unmount();
+    // A size between presets: the slider shows it and no button is pressed.
+    renderPanel({ webcam: sceneOf({ size: 0.27 }), segment: null, range: null });
+    openWholeVideo();
+    expect(screen.getByRole("slider", { name: "Camera size" })).toHaveValue("0.27");
+    for (const id of ["S", "M", "L"]) {
+      expect(screen.getByRole("button", { name: id })).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
   it("sets the shape on the whole video's layout", () => {
     const edits = makeEdits();
     renderPanel({ edits });
@@ -492,11 +546,22 @@ describe("Whole video", () => {
     expect(edits.commitLayout).toHaveBeenCalledWith({ shadow: true }, null);
   });
 
+  it("shrink during zoom is off for a new session and its checkbox turns it on at 0.7", () => {
+    const edits = makeEdits();
+    expect(WEBCAM_DEFAULTS.scaleDuringZoom).toBe(1);
+    renderPanel({ edits, segment: null, range: null });
+    openWholeVideo();
+    expect(screen.getByRole("checkbox", { name: "Shrink during zoom" })).not.toBeChecked();
+    expect(screen.queryByRole("slider", { name: "Size during zoom" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Shrink during zoom" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith({ scaleDuringZoom: 0.7 }, null);
+  });
+
   it("shrink during zoom: off is 1, on restores 0.7 and shows its slider", () => {
     const edits = makeEdits();
     const { unmount } = render(
       <WebcamPanel
-        webcam={sceneOf()}
+        webcam={sceneOf({ scaleDuringZoom: 0.7 })}
         segment={null}
         range={null}
         playhead={0}
@@ -520,7 +585,7 @@ describe("Whole video", () => {
 
   it("the size-during-zoom slider still works: a keyboard step commits, a drag is one gesture", () => {
     const edits = makeEdits();
-    renderPanel({ edits });
+    renderPanel({ edits, webcam: sceneOf({ scaleDuringZoom: 0.7 }) });
     openWholeVideo();
     const slider = screen.getByRole("slider", { name: "Size during zoom" });
     fireEvent.change(slider, { target: { value: "0.5" } });

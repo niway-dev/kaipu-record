@@ -62,7 +62,7 @@ const cam = (sourceTs: number) => ({ image: WEBCAM_IMAGE, sourceTs });
 const SOURCE = { width: 1920, height: 1080 };
 
 const webcam = (segments: WebcamScene["segments"] = []): WebcamScene => ({
-  layout: { ...WEBCAM_DEFAULTS, shadow: false, mirrored: false },
+  layout: { ...WEBCAM_DEFAULTS, shadow: false, mirrored: false, scaleDuringZoom: 0.7 },
   segments,
 });
 

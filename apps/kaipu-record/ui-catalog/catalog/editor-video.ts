@@ -523,8 +523,14 @@ export const editorVideo = catalog(
     },
     "camera-no-part": {
       profile: "camera-parts",
-      how: "Open “Camera parts” and select the bubble at the start, where no part is: This part says No change and has no button.",
-      steps: [open(ASSETS.cameraParts), audioWaveformDrawn, loaded, selectBubble],
+      how: "Open “Camera parts” and select the bubble at the start, where no part is (the panel opens on Whole video), and open the This part tab: it says No change and has no button.",
+      steps: [
+        open(ASSETS.cameraParts),
+        audioWaveformDrawn,
+        loaded,
+        selectBubble,
+        cameraTab("This part"),
+      ],
       demonstrates: [
         "editorVideo.webcamPanel:noPart",
         "editorVideo.webcamLane:originalStretch",

@@ -53,7 +53,15 @@ describe("editFingerprint — webcam", () => {
   } as const;
   const fixed = (webcam: typeof track | null): VideoScene => {
     const scene = initialScene(10, webcam);
-    return { ...scene, items: [{ ...scene.items[0]!, id: "clip" }] };
+    // The pinned hashes below were taken with the 0.7 shrink (the default until NIW2-884).
+    return {
+      ...scene,
+      items: [{ ...scene.items[0]!, id: "clip" }],
+      webcam: scene.webcam && {
+        ...scene.webcam,
+        layout: { ...scene.webcam.layout, scaleDuringZoom: 0.7 },
+      },
+    };
   };
 
   it("changes with the layer, so an export without the face is never reused for one with it", () => {
@@ -95,7 +103,7 @@ describe("editFingerprint — camera block transitions (ADR 0039)", () => {
       ...scene,
       items: [{ ...scene.items[0]!, id: "clip" }],
       webcam: {
-        layout: scene.webcam!.layout,
+        layout: { ...scene.webcam!.layout, scaleDuringZoom: 0.7 },
         segments: [
           {
             id: "o",
@@ -146,7 +154,15 @@ describe("editFingerprint — background (NIW2-668)", () => {
   } as const;
   const fixed = (webcam: typeof track | null): VideoScene => {
     const scene = initialScene(10, webcam);
-    return { ...scene, items: [{ ...scene.items[0]!, id: "clip" }] };
+    // The pinned hashes below were taken with the 0.7 shrink (the default until NIW2-884).
+    return {
+      ...scene,
+      items: [{ ...scene.items[0]!, id: "clip" }],
+      webcam: scene.webcam && {
+        ...scene.webcam,
+        layout: { ...scene.webcam.layout, scaleDuringZoom: 0.7 },
+      },
+    };
   };
   const MAGENTA = { bg: "magenta", padding: 48, radius: 16, shadow: 24 } as const;
 
