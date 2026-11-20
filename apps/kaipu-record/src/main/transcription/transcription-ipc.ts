@@ -97,8 +97,9 @@ export async function hashMediaThroughCache(
   try {
     const hashed = await currentVault().ensureContentHash(item.id);
     if (hashed) return hashed.contentSha256;
-  } catch (error) {
-    if (!(error instanceof FileChangedWhileHashingError)) throw error;
+  } catch {
+    // The cache could not answer (the file kept changing, or the sidecar cannot be written on a
+    // read-only vault): hash plainly, as before the cache. A file that is gone fails with ENOENT.
     return sha256FileBase64(item.mediaPath);
   }
   throw Object.assign(new Error(`transcription: media of "${item.id}" is gone`), {
@@ -235,6 +236,7 @@ async function checkFreshness(id: string): Promise<TranscriptFreshnessResult> {
   return {
     verdict: "stale",
     autoRetranscribe: sidecar !== null && sidecar.autoRetranscribedSha256 !== contentSha256,
+    mediaContentSha256: contentSha256,
   };
 }
 
@@ -265,7 +267,7 @@ function checkTranscriptFreshness(id: string): Promise<TranscriptFreshnessResult
  */
 async function recordAutomaticAttempt(id: string): Promise<void> {
   const vault = currentVault();
-  const hashed = await vault.ensureContentHash(id).catch(() => null);
+  const hashed = await vault.ensureContentHash(id);
   if (hashed) await vault.writeMeta(id, { autoRetranscribedSha256: hashed.contentSha256 });
 }
 
@@ -304,7 +306,18 @@ export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): Transcript
       if (pinned) return pinned.begin(parsed);
       if (override) return { status: "refused", reason: "unavailable" };
       const result = await service.begin(parsed);
-      if (parsed.automatic && result.status === "accepted") await recordAutomaticAttempt(parsed.id);
+      if (parsed.automatic && result.status === "accepted") {
+        // The job already holds the slot: the renderer must get its id even when the record
+        // cannot be written.
+        try {
+          await recordAutomaticAttempt(parsed.id);
+        } catch (error) {
+          console.warn(
+            `transcription: could not record the automatic attempt for ${parsed.id}`,
+            error,
+          );
+        }
+      }
       return result;
     }),
   );

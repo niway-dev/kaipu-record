@@ -442,7 +442,7 @@ describe("with a real vault", () => {
       await seedTranscript("c-stale", await sha256FileBase64(item.filePath));
       await writeFile(item.filePath, "different bytes now");
 
-      expect(await checkFreshness("c-stale")).toEqual({
+      expect(await checkFreshness("c-stale")).toMatchObject({
         verdict: "stale",
         autoRetranscribe: true,
       });
@@ -458,10 +458,38 @@ describe("with a real vault", () => {
         id: "c-once",
         automatic: true,
       });
-      expect(await checkFreshness("c-once")).toEqual({ verdict: "stale", autoRetranscribe: false });
+      expect(await checkFreshness("c-once")).toMatchObject({
+        verdict: "stale",
+        autoRetranscribe: false,
+      });
       // New content is a new attempt.
       await writeFile(item.filePath, "yet another recording");
-      expect(await checkFreshness("c-once")).toEqual({ verdict: "stale", autoRetranscribe: true });
+      expect(await checkFreshness("c-once")).toMatchObject({
+        verdict: "stale",
+        autoRetranscribe: true,
+      });
+    });
+
+    it("returns the accepted job even when the automatic attempt cannot be recorded", async () => {
+      await addMedia("c-readonly");
+      await seedTranscript("c-readonly", "an-older-hash");
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const write = vi
+        .spyOn(LibraryVault.prototype, "writeMeta")
+        .mockRejectedValue(new Error("EROFS: read-only file system"));
+      try {
+        const result = await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, {
+          ...REQUEST,
+          id: "c-readonly",
+          automatic: true,
+        });
+        expect(result).toEqual({ status: "accepted", jobId: "job-1" });
+        expect(write).toHaveBeenCalled();
+        expect(warn).toHaveBeenCalled();
+      } finally {
+        write.mockRestore();
+        warn.mockRestore();
+      }
     });
 
     it("a manual begin does not use up the automatic attempt", async () => {
@@ -555,6 +583,24 @@ describe("with a real vault", () => {
       hashSpy.mockClear();
       expect(await hashMediaThroughCache(job(item))).not.toBe(first);
       expect(hashSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("hashes plainly when the cache cannot answer, e.g. a vault that cannot be written", async () => {
+      const item = await addMedia("job-readonly", "some recording");
+      const ensure = vi
+        .spyOn(LibraryVault.prototype, "ensureContentHash")
+        .mockRejectedValue(new Error("EROFS: read-only file system"));
+      try {
+        const actual =
+          await vi.importActual<typeof import("../library/content-hash")>(
+            "../library/content-hash",
+          );
+        expect(await hashMediaThroughCache(job(item))).toBe(
+          await actual.sha256FileBase64(item.filePath),
+        );
+      } finally {
+        ensure.mockRestore();
+      }
     });
 
     it("fails with ENOENT for a file that is gone, as the job expects", async () => {
