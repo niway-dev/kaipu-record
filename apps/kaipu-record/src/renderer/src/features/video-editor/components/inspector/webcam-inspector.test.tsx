@@ -91,6 +91,22 @@ describe("the Camera panel's tabs", () => {
     expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("reports the tab it opens on and every change, for the preview's corner handles", () => {
+    const onTabChange = vi.fn();
+    const { unmount } = render(
+      <WebcamPanel {...panelProps({ segment: null, range: null, onTabChange })} />,
+    );
+    expect(onTabChange.mock.calls).toEqual([["whole"]]);
+    fireEvent.click(screen.getByRole("tab", { name: "This part" }));
+    expect(onTabChange.mock.calls).toEqual([["whole"], ["part"]]);
+    unmount();
+    const again = vi.fn();
+    render(<WebcamPanel {...panelProps({ onTabChange: again })} />);
+    expect(again.mock.calls).toEqual([["part"]]);
+    openWholeVideo();
+    expect(again.mock.calls).toEqual([["part"], ["whole"]]);
+  });
+
   it("still lets the user open This part with no part, and shows the empty sentence", () => {
     render(<WebcamPanel {...panelProps({ segment: null, range: null, playhead: 0 })} />);
     fireEvent.click(screen.getByRole("tab", { name: "This part" }));

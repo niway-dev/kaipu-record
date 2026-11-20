@@ -6,6 +6,7 @@ import { joinRecording, sourceAxis } from "../source-axis";
 import { toLayout } from "../timeline";
 import { useVideoScene } from "../use-video-scene";
 import { useWebcamEditing } from "./use-webcam-editing";
+import { webcamResizeTarget, type WebcamPanelTab } from "./webcam-resize";
 
 const TRACK: WebcamTrackMeta = {
   startOffsetMs: 0,
@@ -96,6 +97,65 @@ describe("useWebcamEditing", () => {
     act(() => result.current.controller.undo());
     expect(result.current.controller.scene.webcam!.layout.position).toEqual(before);
     expect(result.current.controller.canUndo).toBe(false);
+  });
+
+  // The page sends a corner drag's live patch where the Camera panel's open tab points
+  // (`webcamResizeTarget`): the part at the playhead on "This part", the whole layout on "Whole video".
+  describe("a corner drag of the bubble, by the Camera panel's tab", () => {
+    const withPart = (): VideoScene => {
+      const base = initialScene(20, TRACK);
+      return {
+        ...base,
+        webcam: {
+          ...base.webcam!,
+          segments: [
+            {
+              id: "o",
+              start: 5,
+              end: 8,
+              mode: "override",
+              layout: { position: { x: 0.8, y: 0.2 } },
+            },
+          ],
+        },
+      };
+    };
+    const drag = (
+      result: ReturnType<typeof setup>["result"],
+      tab: WebcamPanelTab,
+      sourceTime: number,
+    ): void => {
+      const target = webcamResizeTarget(result.current.controller.scene.webcam!, tab, sourceTime);
+      act(() => result.current.webcam.begin());
+      for (const size of [0.3, 0.4]) {
+        act(() => result.current.webcam.liveLayout({ size }, target.whole ? null : sourceTime));
+      }
+      act(() => result.current.webcam.end());
+    };
+
+    it('"This part" writes the size into the part at the playhead, as one undo step', () => {
+      const { result } = setup(withPart());
+      const globalSize = result.current.controller.scene.webcam!.layout.size;
+      drag(result, "part", 6);
+      const webcam = result.current.controller.scene.webcam!;
+      expect(webcam.segments[0].layout).toEqual({ position: { x: 0.8, y: 0.2 }, size: 0.4 });
+      expect(webcam.layout.size).toBe(globalSize);
+      act(() => result.current.controller.undo());
+      expect(result.current.controller.scene.webcam!.segments[0].layout).toEqual({
+        position: { x: 0.8, y: 0.2 },
+      });
+      expect(result.current.controller.canUndo).toBe(false);
+    });
+
+    it('"Whole video" writes the size into the whole layout even inside a part', () => {
+      const { result } = setup(withPart());
+      drag(result, "whole", 6);
+      const webcam = result.current.controller.scene.webcam!;
+      expect(webcam.layout.size).toBe(0.4);
+      expect(webcam.segments[0].layout).toEqual({ position: { x: 0.8, y: 0.2 } });
+      act(() => result.current.controller.undo());
+      expect(result.current.controller.canUndo).toBe(false);
+    });
   });
 
   it("inside an override, a layout edit changes the override, not the global layout", () => {

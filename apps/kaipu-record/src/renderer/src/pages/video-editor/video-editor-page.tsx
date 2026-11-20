@@ -2140,7 +2140,7 @@ function VideoEditor({
   // The rail's "Hide camera from here" is disabled where it cannot hide, and says why.
   const hideAt = sourceTimeAtTimeline(layout, playback.timelineTime);
   // The Camera panel's open tab: a corner drag on the bubble edits what that tab edits.
-  const [webcamTab] = useState<WebcamPanelTab>("whole");
+  const [webcamTab, setWebcamTab] = useState<WebcamPanelTab>("whole");
   const webcamResize = scene.webcam
     ? webcamResizeTarget(scene.webcam, webcamTab, hideAt)
     : { whole: true, anchor: "opposite" as const };
@@ -3032,6 +3032,7 @@ function VideoEditor({
                   frame={frameSize}
                   onPlaySlide={handlePlayWebcamSlide}
                   onRemoved={() => selectKind("webcam", null)}
+                  onTabChange={setWebcamTab}
                 />
               ) : selectedOverlay ? (
                 <AnnotationInspector

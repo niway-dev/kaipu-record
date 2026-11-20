@@ -14,7 +14,7 @@
  * on the video is dragged to move it. Every control edits through WebcamEditing with the
  * history contract: buttons commit, sliders run begin → live… → end.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff, Play, Trash2, Webcam } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -31,6 +31,7 @@ import { NAME_LABEL } from "../webcam-name-label";
 import type { WebcamEditing } from "../../webcam/use-webcam-editing";
 import { webcamOwnLook } from "../../webcam/webcam-edits";
 import type { FrameSize } from "../../webcam/webcam-layout";
+import type { WebcamPanelTab } from "../../webcam/webcam-resize";
 import {
   WEBCAM_LIMITS,
   WEBCAM_MOTION_BUTTONS,
@@ -526,7 +527,7 @@ function HiddenRangePanel({
   );
 }
 
-type Tab = "part" | "whole";
+type Tab = WebcamPanelTab;
 
 export interface WebcamPanelProps {
   webcam: WebcamScene;
@@ -542,6 +543,11 @@ export interface WebcamPanelProps {
   onPlaySlide(part: WebcamSegment): void;
   /** The segment the panel was showing is gone: the page clears its selection. */
   onRemoved(): void;
+  /**
+   * The tab the panel shows, reported when it opens and on every change: the preview's corner
+   * handles edit what that tab edits ("This part" or "Whole video"). The panel keeps the state.
+   */
+  onTabChange?(tab: WebcamPanelTab): void;
 }
 
 /**
@@ -557,6 +563,7 @@ export function WebcamPanel({
   frame,
   onPlaySlide,
   onRemoved,
+  onTabChange,
 }: WebcamPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   // "This part" opens only when it has content: a part under the playhead or selected. With
@@ -564,6 +571,11 @@ export function WebcamPanel({
   // keys the panel by the selection, so a new selection evaluates this again.
   const [tab, setTab] = useState<Tab>(segment && range ? "part" : "whole");
   const tabButtons = useRef<Record<Tab, HTMLButtonElement | null>>({ part: null, whole: null });
+  const tabChange = useRef(onTabChange);
+  tabChange.current = onTabChange;
+  useEffect(() => {
+    tabChange.current?.(tab);
+  }, [tab]);
   if (segment?.mode === "hidden" && range) {
     return <HiddenRangePanel segment={segment} range={range} edits={edits} onRemoved={onRemoved} />;
   }
