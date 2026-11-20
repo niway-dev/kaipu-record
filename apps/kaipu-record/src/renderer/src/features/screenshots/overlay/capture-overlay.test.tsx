@@ -2115,6 +2115,21 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     expect(screen.getByTestId("ratio-menu")).toHaveTextContent("16:9");
   });
 
+  it("Esc closes an open ratio menu first and does not cancel; the next Esc cancels", async () => {
+    const { answer } = renderRecord();
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(screen.getByTestId("ratio-menu"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    // Pressed on the focused trigger, as a keyboard user would: it bubbles up to the window.
+    fireEvent.keyDown(screen.getByTestId("ratio-menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(answer).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(screen.getByTestId("ratio-menu"), { key: "Escape" });
+    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
+  });
+
   it("a ratio pick reshapes the box around its centre and is remembered with the area", async () => {
     const { answer, api } = renderRecord({ "42": { ...area, height: 300 } });
     await screen.findByTestId("capture-frame");
@@ -3311,6 +3326,18 @@ describe("CaptureOverlay — the device menus", () => {
     await flush();
 
     expect(setCounting).not.toHaveBeenCalled();
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("Esc closes an open device menu first and does not cancel the capture", async () => {
+    devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
+    const { answer } = await renderRecording();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("menuitemradio", { name: "USB mic" }), { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
     expect(answer).not.toHaveBeenCalled();
   });
 

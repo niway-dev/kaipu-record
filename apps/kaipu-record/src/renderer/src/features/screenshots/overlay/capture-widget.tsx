@@ -128,10 +128,13 @@ interface CaptureWidgetProps {
 }
 
 /**
- * Closes `close` when the pointer goes down anywhere outside `ref`, while `open` is true.
- * Capture phase, so a control that stops its own pointer events cannot keep a menu open.
+ * Closes `close` while `open` is true when the pointer goes down anywhere outside `ref`, or when
+ * Esc is pressed. The pointer listener is in the capture phase, so a control that stops its own
+ * pointer events cannot keep a menu open. Esc is taken in the capture phase too and goes no
+ * further, so the overlay's window-level Esc does not also cancel the capture: the first Esc
+ * closes the menu, the next one cancels.
  */
-function useDismissOnOutsidePress(
+function useDismissMenu(
   ref: React.RefObject<HTMLElement | null>,
   open: boolean,
   close: () => void,
@@ -141,8 +144,18 @@ function useDismissOnOutsidePress(
     const onPointerDown = (event: PointerEvent): void => {
       if (!ref.current?.contains(event.target as Node)) close();
     };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    };
     document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
   }, [ref, open, close]);
 }
 
@@ -614,7 +627,7 @@ function RatioMenu({
   const t = useTranslations("screenshots");
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLDivElement | null>(null);
-  useDismissOnOutsidePress(wrapper, open, () => setOpen(false));
+  useDismissMenu(wrapper, open, () => setOpen(false));
   const nameOf = (value: RecordingRatio): string =>
     value === "free" ? t("overlay.ratioFree") : value;
   return (
@@ -725,7 +738,7 @@ function InputCell({
     const timer = setTimeout(() => setLit(false), TOAST_MS);
     return () => clearTimeout(timer);
   }, [halo]);
-  useDismissOnOutsidePress(cell, open, () => setOpen(false));
+  useDismissMenu(cell, open, () => setOpen(false));
   const chooseDevice = (
     <button
       type="button"
