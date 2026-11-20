@@ -426,7 +426,7 @@ describe("TranscriptPanel — states", () => {
     hooks.transcript.mockReturnValue(READY({}, true, true));
     control({ kind: "running", phase: "transcribing", segmentsDone: 2, segmentsTotal: 5 });
     setup();
-    expect(panel()).toHaveAttribute("data-state", "stale");
+    expect(panel()).toHaveAttribute("data-state", "staleRerunning");
     expect(screen.getByTestId("transcript-list")).toHaveTextContent("Hello brave new world.");
     const banner = screen.getByTestId("transcript-stale");
     expect(within(banner).getByTestId("transcript-progress")).toHaveAttribute("aria-valuenow", "2");

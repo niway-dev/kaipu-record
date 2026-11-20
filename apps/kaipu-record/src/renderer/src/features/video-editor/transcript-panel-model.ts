@@ -44,7 +44,13 @@ export function viewState(view: PanelView): string {
     case "running":
       return "transcribing";
     case "words":
-      return view.stale ? "stale" : view.unresolved ? "unresolved" : "done";
+      return view.stale
+        ? view.rerun
+          ? "staleRerunning"
+          : "stale"
+        : view.unresolved
+          ? "unresolved"
+          : "done";
     default:
       return view.kind;
   }

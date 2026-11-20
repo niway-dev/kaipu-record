@@ -232,6 +232,14 @@ export const PROFILES = {
     flags: { transcription: true },
     env: { KAIPU_TRANSCRIPTION: "ready,job:running:3/12" },
   },
+  "transcription-job-running-transcripts": {
+    description:
+      "Like transcription-transcripts (a transcript file beside four recordings, the model installed), with a job pinned (KAIPU_TRANSCRIPTION=ready,job:running:3/12, unpackaged builds only): Transcribe again on the out-of-date one starts a job that stays at 3 of 12 until it is cancelled. No engine runs and no transcript is written.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "ready,job:running:3/12" },
+    transcripts: true,
+  },
   "transcription-job-failed": {
     description:
       "Like transcription-ready, with a job pinned to fail (KAIPU_TRANSCRIPTION=ready,job:failed:engine-failed, unpackaged builds only): the next Transcribe click ends with the engine stopping. No engine runs.",

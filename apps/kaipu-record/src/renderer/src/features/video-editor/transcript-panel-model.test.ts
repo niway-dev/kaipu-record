@@ -56,7 +56,7 @@ describe("panelView", () => {
       failure: null,
       rerun: { phase: "transcribing", segmentsDone: 1, segmentsTotal: 4 },
     });
-    expect(viewState(view)).toBe("stale");
+    expect(viewState(view)).toBe("staleRerunning");
   });
 
   it("is loading while the file is read", () => {

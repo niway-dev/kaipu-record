@@ -1006,6 +1006,31 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.transcriptPanel" },
       gates: [transcribeOn],
     },
+    "transcript-stale-rerunning": {
+      profile: "transcription-job-running-transcripts",
+      how: "With a transcript beside “Onboarding flow” that was written for an earlier version of the recording and a job pinned at 3 of 12 parts (no engine runs), open it, press Transcript in the tool column and click Transcribe again: the out-of-date banner stays over the old words and now carries the progress bar with Cancel. The state cancels the job afterwards.",
+      steps: [
+        open(ASSETS.onboardingFlow),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ css: "[data-w]" }),
+        inPanel(panelButton("Transcribe again")),
+        {
+          click: { area: "editorVideo.transcriptPanel", part: panelButton("Transcribe again") },
+        },
+        inPanel({ role: "progressbar" }),
+        inPanel({ text: "3 of 12 parts" }),
+        inPanel({ text: "This transcript is out of date" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:staleRerunning"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+      after: [
+        { click: { area: "editorVideo.transcriptPanel", part: panelButton("Cancel") } },
+        inPanel(panelButton("Transcribe again")),
+      ],
+    },
     "transcript-unreadable": {
       profile: "transcription-transcripts",
       how: "With a transcript file beside “Team notes” that is not valid, open it and press Transcript in the tool column: the right column says the saved transcript could not be read and offers Try again.",
