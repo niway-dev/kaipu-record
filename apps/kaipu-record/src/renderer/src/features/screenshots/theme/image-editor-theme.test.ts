@@ -42,6 +42,8 @@ const TOKENS: Array<[string, string, string | null]> = [
   ["--ie-ov-bg", "rgba(11,11,13,.94)", null],
   ["--ie-ov-bd", "rgba(255,255,255,.24)", null],
   ["--ie-ov-tx", "#e8e8ed", null],
+  ["--ie-ov-hover", "rgba(255,255,255,.14)", null],
+  ["--ie-ov-track", "rgba(255,255,255,.1)", null],
   ["--ie-dim", "rgba(6,6,7,.68)", null],
   ["--ie-ink-light", "#fff", null],
   ["--ie-ink-dark", "#000", null],

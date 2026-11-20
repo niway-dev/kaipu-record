@@ -37,27 +37,43 @@
   pointer-events: none;
 }
 
-/* The crop window's outline: a thin white line, 1 px on screen whatever the zoom. The brackets,
-   bars and grid are `crop-chrome.module.css`. */
+/* The crop window's outline: a thin accent line, 1 px on screen whatever the zoom, with a hairline
+   of dark under it so it reads on a white picture too. The brackets, bars and grid are
+   `crop-chrome.module.css`. */
 .cropWindow {
   fill: none;
-  stroke: #fff;
+  stroke: var(--ie-accent);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.55));
 }
 
 /* Crop mode's "Reset" and "Done": pinned under the window's bottom-right corner, Reset left of
-   Done (the approved mock). */
+   Done (the approved mock). The anchor is a zero-size point at that corner, scaled by 1 / canvas
+   zoom like the action bar's, so what is inside is in screen px: the buttons are the same size
+   at 49% as at 100%. */
 .cropActions {
   position: absolute;
+  width: 0;
+  height: 0;
+  transform: scale(calc(1 / var(--canvas-zoom, 1)));
+  transform-origin: 0 0;
+  z-index: 4;
+}
+
+/* The row hangs left of the anchor (its right edge on the corner) and 10 px below it. */
+.cropActionsRow {
+  position: absolute;
+  top: 10px;
+  right: 0;
   display: flex;
   gap: 6px;
-  transform: translate(-100%, 10px);
 }
 
 .cropDone,
 .cropReset {
+  min-width: 72px;
   padding: 5px 12px;
   border: none;
   border-radius: 5px;
@@ -109,18 +125,11 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
-/* Selected measure (mock C9): white round end dots with a 2 px border in the measure's color
-   (set inline) and a faint dark ring; the halo sits under every measure on screen. */
-.measureDot {
-  fill: var(--ie-ink-light);
-  stroke-width: 2;
-}
-
-.measureDotRing {
-  fill: none;
-  stroke: var(--ie-ink-dark);
-  stroke-opacity: 0.4;
-  stroke-width: 1;
+/* A selected measure's end: an invisible grab target over the ruler cap; the halo under the
+   line is Inspect's soft white outline (widths come from ruler-line.ts). */
+.measureCapHit {
+  fill: transparent;
+  stroke: none;
 }
 
 .measureHalo {

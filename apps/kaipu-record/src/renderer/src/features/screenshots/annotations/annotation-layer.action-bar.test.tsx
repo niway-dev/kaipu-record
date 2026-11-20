@@ -69,6 +69,7 @@ const URLS = { "img-aaaaaaaaaaaa": "blob:added" };
 
 const handlers = () => ({
   onEnterCrop: vi.fn(),
+  onCropDone: vi.fn(),
   onResetCrop: vi.fn(),
   onImageRadius: vi.fn(),
 });
@@ -108,12 +109,16 @@ afterEach(() => {
 
 const bar = () => screen.queryByTestId("image-action-bar");
 const inBar = (name: string) =>
-  within(screen.getByTestId("image-action-bar")).getByRole("button", { name });
+  within(screen.getByTestId("image-action-bar")).getByRole(
+    name === "Move" || name === "Crop" ? "radio" : "button",
+    { name },
+  );
 
 describe("the image action bar (AC7)", () => {
-  it("shows over a selected added image with Crop, Corners and Reset", () => {
+  it("shows over a selected added image with Move | Crop, Corners and Reset", () => {
     mount(sceneOf([image], "i1"), handlers());
     expect(bar()).not.toBeNull();
+    inBar("Move");
     inBar("Crop");
     inBar("Corners");
     inBar("Reset");
@@ -194,6 +199,47 @@ describe("the image action bar (AC7)", () => {
     expect(h.onImageRadius).toHaveBeenCalledWith("i1", 20);
   });
 
+  it("starts in Move: Move is the checked segment", () => {
+    mount(sceneOf([image], "i1"), handlers());
+    expect(inBar("Move")).toHaveAttribute("aria-checked", "true");
+    expect(inBar("Crop")).toHaveAttribute("aria-checked", "false");
+  });
+
+  describe("in crop mode", () => {
+    const cropping = {
+      id: "i1",
+      full: { x: 0.5, y: 0.5, w: 0.4, h: 0.3 },
+      win: { x: 0.6, y: 0.55, w: 0.2, h: 0.2 },
+    };
+
+    it("stays, over the crop window, with Crop checked", () => {
+      mount(sceneOf([image], "i1"), { ...handlers(), cropping });
+      expect(bar()).not.toBeNull();
+      expect(inBar("Crop")).toHaveAttribute("aria-checked", "true");
+      expect(inBar("Move")).toHaveAttribute("aria-checked", "false");
+      // The window spans x 60..80 and starts at y 55 (of a 100 px layer): its middle is 70.
+      const anchor = bar()!.parentElement!;
+      expect(parseFloat(anchor.style.left)).toBeCloseTo(70, 6);
+      expect(parseFloat(anchor.style.top)).toBeCloseTo(55, 6);
+    });
+
+    it("choosing Move leaves crop mode, exactly like Done", () => {
+      const h = handlers();
+      mount(sceneOf([image], "i1"), { ...h, cropping });
+      fireEvent.click(inBar("Move"));
+      expect(h.onCropDone).toHaveBeenCalledTimes(1);
+    });
+
+    it("Reset follows what the page says about a crop to remove", () => {
+      const h = handlers();
+      const a = mount(sceneOf([image], "i1"), { ...h, cropping });
+      expect(inBar("Reset")).toBeDisabled();
+      a.unmount();
+      mount(sceneOf([image], "i1"), { ...h, cropping, canResetCrop: true });
+      expect(inBar("Reset")).toBeEnabled();
+    });
+  });
+
   it("a press on the bar does not reach the layer: nothing is deselected or moved", () => {
     const scene = sceneOf([image], "i1");
     mount(scene, handlers());
@@ -202,18 +248,6 @@ describe("the image action bar (AC7)", () => {
   });
 
   describe("is hidden", () => {
-    it("in crop mode", () => {
-      mount(sceneOf([image], "i1"), {
-        ...handlers(),
-        cropping: {
-          id: "i1",
-          full: { x: 0.5, y: 0.5, w: 0.4, h: 0.3 },
-          win: { x: 0.5, y: 0.5, w: 0.4, h: 0.3 },
-        },
-      });
-      expect(bar()).toBeNull();
-    });
-
     it("in Inspect, which gives the layer no crop handlers", () => {
       mount(sceneOf([image], "i1"));
       expect(bar()).toBeNull();
@@ -354,10 +388,10 @@ describe("crop mode's look (AC6)", () => {
     });
   });
 
-  it("keeps Done, and no action bar", () => {
+  it("keeps Done, and the bar with Crop checked", () => {
     mount(sceneOf([]), { ...handlers(), cropping: session });
     expect(screen.getByRole("button", { name: "Done" })).not.toBeNull();
-    expect(bar()).toBeNull();
+    expect(inBar("Crop")).toHaveAttribute("aria-checked", "true");
   });
 
   it("a selected image keeps the thin accent frame and small handles, not the crop chrome", () => {
@@ -367,16 +401,74 @@ describe("crop mode's look (AC6)", () => {
     expect(screen.queryByTestId("crop-chrome")).toBeNull();
   });
 
-  it("pins the spec's marks: 4 px brackets 16 px long, 22 x 4 px bars, a 1 px white outline", () => {
+  it("pins the spec's marks: 4 px brackets 16 px long, 22 x 4 px bars, a 1 px outline", () => {
     const chrome = css("crop-chrome.module.css");
     expect(chrome).toMatch(/16px \/ var\(--canvas-zoom, 1\)/);
     expect(chrome).toMatch(/22px \/ var\(--canvas-zoom, 1\)/);
     expect(chrome).toMatch(/--thick:\s*calc\(4px \/ var\(--canvas-zoom, 1\)\)/);
-    expect(chrome).toMatch(/rgba\(255, 255, 255, 0\.4\)/);
     const layerCss = css("annotation-layer.module.css");
     const outline = layerCss.match(/\.cropWindow\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(outline).toMatch(/stroke:\s*#fff/);
     expect(outline).toMatch(/stroke-width:\s*1;/);
     expect(outline).toMatch(/non-scaling-stroke/);
+  });
+
+  it("wears the accent pink, not white: brackets, bars, thirds grid and the window outline", () => {
+    const chrome = css("crop-chrome.module.css");
+    // The marks are painted from the accent token, never a hard-coded white.
+    expect(chrome).not.toMatch(/#fff\b|rgba\(255, 255, 255/);
+    for (const mark of [".nw", ".ne", ".se", ".sw", ".edge"]) {
+      const body = chrome.match(new RegExp(`\\${mark}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+      expect(body, mark).toMatch(/var\(--ie-accent\)/);
+    }
+    // The grid is the accent at ~60%.
+    const line = chrome.match(/\.line\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(line).toMatch(/color-mix\(in srgb, var\(--ie-accent\) 60%, transparent\)/);
+    const outline =
+      css("annotation-layer.module.css").match(/\.cropWindow\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(outline).toMatch(/stroke:\s*var\(--ie-accent\)/);
+  });
+
+  it("gives the pink a thin dark outline so it reads on white and on dark images", () => {
+    const chrome = css("crop-chrome.module.css");
+    const win = chrome.match(/\.window\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(win).toMatch(/drop-shadow\(0 0 1px rgba\(0, 0, 0/);
+    const outline =
+      css("annotation-layer.module.css").match(/\.cropWindow\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(outline).toMatch(/drop-shadow\(0 0 1px rgba\(0, 0, 0/);
+  });
+
+  describe("Reset and Done keep their size at any zoom", () => {
+    const layerCss = (): string => css("annotation-layer.module.css");
+    // `pattern` is a regex source, already escaped.
+    const body = (pattern: string): string =>
+      layerCss().match(new RegExp(`${pattern}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+
+    it("sit in an anchor under the window's bottom-right corner that undoes the zoom", () => {
+      mount(sceneOf([]), { ...handlers(), cropping: session });
+      const anchor = screen.getByTestId("crop-actions");
+      // The window spans 25..75 of a 100 px layer: its bottom-right corner is (75, 75).
+      expect(anchor.style.left).toBe("75px");
+      expect(anchor.style.top).toBe("75px");
+      expect(anchor.className).toContain("cropActions");
+      // Both buttons live inside it, so the counter-scale reaches both.
+      expect(within(anchor).getByRole("button", { name: "Reset" })).toBeInTheDocument();
+      expect(within(anchor).getByRole("button", { name: "Done" })).toBeInTheDocument();
+    });
+
+    it("the anchor scales by 1 / zoom, so the net scale is 1 at 49% and at 100%", () => {
+      const transform = body("\\.cropActions").match(/transform:\s*([^;]+);/)?.[1] ?? "";
+      const factor = transform.match(/^scale\(calc\(1 \/ var\(--canvas-zoom, 1\)\)\)$/);
+      expect(factor, transform).not.toBeNull();
+      // The layer is scaled by the zoom, the anchor by 1 / zoom: what reaches the screen is 1.
+      for (const zoom of [0.49, 1]) expect(zoom * (1 / zoom)).toBeCloseTo(1, 10);
+      expect(body("\\.cropActions")).toMatch(/transform-origin:\s*0 0/);
+    });
+
+    it("each button is at least 72 px wide, in the unscaled (screen) unit", () => {
+      // One rule serves both buttons.
+      expect(body("\\.cropDone,\\s*\\.cropReset")).toMatch(/min-width:\s*72px/);
+      // Not in the zoom-dependent unit: nothing in the actions divides by the zoom itself.
+      expect(body("\\.cropActionsRow")).not.toMatch(/canvas-zoom/);
+    });
   });
 });

@@ -31,6 +31,9 @@
   --ie-ov-bg: rgba(11, 11, 13, 0.94);
   --ie-ov-bd: rgba(255, 255, 255, 0.24);
   --ie-ov-tx: #e8e8ed;
+  /* Hover and track tints on the always-dark overlay chrome, light in both themes. */
+  --ie-ov-hover: rgba(255, 255, 255, 0.14);
+  --ie-ov-track: rgba(255, 255, 255, 0.1);
   --ie-dim: rgba(6, 6, 7, 0.68);
   --ie-ink-light: #fff;
   --ie-ink-dark: #000;

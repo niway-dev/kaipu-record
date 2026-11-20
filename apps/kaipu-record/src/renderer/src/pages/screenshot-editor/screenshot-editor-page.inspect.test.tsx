@@ -4,6 +4,9 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
+import type { CanvasReadResult } from "@shared/types/screenshot-canvas";
+import { buildCanvasDoc } from "@renderer/features/screenshots/annotations/canvas-doc";
+import type { Scene } from "@renderer/features/screenshots/annotations";
 import { ScreenshotEditor, ScreenshotEditorPage } from "./screenshot-editor-page";
 
 // Inspect mode (NIW2-699) is behind `image-inspect`; image-canvas is the other latch it must
@@ -830,6 +833,81 @@ describe.each([
     fireEvent.pointerDown(layer(), { ...FILL, button: 0, pointerId: 1 });
     fireEvent.pointerUp(layer(), { ...FILL, button: 0, pointerId: 1 });
     expect(document.querySelector('[data-kind="measure"]')).toBeNull();
+  });
+});
+
+describe("ScreenshotEditorPage — a pinned measure on a placed base (NIW2-876)", () => {
+  const PLACEMENT = { x: 0.5, y: 0.2, scale: 0.5 };
+  const LOCAL: ImageSource = { kind: "local", id: "shot-1", assetId: "a-shot-1", title: "Shot" };
+  // The 8 px asset covers (100..200, 40..140) of the 200 px layer: 12.5 layer px per image px.
+  const readCanvas = vi.fn();
+  const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9]).buffer;
+  beforeEach(() => {
+    flags["image-inspect"] = true;
+    flags["image-canvas"] = true;
+    decodeSrgbBuffer.mockImplementation(async () => buttonImage());
+    readCanvas.mockResolvedValue({
+      docJson: JSON.stringify(
+        buildCanvasDoc(
+          {
+            beautify: { bg: "none", padding: 0, radius: 0, shadow: 0 } as Scene["beautify"],
+            annotations: [],
+            basePlacement: PLACEMENT,
+          },
+          { pixelWidth: 8, pixelHeight: 8 },
+        ),
+      ),
+      assets: { base: pngBytes },
+    } as unknown as CanvasReadResult);
+    window.electronAPI.readScreenshotCanvas = readCanvas as never;
+    window.electronAPI.readScreenshotBytes = vi.fn(async () => pngBytes);
+    for (const prop of ["clientWidth", "clientHeight"]) {
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => 200 });
+    }
+    for (const prop of ["naturalWidth", "naturalHeight"]) {
+      Object.defineProperty(HTMLImageElement.prototype, prop, { configurable: true, get: () => 8 });
+    }
+  });
+  afterEach(() => {
+    for (const prop of ["clientWidth", "clientHeight"]) {
+      Reflect.deleteProperty(HTMLElement.prototype, prop);
+    }
+    for (const prop of ["naturalWidth", "naturalHeight"]) {
+      Reflect.deleteProperty(HTMLImageElement.prototype, prop);
+    }
+  });
+
+  it("lands on the placed base, not at the origin", async () => {
+    const router = createMemoryRouter(
+      [
+        { path: "/editor/:id", element: <ScreenshotEditor source={LOCAL} /> },
+        { path: "/", element: <div>capture</div> },
+      ],
+      { initialEntries: ["/editor/shot-1"] },
+    );
+    render(<RouterProvider router={router} />);
+    await loadImage();
+    press("i");
+    await screen.findByTestId("inspect-layer");
+    // Pixel (4, 2) sits at world (0.5 + 4.5/8 * 0.5, 0.2 + 2.5/8 * 0.5) = (0.78125, 0.35625).
+    const over = { clientX: 0.78125 * 200, clientY: 0.35625 * 200 };
+    fireEvent.pointerMove(layer(), over);
+    await screen.findByText("4, 2");
+    press("1");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    fireEvent.pointerDown(layer(), { ...over, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(layer(), { ...over, button: 0, pointerId: 1 });
+    const pinned = await waitFor(() => {
+      const el = document.querySelector('[data-kind="measure"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    // The run is pixels 3..7 of row 2: x from 0.5 + 3/8 * 0.5 = 0.6875 to 0.5 + 7/8 * 0.5 =
+    // 0.9375 (137.5 to 187.5 px), on y = 0.2 + 2.5/8 * 0.5 (71.25 px).
+    const line = pinned.querySelector("line")!;
+    expect(parseFloat(line.getAttribute("x1")!)).toBeCloseTo(137.5);
+    expect(parseFloat(line.getAttribute("x2")!)).toBeCloseTo(187.5);
+    expect(parseFloat(line.getAttribute("y1")!)).toBeCloseTo(71.25);
   });
 });
 

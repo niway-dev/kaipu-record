@@ -12,7 +12,7 @@
  */
 
 import { clampFontPx, resolveFontPx, stepDiameterPx, TEXT_LINE_HEIGHT, textBoxPx } from "./tools";
-import type { Annotation } from "./scene";
+import type { Annotation, BasePlacement } from "./scene";
 import { dragMeasureEnd, measureEndpoints } from "./measure";
 
 export type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "p1" | "p2";
@@ -59,7 +59,7 @@ type Clamp = (v: number) => number;
 /** The annotation's bounding box in normalized coords, or null when it has none
  *  (e.g. an empty path). `size` is the layer's pixel size — only text needs it, since
  *  its box is derived from the rendered font size. */
-export function annotationBox(a: Annotation, size: Size): Box | null {
+export function annotationBox(a: Annotation, size: Size, placement?: BasePlacement): Box | null {
   if (a.kind === "box" || a.kind === "blur" || a.kind === "image") {
     return { x: a.x, y: a.y, w: a.w, h: a.h };
   }
@@ -89,7 +89,7 @@ export function annotationBox(a: Annotation, size: Size): Box | null {
     return { x: minX, y: minY, w: Math.max(...xs) - minX, h: Math.max(...ys) - minY };
   }
   if (a.kind === "measure") {
-    const { p1, p2 } = measureEndpoints(a);
+    const { p1, p2 } = measureEndpoints(a, placement);
     return {
       x: Math.min(p1.x, p2.x),
       y: Math.min(p1.y, p2.y),
@@ -113,7 +113,7 @@ export function annotationBox(a: Annotation, size: Size): Box | null {
 }
 
 /** The drag handles for a selected annotation, in normalized coords. */
-export function handlesFor(a: Annotation, size: Size): Handle[] {
+export function handlesFor(a: Annotation, size: Size, placement?: BasePlacement): Handle[] {
   // An added image resizes from its four corners only, with its aspect ratio locked; the
   // edge handles the canvas draws (mock A4) stay decorative. The corners are hit-tested
   // here but drawn by `ImageSelection`, not by the layer's own `Handles`.
@@ -134,13 +134,13 @@ export function handlesFor(a: Annotation, size: Size): Handle[] {
     ];
   }
   if (a.kind === "measure") {
-    const { p1, p2 } = measureEndpoints(a);
+    const { p1, p2 } = measureEndpoints(a, placement);
     return [
       { id: "p1", x: p1.x, y: p1.y },
       { id: "p2", x: p2.x, y: p2.y },
     ];
   }
-  const b = annotationBox(a, size);
+  const b = annotationBox(a, size, placement);
   if (!b) return [];
   if (a.kind === "text") {
     // Excalidraw's shape: a dot in each corner to scale the text, and both side
@@ -243,6 +243,7 @@ export function resizeAnnotation(
    * 0–1. Default (false) keeps a resize inside the image, as before.
    */
   canvas = false,
+  placement?: BasePlacement,
 ): Partial<Annotation> {
   const clamp: Clamp = canvas ? unbounded : clamp01;
   if (a.kind === "image") return resizeImage(a, handle, p, size);
@@ -251,7 +252,7 @@ export function resizeAnnotation(
       ? { x1: clamp(p.x), y1: clamp(p.y) }
       : { x2: clamp(p.x), y2: clamp(p.y) };
   }
-  if (a.kind === "measure") return dragMeasureEnd(a, handle === "p1" ? "from" : "to", p);
+  if (a.kind === "measure") return dragMeasureEnd(a, handle === "p1" ? "from" : "to", p, placement);
   // A badge has no handles; nothing to patch if one is asked for anyway.
   if (a.kind === "step") return {};
   if (a.kind === "text") {

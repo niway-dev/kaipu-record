@@ -33,9 +33,11 @@
   cursor: pointer;
 }
 
+/* The base rules are the floating bar's (always-dark chrome), so they use the overlay tints;
+   the Tool tab's `.panel` rules below swap in the themed tokens. */
 .button:hover:not(:disabled),
 .button[data-open] {
-  background: var(--ie-sep);
+  background: var(--ie-ov-hover);
 }
 
 .button:disabled {
@@ -48,20 +50,46 @@
   outline-offset: 1px;
 }
 
-/* Crop is the one primary action, in the accent like Done. */
-.primary {
+/* Move | Crop: a two-segment mode control. The base segment is neutral; only the checked mode
+   is in the accent, so Crop never looks active while crop mode is closed. */
+.modes {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--ie-ov-track);
+}
+
+.segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ie-ov-tx);
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segment:hover:not([aria-checked="true"]) {
+  background: var(--ie-ov-hover);
+}
+
+.segment[aria-checked="true"] {
   background: var(--ie-accent);
   color: #fff; /* text on --ie-accent, as the crop mode's Done */
   font-weight: 600;
 }
 
-.primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover);
-}
-
-/* Crop mode is open on this image: the pressed state is a ring, since Crop is already accent. */
-.primary[aria-pressed="true"] {
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+.segment:focus-visible {
+  outline: 2px solid var(--ie-accent);
+  outline-offset: 1px;
 }
 
 /* The floating bar: a dark pill, like the size tag's chrome. */
@@ -75,8 +103,9 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
-/* The Tool tab: the three buttons share the width. */
+/* The Tool tab: the mode control takes a row of its own, Corners and Reset share the next. */
 .panel .row {
+  flex-wrap: wrap;
   gap: var(--space-sm);
 }
 
@@ -89,9 +118,23 @@
   font-size: var(--font-size-xs);
 }
 
-.panel .primary {
-  background: var(--ie-accent);
-  border-color: transparent;
+.panel .modes {
+  flex: 1 1 100%;
+  background: var(--ie-sep);
+}
+
+.panel .segment:hover:not([aria-checked="true"]) {
+  background: var(--ie-card);
+}
+
+.panel .segment {
+  flex: 1;
+  height: 26px;
+  color: var(--ie-tx);
+  font-size: var(--font-size-xs);
+}
+
+.panel .segment[aria-checked="true"] {
   color: #fff;
 }
 
@@ -100,8 +143,8 @@
   background: var(--ie-card);
 }
 
-.panel .primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover);
+.panel .button[data-open] {
+  background: var(--ie-sep);
 }
 
 /* On the bar the Corners control hangs under the pill, so opening it never moves the buttons

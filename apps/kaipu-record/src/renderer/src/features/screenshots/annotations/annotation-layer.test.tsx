@@ -3,6 +3,7 @@ import { act, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AnnotationLayer } from "./annotation-layer";
 import { ANNOTATION_COLORS } from "./tools";
+import { RULER_HALO_PX, RULER_STROKE_PX, RULER_TICK_PX } from "../ruler-line";
 import { handlesFor } from "./handles";
 import { useRedactionTile } from "./redaction-preview";
 import type { Annotation, BlurAnnotation, BoxAnnotation, ImageAnnotation } from "./scene";
@@ -1030,19 +1031,42 @@ describe("AnnotationLayer — measure (NIW2-702)", () => {
     expect(screen.queryAllByTestId("resize-handle")).toHaveLength(0);
     expect(g?.querySelector("rect")?.getAttribute("stroke")).toBeNull();
     expect(g?.querySelector("[data-measure-halo]")).not.toBeNull();
+    // The same line as Inspect's hover: its stroke, its soft outline, butt caps (no round ends).
+    const line = g?.querySelector(`g[stroke="${ruler.color}"]`);
+    expect(line?.getAttribute("stroke-width")).toBe(String(RULER_STROKE_PX));
+    expect(line?.getAttribute("stroke-linecap")).toBeNull();
+    expect(g?.querySelector("[data-measure-halo]")?.getAttribute("stroke-width")).toBe(
+      String(RULER_HALO_PX),
+    );
   });
 
-  it("a selected measure draws round end dots in its color and a bordered pill", () => {
+  it("the end caps are Inspect's ticks: RULER_TICK_PX each side of the line, at both ends", () => {
+    const { container } = renderMeasureLayer(makeScene([ruler], null));
+    const lines = container.querySelectorAll(`g[stroke="${ruler.color}"] line`);
+    // The line plus one cap per end.
+    expect(lines).toHaveLength(3);
+    for (const cap of [lines[1], lines[2]]) {
+      // A horizontal measure: the caps are vertical, 2 * RULER_TICK_PX long.
+      expect(cap.getAttribute("x1")).toBe(cap.getAttribute("x2"));
+      const len = Math.abs(Number(cap.getAttribute("y2")) - Number(cap.getAttribute("y1")));
+      expect(len).toBe(RULER_TICK_PX * 2);
+    }
+  });
+
+  it("a selected measure keeps an invisible 12 px grab target at each end and a bordered pill", () => {
     const { container } = renderMeasureLayer(makeScene([ruler], "m1"));
     const g = container.querySelector('[data-kind="measure"]');
     expect(g?.getAttribute("data-selected")).toBe("true");
-    const dots = screen.getAllByTestId("resize-handle");
-    expect(dots).toHaveLength(2);
-    for (const d of dots) {
-      expect(d.tagName.toLowerCase()).toBe("circle");
-      expect(d.getAttribute("r")).toBe("5");
-      expect(d.getAttribute("stroke")).toBe(ruler.color);
+    const hits = screen.getAllByTestId("resize-handle");
+    expect(hits).toHaveLength(2);
+    for (const hit of hits) {
+      expect(hit.tagName.toLowerCase()).toBe("rect");
+      expect(Number(hit.getAttribute("width"))).toBeGreaterThanOrEqual(12);
+      expect(Number(hit.getAttribute("height"))).toBeGreaterThanOrEqual(12);
+      // Invisible: the visible end is the ruler cap drawn by the line, not a second shape.
+      expect(hit.getAttribute("stroke")).toBeNull();
     }
+    expect(g?.querySelector("circle")).toBeNull();
     expect(g?.querySelector("rect")?.getAttribute("stroke")).not.toBeNull();
   });
 

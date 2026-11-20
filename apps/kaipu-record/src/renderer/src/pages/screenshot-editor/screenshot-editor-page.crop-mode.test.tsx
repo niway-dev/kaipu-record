@@ -499,15 +499,48 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
     fireEvent.pointerUp(surface(), { clientX: at[0], clientY: at[1] });
   }
   const barButton = async (name: string) =>
-    within(await screen.findByTestId("image-action-bar")).getByRole("button", { name });
+    within(await screen.findByTestId("image-action-bar")).getByRole(
+      name === "Move" || name === "Crop" ? "radio" : "button",
+      { name },
+    );
   const undoButton = () => screen.getByRole("button", { name: /undo/i });
+  /** A real press: pointerdown first (the click-away listens to it), then the click. */
+  const press = (el: HTMLElement): void => {
+    fireEvent.pointerDown(el, { button: 0 });
+    fireEvent.click(el);
+  };
 
-  it("a selected base shows the bar, and Crop enters the same crop mode as a double-click", async () => {
+  it("a selected base shows the bar in Move, and choosing Crop enters the same crop mode as a double-click", async () => {
+    await open({});
+    selectBase();
+    expect(await barButton("Move")).toHaveAttribute("aria-checked", "true");
+    expect(await barButton("Crop")).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(await barButton("Crop"));
+    expect(await screen.findByTestId("crop-window")).toBeInTheDocument();
+    // The bar stays in crop mode, now with Crop checked, so Move is one press away.
+    expect(await barButton("Crop")).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("choosing Move in the bar leaves crop mode and commits the window, exactly like Done", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    expect(await barButton("Crop")).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(await barButton("Move"));
+    await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    // One undo step, as with Done.
+    undoKey();
+    await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+  });
+
+  it("choosing Move with nothing changed leaves crop mode and writes nothing", async () => {
     await open({});
     selectBase();
     fireEvent.click(await barButton("Crop"));
-    expect(await screen.findByTestId("crop-window")).toBeInTheDocument();
-    expect(screen.queryByTestId("image-action-bar")).toBeNull();
+    await screen.findByTestId("crop-window");
+    fireEvent.click(await barButton("Move"));
+    await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
+    expect(undoButton()).toBeDisabled();
   });
 
   it("Reset is disabled with no crop", async () => {
@@ -569,30 +602,28 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
     selectBase();
     await waitFor(() => expect(toolPanel()?.getAttribute("data-state")).toBe("imageOptions"));
     const panel = within(toolPanel() as HTMLElement);
-    fireEvent.click(panel.getByRole("button", { name: "Crop" }));
+    fireEvent.click(panel.getByRole("radio", { name: "Crop" }));
     expect(await screen.findByTestId("crop-window")).toBeInTheDocument();
-    // In crop mode the panel keeps them, with Crop shown pressed (the approved mock).
+    // In crop mode the panel keeps them, with Crop checked (the approved mock).
     expect(toolPanel()?.getAttribute("data-state")).toBe("imageOptions");
-    const crop = within(toolPanel() as HTMLElement).getByRole("button", { name: "Crop" });
-    expect(crop).toHaveAttribute("aria-pressed", "true");
+    const crop = within(toolPanel() as HTMLElement).getByRole("radio", { name: "Crop" });
+    expect(crop).toHaveAttribute("aria-checked", "true");
+    // Choosing Move there leaves crop mode.
+    press(within(toolPanel() as HTMLElement).getByRole("radio", { name: "Move" }));
+    await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
   });
 
-  it("outside crop mode Crop is not shown pressed", async () => {
+  it("outside crop mode Move is checked and Crop is not", async () => {
     await open({});
     selectBase();
     await waitFor(() => expect(toolPanel()?.getAttribute("data-state")).toBe("imageOptions"));
-    const crop = within(toolPanel() as HTMLElement).getByRole("button", { name: "Crop" });
-    expect(crop).toHaveAttribute("aria-pressed", "false");
+    const panel = within(toolPanel() as HTMLElement);
+    expect(panel.getByRole("radio", { name: "Move" })).toHaveAttribute("aria-checked", "true");
+    expect(panel.getByRole("radio", { name: "Crop" })).toHaveAttribute("aria-checked", "false");
   });
 
   describe("in crop mode", () => {
     const doneRow = () => within(screen.getByTestId("crop-actions"));
-    /** A real press: pointerdown first (the click-away listens to it), then the click. */
-    const press = (el: HTMLElement): void => {
-      fireEvent.pointerDown(el, { button: 0 });
-      fireEvent.click(el);
-    };
-
     it("Reset is next to Done and disabled while there is no crop", async () => {
       await open({});
       fireEvent.doubleClick(surface(), { clientX: 100, clientY: 100 });
@@ -668,7 +699,7 @@ describe("the image action bar and the Tool tab (NIW2-876)", () => {
       fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
       await screen.findByTestId("crop-window");
       const panel = () => within(toolPanel() as HTMLElement);
-      press(panel().getByRole("button", { name: "Crop" }));
+      press(panel().getByRole("radio", { name: "Crop" }));
       press(panel().getByRole("button", { name: "Corners" }));
       expect(screen.getByTestId("crop-window")).toBeInTheDocument();
       press(panel().getByRole("button", { name: "Reset" }));

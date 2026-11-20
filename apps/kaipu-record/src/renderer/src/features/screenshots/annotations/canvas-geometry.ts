@@ -159,6 +159,7 @@ export function annotationBounds(
   scale: number,
   measure: TextMeasure = defaultTextMeasure,
   base: Bounds = wholeBase(naturalW, naturalH),
+  placement?: BasePlacement,
 ): Bounds | null {
   if (a.kind === "blur") {
     // A blur only paints over the visible base, so the part outside it adds nothing (a part
@@ -224,7 +225,7 @@ export function annotationBounds(
   }
   if (a.kind === "measure") {
     // The segment, its end ticks and the label pill, in natural px.
-    const s = measureShape(a, naturalW, naturalH, scale);
+    const s = measureShape(a, naturalW, naturalH, scale, placement);
     const sw = (STROKE_WIDTHS[1] * scale) / 2;
     let b: Bounds = grow(
       {
@@ -293,13 +294,14 @@ export function contentExtents(
   scale: number,
   measure: TextMeasure = defaultTextMeasure,
   base: Bounds = wholeBase(naturalW, naturalH),
+  placement?: BasePlacement,
 ): Extents {
   let left = 0;
   let top = 0;
   let right = 0;
   let bottom = 0;
   for (const a of annotations) {
-    const b = annotationBounds(a, naturalW, naturalH, scale, measure, base);
+    const b = annotationBounds(a, naturalW, naturalH, scale, measure, base, placement);
     if (!b) continue;
     left = Math.max(left, over(base.x1 - b.x1));
     top = Math.max(top, over(base.y1 - b.y1));
