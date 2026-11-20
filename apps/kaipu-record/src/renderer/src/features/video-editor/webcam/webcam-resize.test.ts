@@ -278,6 +278,14 @@ describe("webcamResizeTarget", () => {
     });
   });
 
+  it("offers handles and writes the whole layout on This part with no part shown", () => {
+    expect(webcamResizeTarget(scene(), "part", 3, null)).toEqual({
+      whole: false,
+      anchor: "opposite",
+      handles: true,
+    });
+  });
+
   it("edits the whole video on the Whole video tab", () => {
     expect(webcamResizeTarget(scene(), "whole", 3)).toEqual({
       whole: true,

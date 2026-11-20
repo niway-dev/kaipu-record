@@ -544,8 +544,9 @@ export interface WebcamPanelProps {
   /** The segment the panel was showing is gone: the page clears its selection. */
   onRemoved(): void;
   /**
-   * The tab the panel shows, reported when it opens and on every change: the preview's corner
-   * handles edit what that tab edits ("This part" or "Whole video"). The panel keeps the state.
+   * The tab the panel shows, reported when it opens and on every change. The preview's corner
+   * drag edits what changes on screen: the part when it owns a size or shape or the tab is "This
+   * part", else the whole layout; handles hide only for a shown part not in force at the playhead.
    */
   onTabChange?(tab: WebcamPanelTab): void;
 }

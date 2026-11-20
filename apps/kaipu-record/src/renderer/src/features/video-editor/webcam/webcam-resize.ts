@@ -145,12 +145,14 @@ export interface WebcamResizeTarget {
 
 /**
  * Where a corner drag writes, from the Camera panel's tab (and the part it shows, `shown`).
- * "This part" edits the part at the playhead (or the whole video's layout where none is in
- * force, which is what the bubble shows there); "Whole video" edits the whole video's layout.
+ * The rule is that the bubble must visibly change: the drag edits the part when it owns a size
+ * or shape or the tab is "This part", and the whole video's layout otherwise. "This part" with
+ * no part shown (`shown === null`) still writes to the whole layout, which is what the bubble
+ * shows there. The drag does not always edit what the open panel shows.
  *
  * With "This part" open on a part that is not the one in force at the playhead (a part picked
- * on the lane, then the playhead moved away), the bubble is drawn from some other layout, so a
- * drag would edit that layout while the panel's part stays unchanged: there are no handles.
+ * on the lane, then the playhead moved away), the bubble is drawn from some other layout, so
+ * nothing the drag wrote would show: there are no handles. This is the only case without them.
  *
  * With "Whole video" open while the part at the playhead has a SIZE or SHAPE of its own, a
  * whole-video size would change nothing on screen, so the drag writes to that part instead,
