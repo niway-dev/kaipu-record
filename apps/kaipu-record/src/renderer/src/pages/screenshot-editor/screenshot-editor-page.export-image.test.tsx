@@ -110,6 +110,35 @@ describe("ScreenshotEditorPage — Save is unchanged", () => {
     expect(window.electronAPI.exportScreenshotFile).not.toHaveBeenCalled();
   });
 
+  it("reads the display width with the scene snapshot, not after the byte read", async () => {
+    // A padding change landing while the bytes are read resizes the displayed image; the
+    // export must still pair the snapshot with the width it was taken at (200 here).
+    let resizeOnRead = false;
+    const source: ImageSource = {
+      kind: "blob",
+      width: 400,
+      height: 400,
+      origin: "paste",
+      get bytes() {
+        if (resizeOnRead) {
+          for (const prop of ["clientWidth", "clientHeight"]) {
+            Object.defineProperty(HTMLElement.prototype, prop, {
+              configurable: true,
+              get: () => 300,
+            });
+          }
+        }
+        return bytes;
+      },
+    };
+    mount(source);
+    await loadImage();
+    resizeOnRead = true;
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(exportScene).toHaveBeenCalledTimes(1));
+    expect(exportScene.mock.calls[0][1]).toMatchObject({ displayedW: 200 });
+  });
+
   it("flag on with the default settings: one-click Save still writes the PNG", async () => {
     imageCanvas = true;
     mount(PASTE);
