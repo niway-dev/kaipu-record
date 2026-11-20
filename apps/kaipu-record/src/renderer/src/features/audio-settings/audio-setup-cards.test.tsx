@@ -122,21 +122,25 @@ describe("Microphone and System audio cards", () => {
     expect(onToggleAudio).toHaveBeenCalledOnce();
   });
 
-  it("keeps the unavailable system audio switch disabled and its panel reachable", async () => {
+  it("disables only the left zone of the unavailable system audio card; its panel stays reachable", async () => {
+    const reason = "System audio isn't available for this recording";
     render(<CardHarness unavailable />);
-    expect(screen.getByTitle("System audio isn't available for this recording")).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    expect(screen.getByRole("switch", { name: "System audio" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "System audio" })).toHaveAttribute("title", reason);
+    const device = screen.getByRole("button", { name: /^System audio settings/ });
+    expect(device).toBeEnabled();
+    await userEvent.click(device);
     expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
   });
 
   it("opens one panel at a time from the chevrons", async () => {
     render(<CardHarness />);
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     expect(screen.getByRole("region", { name: "Microphone settings" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
     expect(screen.queryByRole("region", { name: "Microphone settings" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });
 });
@@ -144,7 +148,7 @@ describe("Microphone and System audio cards", () => {
 describe("the two-column panels", () => {
   it("microphone: INPUT with the devices, SOUND with the level and the noise switch", async () => {
     render(<CardHarness />);
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     const panel = screen.getByRole("region", { name: "Microphone settings" });
     expect(within(panel).getByText("Input", { selector: "span" })).toBeInTheDocument();
     expect(within(panel).getByText("Sound")).toBeInTheDocument();
@@ -157,7 +161,7 @@ describe("the two-column panels", () => {
 
   it("microphone, idle: no header, since the setup card already names the microphone", async () => {
     render(<CardHarness />);
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     const panel = screen.getByRole("region", { name: "Microphone settings" });
     expect(within(panel).queryByText("Microphone")).not.toBeInTheDocument();
     expect(within(panel).queryByText("Live")).not.toBeInTheDocument();
@@ -165,7 +169,7 @@ describe("the two-column panels", () => {
 
   it("microphone, recording: only the Live tag shows, with no panel title", async () => {
     render(<CardHarness isRecording />);
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     const panel = screen.getByRole("region", { name: "Microphone settings" });
     expect(within(panel).getByText("Live")).toBeInTheDocument();
     expect(within(panel).queryByText("Microphone")).not.toBeInTheDocument();
@@ -173,7 +177,7 @@ describe("the two-column panels", () => {
 
   it("system audio: WHAT TO CAPTURE with the choices, MIX with ducking and volume", async () => {
     render(<CardHarness />);
-    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
     const panel = screen.getByRole("region", { name: "System audio settings" });
     expect(within(panel).getByText("What to capture")).toBeInTheDocument();
     expect(within(panel).getByText("Mix")).toBeInTheDocument();

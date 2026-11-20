@@ -56,7 +56,7 @@ function PanelHarness({ isRecording = false }: { isRecording?: boolean }): React
 describe("Camera drawer (Record page, page variant)", () => {
   it("opens a drawer with focus on the chosen camera, and Esc returns focus to the chevron", async () => {
     render(<PageHarness />);
-    const chevron = screen.getByRole("button", { name: "Camera settings" });
+    const chevron = screen.getByRole("button", { name: /^Camera settings/ });
     await userEvent.click(chevron);
 
     const drawer = screen.getByRole("region", { name: "Camera settings" });
@@ -73,7 +73,7 @@ describe("Camera drawer (Record page, page variant)", () => {
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
     render(<PageHarness />);
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     await userEvent.click(screen.getByRole("radio", { name: "Square" }));
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
@@ -96,7 +96,7 @@ describe("Camera drawer (Record page, page variant)", () => {
     render(<PageHarness on={false} />);
     await screen.findByText("BLOCKED");
 
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     const button = screen.getByRole("button", { name: "Open System Settings" });
     expect(button).toHaveFocus();
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("Camera drawer (Record page, page variant)", () => {
 describe("Camera drawer (capture panel)", () => {
   it("expands inline, keeps the Tab order inside the panel, and closes on Esc", async () => {
     render(<PanelHarness />);
-    const chevron = screen.getByRole("button", { name: "Camera settings" });
+    const chevron = screen.getByRole("button", { name: /^Camera settings/ });
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
 
     await userEvent.click(chevron);
@@ -125,7 +125,7 @@ describe("Camera drawer (capture panel)", () => {
 
   it("closes from the chevron", async () => {
     render(<PanelHarness />);
-    const chevron = screen.getByRole("button", { name: "Camera settings" });
+    const chevron = screen.getByRole("button", { name: /^Camera settings/ });
     await userEvent.click(chevron);
     await userEvent.click(chevron);
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
@@ -133,7 +133,7 @@ describe("Camera drawer (capture panel)", () => {
 
   it("shows the live note during a recording", async () => {
     render(<PanelHarness isRecording />);
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     expect(screen.getByRole("status")).toHaveTextContent(
       "Changes apply live and will show in the recording.",
     );
@@ -162,7 +162,7 @@ describe("useCameraSettings before the saved value loads", () => {
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
     render(<PageHarness />);
-    fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     fireEvent.change(screen.getByRole("slider"), { target: { value: "300" } });
     // Nothing written while the saved value is unknown.
     expect(updateSettings).not.toHaveBeenCalled();
@@ -190,7 +190,7 @@ describe("useCameraSettings throttling", () => {
       const updateSettings = vi.fn(async () => ({}) as never);
       window.electronAPI.updateSettings = updateSettings;
       render(<PageHarness />);
-      fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+      fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
       const slider = screen.getByRole("slider");
       for (const value of ["250", "260", "270", "280"]) {
         fireEvent.change(slider, { target: { value } });
@@ -223,7 +223,7 @@ describe("useCameraSettings throttling", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+      fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
       const slider = screen.getByRole("slider");
       fireEvent.change(slider, { target: { value: "250" } });
       // Within the throttle window: the second value is still waiting on the timer.
@@ -248,7 +248,7 @@ describe("useCameraSettings throttling", () => {
 describe("window blur", () => {
   it("closes an open camera drawer when the window loses focus", async () => {
     render(<PageHarness />);
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
     act(() => {
       fireEvent.blur(window);
@@ -282,7 +282,7 @@ describe("Camera card (Capture page)", () => {
     });
     try {
       render(<CardHarness />);
-      await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+      await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
       await userEvent.click(await screen.findByRole("radio", { name: "FaceTime HD Camera" }));
       await waitFor(() =>
         expect(updateSettings).toHaveBeenCalledWith({

@@ -1,10 +1,30 @@
-import { catalog, type Step } from "../types";
+import { catalog, type Step, type Target } from "../types";
 import { nc } from "./not-capturable";
 
 const micOff: Step = { call: "updateRecordingSettings", args: [{ isMicrophoneEnabled: false }] };
 const audioOn: Step = { call: "updateRecordingSettings", args: [{ isSystemAudioEnabled: true }] };
 const cameraOn: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: true }] };
 const cameraOff: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: false }] };
+// The Microphone card's right zone is named "Microphone settings: <device line>". Before the
+// microphones are listed the line is blank (no suffix) and then, with an empty list, "No
+// microphones found" (`micSettings.noDevices` in en.json): a real device is any other suffix.
+// A hover shot waits for one so a late re-render of the device line cannot drop the pointer's
+// hover after it landed. The profile runs with a fake audio input ("Fake Audio Input 1"), so
+// the wait is met by that one device; a runner with no microphone times out, which is right,
+// because these states `require` one.
+const MIC_EMPTY_LIST = "No microphones found";
+const micDevicesListed: Step = {
+  waitFor: {
+    area: "record.mic",
+    part: {
+      css: `[aria-label^="Microphone settings: "]:not([aria-label$=": ${MIC_EMPTY_LIST}"])`,
+    },
+  },
+};
+const micZoneHovered = (zone: "switch" | "button"): Target => ({
+  area: "record.mic",
+  part: { css: `[${zone === "switch" ? 'role="switch"' : "aria-expanded"}]:hover` },
+});
 const modeBack: Step = { call: "updateSettings", args: [{ recordingMode: "screen" }] };
 const shotModeBack: Step = { call: "updateSettings", args: [{ screenshotMode: "frame" }] };
 
@@ -76,6 +96,42 @@ export const record = catalog(
       steps: [micOff],
       demonstrates: ["record.mic:off"],
       gates: [{ recordingSetting: "isMicrophoneEnabled", side: "off" }],
+    },
+    "mic-toggle-hover": {
+      profile: "default",
+      how: "Rest the pointer on the Microphone card's left zone (name and ON/OFF readout): only that zone lights up, the device zone stays as it was.",
+      steps: [
+        micDevicesListed,
+        { hover: { area: "record.mic", part: { role: "switch", name: "Microphone" } } },
+        // The zone must be under the pointer, or the shot would show the card at rest.
+        { waitFor: micZoneHovered("switch") },
+      ],
+      keepPointer: true,
+      // Still hovered when the shot is taken, or the run fails instead of keeping the image.
+      stillOnScreen: micZoneHovered("switch"),
+      demonstrates: ["record.mic:toggleHover"],
+      gates: [
+        { recordingSetting: "isMicrophoneEnabled", side: "on" },
+        { permission: "microphone", side: "granted" },
+      ],
+      requires: { microphone: true },
+    },
+    "mic-device-hover": {
+      profile: "default",
+      how: "Rest the pointer on the Microphone card's right zone (device name and chevron): only that zone lights up, the toggle zone stays as it was.",
+      steps: [
+        micDevicesListed,
+        { hover: { area: "record.mic", part: { role: "button", name: "Microphone settings" } } },
+        { waitFor: micZoneHovered("button") },
+      ],
+      keepPointer: true,
+      stillOnScreen: micZoneHovered("button"),
+      demonstrates: ["record.mic:deviceHover"],
+      gates: [
+        { recordingSetting: "isMicrophoneEnabled", side: "on" },
+        { permission: "microphone", side: "granted" },
+      ],
+      requires: { microphone: true },
     },
     "mic-settings": {
       profile: "default",

@@ -20,7 +20,13 @@
   color: var(--accent-primary);
 }
 
+/* An open card that is OFF takes a neutral stronger border: the pink means ON only. */
 .card[data-open] {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.card[data-active][data-open] {
   background: rgba(246, 5, 92, 0.14);
   border-color: rgba(246, 5, 92, 0.6);
 }
@@ -38,13 +44,23 @@
   background: rgba(248, 81, 73, 0.1);
 }
 
-.body {
-  flex: 1 1 auto;
+/* The left zone: the one switch. Icon, name and the ON/OFF readout. */
+.toggle {
+  flex: 0 0 auto;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 12px;
+  gap: 8px;
+  padding: 10px 8px 10px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  transition: background-color 120ms ease;
 }
 
 .icon {
@@ -55,7 +71,6 @@
 }
 
 .text {
-  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -69,15 +84,17 @@
 }
 
 .detail {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  text-align: left;
   font-size: 11px;
   color: var(--text-muted);
 }
 
 .status {
-  flex: 0 0 auto;
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: var(--font-weight-semibold);
@@ -94,90 +111,70 @@
   color: #f88b85;
 }
 
-.switch {
-  position: relative;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 20px;
-  padding: 0;
-  border-radius: 999px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
+/* The right zone: the current device and the chevron. It only opens the panel. */
+.device {
+  flex: 1 1 0%;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 0 8px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  color: inherit;
+  font: inherit;
   appearance: none;
   cursor: pointer;
   transition: background-color 120ms ease;
 }
 
-.switch[aria-checked="true"] {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-}
-
-.switch[aria-disabled="true"],
-.switch:disabled {
-  cursor: not-allowed;
-}
-
-.switch:disabled {
-  opacity: 0.45;
-}
-
-.knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 120ms ease;
-}
-
-.switch[aria-checked="true"] .knob {
-  transform: translateX(14px);
-}
-
-.chevron {
-  flex: 0 0 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-left: 1px solid var(--border);
-  color: inherit;
-  appearance: none;
-  cursor: pointer;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-}
-
-.card[data-active] .chevron {
+.card[data-active] .device {
   border-left-color: rgba(246, 5, 92, 0.32);
 }
 
-.card[data-blocked] .chevron {
+.card[data-blocked] .device {
   border-left-color: rgba(248, 81, 73, 0.4);
 }
 
-.chevron:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.chevron svg {
+.chevron {
+  flex: 0 0 auto;
+  margin-right: 8px;
   transition: transform 120ms ease;
 }
 
-.chevron[data-open] svg {
+.device[data-open] .chevron {
   transform: rotate(180deg);
 }
 
-.switch:focus-visible,
-.chevron:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
+/* Each zone lights up on its own, with a tint and a 1px ring, so the pointer shows which of the
+   two a click will use. The ring is inset, so it never moves the layout. */
+.toggle:hover:not(:disabled):not([aria-disabled="true"]),
+.device:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
-.chevron:focus-visible {
+.card[data-active] .toggle:hover:not(:disabled):not([aria-disabled="true"]),
+.card[data-active] .device:hover:not(:disabled) {
+  background: rgba(246, 5, 92, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(246, 5, 92, 0.55);
+}
+
+.toggle[aria-disabled="true"],
+.toggle:disabled,
+.device:disabled {
+  cursor: not-allowed;
+}
+
+.toggle:disabled,
+.device:disabled {
+  opacity: 0.45;
+}
+
+.toggle:focus-visible,
+.device:focus-visible {
+  outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
 }

@@ -338,21 +338,21 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
 
   it("opens the Camera card's panel via its chevron in the idle layout", () => {
     renderAt(undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
   });
 
   it("opens the Mic and Audio drawers in the page's flow, one at a time", async () => {
     renderAt(undefined);
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     const mic = screen.getByRole("region", { name: "Microphone settings" });
     expect(mic).toBeInTheDocument();
     // In flow, not a floating dialog: it lives in the same block as the tile row.
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mic.parentElement).toContainElement(
-      screen.getByRole("button", { name: "Microphone settings" }),
+      screen.getByRole("button", { name: /^Microphone settings/ }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^System audio settings/ }));
     expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Microphone settings" })).toBeNull();
   });
@@ -368,9 +368,9 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
           <RecordPage />
         </MemoryRouter>,
       );
-      await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+      await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
       expect(screen.getByText("Live")).toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+      await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
       expect(
         screen.getByText("Changes apply live and will show in the recording."),
       ).toBeInTheDocument();
@@ -382,7 +382,7 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     setupState.microphoneEnabled = true;
     setupState.cameraEnabled = true;
     renderAt(undefined);
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     expect(screen.queryByText("Live")).toBeNull();
   });
 
@@ -504,7 +504,7 @@ describe("RecordPage while a take runs", () => {
     expect(toggleMicrophone).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
     expect(toggleCamera).toHaveBeenCalledOnce();
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
   });
 

@@ -9,21 +9,21 @@ export interface SetupCardProps {
   blockedIcon?: ComponentType<{ size?: number }>;
   /** Bold line: Microphone, System audio, Camera. */
   name: string;
-  /** Secondary line: the current choice. */
+  /** The current choice, in the right zone: truncates, with the full text as its title. */
   detail: string;
-  /** The ON / OFF / BLOCKED readout next to the switch. */
+  /** The ON / OFF / BLOCKED readout under the name, in the left zone. */
   status: string;
   on: boolean;
   onToggle: () => void;
   /** The card reads blocked (red): the caller decides what that means for toggling. */
   blocked?: boolean;
-  /** The switch does nothing when pressed (blocked off). It stays focusable. */
+  /** The left zone does nothing when pressed (blocked off). It stays focusable. */
   switchDisabled?: boolean;
-  /** Natively disabled switch, dimmed and not focusable (system audio unavailable). */
+  /** The left zone natively disabled, dimmed and not focusable (system audio unavailable); the panel still opens. */
   switchUnavailable?: boolean;
-  /** Accessible name of the switch when the name alone is not enough (e.g. blocked). */
+  /** Accessible name of the left zone when the name alone is not enough (e.g. blocked). */
   switchLabel?: string;
-  /** Native tooltip for the switch, e.g. why it is disabled. */
+  /** Native tooltip for the left zone, e.g. why it is disabled. */
   switchTitle?: string;
   chevronLabel: string;
   /** Whether the card's panel is open. */
@@ -31,17 +31,19 @@ export interface SetupCardProps {
   onOpenChange: (open: boolean) => void;
   /** The element the open panel belongs to, for aria-controls. */
   controlsId?: string;
-  /** The chevron, so the panel can send focus back to it when it closes. */
+  /** The right zone (device name + chevron), so the panel can send focus back when it closes. */
   chevronRef?: Ref<HTMLButtonElement>;
   /** The catalog area this card is (`uiArea("…")`), put on its root. */
   ui?: UiAreaProps;
 }
 
 /**
- * One card of the Capture page's "Recording setup" row: icon, name and current choice, an
- * ON/OFF readout with a switch, and a separate chevron segment that opens the card's panel.
- * The switch writes the same recording setting the capture widget reads; the chevron only
- * opens the panel, so turning a source on or off never moves the layout.
+ * One card of the Capture page's "Recording setup" row, in two zones. The left zone (icon, name
+ * and ON/OFF readout) is the one `role="switch"`: pressing it turns the source on or off, the
+ * same recording setting the capture widget reads. The right zone (the current device and a
+ * chevron) is a button that only opens the card's panel, so choosing a device never flips the
+ * source and turning it on or off never moves the layout. Neither zone contains the other or
+ * any other control.
  */
 export function SetupCard({
   icon: Icon,
@@ -65,6 +67,8 @@ export function SetupCard({
 }: SetupCardProps): React.JSX.Element {
   const ShownIcon = blocked && BlockedIcon ? BlockedIcon : Icon;
 
+  const deviceText = detail.trim();
+
   return (
     <div
       {...ui}
@@ -73,43 +77,39 @@ export function SetupCard({
       data-open={open || undefined}
       data-blocked={blocked || undefined}
     >
-      <div className={styles.body}>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={switchLabel ?? name}
+        disabled={switchUnavailable}
+        aria-disabled={switchDisabled || undefined}
+        title={switchTitle}
+        className={styles.toggle}
+        onClick={switchDisabled ? undefined : onToggle}
+      >
         <span className={styles.icon}>
           <ShownIcon size={18} />
         </span>
         <span className={styles.text}>
           <span className={styles.name}>{name}</span>
-          {/* The line truncates in a narrow window; the full text shows on hover. */}
-          <span className={styles.detail} title={detail.trim() || undefined}>
-            {detail}
-          </span>
+          <span className={styles.status}>{status}</span>
         </span>
-        <span className={styles.status}>{status}</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={on}
-          aria-label={switchLabel ?? name}
-          disabled={switchUnavailable}
-          aria-disabled={switchDisabled || undefined}
-          title={switchTitle}
-          className={styles.switch}
-          onClick={switchDisabled ? undefined : onToggle}
-        >
-          <span className={styles.knob} />
-        </button>
-      </div>
+      </button>
       <button
         ref={chevronRef}
         type="button"
-        className={styles.chevron}
-        aria-label={chevronLabel}
+        className={styles.device}
+        aria-label={deviceText ? `${chevronLabel}: ${deviceText}` : chevronLabel}
         aria-expanded={open}
         aria-controls={open ? controlsId : undefined}
+        title={deviceText || undefined}
         data-open={open || undefined}
         onClick={() => onOpenChange(!open)}
       >
-        <ChevronDown size={14} aria-hidden />
+        {/* The line truncates in a narrow window; the full text is the button's title. */}
+        <span className={styles.detail}>{detail}</span>
+        <ChevronDown size={14} aria-hidden className={styles.chevron} />
       </button>
     </div>
   );
