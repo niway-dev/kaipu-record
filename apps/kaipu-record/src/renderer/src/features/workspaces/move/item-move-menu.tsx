@@ -12,6 +12,40 @@ import styles from "./move.module.css";
  * workspaces and what a move there costs. Disabled, with the reason, for an item that cannot
  * move (cloud-only, or a record that cannot be read).
  */
+/** The menu's width in `move.module.css` (`.menu`). */
+const MENU_WIDTH = 300;
+/** Room the menu needs below the button before it opens above instead. */
+const MENU_HEIGHT = 260;
+/** The gap kept between the menu and the window's edges. */
+const EDGE = 8;
+
+/**
+ * Where the menu goes, in window coordinates: below the button (above it near the bottom),
+ * its right edge on the button's right edge, but never past either side of the window. A card
+ * in the first column puts the button near the left edge, where a right-aligned 300 px menu
+ * would start off-screen.
+ */
+export function placeItemMenu(
+  button: Pick<DOMRect, "top" | "bottom" | "right">,
+  viewportWidth: number,
+  viewportHeight: number,
+): React.CSSProperties {
+  const left = Math.max(
+    EDGE,
+    Math.min(button.right - MENU_WIDTH, viewportWidth - MENU_WIDTH - EDGE),
+  );
+  const below = button.bottom + 6;
+  return below + MENU_HEIGHT > viewportHeight
+    ? {
+        position: "fixed",
+        bottom: viewportHeight - button.top + 6,
+        left,
+        right: "auto",
+        top: "auto",
+      }
+    : { position: "fixed", top: below, left, right: "auto" };
+}
+
 export function ItemMoveMenu({
   item,
   onPick,
@@ -68,20 +102,7 @@ export function ItemMoveMenu({
         ref={buttonRef}
         onClick={() => {
           const rect = buttonRef.current?.getBoundingClientRect();
-          if (rect) {
-            const below = rect.bottom + 6;
-            const right = Math.max(8, window.innerWidth - rect.right);
-            setPlace(
-              below + 260 > window.innerHeight
-                ? {
-                    position: "fixed",
-                    bottom: window.innerHeight - rect.top + 6,
-                    right,
-                    top: "auto",
-                  }
-                : { position: "fixed", top: below, right },
-            );
-          }
+          if (rect) setPlace(placeItemMenu(rect, window.innerWidth, window.innerHeight));
           setOpen(!open);
         }}
       >
