@@ -37,8 +37,8 @@ evidence (`.evidence/library-mock/claude-design-prompt.md`, not committed).
     list, grouped as the Export screen groups them, each with the size of its copy (amber where
     the platform compresses again, teal where it plays as is), and **Open Export** at the end.
     It is the default tab while the recording has no copy.
-  - **Copies N** — the original, the copy being made and every exported copy, with a `Viewing`
-    pill on the item on screen; every local copy keeps its drag handle, the one on screen
+  - **Copies N** — the original, the copy being made and every exported copy, the item on
+    screen outlined, with `Viewing` at the start of its details; every local copy keeps its drag handle, the one on screen
     included. `N` counts the finished copies only. The tab exists only once the family has a
     copy or an export is running, and it is the default tab then; before that, Export leads
     (or the first remaining tab when the item cannot be prepared). There is no "Edited project"
