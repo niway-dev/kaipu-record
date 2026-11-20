@@ -1,4 +1,4 @@
-import React, { useRef, type KeyboardEvent, type PointerEvent, type Ref } from "react";
+import React, { useRef, type KeyboardEvent, type PointerEvent } from "react";
 import { Lock, ZoomIn } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import {
@@ -145,8 +145,6 @@ export interface CameraSettingsFieldsProps {
   cameras: CameraDevice[];
   cameraOn: boolean;
   isRecording: boolean;
-  /** The camera list: the group that takes focus when the popover opens (its checked row). */
-  listRef?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -162,7 +160,6 @@ export function CameraSettingsFields({
   cameras,
   cameraOn,
   isRecording,
-  listRef,
 }: CameraSettingsFieldsProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   const note = !cameraOn ? t("offNote") : isRecording ? t("liveNote") : "";
@@ -173,7 +170,6 @@ export function CameraSettingsFields({
         cameras={cameras}
         deviceId={bubble.deviceId}
         onChange={(deviceId) => onChange({ deviceId })}
-        groupRef={listRef}
       />
 
       <div className={styles.mirror}>
@@ -219,7 +215,6 @@ interface CameraSourceListProps {
   /** The chosen camera, or `null` for the default one. */
   deviceId: string | null;
   onChange: (deviceId: string | null) => void;
-  groupRef?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -230,7 +225,6 @@ function CameraSourceList({
   cameras,
   deviceId,
   onChange,
-  groupRef,
 }: CameraSourceListProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   const rows = useRef<(HTMLButtonElement | null)[]>([]);
@@ -268,7 +262,6 @@ function CameraSourceList({
 
   return (
     <div
-      ref={groupRef}
       role="radiogroup"
       aria-label={t("device")}
       className={styles.sources}
@@ -303,14 +296,12 @@ function CameraSourceList({
 export interface CameraBlockedCardProps {
   onOpenSystemSettings: () => void;
   compact?: boolean;
-  buttonRef?: Ref<HTMLButtonElement>;
 }
 
 /** In place of the settings while camera access is denied: why, and the way out. */
 export function CameraBlockedCard({
   onOpenSystemSettings,
   compact = false,
-  buttonRef,
 }: CameraBlockedCardProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   return (
@@ -320,12 +311,7 @@ export function CameraBlockedCard({
       </span>
       <p className={styles.blockedTitle}>{t("blockedTitle")}</p>
       <p className={styles.blockedBody}>{t("blockedBody")}</p>
-      <button
-        ref={buttonRef}
-        type="button"
-        className={styles.blockedButton}
-        onClick={onOpenSystemSettings}
-      >
+      <button type="button" className={styles.blockedButton} onClick={onOpenSystemSettings}>
         {t("openSystemSettings")}
       </button>
     </div>
