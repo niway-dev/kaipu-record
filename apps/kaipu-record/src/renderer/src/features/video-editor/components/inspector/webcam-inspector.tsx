@@ -32,7 +32,6 @@ import type { WebcamEditing } from "../../webcam/use-webcam-editing";
 import { webcamOwnLook } from "../../webcam/webcam-edits";
 import type { FrameSize } from "../../webcam/webcam-layout";
 import {
-  WEBCAM_DEFAULTS,
   WEBCAM_LIMITS,
   WEBCAM_MOTION_BUTTONS,
   WEBCAM_SIZE_PRESETS,
