@@ -1,8 +1,11 @@
-# Test snapshot, 2026-11-20
+---
+title: Test snapshot, 2026-11-20
+description: Read-only ledger of all 10,593 unit, browser and integration tests, with delete, fix, consolidate and move-layer leads and a gap table.
+---
 
 - A snapshot is a read-only ledger of every test, marked by a worker; nothing in the repository was edited.
 - The marks come from Haiku 5.5 high workers, so each flagged row is a lead; a later audit confirms a row before acting on it, and nothing is ever deleted from this file alone.
-- Headline: 10,593 tests, 9,903 retained (320 of them only by a keep-guard), 687 flagged: 339 fix, 179 consolidate, 116 delete candidates, 52 move layer.
+- Headline: 10,593 tests, 9,903 retained (320 of them only by a keep-guard), 686 flagged: 339 fix, 179 consolidate, 116 delete candidates, 52 move layer. The workers' test totals add to 10,593 while their marks add to 10,589: 4 tests were counted but not marked, a worker miscount to settle in the next snapshot.
 - Layers: unit 5,600, browser/component 3,474, integration 1,519, e2e 0 (not in scope).
 
 ## Failures that matter (assumed)
