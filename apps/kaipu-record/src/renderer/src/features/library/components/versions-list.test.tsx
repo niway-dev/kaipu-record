@@ -59,12 +59,7 @@ const probe = {
   sampleRate: 48000,
 };
 
-function renderList(
-  item: LibraryVideo,
-  all: LibraryVideo[],
-  running: RunningCopy | null = null,
-  canExport = false,
-) {
+function renderList(item: LibraryVideo, all: LibraryVideo[], running: RunningCopy | null = null) {
   render(
     <MemoryRouter>
       <VersionsList
@@ -72,12 +67,11 @@ function renderList(
         lineage={buildLineage(all)}
         running={running}
         probe={probe}
-        canExport={canExport}
         now={() => 100_000}
       />
     </MemoryRouter>,
   );
-  return screen.getByRole("region", { name: "Versions" });
+  return screen.getByRole("region", { name: "Copies" });
 }
 
 afterEach(() => {
@@ -97,13 +91,15 @@ describe("VersionsList", () => {
     expect(within(rows[1]!).getByRole("link").getAttribute("href")).toBe("/library/yt");
     expect(rows[1]!.textContent).toContain("Exported copy");
     expect(rows[2]!.textContent).toContain("Exported copy");
-    expect(within(region).getByText("3")).toBeTruthy();
+    // The count is the exported copies, not the original.
+    expect(within(region).getByText("2")).toBeTruthy();
   });
 
-  it("shows the edited project row when the original has an edit session", () => {
+  it("has no Edited project row, even when the original has an edit session", () => {
     const edited = { ...master, editSavedAt: Date.now() - 60_000 };
     const region = renderList(edited, [edited, yt]);
-    expect(within(region).getByText("Edited project")).toBeTruthy();
+    expect(within(region).queryByText("Edited project")).toBeNull();
+    expect(within(region).getAllByRole("listitem")).toHaveLength(2);
   });
 
   it("on a copy, shows the source as a link and Viewing on the copy", () => {
@@ -141,17 +137,6 @@ describe("VersionsList", () => {
     expect(within(rows[0]!).getByText("Viewing")).toBeTruthy();
     expect(within(rows[1]!).getByText("YouTube 1440p")).toBeTruthy();
     expect(rows[1]!.textContent).toMatch(/Exported copy · .*3:02/);
-  });
-
-  it("suggests where it is going when a local recording has no copies", () => {
-    const region = renderList(master, [master], null, true);
-    expect(within(region).getByText(/Pick a place/)).toBeTruthy();
-  });
-
-  it("does not point to a tab the item lacks", () => {
-    const region = renderList(master, [master], null, false);
-    expect(within(region).queryByText(/Pick a place/)).toBeNull();
-    expect(within(region).getByText("No copies yet.")).toBeTruthy();
   });
 
   it("walks a copy of a copy up to the root original, and shows the same family from any member", () => {
@@ -283,5 +268,16 @@ describe("VersionsList", () => {
     const cloudOnly = video({ id: null, assetId: "co", derivedFromAssetId: "master" } as never);
     const region = renderList(master, [master, cloudOnly]);
     expect(within(region).queryByRole("button", { name: /^Drag/ })).toBeNull();
+  });
+
+  it("the copy on screen keeps its drag handle", () => {
+    const region = renderList(yt, [master, yt, gh]);
+    const viewing = within(region).getByText("Viewing").closest("li")!;
+    expect(within(viewing).getByRole("button", { name: /^Drag YouTube 1440p/ })).toBeTruthy();
+    // The original is not an exported copy: no handle on its row.
+    const original = within(region)
+      .getByRole("link", { name: /My master/ })
+      .closest("li")!;
+    expect(within(original).queryByRole("button", { name: /^Drag/ })).toBeNull();
   });
 });

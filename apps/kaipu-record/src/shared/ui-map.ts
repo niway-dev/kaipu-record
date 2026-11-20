@@ -198,6 +198,7 @@ export const UI_MAP = {
         gatedBy: [{ flag: "transcription" }],
       },
       transcribeModelDialog: { states: ["open"], gatedBy: [{ flag: "transcription" }] },
+      // Tab states keep their ids: "destinations" is the Export tab, "versions" the Copies tab.
       tabs: { states: ["destinations", "versions", "transcript", "details", "captures"] },
       // The Transcript tab (NIW2-870): the editor's TranscriptPanel beside the detail video, behind
       // the `transcription` flag; the states are the panel's own views, see `viewState`.
@@ -205,11 +206,11 @@ export const UI_MAP = {
         states: ["idle", "needsModel", "transcribing", "done", "stale"],
         gatedBy: [{ flag: "transcription" }],
       },
-      // VersionsList: the original alone; with its edited project; with the copies made from
-      // it; a copy viewed on its own page (the Viewing pill sits on that row); a copy being
-      // made; a copy whose original was deleted.
+      // VersionsList, the "Copies" tab (shown only with a copy or a running export, NIW2-894): the
+      // original with the copies made from it; a copy viewed on its own page (the Viewing pill
+      // sits on that row); a copy being made; a copy whose original was deleted.
       versions: {
-        states: ["original", "edited", "withCopies", "copy", "running", "sourceDeleted"],
+        states: ["withCopies", "copy", "running", "sourceDeleted"],
       },
       itemDetails: { states: ["recording", "screenshot", "gif"] },
       // The frame captures taken from this video in the editor (NIW2-764), under the tab's

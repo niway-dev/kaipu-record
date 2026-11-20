@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Film, GripVertical, ImagePlay, Info, Pencil } from "lucide-react";
+import { Film, GripVertical, ImagePlay, Info } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
@@ -32,16 +32,13 @@ interface VersionsListProps {
   /** The list the page walks with previous and next; a row's link carries it along, so opening
    *  another version keeps the walk (and its counter) instead of resetting to the whole library. */
   order?: string[];
-  /** The item has the "Where is it going?" tab (a local recording), so the empty state can point
-   *  to it. Without that tab the sentence would name a place that does not exist. */
-  canExport?: boolean;
   now?: () => number;
 }
 
 /**
- * "Versions" tab: the original (never changes), its edited project when there is one, every
- * exported copy, and the copy being made right now. The row of the item on screen carries a
- * "Viewing" pill; every other row opens its own page.
+ * "Copies" tab: the original (never changes), every exported copy, and the copy being made right
+ * now. The row of the item on screen carries a "Viewing" pill; every other row opens its own
+ * page. The page shows the tab only when there is a copy or an export running.
  */
 export function VersionsList({
   item,
@@ -49,7 +46,6 @@ export function VersionsList({
   running,
   probe,
   order,
-  canExport = false,
   now = Date.now,
 }: VersionsListProps): React.JSX.Element {
   const t = useTranslations("library");
@@ -61,8 +57,7 @@ export function VersionsList({
   // The probe is the viewed item's file; only the master's file sizes every copy's picture.
   const masterProbe = master !== null && master.assetId === item.assetId ? probe : null;
 
-  const hasEdit = master !== null && master.kind === "recording" && master.editSavedAt !== null;
-  const count = (master || sourceDeleted ? 1 : 0) + (hasEdit ? 1 : 0) + copies.length;
+  const count = copies.length;
 
   const destinationName = (presetId: ExportPresetId, destination?: DestinationId | null) => {
     const d = destination ?? destinationOfPreset(presetId);
@@ -103,7 +98,6 @@ export function VersionsList({
   };
 
   const viewing = (assetId: string): boolean => assetId === item.assetId;
-  const empty = copies.length === 0 && running === null;
 
   return (
     <section
@@ -149,17 +143,6 @@ export function VersionsList({
             </span>
             <span className={styles.text}>
               <span className={styles.name}>{t("sourceDeleted")}</span>
-            </span>
-          </li>
-        )}
-        {hasEdit && master && (
-          <li className={styles.row} data-state="edited">
-            <span className={styles.genericIcon} aria-hidden>
-              <Pencil size={13} strokeWidth={1.9} />
-            </span>
-            <span className={styles.text}>
-              <span className={styles.name}>{tPrepare("versionsEditedProject")}</span>
-              <span className={styles.facts}>{relativeDate(master.editSavedAt!)}</span>
             </span>
           </li>
         )}
@@ -220,11 +203,6 @@ export function VersionsList({
           );
         })}
       </ul>
-      {empty && (
-        <p className={styles.empty}>
-          {canExport ? tPrepare("versionsEmpty") : tPrepare("versionsEmptyPlain")}
-        </p>
-      )}
     </section>
   );
 }
@@ -292,6 +270,7 @@ function Row({
       <li className={styles.row} data-state="viewing" aria-current="true">
         <div className={styles.inner}>{body}</div>
         <span className={styles.pill}>{viewingLabel}</span>
+        {drag}
       </li>
     );
   }

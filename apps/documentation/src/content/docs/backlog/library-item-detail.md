@@ -1,6 +1,6 @@
 ---
 title: Library item detail — media left, tabbed panel right
-description: NIW2-669 redesign of the Library item page — Edit in the header, Where is it going?, Versions and Details as tabs, no repeated boilerplate.
+description: NIW2-669 redesign of the Library item page — Edit in the header, Export, Copies and Details as tabs, no repeated boilerplate.
 ---
 
 > **Status:** 🟡 In progress — NIW2-669, branch `feature/niw2-669-library-detail-redesign`.
@@ -33,12 +33,16 @@ evidence (`.evidence/library-mock/claude-design-prompt.md`, not committed).
 - **Two columns.** The media on the left (player; or the image with `− Fit +` zoom and its pixel
   size), a panel on the right (354 px, 280 px under 1000 px) with tabs that scroll inside the
   panel — the page itself does not scroll:
-  - **Where is it going?** — only for a local recording. The seven destinations as a vertical
+  - **Export** — only for a local recording. The seven destinations as a vertical
     list, grouped as the Export screen groups them, each with the size of its copy (amber where
     the platform compresses again, teal where it plays as is), and **Open Export** at the end.
     It is the default tab while the recording has no copy.
-  - **Versions** — the original, its edited project, every exported copy and the copy being made,
-    with a `Viewing` pill on the item on screen. The default once a copy exists.
+  - **Copies N** — the original, the copy being made and every exported copy, with a `Viewing`
+    pill on the item on screen; every local copy keeps its drag handle, the one on screen
+    included. `N` counts the finished copies only. The tab exists only once the family has a
+    copy or an export is running, and it is the default tab then; before that, Export leads
+    (or the first remaining tab when the item cannot be prepared). There is no "Edited project"
+    row: the header's "Edited · not exported" badge carries that state.
   - **Details** — source, resolution, frame rate, audio, size, created, location, workspace;
     rows that do not apply are left out.
 - At narrow widths Reveal and Open become icon buttons with tooltips; Edit keeps its label.
@@ -47,13 +51,13 @@ evidence (`.evidence/library-mock/claude-design-prompt.md`, not committed).
 
 | Before                                                   | Now                                                             |
 | -------------------------------------------------------- | --------------------------------------------------------------- |
-| "MASTER · FULL QUALITY" by the title and over the player | Gone; the Versions tab says which file is the original          |
+| "MASTER · FULL QUALITY" by the title and over the player | Gone; the Copies tab says which file is the original            |
 | "This is your original. It never changes."               | The `i` tooltip by the title                                    |
 | "Editing project available on this device"               | Gone; edit-state badges stay when they say something            |
 | "Local" and "SCREEN" in the metadata                     | Cloud state only when it differs; the capture source in Details |
 | "IN Personal Workspace" chip on the page                 | Move to workspace… in the `•••` menu; workspace in Details      |
-| "Not now" on Where is it going?                          | Switching tab                                                   |
-| "Copies from this original" panel                        | The Versions tab                                                |
+| "Not now" on Export                                      | Switching tab                                                   |
+| "Copies from this original" panel                        | The Copies tab                                                  |
 
 New IPC: `openLocalRecording` and `localRecordingPath` (main, vault-admitted, plain item ids
 only).
@@ -62,3 +66,10 @@ only).
 
 - **Duplicate** is in the design's `•••` menu, but the app has no duplicate operation for a vault
   item; owner decision pending.
+
+## Changes
+
+- 2026-11-20 (NIW2-894): the **Versions** tab became **Copies**, shown only with a copy or a
+  running export, and lost its "Edited project" row. The "Where is it going?" tab became
+  **Export** (the card heading inside it keeps its wording). Default tab: Copies once a copy
+  exists, Export before that.

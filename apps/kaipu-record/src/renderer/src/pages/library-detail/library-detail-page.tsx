@@ -55,7 +55,7 @@ import { RecordingTitle } from "@renderer/features/library/components/recording-
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
 import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
 import { absoluteDate, formatDuration, formatSize } from "@renderer/features/library/format";
-import { buildLineage, editBadge, isMaster } from "@renderer/features/library/lineage";
+import { buildLineage, editBadge, familyOf, isMaster } from "@renderer/features/library/lineage";
 import type { EditingState, RemoveLocalCopyResult } from "@shared/types/library-item";
 import { Button } from "@kaipu/ui";
 import { Badge } from "@kaipu/ui";
@@ -70,7 +70,7 @@ import { LibraryTranscriptTab } from "./library-transcript-tab";
 
 type LibraryMessageKey = keyof Messages["library"];
 
-type PanelTab = "versions" | "transcript" | "details" | "destinations" | "captures";
+type PanelTab = "copies" | "transcript" | "details" | "destinations" | "captures";
 
 /** The editing-state line under the metadata. "project-available" has no line on purpose:
  *  the owner asked for it to go; the other states say something the user has to act on. */
@@ -205,7 +205,7 @@ export function LibraryDetailPage(): React.JSX.Element {
       : null,
   );
   const showInAppCard = showCard && floatingCard.inApp;
-  // A copy finished in the background: re-list, so it shows under "Versions".
+  // A copy finished in the background: re-list, so it shows under "Copies".
   const runner = useExportRunner();
   const readyId = runner.ready?.recording.id ?? null;
   useEffect(() => {
@@ -239,8 +239,8 @@ export function LibraryDetailPage(): React.JSX.Element {
     height: number;
   } | null>(null);
 
-  // The panel's tabs. Until the user picks one, "Where is it going?" leads while the
-  // original has no copy yet (Export v3, section 1); "Versions" otherwise. Moving to another
+  // The panel's tabs. Until the user picks one, "Copies" leads once the family has a copy (or an export
+  // runs) and "Export" before that; the first remaining tab when the item cannot be prepared. Moving to another
   // item starts over.
   // The pick is stored with the item it was made on, so another item ignores it at once
   // (an effect that cleared it would paint the old tab for one frame).
@@ -289,13 +289,15 @@ export function LibraryDetailPage(): React.JSX.Element {
   // NIW2-217: a GIF export plays in an <img>, has no editor and no edit-state line.
   const isGif = video.kind === "gif";
   const gifInfo = isGif ? video.gif : null;
-  const exports = lineage.exportsOf.get(video.assetId) ?? [];
   const badge = editBadge(video, lineage);
   // NIW2-585: the recording is the master. Its first copy is what moves the panel from
-  // "Where is it going?" to "Versions".
+  // "Export" to "Copies".
   const master = isMaster(video);
   const running = runningCopyOf(runner, video.assetId);
-  const hasCopies = exports.length > 0 || running !== null;
+  // NIW2-894: the Copies tab exists only once the family has an exported copy or one is being
+  // made; its count is the finished copies alone.
+  const familyCopies = familyOf(video, lineage).copies;
+  const showCopies = familyCopies.length > 0 || running !== null;
   const screenshotDimensions =
     shotSize && shotSize.assetId === video.assetId
       ? { width: shotSize.width, height: shotSize.height }
@@ -318,20 +320,23 @@ export function LibraryDetailPage(): React.JSX.Element {
   const showTranscript =
     transcriptionOn && canTranscribeVideo(video, hasAudio) && durationKnownOrPending;
   const tabs: PanelTab[] = [
-    "versions",
+    ...(showCopies ? (["copies"] as const) : []),
     ...(showTranscript ? (["transcript"] as const) : []),
     "details",
     ...(preparable ? (["destinations"] as const) : []),
     ...(hasCaptures ? (["captures"] as const) : []),
   ];
-  const defaultTab: PanelTab =
-    master && preparable !== null && !hasCopies ? "destinations" : "versions";
+  const defaultTab: PanelTab = showCopies
+    ? "copies"
+    : preparable !== null
+      ? "destinations"
+      : (tabs[0] ?? "details");
   const tab: PanelTab = pickedTab && tabs.includes(pickedTab) ? pickedTab : defaultTab;
   const tabLabel: Record<PanelTab, string> = {
-    versions: t("tabVersions"),
+    copies: t("tabCopies", { count: familyCopies.length }),
     transcript: t("tabTranscript"),
     details: t("tabDetails"),
-    destinations: t("destinationsTitle"),
+    destinations: t("tabExport"),
     captures: t("tabCaptures", { count: captures.length }),
   };
   const onTabKey = (event: React.KeyboardEvent, current: PanelTab): void => {
@@ -855,7 +860,6 @@ export function LibraryDetailPage(): React.JSX.Element {
                 running={running}
                 probe={probe}
                 order={order}
-                canExport={preparable !== null}
               />
             )}
           </div>
