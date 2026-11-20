@@ -3706,19 +3706,22 @@ describe("CaptureOverlay — expanded is always one row (NIW2-883)", () => {
     expect(screen.getByTestId("input-microphone")).not.toHaveTextContent("Microphone");
     expect(screen.getByTestId("input-systemAudio")).toHaveTextContent("Audio");
     expect(screen.getByTestId("input-systemAudio")).not.toHaveTextContent("System audio");
-    // Still the expanded toolbar: the user's choice stands.
+    // Still the expanded toolbar: both the look and the user's choice.
     expect(widget()).toHaveAttribute("data-expanded", "true");
     expect(screen.getByTestId("widget-expand")).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("at 1440 and 1280 falls back to the compact look, and keeps the expanded choice", async () => {
+  it("at 1440 and 1280 draws the compact look, with none of the expanded styling, and keeps the choice", async () => {
     for (const width of [1440, 1280]) {
       renderRecording(width);
       await screen.findByTestId("capture-frame");
       await waitFor(() => expect(widget()).toHaveAttribute("data-fit", "5"));
       expect(screen.queryByTestId("size-readout")).toBeNull();
       expect(screen.getByTestId("input-microphone")).not.toHaveTextContent("Mic");
-      expect(widget()).toHaveAttribute("data-expanded", "true");
+      // The look is compact, so it gets none of the expanded styling; the choice is still saved
+      // as expanded, and the button still offers to collapse it.
+      expect(widget()).not.toHaveAttribute("data-expanded");
+      expect(screen.getByTestId("widget-expand")).toHaveAttribute("aria-expanded", "true");
       cleanup();
       resetSettingsStoreForTests();
       vi.restoreAllMocks();

@@ -386,7 +386,7 @@ span.inputName {
   flex: none;
 }
 
-/* Expanded wraps its secondary groups first: the actions stay together at the end of a line. */
+/* Cancel sits at the end of the row, after the confirm button. The row never wraps. */
 .cancel {
   height: 40px;
   padding: 0 12px;

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { widgetFitWidth } from "./widget-placement";
 import { COMPACT_LEVEL, FIT_SLACK_DIP, fitLevel, widgetLook } from "./widget-fit";
 
-// Illustrative row widths per level for the recording toolbar (invented, but shaped like the
-// real one: the full row is about 1890 px, and each level gives up some of it).
+// These cases pin the pure arithmetic (which level a width settles on) with stated widths, not
+// measured ones. The widths are invented but shaped like the real row (the full row is about
+// 1890 px, and each level gives up some of it). They were NOT measured in a real window: jsdom
+// lays nothing out, so the real width per level still needs a look in the app.
 const RECORD = [1890, 1770, 1660, 1580, 1490, 900];
 
 /** The level the toolbar settles on once every level has been measured. */

@@ -292,7 +292,7 @@ export function CaptureWidget({
         data-testid="capture-widget"
         data-edge={placement.edge}
         data-enter={enterFrom ?? undefined}
-        data-expanded={wanted || undefined}
+        data-expanded={expanded || undefined}
         data-fit={wanted ? level : undefined}
         data-intent={chrome.intent}
         data-counting={counting || undefined}
@@ -576,13 +576,15 @@ export function CaptureWidget({
             className={styles.expandToggle}
             data-testid="widget-expand"
             inert={lock}
-            aria-expanded={expanded}
-            aria-label={expanded ? t("widget.collapse") : t("widget.expand")}
-            title={expanded ? t("widget.collapse") : t("widget.expand")}
+            // The saved choice, not the look: a display too narrow for the expanded row draws the
+            // compact one, and the button still says what the next press will undo.
+            aria-expanded={wanted}
+            aria-label={wanted ? t("widget.collapse") : t("widget.expand")}
+            title={wanted ? t("widget.collapse") : t("widget.expand")}
             onClick={chrome.onToggleExpanded}
           >
             <Kbd>{controlKeyLabel(platform)}</Kbd>
-            {expanded ? (
+            {wanted ? (
               <ChevronsRightLeft size={13} aria-hidden />
             ) : (
               <ChevronsLeftRight size={13} aria-hidden />
