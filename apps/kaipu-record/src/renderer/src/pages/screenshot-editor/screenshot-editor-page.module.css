@@ -353,6 +353,10 @@
   min-width: 0;
   min-height: 0;
   background: var(--ie-stage);
+  /* A size container, so the frame can bound a tall shot by the stage height (`100cqh` in
+     beautified-frame.module.css). The stage already has a definite size (flex: 1 in a sized
+     row), so size containment changes nothing about its layout. */
+  container-type: size;
 }
 
 /* Once zoomed in, anchor the shot to the top-left so it lines up with the frame's

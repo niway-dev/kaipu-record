@@ -158,7 +158,18 @@ export function BeautifiedFrame({
     return () => obs.disconnect();
   }, [windowed]);
 
+  // The height bound for the shot, as a length: its own percent height has no definite parent.
+  // Un-windowed it is what the frame's own `max-height: 100%` leaves after the padding (the
+  // extents and a base's offset cancel out: both the frame and its content move by the same
+  // amount). Windowed, the frame is recomposed from the shot's constant size, so the bound is
+  // that size: it must not shrink when the padding slider grows the frame.
+  const shotMaxH = windowed
+    ? base
+      ? base.shot.h
+      : measured.h - 2 * measured.pad - measured.extH
+    : `calc(100cqh - ${2 * beautify.padding}px)`;
   const frameStyle: React.CSSProperties = {
+    "--shot-max-h": typeof shotMaxH === "number" ? `${shotMaxH}px` : shotMaxH,
     background: backgroundCss(beautify.bg),
     padding: ext
       ? `${beautify.padding + ext.top}px ${beautify.padding + ext.right}px ${beautify.padding + ext.bottom}px ${beautify.padding + ext.left}px`
@@ -183,7 +194,7 @@ export function BeautifiedFrame({
           ),
         }
       : {}),
-  };
+  } as React.CSSProperties;
   const transform = viewTransform({ zoom, panX: pan?.x ?? 0, panY: pan?.y ?? 0 });
   const inner = (
     <>
