@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ToolPanel } from "./tool-panel";
+import type { InspectController } from "../inspect";
 import { ANNOTATION_COLORS } from "../annotations/tools";
 import type { Annotation } from "../annotations/scene";
 import type { EditorScene } from "../annotations/use-editor-scene";
@@ -75,6 +76,10 @@ const text: Annotation = {
 const blur: Annotation = { id: "u1", kind: "blur", x: 0.1, y: 0.1, w: 0.2, h: 0.2 };
 
 const state = () => document.querySelector('[data-ui-area="editorImage.toolPanel"]');
+
+vi.mock("../inspect", () => ({
+  InspectBar: () => <div data-testid="inspect-bar-stub" />,
+}));
 
 describe("ToolPanel", () => {
   describe("empty state", () => {
@@ -232,6 +237,102 @@ describe("ToolPanel", () => {
       expect(state()).toHaveAttribute("data-state", "selection");
       expect(screen.queryByTestId("tool-panel-empty")).toBeNull();
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    });
+  });
+  describe("a selected image's actions (NIW2-876)", () => {
+    const actions = () => ({
+      imageId: "img-1",
+      hasCrop: true,
+      followRadius: 8,
+      maxRadius: 100,
+      onCrop: vi.fn(),
+      onResetCrop: vi.fn(),
+      onRadius: vi.fn(),
+    });
+
+    it("show Crop, Corners and Reset, the same controls as the floating bar", () => {
+      const a = actions();
+      render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode imageActions={a} />);
+      expect(state()).toHaveAttribute("data-state", "imageOptions");
+      expect(screen.queryByTestId("tool-panel-empty")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Crop" }));
+      expect(a.onCrop).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+      expect(a.onResetCrop).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: "Corners" })).toBeInTheDocument();
+    });
+
+    it("sit beside Delete for an added image", () => {
+      const image: Annotation = {
+        id: "i1",
+        kind: "image",
+        assetId: "img-aaaaaaaaaaaa",
+        x: 0,
+        y: 0,
+        w: 0.2,
+        h: 0.2,
+        pixelWidth: 10,
+        pixelHeight: 10,
+      };
+      render(
+        <ToolPanel
+          tools={makeTools()}
+          scene={makeScene([image], "i1")}
+          canvasMode
+          imageActions={actions()}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "imageOptions");
+      expect(screen.getByRole("button", { name: "Crop" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    });
+
+    it("are not shown when the prop is absent", () => {
+      render(<ToolPanel tools={makeTools()} scene={makeScene()} canvasMode />);
+      expect(state()).toHaveAttribute("data-state", "empty");
+      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+    });
+
+    it("are not shown in Inspect, which reads the image: the Inspect bar wins", () => {
+      render(
+        <ToolPanel
+          tools={makeTools()}
+          scene={makeScene()}
+          canvasMode
+          inspect={{} as InspectController}
+          imageActions={actions()}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "inspect");
+      expect(screen.getByTestId("inspect-bar-stub")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+    });
+
+    it("are not shown with the Export frame tool: its card wins", () => {
+      render(
+        <ToolPanel
+          tools={makeTools({ tool: "crop" })}
+          scene={makeScene()}
+          canvasMode
+          exportFrame={{ hasFrame: false, onFit: vi.fn(), onRemove: vi.fn() }}
+          imageActions={actions()}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "crop");
+      expect(screen.queryByRole("button", { name: "Crop" })).toBeNull();
+    });
+
+    it("show Crop pressed while crop mode is open on the image", () => {
+      render(
+        <ToolPanel
+          tools={makeTools()}
+          scene={makeScene()}
+          canvasMode
+          imageActions={{ ...actions(), cropping: true }}
+        />,
+      );
+      expect(state()).toHaveAttribute("data-state", "imageOptions");
+      expect(screen.getByRole("button", { name: "Crop" })).toHaveAttribute("aria-pressed", "true");
     });
   });
 });

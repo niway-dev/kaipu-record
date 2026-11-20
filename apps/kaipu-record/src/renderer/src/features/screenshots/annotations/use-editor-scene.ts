@@ -132,9 +132,15 @@ export function useEditorScene(
     (id: string, patch: Partial<Annotation>) => {
       commit({
         ...sceneRef.current,
-        annotations: sceneRef.current.annotations.map((a) =>
-          a.id === id ? ({ ...a, ...patch } as Annotation) : a,
-        ),
+        annotations: sceneRef.current.annotations.map((a) => {
+          if (a.id !== id) return a;
+          const next = { ...a, ...patch } as Record<string, unknown>;
+          // An undefined value is no field, like `commitBase`: no dead key in the scene.
+          for (const key of Object.keys(patch)) {
+            if (next[key] === undefined) delete next[key];
+          }
+          return next as unknown as Annotation;
+        }),
       });
     },
     [commit],

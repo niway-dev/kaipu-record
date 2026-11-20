@@ -45,9 +45,7 @@ import {
 } from "./scene";
 import {
   BASE_IMAGE_ID,
-  CROP_HANDLES,
   cropHandleAt,
-  cropHandlePoint,
   baseAsImage,
   resizeBasePlacement,
   resizeCropWindow,
@@ -55,6 +53,7 @@ import {
   type BaseFields,
   type CropTarget,
 } from "./image-crop";
+import { followRadiusSource, imageActionState } from "./image-actions";
 import { useRedactionTile } from "./redaction-preview";
 import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
@@ -74,6 +73,8 @@ import {
 } from "../text-selection";
 import { gapMeasures, type WorldRect } from "../canvas/image-gap";
 import { ImageSelection } from "../canvas/image-selection";
+import { ImageActionBar } from "../canvas/image-action-bar";
+import { CropChrome } from "./crop-chrome";
 import { RedactionLockTag } from "../canvas/redaction-lock-tag";
 import styles from "./annotation-layer.module.css";
 
@@ -175,6 +176,18 @@ interface LayerProps {
   /** The "Done" button of crop mode. */
   onCropDone?: () => void;
   /**
+   * Crop mode's Reset is enabled: the page knows whether the image carries a committed crop
+   * (this layer's `base` drops it while the base is being cropped) or the window was dragged in.
+   */
+  canResetCrop?: boolean;
+  /**
+   * The action bar's Reset (NIW2-876): remove the selected image's crop, in one commit. Absent
+   * with `onEnterCrop` (Inspect on): the bar is not shown at all.
+   */
+  onResetCrop?: (id: string) => void;
+  /** The action bar's Corners: the selected image's own radius in source px; undefined = follow the slider. */
+  onImageRadius?: (id: string, radius: number | undefined) => void;
+  /**
    * A base resize in flight: the base's fields with the drag applied, null once it ends. The
    * editor lays the frame out from them so the page follows the drag. Must be stable.
    */
@@ -209,6 +222,9 @@ function AnnotationLayerImpl({
   onEnterCrop,
   onCropWindow,
   onCropDone,
+  canResetCrop = false,
+  onResetCrop,
+  onImageRadius,
   onLiveBase,
 }: LayerProps): React.JSX.Element {
   const t = useTranslations("screenshots");
@@ -278,6 +294,8 @@ function AnnotationLayerImpl({
     fontPx?: number;
   } | null>(null);
   const drag = useRef<Drag | null>(null);
+  // An image is being pressed, moved or resized: the action bar steps out of the way (NIW2-876).
+  const [gesturing, setGesturing] = useState(false);
   // The selected base image, as an image annotation, so it wears the image chrome and resizes
   // through the same machinery. Never in the scene (the base is not an annotation).
   const baseCrop = base.baseCrop;
@@ -479,6 +497,7 @@ function AnnotationLayerImpl({
             sel.id === BASE_IMAGE_ID
               ? { mode: "resize-base", handle, orig: base }
               : { mode: "resize", id: sel.id, handle, orig: sel };
+          setGesturing(true);
           // A base drag owns the history until it ends: undo mid-drag would remove the crop the
           // release then computes its placement from.
           if (sel.id === BASE_IMAGE_ID) scene.beginInteract();
@@ -499,6 +518,8 @@ function AnnotationLayerImpl({
       // editing to select it" is unchanged.
       const editingThis = editing?.id !== undefined && hit?.id === editing.id;
       if (hit && !editingThis) {
+        // The action bar steps aside on the first move, not on the press: a plain click on the
+        // selected image must not unmount the bar and drop an open Corners panel's value.
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         (e.target as Element).setPointerCapture?.(e.pointerId);
       }
@@ -601,6 +622,7 @@ function AnnotationLayerImpl({
       return;
     }
     if (d.mode === "move") {
+      setGesturing(true);
       setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
       return;
     }
@@ -687,6 +709,7 @@ function AnnotationLayerImpl({
   const onPointerUp = (): void => {
     const d = drag.current;
     drag.current = null;
+    setGesturing(false);
     if (!d || d.mode === "select-text" || d.mode === "crop-window") return;
     if (d.mode === "resize-base") {
       commitBaseLive();
@@ -741,6 +764,7 @@ function AnnotationLayerImpl({
   const onPointerAbort = (): void => {
     const d = drag.current;
     drag.current = null;
+    setGesturing(false);
     if (d?.mode === "move" || d?.mode === "resize") commitLive();
     if (d?.mode === "resize-base") commitBaseLive();
     setDraft(null);
@@ -862,6 +886,14 @@ function AnnotationLayerImpl({
       if (a.kind === "image" && a.id !== selectedImage.id) others.push(world(a));
     return gapMeasures(world(selectedImage), others);
   }, [selectedImage, natural, shown, baseCrop, basePlacement]);
+
+  // The floating action bar (NIW2-876): Crop, Corners and Reset over the selected image. It
+  // needs the crop handlers (absent in Inspect, where the image is read, not edited), and it
+  // steps out of the way while the image is pressed, moved or resized and in crop mode.
+  const actionState =
+    selectedImage && onEnterCrop && onResetCrop && onImageRadius && !gesturing && !cropping
+      ? imageActionState(selectedImage.id, scene.annotations, base, natural)
+      : null;
 
   return (
     <div
@@ -1032,20 +1064,58 @@ function AnnotationLayerImpl({
           unit={natural && natural.w > 0 ? size.w / natural.w : 1}
         />
       )}
+      {selectedImage && actionState && onEnterCrop && onResetCrop && onImageRadius && (
+        <ImageActionBar
+          rect={{
+            x: selectedImage.x * size.w,
+            y: selectedImage.y * size.h,
+            w: selectedImage.w * size.w,
+            h: selectedImage.h * size.h,
+          }}
+          actions={{
+            imageId: actionState.id,
+            hasCrop: actionState.hasCrop,
+            ...(actionState.radius !== undefined ? { radius: actionState.radius } : {}),
+            followRadius: followRadiusSource(radius, naturalW, size.w),
+            maxRadius: actionState.maxRadius,
+            onCrop: () => onEnterCrop(actionState.id),
+            onResetCrop: () => onResetCrop(actionState.id),
+            onRadius: (r) => onImageRadius(actionState.id, r),
+          }}
+        />
+      )}
+      {cropping && <CropChrome win={cropping.win} size={size} />}
       {cropping && (
-        <button
-          type="button"
-          className={styles.cropDone}
-          title={t("cropDoneTitle")}
+        <div
+          className={styles.cropActions}
+          data-testid="crop-actions"
           style={{
             left: (cropping.win.x + cropping.win.w) * size.w,
             top: (cropping.win.y + cropping.win.h) * size.h,
           }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={onCropDone}
         >
-          {t("cropDone")}
-        </button>
+          {onResetCrop && (
+            <button
+              type="button"
+              className={styles.cropReset}
+              title={t("imageActionResetTitle")}
+              disabled={!canResetCrop}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => onResetCrop(cropping.id)}
+            >
+              {t("imageActionReset")}
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.cropDone}
+            title={t("cropDoneTitle")}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onCropDone}
+          >
+            {t("cropDone")}
+          </button>
+        </div>
       )}
       {selectedLocked && (
         <RedactionLockTag
@@ -1148,6 +1218,9 @@ function sameLayerProps(p: LayerProps, n: LayerProps): boolean {
     p.onEnterCrop === n.onEnterCrop &&
     p.onCropWindow === n.onCropWindow &&
     p.onCropDone === n.onCropDone &&
+    p.canResetCrop === n.canResetCrop &&
+    p.onResetCrop === n.onResetCrop &&
+    p.onImageRadius === n.onImageRadius &&
     p.onLiveBase === n.onLiveBase
   );
 }
@@ -1194,36 +1267,21 @@ function CropScrim({ target, size }: { target: CropTarget; size: Size }): React.
   );
 }
 
-/** The crop window's outline and its eight handles. Presses are hit-tested by the layer. */
+/**
+ * The crop window's outline: 1 px white on screen, not the accent frame a selection wears. Its
+ * handles, grid and the area root are `CropChrome`, drawn in HTML over the layer.
+ */
 function CropWindow({ target, size }: { target: CropTarget; size: Size }): React.JSX.Element {
   const { win } = target;
   return (
-    <g {...uiArea("editorImage.imageCropMode")}>
-      <rect
-        data-testid="crop-window"
-        className={`${styles.selOutline} ${styles.imageFrame}`}
-        x={win.x * size.w}
-        y={win.y * size.h}
-        width={win.w * size.w}
-        height={win.h * size.h}
-      />
-      {CROP_HANDLES.map((h) => {
-        const pt = cropHandlePoint(win, h);
-        return (
-          <rect
-            key={h}
-            data-testid="crop-handle"
-            className={styles.handle}
-            x={pt.x * size.w - HANDLE_PX / 2}
-            y={pt.y * size.h - HANDLE_PX / 2}
-            width={HANDLE_PX}
-            height={HANDLE_PX}
-            rx={2}
-            style={{ cursor: handleCursor(h) }}
-          />
-        );
-      })}
-    </g>
+    <rect
+      data-testid="crop-window"
+      className={styles.cropWindow}
+      x={win.x * size.w}
+      y={win.y * size.h}
+      width={win.w * size.w}
+      height={win.h * size.h}
+    />
   );
 }
 

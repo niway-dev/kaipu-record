@@ -1,0 +1,205 @@
+/*
+ * Crop / Corners / Reset of a selected image (NIW2-876). One component, two homes: `.bar` is
+ * the dark pill floating over the image, `.panel` is the Tool tab's block. Colors and spacing
+ * are the editor's tokens; the bar reuses the overlay tokens the size tag wears.
+ */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ie-ov-tx);
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled),
+.button[data-open] {
+  background: var(--ie-sep);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--ie-accent);
+  outline-offset: 1px;
+}
+
+/* Crop is the one primary action, in the accent like Done. */
+.primary {
+  background: var(--ie-accent);
+  color: #fff; /* text on --ie-accent, as the crop mode's Done */
+  font-weight: 600;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+/* Crop mode is open on this image: the pressed state is a ring, since Crop is already accent. */
+.primary[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+/* The floating bar: a dark pill, like the size tag's chrome. */
+.bar {
+  position: relative;
+  align-items: stretch;
+  padding: 4px;
+  background: var(--ie-ov-bg);
+  border: 1px solid var(--ie-ov-bd);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* The Tool tab: the three buttons share the width. */
+.panel .row {
+  gap: var(--space-sm);
+}
+
+.panel .button {
+  flex: 1;
+  height: 30px;
+  background: var(--ie-card);
+  border-color: var(--ie-sep);
+  color: var(--ie-tx);
+  font-size: var(--font-size-xs);
+}
+
+.panel .primary {
+  background: var(--ie-accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.panel .button:hover:not(:disabled) {
+  border-color: var(--ie-accent);
+  background: var(--ie-card);
+}
+
+.panel .primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+/* On the bar the Corners control hangs under the pill, so opening it never moves the buttons
+   (a bar above the image grows upward from its bottom edge otherwise). */
+.bar .host {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: 240px;
+  transform: translateX(-50%);
+  padding: 4px 8px 8px;
+  background: var(--ie-ov-bg);
+  border: 1px solid var(--ie-ov-bd);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.bar .host[hidden] {
+  display: none;
+}
+
+/* ── Corners ─────────────────────────────────── */
+
+.corners {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 2px;
+}
+
+.cornersLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ie-faint);
+  font-family: var(--font-family);
+  font-size: 10.5px;
+}
+
+.cornersInputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slider {
+  flex: 1;
+  min-width: 90px;
+  accent-color: var(--ie-accent);
+}
+
+.number {
+  width: 52px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--ie-sep);
+  border-radius: 5px;
+  background: var(--ie-card);
+  color: var(--ie-tx);
+  font-family: var(--ie-font-mono);
+  font-size: 11px;
+}
+
+.cornersFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hint {
+  color: var(--ie-faint);
+  font-family: var(--font-family);
+  font-size: 10.5px;
+}
+
+.follow {
+  margin-left: auto;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--ie-sep);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ie-ov-tx);
+  font-family: var(--font-family);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.panel .follow {
+  color: var(--ie-tx);
+}
+
+.follow:hover:not(:disabled) {
+  border-color: var(--ie-accent);
+}
+
+.follow:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
