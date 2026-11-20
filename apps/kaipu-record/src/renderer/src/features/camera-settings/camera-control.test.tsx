@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { CameraBubbleSettings } from "@shared/camera-bubble";
 import { CameraPanelPopover, CameraPanelTile, useCameraControl } from "./camera-control";
@@ -239,7 +239,9 @@ describe("Camera card (Capture page)", () => {
           cameraBubble: expect.objectContaining({ deviceId: "cam-2" }),
         }),
       );
-      expect(screen.getAllByText("FaceTime HD Camera").length).toBeGreaterThan(0);
+      // The card's own secondary line (inside its chevron), not the popover's radio row.
+      const chevron = screen.getByRole("button", { name: /^Camera settings/ });
+      expect(within(chevron).getByText("FaceTime HD Camera")).toBeInTheDocument();
     } finally {
       Object.defineProperty(navigator, "mediaDevices", { value: media, configurable: true });
     }
