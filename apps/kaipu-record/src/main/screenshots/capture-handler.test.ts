@@ -373,6 +373,9 @@ describe("createCaptureHandler", () => {
       const log: string[] = [];
       let releaseSave!: () => void;
       let secondAnswer!: (result: ProviderResult) => void;
+      // The second pick's user taking their time before confirming (the grab).
+      let confirm!: () => void;
+      const confirmed = new Promise<void>((resolve) => (confirm = resolve));
       const capture = vi
         .fn<ScreenshotCaptureProvider["capture"]>()
         .mockImplementationOnce(async ({ overlay: port }) => {
@@ -382,6 +385,7 @@ describe("createCaptureHandler", () => {
         })
         .mockImplementationOnce(async ({ overlay: port }) => {
           log.push("second pick opened");
+          await confirmed;
           await port.hideAll();
           log.push("second shot grabbed");
           return new Promise<ProviderResult>((resolve) => (secondAnswer = resolve));
@@ -395,7 +399,14 @@ describe("createCaptureHandler", () => {
       );
       harness.windows.beforeCapture.mockImplementation(() => void log.push("before"));
       harness.windows.afterCapture.mockImplementation((ending) => void log.push(`after ${ending}`));
-      return { ...harness, capture, log, release: () => releaseSave(), answer: () => secondAnswer };
+      return {
+        ...harness,
+        capture,
+        log,
+        confirm: () => confirm(),
+        release: () => releaseSave(),
+        answer: () => secondAnswer,
+      };
     }
 
     it("opens the next pick at once instead of answering it cancelled", async () => {
@@ -416,7 +427,7 @@ describe("createCaptureHandler", () => {
     });
 
     it("keeps the previous capture's window hooks and save ahead of the new pick's", async () => {
-      const { handler, saveToVault, log, release, answer } = slowFirstSave();
+      const { handler, saveToVault, log, release, confirm, answer } = slowFirstSave();
       const first = handler({ mode: "frame" });
       await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
 
@@ -427,6 +438,7 @@ describe("createCaptureHandler", () => {
 
       release();
       expect((await first).kind).toBe("captured");
+      confirm();
       await vi.waitFor(() => expect(answer()).toBeDefined());
       answer()({ kind: "cancelled" });
       await second;
@@ -441,7 +453,91 @@ describe("createCaptureHandler", () => {
       ]);
     });
 
-    it("still turns a press away while a pick is open", async () => {
+    it("leaves the previous capture's toast up while the new pick is open, and hides it only when the new shot is about to be taken", async () => {
+      const { handler, saveToVault, log, release, confirm, answer } = slowFirstSave();
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+
+      release();
+      await first;
+      await tick();
+      // The first capture's `afterCapture` showed its toast; the second's `beforeCapture`
+      // (which dismisses it) has not run in the same turn.
+      expect(log).toEqual(["before", "second pick opened", "after quiet"]);
+
+      confirm();
+      await vi.waitFor(() => expect(answer()).toBeDefined());
+      expect(log.slice(3)).toEqual(["before", "second shot grabbed"]);
+      answer()({ kind: "cancelled" });
+      await second;
+    });
+
+    it("leaves the windows and the previous toast alone when the new pick is cancelled without a shot", async () => {
+      const log: string[] = [];
+      let releaseSave!: () => void;
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return shot;
+        })
+        .mockImplementationOnce(async () => ({ kind: "cancelled" }));
+      const { handler, windows, saveToVault } = setup(capture);
+      saveToVault.mockImplementationOnce(
+        () => new Promise((resolve) => (releaseSave = () => resolve({ id: "s", assetId: "a" }))),
+      );
+      windows.beforeCapture.mockImplementation(() => void log.push("before"));
+      windows.afterCapture.mockImplementation((ending) => void log.push(`after ${ending}`));
+
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+      releaseSave();
+      await first;
+      expect(await second).toEqual({ kind: "cancelled" });
+
+      expect(log).toEqual(["before", "after quiet"]);
+    });
+
+    it("clears the previous capture's kept bytes after it has kept them, not before", async () => {
+      prefs = { copy: "auto", afterCapture: "preview" };
+      let secondDone!: () => void;
+      const capture = vi
+        .fn<ScreenshotCaptureProvider["capture"]>()
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return { ...shot, png: Buffer.from([9, 8, 7]) };
+        })
+        .mockImplementationOnce(async ({ overlay: port }) => {
+          await port.hideAll();
+          return new Promise<ProviderResult>((resolve) => (secondDone = () => resolve(shot)));
+        });
+      const { handler, saveToVault } = setup(capture);
+      // The first save fails: the copy is all it has, so its bytes are kept for the toast's Save.
+      let failSave!: () => void;
+      saveToVault.mockImplementationOnce(
+        () => new Promise((_resolve, reject) => (failSave = () => reject(new Error("disk full")))),
+      );
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const first = handler({ mode: "frame" });
+      await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
+      const second = handler({ mode: "frame" });
+      await tick();
+      failSave();
+      await first;
+      await vi.waitFor(() => expect(secondDone).toBeDefined());
+      secondDone();
+      await second;
+
+      // The second shot was saved, so nothing of the first one is left to retry.
+      expect(takeLastQuietCapture()).toBeNull();
+    });
+
+    it("still turns a press away while a pick is open, also after the previous shot finished saving", async () => {
       const { handler, capture, release, saveToVault } = slowFirstSave();
       const first = handler({ mode: "frame" });
       await vi.waitFor(() => expect(saveToVault).toHaveBeenCalledOnce());
@@ -449,9 +545,11 @@ describe("createCaptureHandler", () => {
       await tick();
 
       expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
-      expect(capture).toHaveBeenCalledTimes(2);
       release();
       await first;
+      // The first capture ended while the second pick is still open: its guard stays.
+      expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
+      expect(capture).toHaveBeenCalledTimes(2);
     });
   });
 

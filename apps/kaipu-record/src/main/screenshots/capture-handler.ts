@@ -150,7 +150,9 @@ export function createCaptureHandler(
   // `cancelled` without touching the first one. It covers the pick and the grab only: once
   // the provider returns, the overlay is gone and the next press may open its own, even
   // while this capture is still saving (NIW2-878).
-  let picking = false;
+  // A token per capture, not a boolean: a capture that finishes while the next one's pick is
+  // open must not release that pick's guard.
+  let picking: object | null = null;
   // What a capture does after its pick (save, copy, toast, `afterCapture`), as one promise
   // per capture. The next capture's window hooks wait for it: both share the hidden-window
   // state, the toast and the camera bubble, and an `afterCapture` that ran inside the next
@@ -188,19 +190,37 @@ export function createCaptureHandler(
     if (picking) return { kind: "cancelled" };
     // An insert belongs to the open editor, which is not reachable during a take.
     if (insert && readDuringTake(deps)) return { kind: "cancelled" };
-    picking = true;
+    const token = {};
+    picking = token;
+    const release = (): void => {
+      if (picking === token) picking = null;
+    };
     const after = finishing;
     let finished!: () => void;
     const mine = new Promise<void>((resolve) => (finished = resolve));
     finishing = mine;
     // A new capture frees the previous quiet capture's bytes. An insert does not replace it
-    // (it never reaches the toast), so the toast's Save retry keeps its shot.
-    if (!insert) clearLastQuietCapture();
+    // (it never reaches the toast), so the toast's Save retry keeps its shot. Behind a
+    // capture that is still saving, this waits for it (see `hide`).
+    const clearKept = (): void => {
+      if (!insert) clearLastQuietCapture();
+    };
+    if (!after) clearKept();
     const workspace = readWorkspace(deps);
     // An insert never reads the capture policy: nothing is saved, copied or toasted.
     const policy = insert ? null : readPolicy(deps, workspace);
     const duringTake = readDuringTake(deps);
+    // This capture's `beforeCapture` (with the clear above): set once it ran or is waiting.
+    // Null while a capture behind a saving one has hidden nothing yet.
     let hooksReady: Promise<void> | null = null;
+    const hide = (): Promise<void> => {
+      hooksReady ??= after!.then(() => {
+        clearKept();
+        deps.windows.beforeCapture();
+      });
+      hooksReady.catch(() => {});
+      return hooksReady;
+    };
     let result: ProviderResult = { kind: "cancelled" };
     let answer: CaptureResult = { kind: "cancelled" };
     let failed = false;
@@ -210,13 +230,18 @@ export function createCaptureHandler(
       // Inside the try: a throw while hiding windows must still release the guard.
       let overlay = deps.overlay;
       if (after) {
-        // The previous capture is still saving: its windows come back first, then this one's go
-        // away. The overlay opens now, but nothing is hidden or grabbed before that.
-        const hidden = after.then(() => deps.windows.beforeCapture());
-        hooksReady = hidden;
-        hidden.catch(() => {});
-        overlay = { ...deps.overlay, hideAll: async () => (await hidden, deps.overlay.hideAll()) };
+        // The previous capture is still saving. The overlay opens now, but this capture's
+        // windows are hidden (which also dismisses the previous toast) only when its shot is
+        // about to be taken, and then only after the previous capture has finished.
+        overlay = {
+          ...deps.overlay,
+          hideAll: async () => {
+            await hide();
+            return deps.overlay.hideAll();
+          },
+        };
       } else {
+        hooksReady = Promise.resolve();
         deps.windows.beforeCapture();
       }
       const recordingTarget = duringTake ? await deps.recordingTarget?.() : undefined;
@@ -233,10 +258,10 @@ export function createCaptureHandler(
               });
       } finally {
         // The pick has ended (or never opened): a new press may open its own now.
-        picking = false;
+        release();
       }
-      // Whatever follows (a save, a recording target) belongs after the previous capture.
-      await hooksReady;
+      // A shot or a recording target belongs after the previous capture; a cancel hid nothing.
+      if (after && (result.kind === "captured" || result.kind === "record")) await hide();
       if (result.kind === "captured") {
         // Before the policy: a quiet save that fails and falls back to the editor still
         // remembers the mode the user captured in.
@@ -270,14 +295,17 @@ export function createCaptureHandler(
       failed = true;
       answer = { kind: "cancelled" };
     } finally {
-      picking = false;
+      release();
       // Only the editor path reveals the window itself; cancel restores it here; quiet keeps it hidden.
       try {
-        // Never before this capture's own `beforeCapture`, which may still be waiting.
-        await hooksReady?.catch(() => {});
-        deps.windows.afterCapture(
-          answer.kind === "captured" ? answer.after : recordStarted ? "recording" : "cancelled",
-        );
+        // Never before this capture's own `beforeCapture`; none ran when it hid nothing.
+        await after;
+        if (hooksReady) {
+          await hooksReady.catch(() => {});
+          deps.windows.afterCapture(
+            answer.kind === "captured" ? answer.after : recordStarted ? "recording" : "cancelled",
+          );
+        }
       } finally {
         if (finishing === mine) finishing = null;
         finished();

@@ -255,12 +255,17 @@ next spare was ready, and an Esc sent in that gap reached no window.
   reports `confirming` just before, so an Esc that lands in main during that write saves nothing
   more.
 - One capture right after another opens at once. The capture handler's re-entrancy guard
-  covers the pick and the grab only: when the provider returns the pick has ended, so a press
-  while the shot is still being saved opens its own overlay instead of being answered
-  `cancelled`. What the previous capture still does (save, copy, toast, `afterCapture`) is
-  chained: the new capture's `beforeCapture` and its hide/grab wait for it, because both share
-  the hidden-window state, the toast and the camera bubble. If a save never finishes, later
-  captures open but wait at the hide step.
+  covers the pick and the grab only (a per-capture token, so a capture that ends cannot release
+  the next one's guard): when the provider returns the pick has ended, so a press while the shot
+  is still being saved opens its own overlay instead of being answered `cancelled`. What the
+  previous capture still does (save, copy, toast, `afterCapture`) is chained, because both
+  share the hidden-window state, the toast, the camera bubble and the kept quiet bytes. The new
+  capture hides its windows (`beforeCapture`, which also dismisses the previous toast and clears
+  the kept bytes) only when its shot is about to be taken, and only after the previous capture
+  has finished. So the previous toast stays up while the new pick is open, and a new pick that
+  is cancelled touches neither the windows nor the toast. If a save never finishes, later
+  captures open but wait at the hide step. The previous toast may appear on the display the new
+  pick chose, because the toast seam keeps one picked display.
 
 ### Entry points and shortcuts
 
