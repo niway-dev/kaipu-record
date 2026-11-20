@@ -62,11 +62,11 @@ describe("SetupCard", () => {
     const onOpenChange = vi.fn();
     render(<SetupCard {...base} onToggle={onToggle} onOpenChange={onOpenChange} />);
     await userEvent.click(screen.getByText("Yeti Nano"));
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     expect(onToggle).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledTimes(2);
 
-    screen.getByRole("button", { name: "Microphone settings" }).focus();
+    screen.getByRole("button", { name: /^Microphone settings/ }).focus();
     await userEvent.keyboard(" ");
     await userEvent.keyboard("{Enter}");
     expect(onToggle).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe("SetupCard", () => {
     const { rerender } = render(
       <SetupCard {...base} onToggle={onToggle} onOpenChange={onOpenChange} />,
     );
-    const device = screen.getByRole("button", { name: "Microphone settings" });
+    const device = screen.getByRole("button", { name: /^Microphone settings/ });
     expect(device).toHaveAttribute("aria-expanded", "false");
     expect(within(device).getByText("Yeti Nano")).toBeInTheDocument();
     await userEvent.click(device);
@@ -94,9 +94,9 @@ describe("SetupCard", () => {
   it("hands the right zone to chevronRef, so the panel can return focus to it", () => {
     const chevronRef = createRef<HTMLButtonElement>();
     render(<SetupCard {...base} chevronRef={chevronRef} />);
-    expect(chevronRef.current).toBe(screen.getByRole("button", { name: "Microphone settings" }));
+    expect(chevronRef.current).toBe(screen.getByRole("button", { name: /^Microphone settings/ }));
     chevronRef.current?.focus();
-    expect(screen.getByRole("button", { name: "Microphone settings" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^Microphone settings/ })).toHaveFocus();
   });
 
   it("has one switch and one button, neither inside the other", () => {
@@ -141,11 +141,11 @@ describe("SetupCard", () => {
     await userEvent.keyboard(" ");
     await userEvent.keyboard("{Enter}");
     expect(onToggle).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Microphone settings/ }));
     expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 
-  it("disables both zones natively when the source is unavailable, with the reason as tooltip", async () => {
+  it("disables only the left zone when the source is unavailable; the device zone still opens the panel", async () => {
     const onToggle = vi.fn();
     const onOpenChange = vi.fn();
     render(
@@ -159,14 +159,23 @@ describe("SetupCard", () => {
       />,
     );
     const toggle = screen.getByRole("switch", { name: "Microphone" });
-    const device = screen.getByRole("button", { name: "Microphone settings" });
+    const device = screen.getByRole("button", { name: /^Microphone settings/ });
     expect(toggle).toBeDisabled();
-    expect(device).toBeDisabled();
     expect(toggle).toHaveAttribute("title", "Not available on this system");
-    expect(device).toHaveAttribute("title", "Not available on this system");
+    expect(device).toBeEnabled();
+    expect(device).toHaveAttribute("title", "Yeti Nano");
     await userEvent.click(toggle);
-    await userEvent.click(device);
     expect(onToggle).not.toHaveBeenCalled();
-    expect(onOpenChange).not.toHaveBeenCalled();
+    await userEvent.click(device);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it("names the device zone after both the settings label and the visible device", () => {
+    const { rerender } = render(<SetupCard {...base} />);
+    expect(
+      screen.getByRole("button", { name: "Microphone settings: Yeti Nano" }),
+    ).toBeInTheDocument();
+    rerender(<SetupCard {...base} detail={"\u00a0"} />);
+    expect(screen.getByRole("button", { name: "Microphone settings" })).toBeInTheDocument();
   });
 });

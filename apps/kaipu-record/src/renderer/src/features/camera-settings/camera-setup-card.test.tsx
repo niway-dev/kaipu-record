@@ -67,7 +67,7 @@ describe("CameraSetupCard controls", () => {
   it("opens the panel from the chevron", async () => {
     const onOpenChange = vi.fn();
     render(<CameraSetupCard {...base} onOpenChange={onOpenChange} />);
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 
@@ -89,7 +89,7 @@ describe("CameraSetupCard controls", () => {
     await userEvent.click(toggle);
     expect(onToggle).not.toHaveBeenCalled();
     // The chevron still works: it is where the way out (System Settings) lives.
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Camera settings/ }));
     expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 });

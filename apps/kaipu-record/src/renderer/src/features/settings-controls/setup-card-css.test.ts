@@ -31,4 +31,12 @@ describe("setup-card.module.css", () => {
     expect(open).not.toMatch(/246, 5, 92/);
     expect(css).toMatch(/\.card\[data-active\]\[data-open\] \{[^}]*246, 5, 92/);
   });
+
+  it("keeps an aria-disabled left zone from lighting up on hover, ON or OFF", () => {
+    const guard = ':not([aria-disabled="true"])';
+    expect(css).toMatch(
+      /\.toggle:hover:not\(:disabled\):not\(\[aria-disabled="true"\]\),\n\.device:hover/,
+    );
+    expect(css).toContain(`.card[data-active] .toggle:hover:not(:disabled)${guard}`);
+  });
 });

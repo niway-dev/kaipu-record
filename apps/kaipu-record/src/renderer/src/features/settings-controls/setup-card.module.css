@@ -156,7 +156,7 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
-.card[data-active] .toggle:hover:not(:disabled),
+.card[data-active] .toggle:hover:not(:disabled):not([aria-disabled="true"]),
 .card[data-active] .device:hover:not(:disabled) {
   background: rgba(246, 5, 92, 0.2);
   box-shadow: inset 0 0 0 1px rgba(246, 5, 92, 0.55);

@@ -19,11 +19,11 @@ export interface SetupCardProps {
   blocked?: boolean;
   /** The left zone does nothing when pressed (blocked off). It stays focusable. */
   switchDisabled?: boolean;
-  /** Both zones natively disabled, dimmed and not focusable (system audio unavailable). */
+  /** The left zone natively disabled, dimmed and not focusable (system audio unavailable); the panel still opens. */
   switchUnavailable?: boolean;
   /** Accessible name of the left zone when the name alone is not enough (e.g. blocked). */
   switchLabel?: string;
-  /** Native tooltip for the left zone, e.g. why it is disabled; also the right zone's when unavailable. */
+  /** Native tooltip for the left zone, e.g. why it is disabled. */
   switchTitle?: string;
   chevronLabel: string;
   /** Whether the card's panel is open. */
@@ -67,7 +67,7 @@ export function SetupCard({
 }: SetupCardProps): React.JSX.Element {
   const ShownIcon = blocked && BlockedIcon ? BlockedIcon : Icon;
 
-  const deviceTitle = switchUnavailable ? switchTitle : detail.trim() || undefined;
+  const deviceText = detail.trim();
 
   return (
     <div
@@ -100,11 +100,10 @@ export function SetupCard({
         ref={chevronRef}
         type="button"
         className={styles.device}
-        aria-label={chevronLabel}
+        aria-label={deviceText ? `${chevronLabel}: ${deviceText}` : chevronLabel}
         aria-expanded={open}
         aria-controls={open ? controlsId : undefined}
-        disabled={switchUnavailable}
-        title={deviceTitle}
+        title={deviceText || undefined}
         data-open={open || undefined}
         onClick={() => onOpenChange(!open)}
       >
