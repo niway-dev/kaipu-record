@@ -2969,7 +2969,7 @@ describe("CaptureOverlay — the ratio menu works in both intents, in Frame only
     });
   });
 
-  it("a chip choice is reported as a settled box, with the ratio only when recording (NIW2-878)", async () => {
+  it("a ratio pick is reported as a settled box, with the ratio only when recording (NIW2-878)", async () => {
     const shot = fakeApi({ "42": area });
     const first = render(
       <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={shot.api} />,
