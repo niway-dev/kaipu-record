@@ -162,6 +162,18 @@ describe("moveItem — same volume", () => {
     expect(await readdir(journalDir)).toEqual([]);
   });
 
+  it("stamps the linked file after the source name is gone, so the next transcript open does not re-hash", async () => {
+    const item = await seedItem(src.directory);
+    // The source has a cached hash, so the move can stamp the target without hashing.
+    await new LibraryVault(src.directory).ensureContentHash(item.id);
+    const outcome = await moveItem({ source: src, target: dst, id: item.id }, deps());
+    expect(outcome).toMatchObject({ ok: true, mode: "linked" });
+    // Unlinking the source name changes the shared inode's ctime; the stamp must match that.
+    expect(await new LibraryVault(dst.directory).cachedContentHash("Demo")).toMatchObject({
+      status: "hit",
+    });
+  });
+
   it("gives a colliding stem a suffix and never overwrites the item already there", async () => {
     const item = await seedItem(src.directory);
     await writeFile(join(dst.directory, "Demo.mp4"), "someone else");
