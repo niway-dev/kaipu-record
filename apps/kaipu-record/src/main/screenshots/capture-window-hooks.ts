@@ -46,6 +46,8 @@ export interface CaptureWindowHooksDeps {
  *   comes back minimized, because a hidden window has no taskbar button.
  * - `recording`: the overlay started a take; the window stays hidden (the countdown is drawn
  *   on the chosen region) and comes back when the take stops, like any recording.
+ * - `handedOver`: a newer pick opened while this capture was saving; nothing is restored and
+ *   `capturing` stays set, because the newest capture inherits the restore (NIW2-878).
  *
  * A window that was hidden stays hidden on every path.
  */
