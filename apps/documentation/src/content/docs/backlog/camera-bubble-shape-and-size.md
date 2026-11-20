@@ -5,6 +5,12 @@ description: "The camera toggle becomes configurable without weighing more: a sp
 
 # Camera bubble — shape and size
 
+> **Current state (NIW2-892):** on the Capture page, the Microphone, System audio and Camera cards
+> no longer open inline drawers. Each opens a small popover anchored to the card, shared with the
+> capture widget's Mic and Camera chevrons. The Camera popover holds the camera list, "Mirror my
+> video", Framing and a help line; shape, size and corners are edited in the editor after
+> recording. The drawer descriptions below are the earlier design.
+
 > **Status: 🟢 Ready to validate (prod review pending)** (2026-10-26). PR #380, integrated with
 > the rest of task 5 on `feat/record-modes-integration`, where the split tile sits in the new
 > Record page and tray layouts and the overlay's Camera toggle honours a blocked camera; unit

@@ -5,6 +5,11 @@ description: "The Mic and Audio tiles split like the Camera tile: an inline draw
 
 # Mic and System audio settings
 
+> **Current state (NIW2-892):** on the Capture page, the Microphone, System audio and Camera cards
+> open a small popover anchored to the card (shared with the capture widget's Mic and Camera
+> chevrons) instead of an inline drawer. System audio no longer shows "One app" at all, not even
+> disabled. The drawer and "One app" descriptions below are the earlier design.
+
 > **Status: 🟡 In progress** (2026-10-27). Branch `feature/recording-mic-audio-settings`.
 > Unit tests, type checks and lint pass; nothing has been run in the Electron app yet, so the
 > audio chain, the live changes mid-take and the meter are untested with a real microphone.
@@ -55,8 +60,7 @@ the default one while it is unplugged.
   arrow keys move the selection); INPUT LEVEL, a slider with the value ("70%"); the "Reduce
   background noise" switch. During a take the device list is locked, a device that disappeared
   stays in the list greyed as DISCONNECTED, and a note says level and noise apply live.
-- **System audio**: WHAT TO CAPTURE (All sound; One app disabled with "Not available yet");
-  VOLUME IN THE RECORDING; the "Lower it while I talk" switch, disabled with "Turn on the
+- **System audio**: VOLUME IN THE RECORDING; the "Lower it while I talk" switch, disabled with "Turn on the
   microphone to use this" while the mic toggle is off.
 - **Record page**: wide inline drawer under the row, in the page's flow (a floating popover was
   clipped at the bottom of the window; the content area scrolls, so a tall drawer pushes and
