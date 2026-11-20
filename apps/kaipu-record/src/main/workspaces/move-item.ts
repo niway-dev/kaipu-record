@@ -18,6 +18,7 @@ import { nextTagColor, type TagColor } from "@kaipu/domain/constants";
 import type { MoveRefusal } from "@shared/types/workspaces";
 import { atomicWriteFile } from "../library/atomic-write";
 import { sha256FileBase64 } from "../library/content-hash";
+import { stampFields, stampMatches, type StatLike } from "../library/hash-stamp";
 import type { DragLedger } from "../library/drag-ledger";
 import { withItemLock } from "../library/item-lock";
 import {
@@ -173,10 +174,10 @@ async function existsStrict(path: string): Promise<boolean> {
   }
 }
 
-async function statOrNull(path: string): Promise<{ size: number; mtimeMs: number } | null> {
+async function statOrNull(path: string): Promise<StatLike | null> {
   try {
     const info = await stat(path);
-    return { size: info.size, mtimeMs: info.mtimeMs };
+    return { size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs, ino: info.ino };
   } catch (error) {
     if (codeOf(error) === "ENOENT") return null;
     throw error;
@@ -287,11 +288,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
   // The media's identity, for healing. A copy always hashes; a link keeps size and mtime.
   const cached =
-    record.contentSha256 &&
-    record.hashedSizeBytes === mediaInfo.size &&
-    record.hashedMtimeMs === mediaInfo.mtimeMs
-      ? record.contentSha256
-      : null;
+    record.contentSha256 && stampMatches(record, mediaInfo) ? record.contentSha256 : null;
   const sha256 = sameDevice ? cached : (cached ?? (await fs.sha256(media)));
 
   // ── 2. The journal.
@@ -547,14 +544,12 @@ async function refreshFreshness(
 ): Promise<void> {
   const now = await statOrNull(join(to.directory, `${newId}${journal.ext}`));
   if (!now) return;
-  if (now.mtimeMs === journal.media.mtimeMs && now.size === journal.media.size) return;
+  // The copy is a new file (new inode and ctime) even when its mtime was kept, so the hash
+  // is stamped for it either way; the journal's hash is the one the move verified.
   if (journal.media.sha256 && now.size === journal.media.size) {
-    await to.writeMeta(newId, {
-      contentSha256: journal.media.sha256,
-      hashedSizeBytes: now.size,
-      hashedMtimeMs: now.mtimeMs,
-    });
+    await to.writeMeta(newId, { contentSha256: journal.media.sha256, ...stampFields(now) });
   }
+  if (now.mtimeMs === journal.media.mtimeMs && now.size === journal.media.size) return;
   const metaPath = to.companionPaths(newId).editMeta;
   let meta: SessionMeta;
   try {

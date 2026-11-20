@@ -1,5 +1,5 @@
 import { basename, extname, join } from "node:path";
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import {
   access,
   copyFile,
@@ -39,6 +39,7 @@ import {
   takenError,
 } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
+import { sameStat, stampFields, stampMatches } from "./hash-stamp";
 import { webcamTrackState } from "./webcam-track-state";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
@@ -72,10 +73,21 @@ export interface Sidecar {
    * Absent in a sidecar written before joined recordings (ADR 0058).
    */
   sourceSceneSourceId?: string | null;
-  /** base64 sha256 + the file stats it was computed for; stale when they differ. */
+  /**
+   * base64 sha256 + the stamp of the file it was computed for (size, mtime, ctime, inode, see
+   * `hash-stamp.ts`); stale when any differs. A sidecar from before ctime and inode were
+   * recorded lacks the last two and re-hashes once.
+   */
   contentSha256?: string;
   hashedSizeBytes?: number;
   hashedMtimeMs?: number;
+  hashedCtimeMs?: number;
+  hashedIno?: number;
+  /**
+   * The content hash this item was last re-transcribed automatically for (NIW2-891). One
+   * automatic attempt per media content: a failed or cancelled run does not restart on every open.
+   */
+  autoRetranscribedSha256?: string;
   /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
   localRemovedAt?: number;
   /** Phase 1 plain-string tags (never released); imported once into the registry. */
@@ -159,6 +171,14 @@ export class AmbiguousIdentityError extends Error {
   ) {
     super(`${AMBIGUOUS_IDENTITY_MARKER}: ${ids.length} local items claim "${assetId}"`);
     this.name = "AmbiguousIdentityError";
+  }
+}
+
+/** The file kept changing while it was hashed, so no hash describes it (NIW2-891: verdict unknown). */
+export class FileChangedWhileHashingError extends Error {
+  constructor(readonly id: string) {
+    super(`File "${id}" changed while hashing`);
+    this.name = "FileChangedWhileHashingError";
   }
 }
 
@@ -800,6 +820,9 @@ export class LibraryVault {
 
         const newId = target.id;
         const newMedia = join(this.directory, `${newId}${ext}`);
+        // A rename moves the file's ctime but not its content, so a hash that matched before
+        // it is stamped again for the new name; without this every rename would cost a re-hash.
+        const hashStampBefore = await this.freshHashStat(current, oldMedia);
         const from = this.companionPaths(id);
         const to = this.companionPaths(newId);
         const retry = options.retry ?? DEFAULT_RENAME_RETRY;
@@ -862,11 +885,43 @@ export class LibraryVault {
         }
 
         readOnlyIdentityMemo.delete(oldSidecar);
+        if (hashStampBefore) await this.restampAfterRename(newId, newMedia, hashStampBefore);
         const recording = await this.describe(newId);
         if (!recording) throw new ItemNotFoundError(newId);
         return { recording, file: "renamed" };
       });
     });
+  }
+
+  /** The file's stat when the sidecar's cached hash still matches it, else null. */
+  private async freshHashStat(meta: Sidecar, path: string): Promise<Stats | null> {
+    if (!meta.contentSha256) return null;
+    try {
+      const info = await stat(path);
+      return stampMatches(meta, info) ? info : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Writes the renamed file's new stamp into its sidecar when it is the same file as before
+   * (same size, mtime and inode: a rename only moves the ctime). Best effort: a failure leaves
+   * the old stamp, which fails to match and costs one re-hash.
+   */
+  private async restampAfterRename(newId: string, newMedia: string, before: Stats): Promise<void> {
+    try {
+      const after = await stat(newMedia);
+      if (
+        after.size === before.size &&
+        after.mtimeMs === before.mtimeMs &&
+        after.ino === before.ino
+      ) {
+        await this.writeMeta(newId, stampFields(after));
+      }
+    } catch {
+      // The next hash request recomputes.
+    }
   }
 
   /** The id `target.assetId` lives under now, or ItemNotFoundError. Caller holds NAMES_LOCK. */
@@ -1059,10 +1114,7 @@ export class LibraryVault {
       }
       throw error;
     }
-    const hashIsFresh =
-      meta.contentSha256 !== undefined &&
-      meta.hashedSizeBytes === info.size &&
-      meta.hashedMtimeMs === info.mtimeMs;
+    const hashIsFresh = meta.contentSha256 !== undefined && stampMatches(meta, info);
     // Only while the file is there (`webcamTrackState`, the rule `probeWebcam` shares): a
     // sidecar field without its file is a missing track. No field, no file check.
     const webcam =
@@ -1330,10 +1382,37 @@ export class LibraryVault {
   }
 
   /**
-   * The file's sha256, from the sidecar cache when it still matches the file's
-   * size + mtime, otherwise recomputed and cached. Never called by `list()`.
-   * Retries up to 3 times if the file changes during hashing; throws if it
-   * keeps changing after the third attempt.
+   * The cached sha256 of the item's media, without reading the media: `hit` when the sidecar's
+   * stamp still matches the file, `miss` when there is no hash or the stamp moved, `missing`
+   * when the item has no media file. An unreadable sidecar is a `miss`.
+   */
+  async cachedContentHash(
+    id: string,
+  ): Promise<
+    { status: "hit"; contentSha256: string } | { status: "miss" } | { status: "missing" }
+  > {
+    let info;
+    try {
+      info = await stat(await this.filePath(id));
+    } catch {
+      return { status: "missing" };
+    }
+    let meta: Sidecar;
+    try {
+      meta = await this.sidecar(id);
+    } catch {
+      return { status: "miss" };
+    }
+    return meta.contentSha256 && stampMatches(meta, info)
+      ? { status: "hit", contentSha256: meta.contentSha256 }
+      : { status: "miss" };
+  }
+
+  /**
+   * The file's sha256, from the sidecar cache when its stamp (size, mtime, ctime, inode) still
+   * matches the file, otherwise recomputed and cached. Never called by `list()`. Retries up to 3
+   * times if the file changes during hashing; throws `FileChangedWhileHashingError` if it keeps
+   * changing after the third attempt.
    */
   async ensureContentHash(
     id: string,
@@ -1346,11 +1425,7 @@ export class LibraryVault {
       return null;
     }
     const meta = await this.writableSidecar(id);
-    if (
-      meta.contentSha256 &&
-      meta.hashedSizeBytes === info.size &&
-      meta.hashedMtimeMs === info.mtimeMs
-    ) {
+    if (meta.contentSha256 && stampMatches(meta, info)) {
       return { contentSha256: meta.contentSha256, sizeBytes: info.size };
     }
 
@@ -1358,12 +1433,8 @@ export class LibraryVault {
       const contentSha256 = await sha256FileBase64(filePath);
       // Re-stat after hashing: if the file changed underneath, don't cache a lie.
       const after = await stat(filePath);
-      if (after.size === info.size && after.mtimeMs === info.mtimeMs) {
-        await this.writeMeta(id, {
-          contentSha256,
-          hashedSizeBytes: info.size,
-          hashedMtimeMs: info.mtimeMs,
-        });
+      if (sameStat(after, info)) {
+        await this.writeMeta(id, { contentSha256, ...stampFields(info) });
         return { contentSha256, sizeBytes: info.size };
       }
       if (attempt < 3) {
@@ -1371,7 +1442,7 @@ export class LibraryVault {
       }
     }
 
-    throw new Error(`File "${id}" changed while hashing`);
+    throw new FileChangedWhileHashingError(id);
   }
 
   /**

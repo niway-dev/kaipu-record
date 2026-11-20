@@ -447,6 +447,8 @@ describe("LibraryVault", () => {
       contentSha256: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
       hashedSizeBytes: 10,
       hashedMtimeMs: info.mtimeMs,
+      hashedCtimeMs: info.ctimeMs,
+      hashedIno: info.ino,
     });
     expect(await vault.describe("exp")).toMatchObject({
       assetId: "11111111-1111-4111-8111-111111111111",
