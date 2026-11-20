@@ -534,6 +534,8 @@ export const IPC_CHANNELS = {
   /** main → renderer, `TranscriptionJobProgress` on every phase change and finished segment. */
   transcriptionJobProgress: "transcription:job-progress",
   transcriptionReadTranscript: "transcription:read-transcript",
+  /** Settles a `checking` read: hashes the media once per item and answers fresh/stale/unknown. */
+  transcriptionCheckFreshness: "transcription:check-freshness",
   screenshotSave: "screenshot:save",
   // Read the image on the system clipboard as PNG (the Editor's New → Paste).
   clipboardReadImage: "clipboard:read-image",

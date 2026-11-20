@@ -511,6 +511,7 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.transcriptionJobProgress, listener);
   },
   readTranscript: (id) => scopedInvoke(IPC_CHANNELS.transcriptionReadTranscript, id),
+  checkTranscriptFreshness: (id) => scopedInvoke(IPC_CHANNELS.transcriptionCheckFreshness, id),
   saveTextFile: (request) => ipcRenderer.invoke(IPC_CHANNELS.saveTextFile, request),
   readClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardReadImage),
   peekClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardPeekImage),

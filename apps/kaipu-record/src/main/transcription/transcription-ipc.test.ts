@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
@@ -31,6 +31,11 @@ vi.mock("electron", () => ({
   nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
   shell: { openPath: vi.fn(async () => ""), showItemInFolder: vi.fn() },
 }));
+// The real hash, counted: the cache tests assert on how often the media was read.
+vi.mock("../library/content-hash", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../library/content-hash")>();
+  return { sha256FileBase64: vi.fn(actual.sha256FileBase64) };
+});
 vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ locale: "en" }) }));
 // The gate here checks the stamp the way the real one does: a call without the active
 // workspace's stamp as its first argument is refused.
@@ -51,6 +56,7 @@ import { vaultActivity } from "../library/vault-activity";
 import type { Transcript } from "./transcript-file";
 import {
   broadcastJobProgress,
+  hashMediaThroughCache,
   openTranscriptionVault,
   registerTranscriptionIpc,
 } from "./transcription-ipc";
@@ -131,6 +137,7 @@ describe("registration", () => {
       IPC_CHANNELS.transcriptionJobEnd,
       IPC_CHANNELS.transcriptionJobCancel,
       IPC_CHANNELS.transcriptionReadTranscript,
+      IPC_CHANNELS.transcriptionCheckFreshness,
     ]) {
       expect(state.handle.has(channel), channel).toBe(true);
     }
@@ -184,6 +191,7 @@ describe("scoped channels", () => {
     ["a zero duration", { ...REQUEST, durationMs: 0 }],
     ["a NaN duration", { ...REQUEST, durationMs: Number.NaN }],
     ["a duration beyond any recording", { ...REQUEST, durationMs: 1e12 }],
+    ["an automatic flag that is a string", { ...REQUEST, automatic: "yes" }],
   ])("begin rejects %s", async (_name, request) => {
     await expect(call(IPC_CHANNELS.transcriptionJobBegin, STAMP, request)).rejects.toThrow(
       /transcription/,
@@ -283,6 +291,7 @@ describe("with a real vault", () => {
     call(IPC_CHANNELS.transcriptionReadTranscript, STAMP, id) as Promise<{
       status: string;
       stale?: boolean;
+      freshness?: string;
       transcript?: Transcript;
     }>;
 
@@ -314,40 +323,82 @@ describe("with a real vault", () => {
     vault = new LibraryVault(vaultDir, "ws-test");
   });
 
+  const checkFreshness = (id: string) =>
+    call(IPC_CHANNELS.transcriptionCheckFreshness, STAMP, id) as Promise<{
+      verdict: string;
+      autoRetranscribe: boolean;
+    }>;
+  const hashSpy = vi.mocked(sha256FileBase64);
+  const timing = vi.spyOn(console, "info").mockImplementation(() => {});
+  const timingLines = () =>
+    timing.mock.calls
+      .map((args) => String(args[0]))
+      .filter((l) => l.startsWith("[transcript-timing]"));
+
+  async function seedTranscript(id: string, hash: string): Promise<void> {
+    await writeFile(vault.companionPaths(id).transcript, JSON.stringify(transcriptFor(hash)));
+  }
+
   describe("readTranscript", () => {
+    beforeEach(() => {
+      hashSpy.mockClear();
+      timing.mockClear();
+    });
+
     it("answers none when the item has no transcript", async () => {
       await addMedia("no-transcript");
       expect(await readTranscript("no-transcript")).toEqual({ status: "none" });
     });
 
-    it("answers ready, not stale, and keeps the unresolved reason", async () => {
-      const item = await addMedia("fresh");
-      const hash = await sha256FileBase64(item.filePath);
-      await writeFile(
-        vault.companionPaths("fresh").transcript,
-        JSON.stringify(transcriptFor(hash)),
-      );
-      const result = await readTranscript("fresh");
+    it("answers the words at once on a cold cache, without reading the media", async () => {
+      const item = await addMedia("cold");
+      await seedTranscript("cold", await sha256FileBase64(item.filePath));
+      hashSpy.mockClear();
+
+      const result = await readTranscript("cold");
       expect(result.status).toBe("ready");
-      expect(result.stale).toBe(false);
+      expect(result).toMatchObject({ stale: false, freshness: "checking" });
       expect(result.transcript!.words).toHaveLength(1);
       expect(result.transcript!.unresolved).toEqual([
         { startMs: 500, endMs: 1000, reason: "segment-failed" },
       ]);
+      expect(hashSpy).not.toHaveBeenCalled();
     });
 
-    it("marks the transcript stale, words still readable, when the recording changed", async () => {
-      const item = await addMedia("changed");
+    it("reads nothing from the media when the cached stamp matches", async () => {
+      const item = await addMedia("warm");
       const hash = await sha256FileBase64(item.filePath);
-      await writeFile(
-        vault.companionPaths("changed").transcript,
-        JSON.stringify(transcriptFor(hash)),
-      );
-      await writeFile(item.filePath, "different bytes now");
-      const result = await readTranscript("changed");
-      expect(result.status).toBe("ready");
-      expect(result.stale).toBe(true);
-      expect(result.transcript!.words).toHaveLength(1);
+      await seedTranscript("warm", hash);
+      await vault.ensureContentHash("warm");
+      hashSpy.mockClear();
+
+      expect(await readTranscript("warm")).toMatchObject({ freshness: "fresh", stale: false });
+      expect(hashSpy).not.toHaveBeenCalled();
+    });
+
+    it("says stale from the cache alone when the cached hash differs from the transcript's", async () => {
+      await addMedia("warm-stale");
+      await seedTranscript("warm-stale", "an-older-hash");
+      await vault.ensureContentHash("warm-stale");
+      hashSpy.mockClear();
+
+      expect(await readTranscript("warm-stale")).toMatchObject({
+        freshness: "stale",
+        stale: true,
+      });
+      expect(hashSpy).not.toHaveBeenCalled();
+    });
+
+    it("logs one timing line per read with the cache outcome", async () => {
+      await addMedia("logged");
+      await seedTranscript("logged", "h");
+      await readTranscript("logged");
+      await vault.ensureContentHash("logged");
+      await readTranscript("logged");
+      expect(timingLines()).toEqual([
+        expect.stringMatching(/^\[transcript-timing\] read logged \d+ms cache=miss$/),
+        expect.stringMatching(/^\[transcript-timing\] read logged \d+ms cache=hit$/),
+      ]);
     });
 
     it("answers invalid, and keeps the file, for a file that does not validate", async () => {
@@ -361,11 +412,155 @@ describe("with a real vault", () => {
     });
 
     it("answers none for a transcript whose recording is gone", async () => {
-      await writeFile(
-        vault.companionPaths("orphan").transcript,
-        JSON.stringify(transcriptFor("hash")),
-      );
+      await seedTranscript("orphan", "hash");
       expect(await readTranscript("orphan")).toEqual({ status: "none" });
+    });
+  });
+
+  describe("checkTranscriptFreshness", () => {
+    beforeEach(() => {
+      hashSpy.mockClear();
+      timing.mockClear();
+    });
+
+    it("answers fresh for an unchanged recording, and the next read is warm", async () => {
+      const item = await addMedia("c-fresh");
+      await seedTranscript("c-fresh", await sha256FileBase64(item.filePath));
+      hashSpy.mockClear();
+
+      expect(await checkFreshness("c-fresh")).toEqual({
+        verdict: "fresh",
+        autoRetranscribe: false,
+      });
+      expect(hashSpy).toHaveBeenCalledTimes(1);
+      expect(await readTranscript("c-fresh")).toMatchObject({ freshness: "fresh" });
+      expect(hashSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("answers stale, and allows one automatic attempt, when the recording changed", async () => {
+      const item = await addMedia("c-stale");
+      await seedTranscript("c-stale", await sha256FileBase64(item.filePath));
+      await writeFile(item.filePath, "different bytes now");
+
+      expect(await checkFreshness("c-stale")).toEqual({
+        verdict: "stale",
+        autoRetranscribe: true,
+      });
+    });
+
+    it("does not allow a second automatic attempt for the same content", async () => {
+      const item = await addMedia("c-once");
+      await seedTranscript("c-once", "an-older-hash");
+      expect((await checkFreshness("c-once")).autoRetranscribe).toBe(true);
+      // The attempt begins: main records it against the media's content hash.
+      await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, {
+        ...REQUEST,
+        id: "c-once",
+        automatic: true,
+      });
+      expect(await checkFreshness("c-once")).toEqual({ verdict: "stale", autoRetranscribe: false });
+      // New content is a new attempt.
+      await writeFile(item.filePath, "yet another recording");
+      expect(await checkFreshness("c-once")).toEqual({ verdict: "stale", autoRetranscribe: true });
+    });
+
+    it("a manual begin does not use up the automatic attempt", async () => {
+      await addMedia("c-manual");
+      await seedTranscript("c-manual", "an-older-hash");
+      await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, { ...REQUEST, id: "c-manual" });
+      expect((await checkFreshness("c-manual")).autoRetranscribe).toBe(true);
+    });
+
+    it("answers unknown when the file keeps changing while it is hashed", async () => {
+      await addMedia("c-busy");
+      await seedTranscript("c-busy", "h");
+      hashSpy.mockImplementation(async (path: string) => {
+        await appendFile(path, "x");
+        return "never-stable";
+      });
+      try {
+        expect(await checkFreshness("c-busy")).toEqual({
+          verdict: "unknown",
+          autoRetranscribe: false,
+        });
+      } finally {
+        const actual =
+          await vi.importActual<typeof import("../library/content-hash")>(
+            "../library/content-hash",
+          );
+        hashSpy.mockImplementation(actual.sha256FileBase64);
+      }
+    });
+
+    it("shares one hash between concurrent checks of the same item", async () => {
+      const item = await addMedia("c-shared");
+      await seedTranscript("c-shared", await sha256FileBase64(item.filePath));
+      hashSpy.mockClear();
+
+      const answers = await Promise.all([checkFreshness("c-shared"), checkFreshness("c-shared")]);
+      expect(answers[0]).toEqual(answers[1]);
+      expect(hashSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("logs one timing line per check with the verdict", async () => {
+      await addMedia("c-logged");
+      await seedTranscript("c-logged", "an-older-hash");
+      await checkFreshness("c-logged");
+      expect(timingLines()).toEqual([
+        expect.stringMatching(/^\[transcript-timing\] check c-logged \d+ms result=stale$/),
+      ]);
+    });
+
+    it("answers unknown without a transcript or without a recording", async () => {
+      await addMedia("c-none");
+      expect(await checkFreshness("c-none")).toEqual({
+        verdict: "unknown",
+        autoRetranscribe: false,
+      });
+      await seedTranscript("c-orphan", "h");
+      expect(await checkFreshness("c-orphan")).toEqual({
+        verdict: "unknown",
+        autoRetranscribe: false,
+      });
+    });
+  });
+
+  describe("hashMediaThroughCache", () => {
+    beforeEach(() => {
+      hashSpy.mockClear();
+    });
+    const job = (item: { id: string; filePath: string }) => ({
+      id: item.id,
+      mediaPath: item.filePath,
+    });
+
+    it("hashes the real content, leaves a stamp, and a second job reads nothing", async () => {
+      const item = await addMedia("job-hash", "first recording");
+      const first = await hashMediaThroughCache(job(item));
+      expect(first).toBe(
+        await vi
+          .importActual<typeof import("../library/content-hash")>("../library/content-hash")
+          .then((m) => m.sha256FileBase64(item.filePath)),
+      );
+      expect((await vault.cachedContentHash("job-hash")).status).toBe("hit");
+      hashSpy.mockClear();
+      expect(await hashMediaThroughCache(job(item))).toBe(first);
+      expect(hashSpy).not.toHaveBeenCalled();
+    });
+
+    it("hashes again when the stamp no longer matches", async () => {
+      const item = await addMedia("job-changed", "first recording");
+      const first = await hashMediaThroughCache(job(item));
+      await writeFile(item.filePath, "second recording");
+      hashSpy.mockClear();
+      expect(await hashMediaThroughCache(job(item))).not.toBe(first);
+      expect(hashSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("fails with ENOENT for a file that is gone, as the job expects", async () => {
+      const item = await addMedia("job-gone");
+      await rm(item.filePath);
+      await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "ENOENT" });
     });
   });
 
