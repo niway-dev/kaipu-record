@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sha256FileBase64 } from "./content-hash";
@@ -141,5 +141,18 @@ describe("LibraryVault content-hash cache", () => {
     hashSpy.mockClear();
     expect((await vault.cachedContentHash("a")).status).toBe("hit");
     expect(hashSpy).not.toHaveBeenCalled();
+  });
+
+  it("reports missing only for a media file that is not there, and rethrows any other stat error", async () => {
+    await writeFile(media("a"), "aaaaaaaaaa");
+    await vault.ensureContentHash("a");
+    // A folder nobody may search: stat of the media inside it fails with EACCES, not ENOENT.
+    await chmod(directory, 0o000);
+    try {
+      await expect(vault.cachedContentHash("a")).rejects.toMatchObject({ code: "EACCES" });
+    } finally {
+      await chmod(directory, 0o755);
+    }
+    expect(await vault.cachedContentHash("a")).toMatchObject({ status: "hit" });
   });
 });

@@ -1384,7 +1384,8 @@ export class LibraryVault {
   /**
    * The cached sha256 of the item's media, without reading the media: `hit` when the sidecar's
    * stamp still matches the file, `miss` when there is no hash or the stamp moved, `missing`
-   * when the item has no media file. An unreadable sidecar is a `miss`.
+   * when the item has no media file (ENOENT); any other stat error throws. An unreadable sidecar
+   * is a `miss`.
    */
   async cachedContentHash(
     id: string,
@@ -1394,8 +1395,10 @@ export class LibraryVault {
     let info;
     try {
       info = await stat(await this.filePath(id));
-    } catch {
-      return { status: "missing" };
+    } catch (error) {
+      // Only an absent file is "missing"; EACCES or EIO must not read as "no transcript".
+      if (errorCode(error) === "ENOENT") return { status: "missing" };
+      throw error;
     }
     let meta: Sidecar;
     try {
