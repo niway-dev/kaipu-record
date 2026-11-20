@@ -28,6 +28,36 @@ vi.mock("@renderer/features/transcription/audio/run-transcription-job", () => ({
   runTranscriptionJob: () => new Promise(() => {}),
 }));
 
+// Lets one test pretend an export is running; every other test sees the real runner.
+const runnerOverride = vi.hoisted(() => ({ job: null as null | { sourceAssetId: string } }));
+vi.mock("@renderer/features/video-editor/export/export-runner", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@renderer/features/video-editor/export/export-runner")>();
+  return {
+    ...actual,
+    useExportRunner: () => {
+      const real = actual.useExportRunner();
+      if (!runnerOverride.job) return real;
+      return {
+        ...real,
+        status: "exporting" as const,
+        fraction: 0.4,
+        attemptStartedAt: null,
+        job: {
+          presetId: "light",
+          sourceTitle: "x",
+          sourceSizeBytes: null,
+          estimateBytes: null,
+          width: 1,
+          height: 1,
+          wholeRecording: true,
+          ...runnerOverride.job,
+        },
+      } as never;
+    },
+  };
+});
+
 const transcribeFlag = vi.hoisted(() => ({ on: false }));
 vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
 
@@ -1784,6 +1814,22 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       );
       // The row of the original and the copy; no "Edited project" row.
       expect(screen.queryByText("Edited project")).toBeNull();
+    });
+
+    it("a running export alone shows the Copies tab, without a count, and opens on it", async () => {
+      runnerOverride.job = { sourceAssetId: "asset-b" };
+      try {
+        list(exportedOnlyItem);
+        renderDetail("asset-b");
+        await waitForLoaded();
+        expect(screen.getByRole("tab", { name: "Copies" })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
+        expect(screen.queryByRole("tab", { name: /Copies \(/ })).toBeNull();
+      } finally {
+        runnerOverride.job = null;
+      }
     });
 
     it("a screenshot has Details only, opening on Details", async () => {

@@ -333,7 +333,9 @@ export function LibraryDetailPage(): React.JSX.Element {
       : (tabs[0] ?? "details");
   const tab: PanelTab = pickedTab && tabs.includes(pickedTab) ? pickedTab : defaultTab;
   const tabLabel: Record<PanelTab, string> = {
-    copies: t("tabCopies", { count: familyCopies.length }),
+    // A running export alone shows the tab without a count: N is finished copies only.
+    copies:
+      familyCopies.length > 0 ? t("tabCopies", { count: familyCopies.length }) : t("tabCopiesBare"),
     transcript: t("tabTranscript"),
     details: t("tabDetails"),
     destinations: t("tabExport"),

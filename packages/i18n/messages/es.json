@@ -747,6 +747,7 @@
     "kindPng": "PNG",
     "panelTabs": "Panel del elemento",
     "tabCopies": "Copias ({count})",
+    "tabCopiesBare": "Copias",
     "tabExport": "Exportar",
     "tabTranscript": "Transcripción",
     "tabDetails": "Detalles",
