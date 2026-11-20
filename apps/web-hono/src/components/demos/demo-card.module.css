@@ -15,9 +15,9 @@
   animation-play-state: paused !important;
 }
 
-/* The mobile sticky CTA floats over the bottom of the viewport (about 70px tall, 20px up);
+/* The sticky CTA (shown below 980px) floats over the bottom of the viewport (about 70px tall, 20px up);
    this lets a card's bottom edge scroll clear of it. */
-@media (width <= 640px) {
+@media (width < 980px) {
   .card {
     margin-bottom: 96px;
   }
