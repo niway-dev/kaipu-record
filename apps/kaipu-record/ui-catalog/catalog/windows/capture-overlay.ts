@@ -157,6 +157,7 @@ export const captureOverlay = catalog(
       ],
       demonstrates: ["captureOverlay.cameraPopover:open"],
       ready: { area: "captureOverlay.cameraPopover" },
+      requires: { camera: true },
       after: [{ press: "Escape", on: "capture-overlay" }, cancel],
     },
     "frame-at-bottom": {
