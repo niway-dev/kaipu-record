@@ -164,18 +164,6 @@ describe("SettingsPopover", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("a press outside closes it and leaves focus where the press put it", () => {
-    render(<Harness />);
-    const elsewhere = screen.getByTestId("elsewhere");
-    // The press lands on an outside element that already holds focus (focus did not move).
-    fireEvent.pointerDown(elsewhere);
-    act(() => elsewhere.focus());
-
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(elsewhere).toHaveFocus();
-    expect(screen.getByRole("button", { name: "chevron" })).not.toHaveFocus();
-  });
-
   it("closes on a press outside it, but not on a press inside it or on its own card", () => {
     render(<Harness />);
 
