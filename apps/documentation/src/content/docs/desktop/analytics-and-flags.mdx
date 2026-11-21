@@ -65,14 +65,35 @@ posthog-js (≥ 1.261.8) returns `undefined` for a **disabled** or missing flag,
 default applies, and `false` for an enabled flag the user does not match. A PostHog value
 otherwise wins over the default.
 
-### Turning a release flag on
+### Admin mode: how the owner tests unreleased features
 
-`capture-while-recording`, the three `image-*` flags and `timeline-levels` exist in PostHog, each
-with one condition that matches only the owner's two devices, so every other build uses its
-default, `false`. To ship the feature without a release, **roll the flag out to 100%**. Builds
-that predate the flag never read it, so they are unaffected. Once the feature is validated, flip
-the default to `true` in `src/shared/analytics.ts` (or remove the flag) and delete it from
-PostHog.
+Release flags are no longer targeted at the owner's devices in PostHog. An **admin account**
+(the server marks it with the admin permission; see the
+[Admin mode ADR](/architecture/decisions/0067-an-admin-account-switches-the-desktop-between-user-and-admin-mode/))
+turns every release flag on for its own copy of the app:
+
+1. Sign in with the admin account. Settings → App shows an **Admin mode** switch; other accounts
+   never see it.
+2. Turn the switch on and press **Restart now**. The mode is decided once at launch, so the
+   switch alone changes nothing until the app restarts; the row says "Restart to apply" while the
+   two differ.
+3. While the process runs in Admin mode, every release flag reads `true`. The title bar shows
+   a "👑 Admin" badge next to the name, and the tray menu has a checked **Admin mode** line that
+   opens Settings → App. An admin account in User mode sees the same tray line unchecked.
+4. To see the app as users do, turn the switch off and restart.
+
+Signing out does not leave Admin mode: the running process keeps the mode, the badge stays, and
+the row shows "Restart to apply" until the app restarts as a normal user. A pin from the
+Developer page still wins over Admin mode, and in a dev build the flag list names Admin mode as the
+source of a flag it turned on.
+
+### Turning a release flag on for everyone
+
+A release flag still exists in PostHog only to ship a feature **without a release**: **roll the
+flag out to 100%**. Builds that predate the flag never read it, so they are unaffected. Once the
+feature is validated, flip the default to `true` in `src/shared/analytics.ts` (or remove the flag)
+and delete it from PostHog. The "In PostHog" column above records what each flag had before Admin
+mode; new release flags do not need an owner-devices condition.
 
 ### Native cursor: no remote kill switch
 
