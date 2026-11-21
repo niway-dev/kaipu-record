@@ -1395,11 +1395,6 @@ app.whenReady().then(async () => {
   });
 });
 
-// Cmd+Q / tray Quit mid-recording would otherwise leave an un-finalized .part in
-// tmpdir (no moov box → unplayable) with no recovery flow. Guard it: confirm,
-// then run the recorder's normal stop path so what's recorded so far is finalized
-// to the vault before the app actually quits. A timeout still quits if the
-// renderer is unresponsive, so the app is never wedged open.
 // "Restart now" (Admin mode): `will-quit` fires only once every window closed, so no guard can
 // cancel this quit any more (the main window's close guards run after `before-quit`). Start the
 // app again when this process ends.
@@ -1407,6 +1402,11 @@ app.on("will-quit", () => {
   relaunchIfRequested(() => app.relaunch());
 });
 
+// Cmd+Q / tray Quit mid-recording would otherwise leave an un-finalized .part in
+// tmpdir (no moov box → unplayable) with no recovery flow. Guard it: confirm,
+// then run the recorder's normal stop path so what's recorded so far is finalized
+// to the vault before the app actually quits. A timeout still quits if the
+// renderer is unresponsive, so the app is never wedged open.
 app.on("before-quit", (event) => {
   // A second copy quitting at start-up owns nothing: it must not clean up the drag
   // copies, shortcuts or analytics of the copy that is running.

@@ -1,5 +1,5 @@
 import { app, BrowserWindow } from "electron";
-import { relaunchIfRequested } from "./relaunch";
+import { exitRelaunchingIfRequested } from "./relaunch";
 import { AppShutdown, QUIT_DEADLINE_MS } from "./shutdown";
 
 /** The one shutdown sequence of this process. Modules register what they open; `index.ts` begins it. */
@@ -9,10 +9,11 @@ export const appShutdown = new AppShutdown({
   openWindows: () => BrowserWindow.getAllWindows().map(describeWindow),
   // `app.exit` ends the process at once: no more `close` round trips, no `will-quit`. So a
   // pending "Restart now" is honoured here too: a quit that hit the deadline still restarts.
-  exit: () => {
-    relaunchIfRequested(() => app.relaunch());
-    app.exit(0);
-  },
+  exit: () =>
+    exitRelaunchingIfRequested(
+      () => app.relaunch(),
+      () => app.exit(0),
+    ),
   setTimer: (callback, ms) => setTimeout(callback, ms),
   clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 });

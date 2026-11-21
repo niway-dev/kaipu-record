@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { meEntitlementsSchema } from "@kaipu/domain/schemas";
-import { FREE_ENTITLEMENTS } from "./entitlements";
+import { FREE_ENTITLEMENTS, type EntitlementsAnswer } from "./entitlements";
 import {
   ADMIN_MODE_ARG,
   adminAnswerFor,
@@ -126,5 +126,13 @@ describe("wire shape", () => {
     expect(Object.keys(meEntitlementsSchema.shape)).toEqual(
       expect.arrayContaining(["userId", "admin"]),
     );
+  });
+
+  it("EntitlementsAnswer names the same fields, with the same types, as the schema (compile time)", () => {
+    type WireKeys = "userId" | "admin";
+    type Server = Pick<ReturnType<typeof meEntitlementsSchema.parse>, WireKeys>;
+    type Desktop = Required<Pick<EntitlementsAnswer, WireKeys>>;
+    // A field renamed on either side breaks the Pick; a changed type breaks the match.
+    expectTypeOf<Server>().toEqualTypeOf<Desktop>();
   });
 });

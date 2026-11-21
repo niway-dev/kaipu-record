@@ -21,3 +21,12 @@ export function relaunchIfRequested(relaunch: () => void): void {
   requested = false;
   relaunch();
 }
+
+/**
+ * The quit deadline ends the process with `app.exit`, which skips `will-quit`. The guards had
+ * passed by then, so a pending "Restart now" still restarts before the process exits.
+ */
+export function exitRelaunchingIfRequested(relaunch: () => void, exit: () => void): void {
+  relaunchIfRequested(relaunch);
+  exit();
+}

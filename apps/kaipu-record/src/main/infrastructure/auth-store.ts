@@ -204,7 +204,13 @@ export function registerAuth(
     cachedAdmin = admin;
     if (changed) notifyAdminChanged();
     try {
-      writeStoredSession({ token: current, ...identity, entitlements: fresh, admin });
+      writeStoredSession({
+        token: current,
+        ...identity,
+        entitlements: fresh,
+        admin,
+        verificationEmailSentAt,
+      });
     } catch (error) {
       // The running session keeps the fresh answer; the next launch starts from the last file.
       console.warn("[auth] could not persist the refreshed session:", error);

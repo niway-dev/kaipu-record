@@ -891,6 +891,25 @@ describe("auth-store", () => {
     expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: true });
   });
 
+  it("a plan refresh keeps the verification-email timestamp on disk", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInWith(answerFor("user-1", false));
+    vi.spyOn(authClient, "resendVerificationEmail").mockResolvedValue(true);
+    await mockState.handlers.get(IPC_CHANNELS.authResendVerification)!({
+      sender: mainWindow.webContents,
+    });
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    await getStatus(); // the refresh rewrites the session file
+
+    vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
+    registerAuth(config, () => null); // a restart reads the file
+    expect(await getStatus()).toHaveProperty("verificationEmailSentAt", expect.any(Number));
+  });
+
   it("a verification email for A that finishes after B signed in is not recorded on B's session", async () => {
     const mainWindow = mockState.windows[0]!;
     await signInWith(answerFor("user-1", false));
