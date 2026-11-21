@@ -806,6 +806,47 @@ describe("auth-store", () => {
     expect(JSON.stringify(handle.getAdminSession())).not.toContain("user-1");
   });
 
+  it("a session check for A that fails after A signed out and B signed in reports B as signed in", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInWith(answerFor("user-1", false));
+    let failA!: (reason: Error) => void;
+    const late = new Promise<never>((_resolve, reject) => (failA = reject));
+    vi.spyOn(authClient, "getSession").mockReturnValue(late);
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(answerFor("user-2", false));
+
+    const check = getStatus(); // A's session check is in flight
+    await Promise.resolve();
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
+    browser.exchange.mockResolvedValue({
+      token: "tok_2",
+      userId: "user-2",
+      email: "b@b.com",
+      name: "B",
+    });
+    await signInVia({ sender: mainWindow.webContents });
+
+    failA(new Error("timeout")); // A's check fails late
+    const status = await check;
+
+    expect(status).toMatchObject({ kind: "signed-in", userId: "user-2", email: "b@b.com" });
+    expect(JSON.stringify(status)).not.toContain("user-1");
+  });
+
+  it("a session check for A that fails after A signed out reports signed-out, not unknown", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInWith(answerFor("user-1", false));
+    let failA!: (reason: Error) => void;
+    const late = new Promise<never>((_resolve, reject) => (failA = reject));
+    vi.spyOn(authClient, "getSession").mockReturnValue(late);
+
+    const check = getStatus();
+    await Promise.resolve();
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
+
+    failA(new Error("timeout"));
+    expect(await check).toEqual({ kind: "signed-out" });
+  });
+
   it("signing in as another account never inherits the previous account's permission", async () => {
     const mainWindow = mockState.windows[0]!;
     const handle = await signInWith(answerFor("user-1", true));

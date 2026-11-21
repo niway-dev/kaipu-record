@@ -151,11 +151,16 @@ describe("the mode is the launch value, never the live setting (AC5)", () => {
     effective: boolean;
   }) {
     const state = { ...live, restartPending: true };
-    api.getSettings = vi.fn(async () => ({ adminMode: live.adminModeSetting }));
-    api.getAdminModeState = vi.fn(async () => state);
-    api.setAdminMode = vi.fn(async () => state);
+    const reads = {
+      getSettings: vi.fn(async () => ({ adminMode: live.adminModeSetting })),
+      getAdminModeState: vi.fn(async () => state),
+      setAdminMode: vi.fn(async () => state),
+    };
+    // The launch argument (`api.adminMode`) stays: it comes from argv and is fixed per process.
+    // Every live source is a spy, and the client must call none of them.
+    Object.assign(api, reads);
     for (const listener of listeners) listener(state);
-    await (api.setAdminMode as (v: boolean) => Promise<unknown>)(live.adminModeSetting);
+    return reads;
   }
 
   async function launchListening(adminMode: boolean) {
@@ -177,9 +182,14 @@ describe("the mode is the launch value, never the live setting (AC5)", () => {
       true,
     );
 
-    await changeSettingMidSession({ isAdmin: false, adminModeSetting: false, effective: true });
+    const reads = await changeSettingMidSession({
+      isAdmin: false,
+      adminModeSetting: false,
+      effective: true,
+    });
 
     expect(readAll(client)).toEqual(before);
+    for (const read of Object.values(reads)) expect(read).not.toHaveBeenCalled();
     // The client never subscribes to the live state: the launch value is all it reads.
     expect(listeners).toHaveLength(0);
   });
@@ -189,9 +199,14 @@ describe("the mode is the launch value, never the live setting (AC5)", () => {
     const before = readAll(client);
     expect(RELEASE_FLAGS.every((name) => client.flagState(name, false).value === false)).toBe(true);
 
-    await changeSettingMidSession({ isAdmin: true, adminModeSetting: true, effective: false });
+    const reads = await changeSettingMidSession({
+      isAdmin: true,
+      adminModeSetting: true,
+      effective: false,
+    });
 
     expect(readAll(client)).toEqual(before);
+    for (const read of Object.values(reads)) expect(read).not.toHaveBeenCalled();
     expect(listeners).toHaveLength(0);
   });
 });

@@ -279,6 +279,8 @@ export function registerAuth(
       if (token !== sent) return currentStateAfterSwitch();
       return { kind: "signed-in", ...identity, entitlements, verificationEmailSentAt };
     } catch {
+      // A failed check of a session that is no longer current says nothing about the current one.
+      if (token !== sent) return currentStateAfterSwitch();
       // Network/other failure — NEVER clear a token we couldn't actually verify was invalid,
       // and keep reporting the plan we last saw.
       return {

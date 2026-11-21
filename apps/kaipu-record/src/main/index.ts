@@ -406,8 +406,10 @@ function createWindow(showOnReady = true): void {
     });
     if (choice !== 1) {
       // Cancelling here aborts a quit already past `before-quit`, if one was in
-      // flight: the app keeps running, so the next close must hide again.
+      // flight: the app keeps running, so the next close must hide again, and a pending
+      // "Restart now" is dropped with the quit.
       isQuitting = false;
+      cancelRelaunchRequest();
       return true;
     }
     closingWithRecording = true;
@@ -441,8 +443,10 @@ function createWindow(showOnReady = true): void {
     });
     if (choice !== 1) {
       // Cancelling here aborts a quit already past `before-quit`, if one was in
-      // flight: the app keeps running, so the next close must hide again.
+      // flight: the app keeps running, so the next close must hide again, and a pending
+      // "Restart now" is dropped with the quit.
       isQuitting = false;
+      cancelRelaunchRequest();
       return true;
     }
     closingWithExport = true;
@@ -1396,6 +1400,13 @@ app.whenReady().then(async () => {
 // then run the recorder's normal stop path so what's recorded so far is finalized
 // to the vault before the app actually quits. A timeout still quits if the
 // renderer is unresponsive, so the app is never wedged open.
+// "Restart now" (Admin mode): `will-quit` fires only once every window closed, so no guard can
+// cancel this quit any more (the main window's close guards run after `before-quit`). Start the
+// app again when this process ends.
+app.on("will-quit", () => {
+  relaunchIfRequested(() => app.relaunch());
+});
+
 app.on("before-quit", (event) => {
   // A second copy quitting at start-up owns nothing: it must not clean up the drag
   // copies, shortcuts or analytics of the copy that is running.
@@ -1449,10 +1460,6 @@ app.on("before-quit", (event) => {
     cancelExportThen(() => app.quit());
     return;
   }
-
-  // "Restart now" (Admin mode): every guard passed, so the quit is real; start the app again
-  // when this process ends.
-  relaunchIfRequested(() => app.relaunch());
 
   // Every guard passed: this quit is real, so the main window's close must not hide it.
   isQuitting = true;

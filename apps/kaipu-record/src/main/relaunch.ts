@@ -1,8 +1,9 @@
 /**
  * "Restart now" must not skip the quit guards (a recording or an export in progress asks to be
  * stopped first), and a quit the user cancels must not leave a relaunch behind. So the request is
- * only a flag: `before-quit` calls `relaunchIfRequested` once every guard has passed, and the two
- * guards that can be answered Cancel call `cancelRelaunchRequest`.
+ * only a flag: `will-quit`, which fires once every window closed, calls `relaunchIfRequested`, and
+ * every guard that can be answered Cancel (two in `before-quit`, two on the main window's close)
+ * calls `cancelRelaunchRequest`.
  */
 let requested = false;
 
