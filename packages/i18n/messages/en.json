@@ -182,6 +182,7 @@
     "adminModeRestartNow": "Restart now",
     "adminModeChangeFailed": "Admin mode did not change. Try again.",
     "adminModeRestartFailed": "The app could not restart. Quit and open it again.",
+    "adminBadge": "👑 Admin",
     "onboarding": "Onboarding",
     "onboardingDescription": "Replay the first-run setup & permissions.",
     "replay": "Replay",

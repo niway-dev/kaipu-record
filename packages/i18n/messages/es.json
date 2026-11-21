@@ -182,6 +182,7 @@
     "adminModeRestartNow": "Reiniciar ahora",
     "adminModeChangeFailed": "El modo Admin no cambió. Inténtalo de nuevo.",
     "adminModeRestartFailed": "La app no pudo reiniciarse. Ciérrala y vuelve a abrirla.",
+    "adminBadge": "👑 Admin",
     "onboarding": "Introducción",
     "onboardingDescription": "Vuelve a ver la configuración inicial y los permisos.",
     "replay": "Repetir",

@@ -11,6 +11,7 @@ import { OnboardingContext } from "@renderer/features/onboarding/onboarding-cont
 import { HistoryArrows } from "./history-arrows";
 import styles from "./title-bar.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
+import { useTranslations } from "@kaipu/i18n";
 
 /**
  * The main window's title bar (NIW2-621), drawn by us in the space main frees with
@@ -36,13 +37,14 @@ export function TitleBar({ workspace = true }: { workspace?: boolean }): React.J
   const onboarding = useContext(OnboardingContext)?.isOpen ?? false;
   const showSwitcher = workspace && workspaces !== null && !onboarding;
   const showHistory = workspace && !onboarding;
+  const t = useTranslations("settings");
   return (
     <header {...uiArea("shell.titleBar")} className={styles.bar} data-platform={hostPlatform()}>
       <KaipuLogo use="product" size={28} />
       <HistoryArrows hidden={!showHistory} />
       <span className={styles.name}>Kaipu Record</span>
       {/* This process runs in Admin mode (ADR 0067): fixed at launch, so it never flickers. */}
-      {window.electronAPI.adminMode && <span className={styles.adminBadge}>👑 Admin</span>}
+      {window.electronAPI.adminMode && <span className={styles.adminBadge}>{t("adminBadge")}</span>}
       {showSwitcher && (
         <>
           <span className={styles.separator} aria-hidden>
