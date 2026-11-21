@@ -154,7 +154,7 @@ you would still have to authenticate as one of them. It is the least public
 thing in `/public`, which is why that folder's description says "reading these
 grants nothing" rather than "these are already published".
 
-`ADMIN_USER_IDS`, the API's allow-list for the desktop's Admin mode (ADR 0067),
+`ADMIN_USER_IDS`, the API's allow-list for the desktop's Admin mode ([an admin account switches the desktop between User and Admin mode](/architecture/decisions/0067-an-admin-account-switches-the-desktop-between-user-and-admin-mode/)),
 sits in `/public` for the same reasons: a list of user ids that grants nothing
 without authenticating as one of them.
 
