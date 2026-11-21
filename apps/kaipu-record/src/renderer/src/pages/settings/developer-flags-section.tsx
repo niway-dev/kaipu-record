@@ -9,6 +9,7 @@ import styles from "./settings-page.module.css";
 
 const SOURCE_COPY: Record<FlagSource, string> = {
   override: "pinned here",
+  admin: "Admin mode (release flag)",
   posthog: "from PostHog",
   default: "default (PostHog not loaded or flag absent)",
 };
