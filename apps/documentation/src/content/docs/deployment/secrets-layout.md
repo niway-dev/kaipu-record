@@ -91,6 +91,7 @@ libraries used _by_ the apps that are.
 | `CONSOLE_API_URL`          | `/public`     | `console`                                       |
 | `CONSOLE_ENVIRONMENT`      | `/public`     | `console`                                       |
 | `CONSOLE_ADMIN_USER_IDS`   | `/public`     | `console`                                       |
+| `ADMIN_USER_IDS`           | `/public`     | `server-hono`                                   |
 | `DATABASE_URL`             | `/database`   | `server-hono` `console` `db-scripts` `web-hono` |
 | `R2_ACCESS_KEY_ID`         | `/cloudflare` | `server-hono`                                   |
 | `R2_SECRET_ACCESS_KEY`     | `/cloudflare` | `server-hono`                                   |
@@ -153,8 +154,19 @@ you would still have to authenticate as one of them. It is the least public
 thing in `/public`, which is why that folder's description says "reading these
 grants nothing" rather than "these are already published".
 
-Note the asymmetry the blast-radius test does not capture: _writing_ this value
-would grant admin to anyone you add. Write access is governed by the identity's
+`ADMIN_USER_IDS`, the API's allow-list for the desktop's Admin mode ([an admin account switches the desktop between User and Admin mode](/architecture/decisions/0067-an-admin-account-switches-the-desktop-between-user-and-admin-mode/)),
+sits in `/public` for the same reasons: a list of user ids that grants nothing
+without authenticating as one of them. Infisical holds it for local development; the production
+Worker gets it from the GitHub `production` secret `ADMIN_USER_IDS`, which
+`release-api.yml` writes into `worker-secrets.json`, so a change goes to both.
+That workflow drops empty values and the Worker keeps a secret it is not sent, so
+emptying the GitHub secret revokes nothing. Deleting the Worker secret alone does not last
+either: the next release sends the GitHub secret again. To remove every admin, set the GitHub
+secret to a placeholder id that matches no user, then either release the API or put the same
+placeholder on the Worker with `wrangler secret put ADMIN_USER_IDS` for an immediate effect.
+
+Note the asymmetry the blast-radius test does not capture: _writing_ either allow-list
+(`CONSOLE_ADMIN_USER_IDS` or `ADMIN_USER_IDS`) would grant admin to anyone you add. Write access is governed by the identity's
 permissions, not by the folder, so the folder still answers the question it is
 meant to.
 

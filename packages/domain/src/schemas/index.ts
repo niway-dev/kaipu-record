@@ -27,6 +27,9 @@ export {
   type Entitlements,
 } from "./subscription";
 
+// Admin permission in /me/entitlements (ADR 0067)
+export { meEntitlementsSchema, parseAdminUserIds, isAdminUser, type MeEntitlements } from "./admin";
+
 // Pagination schemas
 export {
   paginationQuerySchema,
