@@ -4,6 +4,7 @@ import {
   DEFAULT_SURFACE,
   FLAG_DEFAULTS,
   FLAG_NAMES,
+  RELEASE_FLAGS,
   EDITOR_OPENED_EVENT,
   EDITOR_SPEED_CHANGED_EVENT,
   SCREENSHOT_CAPTURED_EVENT,
@@ -300,5 +301,28 @@ describe("scrubEventProperties", () => {
     expect(out).toEqual({ phase: "rename", message: `open '<user-path>' failed` });
     // The input is left as it was.
     expect(input.id).toBe("Q3 board call");
+  });
+});
+
+describe("RELEASE_FLAGS", () => {
+  it("is exactly the flags whose code default is false", () => {
+    expect([...RELEASE_FLAGS].sort()).toEqual(
+      [...FLAG_NAMES].filter((name) => FLAG_DEFAULTS[name] === false).sort(),
+    );
+  });
+
+  it("pins today's list, and leaves a shipped (default true) flag out", () => {
+    expect([...RELEASE_FLAGS].sort()).toEqual(
+      [
+        "capture-while-recording",
+        "image-canvas",
+        "image-inspect",
+        "image-text",
+        "timeline-levels",
+        "transcription",
+        "zoom-filmstrip",
+      ].sort(),
+    );
+    expect(RELEASE_FLAGS).not.toContain("native-cursor-capture");
   });
 });

@@ -321,6 +321,12 @@ export interface AppSettings {
    * with the Control key on the overlay (NIW2-883).
    */
   captureWidget: CaptureWidgetSettings;
+  /**
+   * Admin mode preference (ADR 0067): the wish to run with every release flag on. It grants
+   * nothing alone: the mode is effective only when the signed-in account also holds the admin
+   * permission, and main computes that once at launch (see `shared/admin-mode.ts`).
+   */
+  adminMode: boolean;
 }
 
 /**
@@ -359,6 +365,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   microphone: null,
   editor: DEFAULT_EDITOR_SETTINGS,
   captureWidget: DEFAULT_CAPTURE_WIDGET_SETTINGS,
+  adminMode: false,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */
