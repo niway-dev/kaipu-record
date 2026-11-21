@@ -49,6 +49,8 @@ export const kl = stylex.defineConsts({
 export const palette = stylex.defineVars({
   shipped: "#22c55e",
   shippedTx: "#22c55e",
+  beta: "#a78bfa",
+  betaTx: "#a78bfa",
   progress: "#f59e0b",
   progressTx: "#f59e0b",
   planned: "#8a8a92",
@@ -59,6 +61,8 @@ export const palette = stylex.defineVars({
 export const paletteLight = stylex.createTheme(palette, {
   shipped: "#22c55e",
   shippedTx: "#15803d",
+  beta: "#8b5cf6",
+  betaTx: "#6d28d9",
   progress: "#f59e0b",
   progressTx: "#b45309",
   planned: "#76767f",

@@ -2,20 +2,28 @@ import {
   AppWindow,
   Award,
   BadgeCheck,
+  Camera,
+  Captions,
   Cloud,
+  Crop,
   Download,
   Droplet,
   FileText,
+  Film,
   Frame,
   Globe,
   House,
   Image,
   Keyboard,
+  Layers,
+  LayoutGrid,
   Library,
   MicOff,
   PanelTop,
   PenLine,
   RefreshCw,
+  Ruler,
+  ScanText,
   Scissors,
   SlidersHorizontal,
   Sparkles,
@@ -46,8 +54,16 @@ import {
  * in the docs site's desktop/platform-parity page.
  */
 
-/** Rendered top to bottom: what already ships, what is being built, what comes next. */
-export const ROADMAP_STATES = ["shipped", "inProgress", "planned"] as const;
+/**
+ * Rendered top to bottom: what already ships, what is built but only in private
+ * testing, what is being built, what comes next.
+ *
+ * `beta` is the Private beta: merged code behind a release flag that no user can
+ * turn on yet (there is no Labs page), so it is real and still not downloadable.
+ * Only macOS rows use it today. It ranks between shipped and inProgress, so a row
+ * grouped by its most advanced platform lands under the furthest-along state.
+ */
+export const ROADMAP_STATES = ["shipped", "beta", "inProgress", "planned"] as const;
 
 export type RoadmapState = (typeof ROADMAP_STATES)[number];
 
@@ -137,11 +153,28 @@ export const ROADMAP_ITEMS = [
   { id: "videoZoom", area: "edit", icon: ZoomIn, mac: "shipped", win: "inProgress" },
   { id: "videoMute", area: "edit", icon: MicOff, mac: "shipped", win: "inProgress" },
   { id: "exportPresets", area: "edit", icon: Download, mac: "shipped", win: "inProgress" },
+  { id: "cameraMoves", area: "edit", icon: Camera, mac: "planned", win: "planned" },
 
   // Find
   { id: "library", area: "find", icon: Library, mac: "shipped", win: "inProgress" },
   { id: "captureTags", area: "find", icon: Tag, mac: "shipped", win: "inProgress" },
   { id: "photoZoom", area: "find", icon: Image, mac: "planned", win: "planned" },
+
+  // Private beta: merged and flagged on macOS, not in the download. Windows has no
+  // build of these yet, so its cell is planned.
+  { id: "textRecognition", area: "capture", icon: ScanText, mac: "beta", win: "planned" },
+  { id: "imageInspect", area: "capture", icon: Ruler, mac: "beta", win: "planned" },
+  { id: "imageCanvas", area: "capture", icon: LayoutGrid, mac: "beta", win: "planned" },
+  {
+    id: "screenshotsWhileRecording",
+    area: "capture",
+    icon: Crop,
+    mac: "beta",
+    win: "planned",
+  },
+  { id: "clipLevels", area: "edit", icon: Layers, mac: "beta", win: "planned" },
+  { id: "zoomFilmstrip", area: "edit", icon: Film, mac: "beta", win: "planned" },
+  { id: "localTranscription", area: "find", icon: Captions, mac: "beta", win: "planned" },
 
   // Cloud
   { id: "accounts", area: "cloud", icon: User, mac: "shipped", win: "inProgress" },
@@ -184,7 +217,7 @@ export function stateOf(item: RoadmapItem, platform: PlatformFilter): RoadmapSta
 
 /** Per-state counts for one platform — the summary cards and their bars. */
 export function platformCounts(platform: RoadmapPlatform): Record<RoadmapState, number> {
-  const counts: Record<RoadmapState, number> = { shipped: 0, inProgress: 0, planned: 0 };
+  const counts: Record<RoadmapState, number> = { shipped: 0, beta: 0, inProgress: 0, planned: 0 };
   for (const item of ROADMAP_ITEMS) counts[item[platform]] += 1;
   return counts;
 }

@@ -1,19 +1,10 @@
-import { Crop, Folder, Scissors, Search, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 
-import { CHAPTERS, type ChapterId } from "./chapters";
+import type { Chapters } from "./chapters";
 import { cssVars } from "./css-vars";
 import { useActiveChapter } from "./use-active-chapter";
 import styles from "./rail.module.css";
-
-const ICONS: Record<Exclude<ChapterId, "hero">, typeof Video> = {
-  record: Video,
-  capture: Crop,
-  edit: Scissors,
-  find: Search,
-  files: Folder,
-};
 
 /**
  * The fixed chapter rail. It is the page's only navigation — the old marketing
@@ -23,10 +14,10 @@ const ICONS: Record<Exclude<ChapterId, "hero">, typeof Video> = {
  * navigate, and a button is what a screen reader should announce. The anchor
  * ids still exist on the sections, so a pasted `#record` link works.
  */
-export function Rail() {
+export function Rail({ chapters }: { chapters: Chapters }) {
   const t = useTranslations("landing");
-  const active = useActiveChapter();
-  const activeChapter = CHAPTERS.find((c) => c.id === active);
+  const active = useActiveChapter(chapters);
+  const activeChapter = chapters.find((c) => c.id === active);
 
   const scrollTo = (slug: string): void => {
     document.getElementById(slug)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -40,10 +31,10 @@ export function Rail() {
       </span>
       <span className={styles.tick} aria-hidden />
 
-      {CHAPTERS.map((chapter) => {
+      {chapters.map((chapter) => {
         const isActive = chapter.id === active;
         const label = t(chapter.labelKey);
-        const Icon = chapter.id === "hero" ? null : ICONS[chapter.id];
+        const Icon = chapter.icon;
         return (
           <button
             key={chapter.id}

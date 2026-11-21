@@ -13,8 +13,8 @@ interface ChapterProps {
   tint: "c1" | "c2" | "c3" | "c4";
   number: string;
   icon: LucideIcon;
-  /** i18n key prefix, e.g. "homeChapter1". */
-  keyPrefix: "homeChapter1" | "homeChapter2" | "homeChapter3" | "homeChapter4";
+  /** i18n key prefix, e.g. "homeChapter2". */
+  keyPrefix: "homeChapter2" | "homeChapter3" | "homeChapter4" | "homeChapter5";
   /** The product mockup. Rendered inside a figure, announced once. */
   children: ReactNode;
 }

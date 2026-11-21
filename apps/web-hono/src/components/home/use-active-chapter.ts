@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { CHAPTERS, type ChapterId } from "./chapters";
+import type { Chapters } from "./chapters";
 
 /**
  * Which chapter the rail should show as active.
@@ -14,8 +14,8 @@ import { CHAPTERS, type ChapterId } from "./chapters";
  * Reads layout on a rAF-throttled scroll listener rather than per event, so a
  * trackpad firing 120 scroll events a second still costs one measurement a frame.
  */
-export function useActiveChapter(): ChapterId {
-  const [active, setActive] = useState<ChapterId>("hero");
+export function useActiveChapter(chapters: Chapters): string {
+  const [active, setActive] = useState<string>("hero");
 
   useEffect(() => {
     let frame = 0;
@@ -23,8 +23,8 @@ export function useActiveChapter(): ChapterId {
     const measure = (): void => {
       frame = 0;
       const midpoint = window.innerHeight / 2;
-      let current: ChapterId = CHAPTERS[0]!.id;
-      for (const chapter of CHAPTERS) {
+      let current: string = chapters[0]!.id;
+      for (const chapter of chapters) {
         const el = document.getElementById(chapter.slug);
         if (!el) continue;
         if (el.getBoundingClientRect().top <= midpoint) current = chapter.id;
@@ -45,7 +45,7 @@ export function useActiveChapter(): ChapterId {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, []);
+  }, [chapters]);
 
   return active;
 }

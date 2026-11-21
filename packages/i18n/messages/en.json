@@ -366,23 +366,15 @@
     "homeEyebrow": "Kaipu, in four moments",
     "homeHeroSerif": "Get back to work.",
     "homeChapter1Label": "Record",
-    "homeChapter1Sub": "Screen · voice · camera",
-    "homeChapter1Title": "Show what happened.",
-    "homeChapter1Serif": "One take. No setup.",
-    "homeChapter1Body": "Screen, your voice, system audio and a floating camera — started from the menu bar or a shortcut. Pause, keep going, stop. It’s already saved.",
-    "homeChapter1Pill1": "Menu bar",
-    "homeChapter1Pill2": "⌘⇧2",
-    "homeChapter1Pill3": "Camera bubble",
-    "homeChapter1Pill4": "System audio",
     "homeChapter2Label": "Capture",
-    "homeChapter2Sub": "Screenshots that explain",
-    "homeChapter2Title": "Sometimes a screenshot says it all.",
-    "homeChapter2Serif": "Point at it. Literally.",
-    "homeChapter2Body": "Draw a frame or pick a screen, then add boxes, arrows and handwritten notes. Blur what shouldn’t be seen and set it on a clean background.",
-    "homeChapter2Pill1": "Frame · Screen",
-    "homeChapter2Pill2": "Boxes & arrows",
-    "homeChapter2Pill3": "Blur",
-    "homeChapter2Pill4": "Copy in one click",
+    "homeChapter2Sub": "Screenshots · recordings",
+    "homeChapter2Title": "Capture what happened.",
+    "homeChapter2Serif": "A screenshot or a take. One widget.",
+    "homeChapter2Body": "One toolbar for both. Switch between Screenshot and Recording, draw a frame or pick a screen, then capture. Recordings take your voice, system audio and a floating camera along. Screenshots take boxes, arrows, notes and blur.",
+    "homeChapter2Pill1": "Screenshot · Recording",
+    "homeChapter2Pill2": "⌘⇧1 · ⌘⇧2",
+    "homeChapter2Pill3": "Frame · Screen",
+    "homeChapter2Pill4": "Camera bubble",
     "homeChapter3Label": "Edit",
     "homeChapter3Sub": "Just enough editing",
     "homeChapter3Title": "A small tweak. A clearer idea.",
@@ -474,7 +466,73 @@
     "originKhipuBody": "The Andean system of recording information with cords and knots.",
     "originBody": "Kaipu brings both together: keeping what is happening, so you can explain it, share it, and find it again.",
     "originNote": "Kaipu is our own brand construction inspired by these two ideas, not a literal Quechua translation.",
-    "footerSignature": "This. Captured."
+    "footerSignature": "This. Captured.",
+    "homeChapter5Label": "Share",
+    "homeChapter5Sub": "The right file for each place",
+    "homeChapter5Title": "Send it where it’s going.",
+    "homeChapter5Serif": "Light for the thread. Full for the channel.",
+    "homeChapter5Body": "Pick a destination and Kaipu exports a file that fits: a small copy that plays inline in a pull request, full quality for YouTube, a vertical cut for Reels. The original never changes.",
+    "homeChapter5Pill1": "GitHub · Jira · Linear",
+    "homeChapter5Pill2": "Slack · Discord · Email",
+    "homeChapter5Pill3": "YouTube 16:9 · 1440p or 4K",
+    "homeChapter5Pill4": "Reels · TikTok · Shorts 9:16",
+    "homeOnTheWayEyebrow": "On the way",
+    "homeOnTheWayTitle": "More is coming.",
+    "homeOnTheWaySerif": "Most of it is already in private beta.",
+    "homeOnTheWayBody": "Most of these tools are in private beta on macOS and some are still planned. None is in the download yet, and the dates are not promises.",
+    "homeOnTheWayOcrTitle": "Text recognition",
+    "homeOnTheWayOcrBody": "Select the text inside a screenshot and copy it, or hide a line in one click.",
+    "homeOnTheWayMeasureTitle": "Measure width and height",
+    "homeOnTheWayMeasureBody": "A ruler that measures and pins pixel runs, with a loupe to see the detail.",
+    "homeOnTheWayColorsTitle": "Pick colors",
+    "homeOnTheWayColorsBody": "The color under your cursor in hex, rgb, hsl or oklch, and a panel that finds each color.",
+    "homeOnTheWayGridTitle": "Image grid and move",
+    "homeOnTheWayGridBody": "A roomy canvas: pan, zoom, move things around and draw outside the image.",
+    "homeOnTheWayCameraTitle": "Camera that moves over time",
+    "homeOnTheWayCameraBody": "Your camera bubble changes place and size as the video plays. Planned, not built yet.",
+    "homeOnTheWayCta": "See the full roadmap",
+    "homeWidgetLabel": "The capture widget",
+    "homeWidgetScreenshot": "Screenshot",
+    "homeWidgetRecording": "Recording",
+    "homeWidgetFrame": "Frame",
+    "homeWidgetScreen": "Screen",
+    "homeWidgetFree": "Free",
+    "homeWidgetCopy": "Copy",
+    "homeWidgetCapture": "Capture",
+    "homeWidgetRecord": "Record",
+    "demos": {
+      "edAnnotation": "Start here",
+      "edBeatPoint": "Point at things",
+      "edBeatPrivate": "Hide what is private",
+      "edBeatSections": "Sections",
+      "edBeatZoom": "Zoom lands on your click",
+      "edSectionDemo": "DEMO",
+      "edSectionIntro": "INTRO",
+      "edSectionWrapUp": "WRAP-UP",
+      "shareBeatGithub": "GitHub: small and inline",
+      "shareBeatOriginal": "The original never changes",
+      "shareBeatYoutube": "YouTube: full quality",
+      "shareDestChat": "Slack · Discord · Email",
+      "shareDestChatDesc": "Light, plays in the chat",
+      "shareDestGithubDesc": "Small copy that plays inline",
+      "shareDestVerticalDesc": "9:16 vertical",
+      "shareDestYoutubeDesc": "16:9 · 1440p or 4K",
+      "shareFullNote": "Full quality, 1440p or 4K.",
+      "shareLightNote": "Light. Plays right in the pull request.",
+      "shareOriginalCaption": "Kaipu Recording · 0:18 · original",
+      "shareQuestion": "Where is it going?",
+      "wsBeatPersonal": "Personal: this Mac",
+      "wsBeatSaved": "Saved to the company Drive",
+      "wsBeatSwitch": "Switch to Work",
+      "wsClient": "Client",
+      "wsFolderClient": "Client / Demos",
+      "wsFolderWork": "Work / Recordings",
+      "wsNewRecording": "NEW RECORDING",
+      "wsPersonal": "Personal",
+      "wsSaved": "SAVED",
+      "wsThisMac": "This Mac",
+      "wsWork": "Work"
+    }
   },
   "auth": {
     "welcomeBack": "Welcome Back",
@@ -2648,11 +2706,13 @@
     },
     "status": {
       "shipped": "Shipped",
+      "beta": "Private beta",
       "inProgress": "In progress",
       "planned": "Planned"
     },
     "groupHint": {
       "shipped": "Available today on at least one platform. The cells say where.",
+      "beta": "Built and in private testing. Not in the download yet.",
       "shippedOne": "Already in the app you download.",
       "inProgress": "Being built or ported right now.",
       "planned": "Next up. Order is a priority, not a promise."
@@ -2686,6 +2746,7 @@
     "legend": {
       "title": "How to read it",
       "shipped": "in the current release",
+      "beta": "built, in private testing",
       "inProgress": "being built or ported",
       "planned": "on the list, no date"
     },
@@ -2832,6 +2893,38 @@
         "title": "Signed installer",
         "description": "A build your system trusts out of the box, with no security warning on the first launch.",
         "note": "macOS builds are already signed and notarized by Apple. The first Windows beta ships unsigned; the steps for its warning are below."
+      },
+      "textRecognition": {
+        "title": "Text recognition (OCR)",
+        "description": "Select and copy the text inside a screenshot, or hide a recognized line in one click. Recognized on your Mac, nothing leaves it."
+      },
+      "imageInspect": {
+        "title": "Measure and pick colors",
+        "description": "Measure the width and height of anything in a screenshot with a ruler that pins pixel runs, and read the color under the cursor in hex, rgb, hsl or oklch."
+      },
+      "imageCanvas": {
+        "title": "Image grid and move",
+        "description": "A roomy canvas for the image editor: pan, zoom, move things around on a grid and draw outside the image."
+      },
+      "clipLevels": {
+        "title": "Clip levels and Add from Library",
+        "description": "Put images and videos over the footage on their own levels of the timeline, and add items from the Library to the sequence."
+      },
+      "zoomFilmstrip": {
+        "title": "Zoom-aware filmstrip",
+        "description": "The timeline thumbnails follow your zoom, so you see the right frames exactly where you cut."
+      },
+      "localTranscription": {
+        "title": "Local transcription",
+        "description": "Transcribe a recording on your Mac and follow the transcript in a side panel that tracks your edits."
+      },
+      "screenshotsWhileRecording": {
+        "title": "Screenshots while recording",
+        "description": "Take a screenshot during a take without stopping. It captures the recording target and never opens the editor."
+      },
+      "cameraMoves": {
+        "title": "Camera that moves over time",
+        "description": "The camera bubble changes place and size along the video, on its own track. Planned: the design is not fully built."
       }
     }
   },
