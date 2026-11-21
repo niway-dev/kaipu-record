@@ -411,9 +411,14 @@ export function registerAuth(
     async (event): Promise<{ ok: true; sentAt: number } | { ok: false }> => {
       requireMainWindow(event);
       if (!cachedIdentity || !token) return { ok: false };
+      const sent = token;
       if (!(await resendVerificationEmail(config, cachedIdentity.email))) return { ok: false };
 
       const sentAt = Date.now();
+      // The account can change while the mail is sent (sign-out, then another account). The
+      // mail went out, but its timestamp belongs to the old session: recording it now would mark
+      // the new account's session as having been sent a verification email.
+      if (token !== sent || !cachedIdentity) return { ok: true, sentAt };
       verificationEmailSentAt = sentAt;
       // Best-effort persistence: the mail is already out, so a failed write must not be
       // reported as a failed send. Worst case the fact is forgotten on the next restart —

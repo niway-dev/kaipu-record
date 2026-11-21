@@ -891,6 +891,42 @@ describe("auth-store", () => {
     expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: true });
   });
 
+  it("a verification email for A that finishes after B signed in is not recorded on B's session", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInWith(answerFor("user-1", false));
+    let sendDone!: (value: boolean) => void;
+    vi.spyOn(authClient, "resendVerificationEmail").mockReturnValue(
+      new Promise<boolean>((resolve) => (sendDone = resolve)),
+    );
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(answerFor("user-2", false));
+
+    const resend = mockState.handlers.get(IPC_CHANNELS.authResendVerification)!({
+      sender: mainWindow.webContents,
+    });
+    await Promise.resolve();
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
+    browser.exchange.mockResolvedValue({
+      token: "tok_2",
+      userId: "user-2",
+      email: "b@b.com",
+      name: "B",
+    });
+    await signInVia({ sender: mainWindow.webContents });
+    sendDone(true); // A's mail went out, after B signed in
+
+    expect(await resend).toMatchObject({ ok: true });
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-2",
+      email: "b@b.com",
+      name: "B",
+    });
+    expect(await getStatus()).not.toHaveProperty("verificationEmailSentAt", expect.any(Number));
+    // A fresh process reads B's session from disk without A's timestamp either.
+    vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
+    registerAuth(config, () => null);
+    expect(await getStatus()).not.toHaveProperty("verificationEmailSentAt", expect.any(Number));
+  });
+
   // ── Account identity (AuthHandle for main modules) ────────────────────
 
   it("exposes the current account (userId + token) to main modules and notifies on change", async () => {
