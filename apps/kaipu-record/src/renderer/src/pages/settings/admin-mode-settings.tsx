@@ -49,14 +49,10 @@ export function AdminModeSettings(): React.JSX.Element | null {
   return (
     <div {...uiArea("settingsApp.adminMode")} className={styles.card}>
       <Row
-        label={
-          <span className={styles.label}>
-            {t("adminMode")}
-            <span className={styles.tag}>{t("adminAccount")}</span>
-          </span>
-        }
+        label={t("adminMode")}
         description={
           <span className={styles.description}>
+            <span className={styles.tag}>{t("adminAccount")}</span>
             {t("adminModeDescription")}
             {state.restartPending && (
               <span className={styles.restart}>

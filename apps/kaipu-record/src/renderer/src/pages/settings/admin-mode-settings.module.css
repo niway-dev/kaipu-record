@@ -8,12 +8,6 @@
   background: var(--bg-sidebar);
 }
 
-.label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .tag {
   padding: 1px 8px;
   border-radius: 999px;
