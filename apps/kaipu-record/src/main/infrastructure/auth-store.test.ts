@@ -292,6 +292,7 @@ describe("auth-store", () => {
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
+      admin: false,
     });
 
     // A fresh process reading that file reports the identity even with the server unreachable.
@@ -553,6 +554,202 @@ describe("auth-store", () => {
     await expect(
       mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
     ).resolves.toEqual({ kind: "signed-out" });
+  });
+
+  // ── Admin permission (ADR 0067) ───────────────────────────────────────
+
+  const answerFor = (userId: string | undefined, admin: boolean | undefined): Entitlements =>
+    ({
+      ...FREE_ENTITLEMENTS,
+      ...(userId === undefined ? {} : { userId }),
+      ...(admin === undefined ? {} : { admin }),
+    }) as Entitlements;
+
+  async function signInWith(
+    answer: Entitlements,
+    result = { token: "tok_1", userId: "user-1", email: "a@b.com", name: "A" },
+  ): Promise<ReturnType<typeof registerRealAuth>> {
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(answer);
+    const mainWindow = mockState.windows[0]!;
+    browser.exchange.mockResolvedValue(result);
+    const handle = registerAuth(config, () => mainWindow as never);
+    await signInVia({ sender: mainWindow.webContents });
+    return handle;
+  }
+
+  const getStatus = (): Promise<unknown> =>
+    mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+
+  it("signed out: no admin session at all", () => {
+    const handle = registerAuth(config, () => null);
+    expect(handle.getAdminSession()).toBeNull();
+  });
+
+  it("stores admin:true from an answer for the signed-in user, and keeps it out of the plan the renderer sees", async () => {
+    const handle = await signInWith(answerFor("user-1", true));
+    expect(handle.getAdminSession()).toEqual({ admin: true });
+    const status = (await getStatus()) as { entitlements: object };
+    expect(status.entitlements).not.toHaveProperty("admin");
+    expect(status.entitlements).not.toHaveProperty("userId");
+  });
+
+  it("discards an answer for another user", async () => {
+    const handle = await signInWith(answerFor("user-2", true));
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("treats an answer with no userId as not admin", async () => {
+    const handle = await signInWith(answerFor(undefined, true));
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("treats a missing admin (an older server) as false", async () => {
+    const handle = await signInWith(answerFor("user-1", undefined));
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("is not admin when the sign-in could not fetch the answer", async () => {
+    browser.exchange.mockResolvedValue({
+      token: "tok_1",
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    const handle = registerAuth(config, () => mockState.windows[0] as never);
+    await signInVia({ sender: mockState.windows[0]!.webContents });
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("persists admin with the session: an offline restart still has it, before any round trip", async () => {
+    await signInWith(answerFor("user-1", true));
+
+    vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
+    const reopened = registerAuth(config, () => null);
+    expect(reopened.getAdminSession()).toEqual({ admin: true });
+
+    // Still offline after a status check: the last answer holds until a good check replaces it.
+    await getStatus();
+    expect(reopened.getAdminSession()).toEqual({ admin: true });
+  });
+
+  it("a failed entitlements fetch keeps the stored admin; a good one replaces it", async () => {
+    const handle = await signInWith(answerFor("user-1", true));
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+
+    vi.spyOn(authClient, "getEntitlements").mockRejectedValue(new Error("offline"));
+    await getStatus();
+    expect(handle.getAdminSession()).toEqual({ admin: true });
+
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(answerFor("user-1", false));
+    await getStatus();
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("a refresh whose answer names another user does not grant admin", async () => {
+    const handle = await signInWith(answerFor("user-1", false));
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(answerFor("user-2", true));
+    await getStatus();
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("sign-out clears the permission, in memory and on disk", async () => {
+    const handle = await signInWith(answerFor("user-1", true));
+    const changes: Array<boolean | null> = [];
+    handle.onAdminChanged(() => changes.push(handle.getAdminSession()?.admin ?? null));
+
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({
+      sender: mockState.windows[0]!.webContents,
+    });
+
+    expect(handle.getAdminSession()).toBeNull();
+    expect(changes).toEqual([null]);
+    expect(registerAuth(config, () => null).getAdminSession()).toBeNull();
+  });
+
+  it("an admin:true answer for A that arrives after A signed out and B signed in does not make B admin", async () => {
+    const mainWindow = mockState.windows[0]!;
+    const handle = await signInWith(answerFor("user-1", false));
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    let answerA!: (value: Entitlements) => void;
+    const late = new Promise<Entitlements>((resolve) => (answerA = resolve));
+    vi.spyOn(authClient, "getEntitlements").mockImplementation(async (_config, token) =>
+      token === "tok_1" ? late : answerFor("user-2", false),
+    );
+
+    const refresh = getStatus(); // A's refresh is in flight
+    await Promise.resolve();
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
+    browser.exchange.mockResolvedValue({
+      token: "tok_2",
+      userId: "user-2",
+      email: "b@b.com",
+      name: "B",
+    });
+    await signInVia({ sender: mainWindow.webContents });
+
+    answerA(answerFor("user-1", true)); // arrives late
+    await refresh;
+
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+    expect(handle.getCurrentAccount()).toEqual({ userId: "user-2", token: "tok_2" });
+    expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("signing in as another account never inherits the previous account's permission", async () => {
+    const mainWindow = mockState.windows[0]!;
+    const handle = await signInWith(answerFor("user-1", true));
+    expect(handle.getAdminSession()).toEqual({ admin: true });
+
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(answerFor("user-2", false));
+    vi.spyOn(authClient, "signOutRemote").mockResolvedValue();
+    browser.exchange.mockResolvedValue({
+      token: "tok_2",
+      userId: "user-2",
+      email: "b@b.com",
+      name: "B",
+    });
+    await signInVia({ sender: mainWindow.webContents });
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+  });
+
+  it("notifies when the permission changes value, and only then", async () => {
+    const handle = await signInWith(answerFor("user-1", false));
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    const seen: boolean[] = [];
+    handle.onAdminChanged(() => seen.push(handle.getAdminSession()?.admin === true));
+
+    await getStatus(); // still false: nothing to say
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(answerFor("user-1", true));
+    await getStatus();
+    await getStatus(); // still true
+    expect(seen).toEqual([true]);
+  });
+
+  it("the verification-email timestamp write keeps the stored admin", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInWith(answerFor("user-1", true));
+    vi.spyOn(authClient, "resendVerificationEmail").mockResolvedValue(true);
+    await mockState.handlers.get(IPC_CHANNELS.authResendVerification)!({
+      sender: mainWindow.webContents,
+    });
+    expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: true });
   });
 
   // ── Account identity (AuthHandle for main modules) ────────────────────

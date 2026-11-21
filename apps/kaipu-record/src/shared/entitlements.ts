@@ -32,6 +32,18 @@ export interface Entitlements {
 }
 
 /**
+ * What `GET /api/v1/me/entitlements` answers: the entitlements plus who the answer is for and
+ * whether that account may use Admin mode (ADR 0067). Both extras are optional on the wire: an
+ * older server sends neither, and main reads that as "not admin". Main splits them off before the
+ * plan reaches a renderer, so `Entitlements` itself never carries them. Literal fields on
+ * purpose (preload rule); `admin-mode.test.ts` pins them to `meEntitlementsSchema` in the domain.
+ */
+export interface EntitlementsAnswer extends Entitlements {
+  userId?: string;
+  admin?: boolean;
+}
+
+/**
  * The account before anyone paid — and what an unreachable server falls back to on first run.
  * `cloudStorageBytes` is a LITERAL copy of `PLANS.free.cloudStorageBytes` (250 MB): this file is
  * reachable from the preload bundle, which cannot take value imports from workspace packages

@@ -1,4 +1,8 @@
-import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
+import {
+  FREE_ENTITLEMENTS,
+  type Entitlements,
+  type EntitlementsAnswer,
+} from "@shared/entitlements";
 
 export interface AuthClientConfig {
   serverUrl: string;
@@ -48,21 +52,24 @@ export async function getSession(
 export async function getEntitlements(
   config: AuthClientConfig,
   token: string,
-): Promise<Entitlements> {
+): Promise<EntitlementsAnswer> {
   const res = await fetch(`${config.serverUrl}/api/v1/me/entitlements`, {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`me/entitlements failed: ${res.status}`);
   const body = (await res.json()) as {
-    data: (Omit<Entitlements, "features"> & { features: Partial<Entitlements["features"]> }) | null;
+    data:
+      | (Omit<EntitlementsAnswer, "features"> & { features: Partial<Entitlements["features"]> })
+      | null;
     error: { message: string } | null;
   };
   if (!body.data) throw new Error(body.error?.message ?? "me/entitlements returned no data");
   // The server does not send `cloudUploads`/`cloudStorageBytes` yet (and `watermarkRemoval`
   // may also be absent on an older server) — default whatever the body omits instead of
   // letting `undefined` reach a feature check downstream. See the docstring on
-  // `Entitlements` in @shared/entitlements.
+  // `Entitlements` in @shared/entitlements. `userId` and `admin` ride along in `...body.data`
+  // exactly as sent (absent from an older server); the auth store decides what they mean.
   return {
     ...body.data,
     features: {
