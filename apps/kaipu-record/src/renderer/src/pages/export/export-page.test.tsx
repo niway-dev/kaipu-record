@@ -520,6 +520,29 @@ describe("ExportPage", () => {
       expect(router.state.location.pathname).toBe("/export/asset-1");
     });
 
+    it("Escape, Cancel and ✕ give focus back to Change video", async () => {
+      const { modal } = await openModal();
+      const opener = screen.getByRole("button", { name: /Change video/ });
+      fireEvent.keyDown(modal, { key: "Escape" });
+      expect(opener).toHaveFocus();
+      opener.blur();
+      fireEvent.click(opener);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(opener).toHaveFocus();
+      opener.blur();
+      fireEvent.click(opener);
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(opener).toHaveFocus();
+    });
+
+    it("confirming the recording already on screen gives focus back to Change video", async () => {
+      const { modal } = await openModal();
+      const opener = screen.getByRole("button", { name: /Change video/ });
+      fireEvent.click(within(modal).getByRole("button", { name: "Export this video" }));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(opener).toHaveFocus();
+    });
+
     it("Enter and the arrows on the modal do not export or move the destination behind it", async () => {
       const { modal } = await openModal("/export/asset-1?to=youtube");
       fireEvent.keyDown(modal, { key: "Enter" });

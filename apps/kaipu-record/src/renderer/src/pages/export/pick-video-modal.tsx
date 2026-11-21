@@ -130,7 +130,7 @@ function ExportThisVideo({ onPick }: { onPick(video: LibraryVideo): void }): Rea
 
 /**
  * The state both buttons share: `onOpen` goes on the trigger, `modal` is rendered next to it.
- * Closing without picking puts focus back on the button that opened it.
+ * Closing, with or without a pick, puts focus back on the button that opened it.
  */
 export function usePickVideoModal(props: Omit<PickVideoModalProps, "onClose">): {
   onOpen(event: MouseEvent<HTMLElement>): void;
@@ -138,8 +138,10 @@ export function usePickVideoModal(props: Omit<PickVideoModalProps, "onClose">): 
 } {
   const [opener, setOpener] = useState<HTMLElement | null>(null);
   const { onPick } = props;
+  // Every close, a pick included, hands focus back to the trigger if it is still in the document.
+  // When a pick then replaces the screen and unmounts the trigger, focus falls to the body.
   const close = (): void => {
-    opener?.focus();
+    if (opener?.isConnected) opener.focus();
     setOpener(null);
   };
   return {
@@ -148,7 +150,7 @@ export function usePickVideoModal(props: Omit<PickVideoModalProps, "onClose">): 
       <PickVideoModal
         {...props}
         onPick={(video) => {
-          setOpener(null);
+          close();
           onPick(video);
         }}
         onClose={close}
