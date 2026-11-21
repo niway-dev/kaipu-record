@@ -212,8 +212,23 @@ export function registerAuth(
 
   ipcMain.handle(IPC_CHANNELS.authGetStatus, async (): Promise<AuthStatus> => {
     if (!token) return { kind: "signed-out" };
+    const sent = token;
     try {
-      const identity = await getSession(config, token);
+      const identity = await getSession(config, sent);
+      // The session can change while the check is in flight (sign-out, then another account).
+      // Its answer belongs to the token it was asked about: neither clear nor cache it for the
+      // account that is current now. Report the current state; the renderer re-asks.
+      if (token !== sent) {
+        return token
+          ? {
+              kind: "unknown",
+              lastKnownUserId: cachedIdentity?.userId,
+              lastKnownEmail: cachedIdentity?.email,
+              entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+              verificationEmailSentAt,
+            }
+          : { kind: "signed-out" };
+      }
       if (!identity) {
         // Confirmed gone (a 401, or better-auth's far commoner 200 + null body). Safe to clear.
         token = null;
@@ -229,7 +244,7 @@ export function registerAuth(
       cachedIdentity = identity;
       // Every successful session check re-checks the plan too: this is how a purchase made on
       // the web reaches the app — the user reopens it. No push, no sync engine.
-      const entitlements = await refreshEntitlements(token, identity);
+      const entitlements = await refreshEntitlements(sent, identity);
       return { kind: "signed-in", ...identity, entitlements, verificationEmailSentAt };
     } catch {
       // Network/other failure — NEVER clear a token we couldn't actually verify was invalid,

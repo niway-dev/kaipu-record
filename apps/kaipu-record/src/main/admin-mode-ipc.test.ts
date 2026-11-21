@@ -18,6 +18,7 @@ function fakeWindow(destroyed = false) {
   return { isDestroyed: () => destroyed, webContents: { send: vi.fn() } };
 }
 
+const mainContents = {};
 const world = { session: null as { admin: boolean } | null, setting: false };
 const setSetting = vi.fn((value: boolean) => {
   world.setting = value;
@@ -28,9 +29,13 @@ const { notifyChanged } = registerAdminModeIpc({
   setting: () => world.setting,
   setSetting,
   relaunch,
+  getMainWindow: () => ({ webContents: mainContents }) as never,
 });
 
-const call = (channel: string, ...args: unknown[]) => handlers.get(channel)?.({}, ...args);
+const call = (channel: string, ...args: unknown[]) =>
+  handlers.get(channel)?.({ sender: mainContents }, ...args);
+const callFrom = (sender: unknown, channel: string, ...args: unknown[]) =>
+  handlers.get(channel)?.({ sender }, ...args);
 
 describe("admin mode IPC", () => {
   beforeEach(() => {
@@ -97,6 +102,16 @@ describe("admin mode IPC", () => {
   it("relaunches through the injected relaunch", () => {
     call(IPC_CHANNELS.adminModeRelaunch);
     expect(relaunch).toHaveBeenCalledOnce();
+  });
+
+  it("refuses the two mutating calls from a window that is not the main one", () => {
+    const other = {};
+    expect(() => callFrom(other, IPC_CHANNELS.adminModeSet, true)).toThrow(/main window/);
+    expect(() => callFrom(other, IPC_CHANNELS.adminModeRelaunch)).toThrow(/main window/);
+    expect(setSetting).not.toHaveBeenCalled();
+    expect(relaunch).not.toHaveBeenCalled();
+    // The read stays open to every window.
+    expect(callFrom(other, IPC_CHANNELS.adminModeGetState)).toMatchObject({ effective: false });
   });
 
   it("tells every open window when the state may have changed", () => {

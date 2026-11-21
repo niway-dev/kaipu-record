@@ -21,7 +21,7 @@ import { join } from "path";
 import { captureWhileRecordingEnabled } from "./screenshots/capture-while-recording";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
 import { registerFlagOverridesIpc } from "./flag-overrides-ipc";
-import { setLaunchAdminMode } from "./admin-mode";
+import { isLaunchAdminModeSet, setLaunchAdminMode } from "./admin-mode";
 import { registerAdminModeIpc } from "./admin-mode-ipc";
 import { cancelRelaunchRequest, relaunchIfRequested, requestRelaunchOnQuit } from "./relaunch";
 import { computeAdminMode } from "@shared/admin-mode";
@@ -275,7 +275,13 @@ if (!hasSingleInstanceLock) {
 
   app.on("second-instance", (_event, argv) => {
     deepLinks.receiveArgv(argv);
-    const action = secondInstanceAction({ ready: app.isReady(), recording: !!hub?.isActive() });
+    // "Ready" also means the launch Admin mode is set (it needs the settings and the stored
+    // session, which `whenReady` registers after `initWorkspaces`): a window created before that
+    // would miss `--kaipu-admin-mode=1` and stay the main window for the whole session.
+    const action = secondInstanceAction({
+      ready: app.isReady() && isLaunchAdminModeSet(),
+      recording: !!hub?.isActive(),
+    });
     if (action === "show") showMainWindow();
     else if (action === "notify") showAlreadyRecordingNotice();
   });
@@ -984,6 +990,7 @@ app.whenReady().then(async () => {
   setLaunchAdminMode(adminMode);
   if (adminMode) console.log("[admin] Admin mode: every release flag is on for this session");
   const adminModeIpc = registerAdminModeIpc({
+    getMainWindow: () => mainWindow,
     session: auth.getAdminSession,
     setting: () => getAppSettings().adminMode,
     setSetting: (value) => {

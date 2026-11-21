@@ -4,6 +4,8 @@ import { IPC_CHANNELS } from "@shared/types/ipc";
 import { launchAdminMode } from "./admin-mode";
 
 export interface AdminModeIpcDeps {
+  /** The main window; only it may change the preference or restart the app. */
+  getMainWindow: () => BrowserWindow | null;
   /** The stored admin permission of the current session; null when signed out. */
   session: () => AdminSession | null;
   /** The `adminMode` preference. */
@@ -27,12 +29,23 @@ export function registerAdminModeIpc(deps: AdminModeIpcDeps): { notifyChanged: (
       session: deps.session(),
     });
 
+  // The read stays open to every window; the two mutating handlers are main-window only, like auth.
+  function requireMainWindow(event: Electron.IpcMainInvokeEvent): void {
+    if (event.sender !== deps.getMainWindow()?.webContents) {
+      throw new Error("admin mode IPC calls are only accepted from the main window");
+    }
+  }
+
   ipcMain.handle(IPC_CHANNELS.adminModeGetState, (): AdminModeState => state());
-  ipcMain.handle(IPC_CHANNELS.adminModeSet, (_event, value: unknown): AdminModeState => {
+  ipcMain.handle(IPC_CHANNELS.adminModeSet, (event, value: unknown): AdminModeState => {
+    requireMainWindow(event);
     if (typeof value === "boolean") deps.setSetting(value);
     return state();
   });
-  ipcMain.handle(IPC_CHANNELS.adminModeRelaunch, (): void => deps.relaunch());
+  ipcMain.handle(IPC_CHANNELS.adminModeRelaunch, (event): void => {
+    requireMainWindow(event);
+    deps.relaunch();
+  });
 
   return {
     notifyChanged: () => {

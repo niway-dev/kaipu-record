@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ADMIN_MODE_ARG, readAdminModeArg } from "@shared/admin-mode";
 import { launchAdminMode, setLaunchAdminMode } from "./admin-mode";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
@@ -8,6 +8,16 @@ import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
 afterEach(() => {
   setLaunchAdminMode(false);
   setActiveFlagOverrides({});
+});
+
+describe("launch mode set marker", () => {
+  it("is false until setLaunchAdminMode runs, so a second launch cannot open a window earlier", async () => {
+    vi.resetModules();
+    const fresh = await import("./admin-mode");
+    expect(fresh.isLaunchAdminModeSet()).toBe(false);
+    fresh.setLaunchAdminMode(false);
+    expect(fresh.isLaunchAdminModeSet()).toBe(true);
+  });
 });
 
 describe("withFlagOverrides carries the launch mode to a window", () => {
