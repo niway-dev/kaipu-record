@@ -181,7 +181,7 @@ export function registerAuth(
     identity: { userId: string; email: string; name: string },
   ): Promise<Entitlements> {
     const request = ++refreshRequest;
-    let answer: Entitlements;
+    let answer: EntitlementsAnswer;
     try {
       answer = await getEntitlements(config, current);
     } catch {
