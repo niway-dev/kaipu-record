@@ -156,7 +156,9 @@ grants nothing" rather than "these are already published".
 
 `ADMIN_USER_IDS`, the API's allow-list for the desktop's Admin mode ([an admin account switches the desktop between User and Admin mode](/architecture/decisions/0067-an-admin-account-switches-the-desktop-between-user-and-admin-mode/)),
 sits in `/public` for the same reasons: a list of user ids that grants nothing
-without authenticating as one of them.
+without authenticating as one of them. Infisical holds it for local development; the production
+Worker gets it from the GitHub `production` secret `ADMIN_USER_IDS`, which
+`release-api.yml` writes into `worker-secrets.json`, so a change goes to both.
 
 Note the asymmetry the blast-radius test does not capture: _writing_ either allow-list
 (`CONSOLE_ADMIN_USER_IDS` or `ADMIN_USER_IDS`) would grant admin to anyone you add. Write access is governed by the identity's
