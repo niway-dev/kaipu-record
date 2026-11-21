@@ -69,6 +69,12 @@ describe("relaunch wiring in the main process", () => {
     expect(dropped).toHaveLength(resets.length);
   });
 
+  it("drops a pending restart at all four Cancel answers: two in before-quit, two on close", () => {
+    // Recording and export each ask twice: once from before-quit (Cmd+Q, tray Quit), once from
+    // the main window's close. A new guard that can say Cancel must be added here as well.
+    expect(source("index.ts").match(/\bcancelRelaunchRequest\(\);/g)).toHaveLength(4);
+  });
+
   it("the deadline exit goes through exitRelaunchingIfRequested", () => {
     expect(source("app-shutdown.ts")).toMatch(/exit: \(\) =>\s*exitRelaunchingIfRequested\(/);
   });
