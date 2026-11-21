@@ -1,0 +1,42 @@
+/* The Admin mode row (admin-mode-settings.tsx): a card with an amber outline on top of the App
+   page, so it reads as a different kind of setting from the user-facing ones below it. */
+.card {
+  margin-bottom: 24px;
+  padding: 4px 8px;
+  border: 1px solid #b7791f;
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #3b2a06;
+  color: #ffd98a;
+  font-weight: var(--font-weight-semibold);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The shared Row keeps a description on one line; this one carries the restart prompt. */
+.description {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.restart {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
