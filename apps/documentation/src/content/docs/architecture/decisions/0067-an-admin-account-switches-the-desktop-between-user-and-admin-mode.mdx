@@ -1,0 +1,87 @@
+---
+title: "ADR 0067: An admin account switches the desktop app between User mode and Admin mode"
+description: A server-side admin permission, from an allowlist of user ids in the API, lets an account switch the desktop app between User mode (flags evaluate as for everyone) and Admin mode (every release flag on). The mode is remembered, applies on the next launch, and a crown badge shows it. It replaces PostHog conditions on the owner's device ids and amends ADR 0049.
+---
+
+# ADR 0067: An admin account switches the desktop app between User mode and Admin mode
+
+## Status
+
+| Field  | Value                                                                                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status | Proposed, 2026-11-21. Design PR pending the owner's go. [NIW2-900](https://linear.app/niway/issue/NIW2-900).                                                       |
+| Spec   | [Admin mode — design](/specs/2026-11-21-admin-mode-design/)                                                                                                        |
+| Amends | [ADR 0049](/architecture/decisions/0049-flags-are-a-typed-registry-with-state-in-our-api-labs-is-user-opt-in/): "release flags are owner-only" gets its mechanism. |
+
+## Context
+
+Release flags (code default `false`) reach the owner's production installs through PostHog: each flag
+has one condition, `distinct_id` exact on the owner's two per-install device ids. The desktop app never
+sends the account to PostHog. Desktop 0.19.0 was the first build that reads PostHog, and on 2026-11-21
+the owner found every unreleased feature on in production without having noticed (this thread; flag
+filters read from PostHog the same day). Seeing the app as a normal user meant editing PostHog.
+
+The API has no notion of an admin: the user table has no role, and the only allowlist is the Console's
+`CONSOLE_ADMIN_USER_IDS` (`apps/console/src/lib/access.ts`). The desktop already reads
+`GET /api/v1/me/entitlements` with its bearer session on every successful session check and keeps the
+last answer offline (`apps/kaipu-record/src/main/infrastructure/auth-store.ts`).
+
+The screenshot editor latches `image-canvas`, `image-inspect` and `image-text` at mount so a flag flip
+cannot drop a crop mid-edit (`screenshot-editor-page.tsx`), and main keeps flag values the renderer
+reports. A mode that changes mid-session would leave the badge and the running behavior disagreeing.
+
+## Decision
+
+1. **Permission on the server.** server-hono reads `ADMIN_USER_IDS` (comma-separated user ids,
+   Infisical `/auth`) and `GET /api/v1/me/entitlements` adds `admin: boolean` for the session's user.
+   Missing or empty variable: nobody is admin.
+2. **Held in main, bound to the account.** The desktop stores `admin` with the session in `auth.enc`,
+   discards an answer whose user is not the current session's, clears it on sign-out, and keeps the
+   last answer offline until the next successful check.
+3. **Preference, not authority.** `adminMode: boolean` in `settings.json` (default `false`) is the
+   wish. Effective Admin mode = `adminMode && admin`, computed once at launch and fixed for the session.
+4. **Applies on the next launch.** Changing the switch shows "Restart to apply" with **Restart now**.
+   Every window and main see one mode per session.
+5. **Evaluation order.** dev override → Admin mode (release flags `true`) → PostHog → code default.
+   Only release flags are forced; future Labs flags (ADR 0049) are not. Platform checks and plan
+   entitlements still apply.
+6. **Visible everywhere it matters.** A "👑 Admin" badge in the main window's title bar while Admin mode
+   is effective; an "Admin mode" row in Settings → App only for admin accounts; an "Admin mode" check
+   line in the tray menu. User mode adds nothing a normal user does not see.
+7. **PostHog stops targeting devices.** After the owner runs the new build on both installs, the
+   device-id conditions are removed; release flags are off for everyone until their rollout.
+
+## Alternatives rejected
+
+- **Keep PostHog device targeting and edit it to switch.** It is what failed: invisible, per device,
+  and needs the PostHog panel.
+- **Switch live without a restart.** Needs every latched consumer (screenshot editor, main's capture
+  flag, every window) to re-read safely; a half-applied switch shows one mode and behaves in the other.
+- **A `role` column with Better Auth's admin plugin.** A schema change and a production `db:push` for a
+  single admin; the allowlist matches the Console's existing pattern.
+- **Reuse `CONSOLE_ADMIN_USER_IDS`.** Couples Console access and desktop release testing; separate
+  variable, same shape.
+- **Per-flag toggles in production.** More than the owner needs now ("lo más simple").
+- **Labs.** User opt-in for experiments, not release flags (ADR 0049 keeps them apart).
+
+## Consequences
+
+- A flag turned off in PostHog does not reach an admin in Admin mode: no per-flag kill switch for the
+  admin. Recovery from a broken flagged feature: sign out, or set `adminMode` to `false` in
+  `settings.json`, then relaunch.
+- Revoking admin takes effect at the next successful session check; offline, the last answer holds.
+- The client gate is visibility, not security: the code is public (AGPL). Server permissions and plan
+  entitlements stay enforced on the server.
+- Two things to keep in sync for the owner: the allowlist in Infisical and the absence of device-id
+  conditions in PostHog.
+
+## Non-goals
+
+- Per-flag overrides in production, impersonating another user, roles beyond admin, an admin page in
+  the desktop app, percentage rollouts.
+
+## What would reopen this
+
+- A second kind of staff needs a different subset of flags, or a flag needs a kill switch that beats
+  Admin mode: then a server-provided flag map (ADR 0049's API state) replaces the all-on rule.
+- More than a handful of admins: then a role in the database replaces the allowlist.
