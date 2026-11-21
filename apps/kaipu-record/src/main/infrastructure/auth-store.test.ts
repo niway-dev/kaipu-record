@@ -577,7 +577,7 @@ describe("auth-store", () => {
     return handle;
   }
 
-  const getStatus = (): Promise<unknown> =>
+  const getStatus = async (): Promise<unknown> =>
     mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
 
   it("signed out: no admin session at all", () => {
