@@ -208,6 +208,10 @@ export const shell = catalog(
   },
   {
     notCapturable: {
+      "shell.titleBar:admin": nc(
+        "needsApi",
+        "needs an account with the admin permission and a launch in Admin mode; the catalog runs signed out against no API",
+      ),
       "shell.updateBanner:ready": nc(
         "needsApi",
         "needs a downloaded update; an unpackaged build has no update feed",

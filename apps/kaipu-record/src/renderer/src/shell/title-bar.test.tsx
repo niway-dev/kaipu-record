@@ -14,8 +14,11 @@ vi.mock("@renderer/features/workspaces/workspace-switcher", () => ({
   WorkspaceSwitcher: () => <button type="button">switcher</button>,
 }));
 
-function setPlatform(platform: string): void {
-  Object.defineProperty(window, "electronAPI", { value: { platform }, configurable: true });
+function setPlatform(platform: string, adminMode = false): void {
+  Object.defineProperty(window, "electronAPI", {
+    value: { platform, adminMode },
+    configurable: true,
+  });
 }
 
 afterEach(() => {
@@ -25,6 +28,19 @@ afterEach(() => {
 });
 
 describe("TitleBar", () => {
+  it("shows the Admin badge right after the name while the process runs in Admin mode", () => {
+    setPlatform("darwin", true);
+    render(<TitleBar />);
+    const badge = screen.getByText("👑 Admin");
+    const name = screen.getByText("Kaipu Record");
+    expect(name.nextElementSibling).toBe(badge);
+  });
+
+  it("shows no badge in User mode", () => {
+    render(<TitleBar />);
+    expect(screen.queryByText(/Admin/)).toBeNull();
+  });
+
   it("shows the name and the workspace switcher", () => {
     render(<TitleBar />);
     expect(screen.getByText("Kaipu Record")).toBeInTheDocument();

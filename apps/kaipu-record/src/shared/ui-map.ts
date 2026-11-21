@@ -742,6 +742,8 @@ export const UI_MAP = {
     route: "/settings/app",
     areas: {
       page: { states: ["default"] },
+      // Admin accounts only (ADR 0067); absent for everyone else, which is the default look.
+      adminMode: { states: ["on", "restartPending"] },
       app: { states: ["default"], gatedBy: [{ setting: "showInDock" }] },
       privacy: { states: ["default"] },
       updates: { states: ["idle", "available", "ready"] },
@@ -881,7 +883,7 @@ export const UI_MAP = {
   shell: {
     kind: "chrome",
     areas: {
-      titleBar: { states: ["default", "withSwitcher"] },
+      titleBar: { states: ["default", "withSwitcher", "admin"] },
       historyArrows: { states: ["atStart", "canGoBack"] },
       workspaceSwitcher: { states: ["closed", "hint", "notConnected", "locked"] },
       workspaceMenu: { states: ["open"] },

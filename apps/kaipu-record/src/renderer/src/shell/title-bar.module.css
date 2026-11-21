@@ -37,6 +37,21 @@
   white-space: nowrap;
 }
 
+/* "👑 Admin" (Admin mode): a dark amber pill with light amber text, about 11:1 contrast in
+   both themes, so it reads as a status and never as a button. */
+.adminBadge {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border: 1px solid #b7791f;
+  border-radius: 999px;
+  background: #3b2a06;
+  color: #ffd98a;
+  font-weight: var(--font-weight-semibold);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
 .separator {
   color: var(--text-muted);
   opacity: 0.6;

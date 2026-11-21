@@ -19,6 +19,10 @@ export interface ScenarioOptions {
   videoName?: string;
   /** Fills the throwaway vault before launch (default: the suite's two fixtures). */
   seedVault?: (vaultDir: string) => Promise<void>;
+  /** Extra `settings.json` keys, merged over the suite's pinned locale. */
+  settings?: Record<string, unknown>;
+  /** Writes into the throwaway userData before launch (a stored session, for example). */
+  seedUserData?: (userDataDir: string) => Promise<void>;
 }
 
 export interface Scenario {
@@ -55,6 +59,8 @@ export async function startScenario(
     recordVideoDir: outDir,
     ...(options.env ? { env: options.env } : {}),
     ...(options.seedVault ? { seedVault: options.seedVault } : {}),
+    ...(options.settings ? { settings: options.settings } : {}),
+    ...(options.seedUserData ? { seedUserData: options.seedUserData } : {}),
   });
   let n = options.shotOffset ?? 0;
   return {

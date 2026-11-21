@@ -22,6 +22,7 @@ export interface TrayMenuLabels {
   takeScreenshot: string;
   library: string;
   settings: string;
+  adminMode: string;
   quit: string;
 }
 
@@ -34,6 +35,8 @@ export interface TrayMenuActions {
   takeScreenshot(): void;
   openLibrary(): void;
   openSettings(): void;
+  /** Settings, App: where the Admin mode switch lives. */
+  openAdminMode(): void;
   quit(): void;
 }
 
@@ -49,6 +52,12 @@ export interface TrayMenuInput {
    * Stop; it sends the same stop command, which cancels a pending start.
    */
   countingDown?: boolean;
+  /**
+   * Admin mode (ADR 0067). The line shows while this process runs in Admin mode (checked, even
+   * after the admin signed out) and for an admin account in User mode (unchecked); a non-admin
+   * account gets none. Clicking it opens Settings, App, where the switch lives.
+   */
+  admin?: { isAdmin: boolean; effective: boolean };
 }
 
 /** Display-only accelerator; an empty binding shows nothing. */
@@ -102,8 +111,15 @@ export function buildTrayMenuTemplate(input: TrayMenuInput): MenuItemConstructor
     { type: "separator" },
     { label: labels.library, click: actions.openLibrary },
     { label: labels.settings, click: actions.openSettings },
-    { type: "separator" },
-    { label: labels.quit, click: actions.quit },
   );
+  if (input.admin && (input.admin.effective || input.admin.isAdmin)) {
+    items.push({
+      label: labels.adminMode,
+      type: "checkbox",
+      checked: input.admin.effective,
+      click: actions.openAdminMode,
+    });
+  }
+  items.push({ type: "separator" }, { label: labels.quit, click: actions.quit });
   return items;
 }
