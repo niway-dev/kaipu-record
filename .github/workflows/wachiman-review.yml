@@ -2,9 +2,10 @@ name: Wachiman review
 # The review runs on a Claude subscription, not an API key: run `claude setup-token` signed in to the
 # account whose plan should pay and save the token as the repository secret CLAUDE_CODE_OAUTH_TOKEN
 # (ADR 0037 of niway-dev/wachiman). The token lasts a year and shares that plan's usage limits.
-# Pinned to an exact release tag, so a new engine release runs here only after this line is edited
-# (ADR 0001 of niway-dev/wachiman). Releases never move a tag, but a repository admin could;
-# only a full commit SHA is immutable.
+# Follows the floating `@v1` tag: each stable 1.x release, security fixes included, runs here
+# without editing this file. A breaking change ships as v2 and needs this line edited. The cost:
+# a new release runs with this repository's credentials before anyone here has read it. To hold
+# one version, pin an exact tag or a full commit SHA instead.
 # First install: the installing pull request gets only the automatic review. `/wachiman review` works
 # from the next pull request, because `issue_comment` runs from the default branch. Automatic
 # thread-reply runs (v1.5.0) need a `pull_request_review_comment` trigger, which this caller does not have.
@@ -28,7 +29,7 @@ on:
 permissions: { contents: read, pull-requests: write, issues: read }
 jobs:
   review:
-    uses: niway-dev/wachiman/.github/workflows/review.yml@2dd954858c8c0e6fdb61185ec797f38cf7568bf4 # v1.13.0
+    uses: niway-dev/wachiman/.github/workflows/review.yml@v1
     with:
       operator: csdev19
       model: claude-sonnet-5-5
