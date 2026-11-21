@@ -297,9 +297,11 @@ function ExportScreen({
   keys.current = { primary, step };
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      // A modal over the screen ("Change video") owns the keys: Enter on it must not export the
-      // video behind it, nor the arrows move the destination.
-      if (event.target instanceof Element && event.target.closest("[aria-modal='true']")) return;
+      // A modal over the screen ("Change video") owns the keys: Enter must not export the video
+      // behind it, nor the arrows move the destination. Keyed on "a modal is open", not on the
+      // target: ModalOverlay does not trap focus, so Tab (or a disabled, focused button) can
+      // leave focus on the page behind it.
+      if (document.querySelector("[aria-modal='true']")) return;
       if (isPrimaryEnter(event)) {
         // A card would otherwise also click itself: Enter is "export", not "select".
         event.preventDefault();

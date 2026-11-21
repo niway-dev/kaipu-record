@@ -240,7 +240,8 @@ describe("LibraryPicker", () => {
       expect(rows().map((r) => r.getAttribute("aria-label"))).toEqual(["Beta"]);
       type("gam");
       expect(onQueryChange).toHaveBeenCalledWith("gam");
-      expect(rows()).toHaveLength(1);
+      // The caller decides the query: typing alone does not change the list.
+      expect(rows().map((r) => r.getAttribute("aria-label"))).toEqual(["Beta"]);
     });
 
     it("a custom filter replaces the title match", () => {

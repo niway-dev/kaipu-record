@@ -527,6 +527,16 @@ describe("ExportPage", () => {
       expect(exportController.start).not.toHaveBeenCalled();
       expect(card(/^YouTube/)).toHaveAttribute("aria-checked", "true");
     });
+
+    it("the same keys pressed on the page behind the open modal are ignored too", async () => {
+      await openModal("/export/asset-1?to=youtube");
+      // ModalOverlay does not trap focus, so a key can land on the card or on <body>.
+      fireEvent.keyDown(card(/^YouTube/), { key: "Enter" });
+      fireEvent.keyDown(document.body, { key: "Enter" });
+      fireEvent.keyDown(card(/^YouTube/), { key: "ArrowRight" });
+      expect(exportController.start).not.toHaveBeenCalled();
+      expect(card(/^YouTube/)).toHaveAttribute("aria-checked", "true");
+    });
   });
 
   it("one export at a time: while one runs, Export says so", async () => {

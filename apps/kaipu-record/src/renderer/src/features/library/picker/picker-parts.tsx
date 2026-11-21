@@ -194,8 +194,9 @@ export function Row({
       <span className={styles.text}>
         <span className={styles.name}>{item.title}</span>
         {badge && <span className={styles.badge}>{badge}</span>}
-        {lines.map((line) => (
-          <span key={line} className={styles.meta}>
+        {lines.map((line, index) => (
+          // Static text with no state: the index is a stable key, and equal lines stay legal.
+          <span key={index} className={styles.meta}>
             {line}
           </span>
         ))}
