@@ -5,6 +5,7 @@ import "posthog-js/dist/exception-autocapture";
 import {
   DEFAULT_PRODUCT,
   DEFAULT_SURFACE,
+  RELEASE_FLAGS,
   scrubEventProperties,
   scrubPersonalPathsDeep,
   type FlagName,
@@ -199,15 +200,31 @@ function subscribeToOverrideChanges(): void {
 }
 
 /** Where a flag's effective value comes from, in the order `isFlagEnabled` reads them. */
-export type FlagSource = "override" | "posthog" | "default";
+export type FlagSource = "override" | "admin" | "posthog" | "default";
 
-/** The effective value of a flag and which layer decided it. */
+/**
+ * The mode this window was launched in (ADR 0067): true in Admin mode. It is the launch
+ * argument main set before any window existed, read synchronously from the preload and fixed
+ * for the session. It is never the live `adminMode` setting: changing that, or signing out,
+ * changes nothing here until the next launch, so every window and main agree and a latched
+ * consumer (the screenshot editor) can never see the other mode.
+ */
+function adminModeAtLaunch(): boolean {
+  return window.electronAPI?.adminMode === true;
+}
+
+/**
+ * The effective value of a flag and which layer decided it: dev override, then Admin mode
+ * (every release flag on), then PostHog, then the code default. A flag that defaults to `true`
+ * is not a release flag and skips the Admin layer.
+ */
 export function flagState(
   name: FlagName,
   fallback: boolean,
 ): { value: boolean; source: FlagSource } {
   const override = currentFlagOverrides()[name];
   if (override !== undefined) return { value: override, source: "override" };
+  if (adminModeAtLaunch() && RELEASE_FLAGS.includes(name)) return { value: true, source: "admin" };
   if (initialized) {
     const value = posthog.isFeatureEnabled(name);
     if (value !== undefined) return { value, source: "posthog" };
@@ -219,7 +236,7 @@ export function flagState(
  * Read a flag, returning `fallback` while unresolved or when the build has no PostHog key.
  * It does not depend on the usage-and-crash-reports preference. An override (unpackaged
  * builds only: `KAIPU_FLAG_OVERRIDES` at launch, or the Developer page while running) wins
- * over PostHog, initialized or not.
+ * over everything, and Admin mode over PostHog, initialized or not (see `flagState`).
  */
 export function isFlagEnabled(name: FlagName, fallback: boolean): boolean {
   return flagState(name, fallback).value;

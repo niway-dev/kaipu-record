@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveCaptureWhileRecording } from "./capture-while-recording";
+import {
+  captureWhileRecordingEnabled,
+  resolveCaptureWhileRecording,
+  setReportedCaptureWhileRecording,
+} from "./capture-while-recording";
 
 describe("resolveCaptureWhileRecording", () => {
   it("is off by default", () => {
@@ -25,6 +29,22 @@ describe("resolveCaptureWhileRecording", () => {
       expect(resolveCaptureWhileRecording({ platform, override: true, reported: true })).toBe(
         false,
       );
+    }
+  });
+});
+
+describe("Admin mode and the platform check (ADR 0067)", () => {
+  // Admin mode forces the renderer's resolved `capture-while-recording` flag to true, and the
+  // renderer reports that value to main. The flag only opens the feature; the platform check
+  // still has the last word.
+  it("stays off outside macOS even when Admin mode forced the reported flag on", () => {
+    setReportedCaptureWhileRecording(true);
+    try {
+      expect(captureWhileRecordingEnabled("darwin")).toBe(true);
+      expect(captureWhileRecordingEnabled("win32")).toBe(false);
+      expect(captureWhileRecordingEnabled("linux")).toBe(false);
+    } finally {
+      setReportedCaptureWhileRecording(false);
     }
   });
 });

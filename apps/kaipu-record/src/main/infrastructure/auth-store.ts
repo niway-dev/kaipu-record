@@ -1,7 +1,12 @@
 import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
+import {
+  FREE_ENTITLEMENTS,
+  type Entitlements,
+  type EntitlementsAnswer,
+} from "@shared/entitlements";
+import { adminAnswerFor, type AdminSession } from "@shared/admin-mode";
 import type { AuthError, AuthStatus, BrowserSignInIntent } from "@shared/types/auth";
 import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { IPC_CHANNELS } from "@shared/types/ipc";
@@ -31,6 +36,9 @@ interface StoredSession {
    *  existed have none and load as free — a one-time re-check on the next status call, not a
    *  re-login. */
   entitlements?: Entitlements;
+  /** Whether the server said this account may use Admin mode (ADR 0067), bound to `userId`.
+   *  Optional on read: files written before it existed load as not admin. */
+  admin?: boolean;
   /** When this machine last sent a verification email for this account. Optional on read:
    *  files written before this existed simply have none, which reads as "never sent". */
   verificationEmailSentAt?: number;
@@ -47,6 +55,12 @@ export interface AuthHandle {
   /** Finish a browser sign-in with the code from a `kaipu://auth/callback` link. Failures are
    *  also reported to the renderer, since nobody is awaiting this call's result on screen. */
   completeBrowserSignIn(code: string): Promise<AuthAttemptResult>;
+  /** The stored admin permission of the current session, or null when signed out. Offline, the
+   *  last answer for this account holds; main reads it once at launch (ADR 0067). */
+  getAdminSession(): AdminSession | null;
+  /** Fires after sign-in, sign-out and whenever a check changes the permission's value. Read
+   *  `getAdminSession` for the new state. */
+  onAdminChanged(listener: () => void): () => void;
 }
 
 export interface AuthStoreDeps {
@@ -104,6 +118,14 @@ function clearStoredSession(): void {
   }
 }
 
+/** The plan without the answer's `userId` and `admin`: those never reach a renderer or the plan cache. */
+function planOf(answer: EntitlementsAnswer): Entitlements {
+  const plan: EntitlementsAnswer = { ...answer };
+  delete plan.userId;
+  delete plan.admin;
+  return plan;
+}
+
 /** Narrow whatever auth-client threw into the structured shape the renderer switches on.
  *  auth-client only ever throws `AuthError`-shaped literals, so the cast is a narrowing,
  *  not a lie; anything else (a genuine runtime Error) becomes `unknown` with its message. */
@@ -131,6 +153,9 @@ export function registerAuth(
   let cachedEntitlements: Entitlements | null = stored
     ? (stored.entitlements ?? FREE_ENTITLEMENTS)
     : null;
+  // The admin permission of the current session. Seeded from disk like the plan; replaced only
+  // by an answer for THIS user, cleared with the session. False whenever there is no token.
+  let cachedAdmin = stored?.admin === true;
   // Seeded from disk for the same reason: the cloud screen is remounted on every visit, so
   // this is the only thing that can tell it the verification mail has already gone out.
   let verificationEmailSentAt: number | undefined = stored?.verificationEmailSentAt;
@@ -143,19 +168,54 @@ export function registerAuth(
     for (const listener of accountListeners) listener(userId);
   }
 
+  const adminListeners = new Set<() => void>();
+  function notifyAdminChanged(): void {
+    for (const listener of adminListeners) listener();
+  }
+
+  // Numbers each plan check; an answer older than the last one applied is dropped. A newer
+  // check that failed applied nothing, so an older answer that lands after it still counts.
+  let refreshRequest = 0;
+  let appliedRequest = 0;
+
   /** Re-check the plan and persist it. Failure keeps the cached copy — "couldn't ask" ≠ free. */
   async function refreshEntitlements(
     current: string,
     identity: { userId: string; email: string; name: string },
   ): Promise<Entitlements> {
+    const request = ++refreshRequest;
+    let answer: EntitlementsAnswer;
     try {
-      const fresh = await getEntitlements(config, current);
-      cachedEntitlements = fresh;
-      writeStoredSession({ token: current, ...identity, entitlements: fresh });
-      return fresh;
+      answer = await getEntitlements(config, current);
     } catch {
       return cachedEntitlements ?? FREE_ENTITLEMENTS;
     }
+    // The session can change while the answer is in flight (sign-out, another account). An
+    // answer for a session that is no longer current is dropped whole: it must not grant
+    // admin to the next account, and it must not write the old account's file back to disk.
+    // A later answer for the same session also wins over an older one that lands after it.
+    if (token !== current || cachedIdentity?.userId !== identity.userId || request < appliedRequest)
+      return cachedEntitlements ?? FREE_ENTITLEMENTS;
+    appliedRequest = request;
+    const fresh = planOf(answer);
+    const admin = adminAnswerFor(answer, identity.userId);
+    cachedEntitlements = fresh;
+    const changed = admin !== cachedAdmin;
+    cachedAdmin = admin;
+    if (changed) notifyAdminChanged();
+    try {
+      writeStoredSession({
+        token: current,
+        ...identity,
+        entitlements: fresh,
+        admin,
+        verificationEmailSentAt,
+      });
+    } catch (error) {
+      // The running session keeps the fresh answer; the next launch starts from the last file.
+      console.warn("[auth] could not persist the refreshed session:", error);
+    }
+    return fresh;
   }
 
   function broadcast(status: AuthStatus): void {
@@ -170,26 +230,63 @@ export function registerAuth(
     }
   }
 
+  /**
+   * What a session check that outlived its token reports: the session that is current now. The
+   * renderer applies this answer as is, so a session signed in since then is reported as signed
+   * in, never as the offline-style `unknown`.
+   */
+  function currentStateAfterSwitch(): AuthStatus {
+    if (token && cachedIdentity) {
+      return {
+        kind: "signed-in",
+        ...cachedIdentity,
+        entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+        verificationEmailSentAt,
+      };
+    }
+    return token
+      ? {
+          kind: "unknown",
+          lastKnownUserId: cachedIdentity?.userId,
+          lastKnownEmail: cachedIdentity?.email,
+          entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+          verificationEmailSentAt,
+        }
+      : { kind: "signed-out" };
+  }
+
   ipcMain.handle(IPC_CHANNELS.authGetStatus, async (): Promise<AuthStatus> => {
     if (!token) return { kind: "signed-out" };
+    const sent = token;
     try {
-      const identity = await getSession(config, token);
+      const identity = await getSession(config, sent);
+      // The session can change while the check is in flight (sign-out, then another account).
+      // Its answer belongs to the token it was asked about: neither clear nor cache it for the
+      // account that is current now. Report the session that is current instead.
+      if (token !== sent) return currentStateAfterSwitch();
       if (!identity) {
         // Confirmed gone (a 401, or better-auth's far commoner 200 + null body). Safe to clear.
         token = null;
         cachedIdentity = null;
         cachedEntitlements = null;
+        cachedAdmin = false;
         verificationEmailSentAt = undefined;
         clearStoredSession();
         notifyAccountChanged(null);
+        notifyAdminChanged();
         return { kind: "signed-out" };
       }
       cachedIdentity = identity;
       // Every successful session check re-checks the plan too: this is how a purchase made on
       // the web reaches the app — the user reopens it. No push, no sync engine.
-      const entitlements = await refreshEntitlements(token, identity);
+      const entitlements = await refreshEntitlements(sent, identity);
+      // The same switch can happen while the plan is fetched: never report A as signed in
+      // once B's session is the current one.
+      if (token !== sent) return currentStateAfterSwitch();
       return { kind: "signed-in", ...identity, entitlements, verificationEmailSentAt };
     } catch {
+      // A failed check of a session that is no longer current says nothing about the current one.
+      if (token !== sent) return currentStateAfterSwitch();
       // Network/other failure — NEVER clear a token we couldn't actually verify was invalid,
       // and keep reporting the plan we last saw.
       return {
@@ -216,15 +313,19 @@ export function registerAuth(
     // A fresh credential means a fresh account: never carry a previous user's plan across.
     // Best-effort fetch — a sign-in must not fail because billing was unreachable.
     let entitlements = FREE_ENTITLEMENTS;
+    let admin = false;
     try {
-      entitlements = await getEntitlements(config, result.token);
+      const answer = await getEntitlements(config, result.token);
+      entitlements = planOf(answer);
+      admin = adminAnswerFor(answer, result.userId);
     } catch {
-      // stays free until the next successful status check
+      // stays free (and not admin) until the next successful status check
     }
-    writeStoredSession({ ...result, entitlements });
+    writeStoredSession({ ...result, entitlements, admin });
     token = result.token;
     cachedIdentity = { userId: result.userId, email: result.email, name: result.name };
     cachedEntitlements = entitlements;
+    cachedAdmin = admin;
     // A fresh credential means a fresh account: never inherit the previous user's send
     // history. The written session omits the field, so disk and memory agree.
     verificationEmailSentAt = undefined;
@@ -237,6 +338,7 @@ export function registerAuth(
     };
     broadcast(status);
     notifyAccountChanged(result.userId);
+    notifyAdminChanged();
     return status;
   }
 
@@ -315,9 +417,14 @@ export function registerAuth(
     async (event): Promise<{ ok: true; sentAt: number } | { ok: false }> => {
       requireMainWindow(event);
       if (!cachedIdentity || !token) return { ok: false };
+      const sent = token;
       if (!(await resendVerificationEmail(config, cachedIdentity.email))) return { ok: false };
 
       const sentAt = Date.now();
+      // The account can change while the mail is sent (sign-out, then another account). The
+      // mail went out, but its timestamp belongs to the old session: recording it now would mark
+      // the new account's session as having been sent a verification email.
+      if (token !== sent || !cachedIdentity) return { ok: true, sentAt };
       verificationEmailSentAt = sentAt;
       // Best-effort persistence: the mail is already out, so a failed write must not be
       // reported as a failed send. Worst case the fact is forgotten on the next restart —
@@ -330,6 +437,7 @@ export function registerAuth(
           email: cachedIdentity.email,
           name: cachedIdentity.name,
           entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+          admin: cachedAdmin,
           verificationEmailSentAt: sentAt,
         });
       } catch (err) {
@@ -345,10 +453,12 @@ export function registerAuth(
     token = null;
     cachedIdentity = null;
     cachedEntitlements = null;
+    cachedAdmin = false;
     verificationEmailSentAt = undefined;
     clearStoredSession();
     broadcast({ kind: "signed-out" });
     notifyAccountChanged(null);
+    notifyAdminChanged();
     if (outgoingToken)
       void signOutRemote(config, outgoingToken).catch((error) => {
         console.error("remote auth sign-out failed", error);
@@ -368,6 +478,11 @@ export function registerAuth(
       const result = await finishBrowserSignIn(code);
       if (!result.ok) sendToRenderer(IPC_CHANNELS.authBrowserSignInFailed, result.error);
       return result;
+    },
+    getAdminSession: () => (token ? { admin: cachedAdmin } : null),
+    onAdminChanged: (listener) => {
+      adminListeners.add(listener);
+      return () => adminListeners.delete(listener);
     },
     onAccountChanged: (listener) => {
       accountListeners.add(listener);

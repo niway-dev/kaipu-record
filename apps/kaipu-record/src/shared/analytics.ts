@@ -55,6 +55,15 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   transcription: false,
 };
 
+/**
+ * The release flags: every flag whose code default is `false`, derived from `FLAG_DEFAULTS` (no
+ * hand list, so a new unreleased flag is covered the day it is added). Admin mode (ADR 0067)
+ * forces exactly these on. A flag that defaults to `true` has shipped and is never touched.
+ */
+export const RELEASE_FLAGS: readonly FlagName[] = FLAG_NAMES.filter(
+  (name) => FLAG_DEFAULTS[name] === false,
+);
+
 /** Identity super-properties attached to every event/error for multi-surface filtering. */
 export const DEFAULT_PRODUCT = "kaipu-recorder";
 export const DEFAULT_SURFACE = "desktop";

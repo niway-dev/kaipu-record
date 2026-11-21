@@ -25,6 +25,7 @@ import type {
   RecordingReadyPayload,
   RecordingReadyTimer,
 } from "./recording-ready";
+import type { AdminModeState } from "../admin-mode";
 import type { FlagName, SerializedError } from "../analytics";
 import type { RecordingWriterKind } from "../webcam-track";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
@@ -316,6 +317,22 @@ export interface KaipuElectronAPI {
   onFlagOverridesChanged(
     listener: (overrides: Readonly<Partial<Record<FlagName, boolean>>>) => void,
   ): () => void;
+  /**
+   * The mode this window was launched in: true in Admin mode (ADR 0067). Read from a launch
+   * argument, so it is there before the first render and never changes while the app runs.
+   */
+  readonly adminMode: boolean;
+  /** Stored permission, preference, launch value and whether a restart is pending. */
+  getAdminModeState(): Promise<AdminModeState>;
+  /**
+   * Write the `adminMode` preference. It never changes the running mode: it only changes what
+   * the next launch computes. Resolves with the state.
+   */
+  setAdminMode(enabled: boolean): Promise<AdminModeState>;
+  /** Quit through the recording/export guards and start the app again ("Restart now"). */
+  relaunchApp(): Promise<void>;
+  /** The stored permission or the preference changed (sign-out, a refresh, the switch). */
+  onAdminModeChanged(listener: (state: AdminModeState) => void): () => void;
   /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
   readonly platform: string;
   /** The running app version (`app.getVersion()`), used by the version gate. */

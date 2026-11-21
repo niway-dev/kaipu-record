@@ -2,6 +2,7 @@ import { NATIVE_CAPTURE_CHANNELS as nativeChannels } from "@shared/native-captur
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
+import { readAdminModeArg, type AdminModeState } from "@shared/admin-mode";
 import { parseFlagOverrides, readFlagOverridesArg } from "@shared/flag-overrides";
 import type { AppSettings, ReconcileProgress, ShortcutAction } from "@shared/types";
 import type { AuthError, AuthStatus } from "@shared/types/auth";
@@ -124,6 +125,17 @@ const kaipuApi: KaipuElectronAPI = {
       listener(validFlagOverrides(overrides));
     ipcRenderer.on(IPC_CHANNELS.flagOverridesChanged, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.flagOverridesChanged, handler);
+  },
+  // The mode this window was launched in (ADR 0067), read from the launch argument main sets
+  // before any window exists: synchronous, fixed for the session.
+  adminMode: readAdminModeArg(process.argv),
+  getAdminModeState: () => ipcRenderer.invoke(IPC_CHANNELS.adminModeGetState),
+  setAdminMode: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.adminModeSet, enabled === true),
+  relaunchApp: () => ipcRenderer.invoke(IPC_CHANNELS.adminModeRelaunch),
+  onAdminModeChanged: (listener) => {
+    const handler = (_event: IpcRendererEvent, state: AdminModeState): void => listener(state);
+    ipcRenderer.on(IPC_CHANNELS.adminModeChanged, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.adminModeChanged, handler);
   },
   platform: process.platform,
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),

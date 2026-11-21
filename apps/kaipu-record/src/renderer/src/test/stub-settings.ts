@@ -26,6 +26,7 @@ export const STUB_SETTINGS = {
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
+  adminMode: false,
   cameraBubble: {
     shape: "circle",
     cornerRadius: 0.18,
