@@ -41,6 +41,8 @@ export function TitleBar({ workspace = true }: { workspace?: boolean }): React.J
       <KaipuLogo use="product" size={28} />
       <HistoryArrows hidden={!showHistory} />
       <span className={styles.name}>Kaipu Record</span>
+      {/* This process runs in Admin mode (ADR 0067): fixed at launch, so it never flickers. */}
+      {window.electronAPI.adminMode && <span className={styles.adminBadge}>👑 Admin</span>}
       {showSwitcher && (
         <>
           <span className={styles.separator} aria-hidden>
