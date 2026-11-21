@@ -701,8 +701,10 @@ describe("auth-store", () => {
     await signInVia({ sender: mainWindow.webContents });
 
     answerA(answerFor("user-1", true)); // arrives late
-    await refresh;
+    const status = await refresh;
 
+    expect(status).not.toMatchObject({ kind: "signed-in", userId: "user-1" });
+    expect(status).toMatchObject({ kind: "unknown", lastKnownUserId: "user-2" });
     expect(handle.getAdminSession()).toEqual({ admin: false });
     expect(handle.getCurrentAccount()).toEqual({ userId: "user-2", token: "tok_2" });
     expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: false });

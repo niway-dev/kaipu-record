@@ -207,6 +207,16 @@ describe("updateAppSettings (main-side writers)", () => {
     reloaded.registerSettings();
     expect(reloaded.getAppSettings().screenshotMode).toBe("screen");
   });
+
+  it("the renderer's generic settings write cannot change adminMode; main-side writers can", async () => {
+    const store = await loadStore();
+    store.registerSettings();
+    const after = updateSettings({ adminMode: true, theme: "light" });
+    expect(after.adminMode).toBe(false);
+    expect(after.theme).toBe("light");
+    expect(store.updateAppSettings({ adminMode: true }).adminMode).toBe(true);
+    expect(updateSettings({ adminMode: false }).adminMode).toBe(true);
+  });
 });
 
 describe("side effects run only for the settings they follow", () => {

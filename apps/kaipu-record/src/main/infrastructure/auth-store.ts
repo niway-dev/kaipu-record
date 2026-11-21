@@ -210,6 +210,19 @@ export function registerAuth(
     }
   }
 
+  /** What a session check that outlived its token reports: the session that is current now. */
+  function currentStateAfterSwitch(): AuthStatus {
+    return token
+      ? {
+          kind: "unknown",
+          lastKnownUserId: cachedIdentity?.userId,
+          lastKnownEmail: cachedIdentity?.email,
+          entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+          verificationEmailSentAt,
+        }
+      : { kind: "signed-out" };
+  }
+
   ipcMain.handle(IPC_CHANNELS.authGetStatus, async (): Promise<AuthStatus> => {
     if (!token) return { kind: "signed-out" };
     const sent = token;
@@ -218,17 +231,7 @@ export function registerAuth(
       // The session can change while the check is in flight (sign-out, then another account).
       // Its answer belongs to the token it was asked about: neither clear nor cache it for the
       // account that is current now. Report the current state; the renderer re-asks.
-      if (token !== sent) {
-        return token
-          ? {
-              kind: "unknown",
-              lastKnownUserId: cachedIdentity?.userId,
-              lastKnownEmail: cachedIdentity?.email,
-              entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
-              verificationEmailSentAt,
-            }
-          : { kind: "signed-out" };
-      }
+      if (token !== sent) return currentStateAfterSwitch();
       if (!identity) {
         // Confirmed gone (a 401, or better-auth's far commoner 200 + null body). Safe to clear.
         token = null;
@@ -245,6 +248,9 @@ export function registerAuth(
       // Every successful session check re-checks the plan too: this is how a purchase made on
       // the web reaches the app — the user reopens it. No push, no sync engine.
       const entitlements = await refreshEntitlements(sent, identity);
+      // The same switch can happen while the plan is fetched: never report A as signed in
+      // once B's session is the current one.
+      if (token !== sent) return currentStateAfterSwitch();
       return { kind: "signed-in", ...identity, entitlements, verificationEmailSentAt };
     } catch {
       // Network/other failure — NEVER clear a token we couldn't actually verify was invalid,
