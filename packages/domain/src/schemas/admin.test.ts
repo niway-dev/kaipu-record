@@ -21,6 +21,12 @@ describe("isAdminUser", () => {
     expect(isAdminUser("u3", "u1, u2")).toBe(false);
   });
 
+  it("matches the whole id, case-sensitively", () => {
+    expect(isAdminUser("u1", "u10")).toBe(false);
+    expect(isAdminUser("u10", "u1")).toBe(false);
+    expect(isAdminUser("U1", "u1")).toBe(false);
+  });
+
   it("is false for everyone when the list is missing or empty", () => {
     expect(isAdminUser("u1", undefined)).toBe(false);
     expect(isAdminUser("u1", "")).toBe(false);
