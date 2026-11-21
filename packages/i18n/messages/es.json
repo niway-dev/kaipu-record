@@ -1014,6 +1014,12 @@
     "shotZoomIn": "Acercar",
     "shotZoomFit": "Ajustar"
   },
+  "libraryPicker": {
+    "play": "Reproducir vista previa",
+    "pause": "Pausar vista previa",
+    "seek": "Buscar en la vista previa",
+    "unavailable": "No se puede reproducir esta grabación."
+  },
   "export": {
     "pageTitle": "Exportar",
     "originalTag": "Original",

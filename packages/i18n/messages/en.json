@@ -1014,6 +1014,12 @@
     "shotZoomIn": "Zoom in",
     "shotZoomFit": "Fit"
   },
+  "libraryPicker": {
+    "play": "Play preview",
+    "pause": "Pause preview",
+    "seek": "Seek the preview",
+    "unavailable": "This recording can't be played."
+  },
   "export": {
     "pageTitle": "Export",
     "originalTag": "Original",
