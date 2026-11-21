@@ -45,8 +45,9 @@
   background: var(--bg-raised);
 }
 
+/* Which version is on screen: an accent outline, since the row has no room for a pill. */
 .row[data-state="viewing"] {
-  border-color: var(--border-light);
+  border-color: var(--accent-primary);
 }
 
 .link,
@@ -135,17 +136,6 @@
   cursor: help;
 }
 
-/* The one pink in the list: which version is on screen. */
-.pill {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--accent-primary-soft);
-  color: var(--accent-primary);
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold);
-}
-
 .bar {
   flex-shrink: 0;
   width: 70px;
@@ -160,13 +150,6 @@
   height: 100%;
   background: var(--tone-saving);
   transition: width 0.4s ease;
-}
-
-.empty {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
-  color: var(--text-muted);
 }
 
 /* Drag handle of a local exported copy: a native file drag, outside the row's link. */

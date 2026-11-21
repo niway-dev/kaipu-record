@@ -28,6 +28,36 @@ vi.mock("@renderer/features/transcription/audio/run-transcription-job", () => ({
   runTranscriptionJob: () => new Promise(() => {}),
 }));
 
+// Lets one test pretend an export is running; every other test sees the real runner.
+const runnerOverride = vi.hoisted(() => ({ job: null as null | { sourceAssetId: string } }));
+vi.mock("@renderer/features/video-editor/export/export-runner", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@renderer/features/video-editor/export/export-runner")>();
+  return {
+    ...actual,
+    useExportRunner: () => {
+      const real = actual.useExportRunner();
+      if (!runnerOverride.job) return real;
+      return {
+        ...real,
+        status: "exporting" as const,
+        fraction: 0.4,
+        attemptStartedAt: null,
+        job: {
+          presetId: "light",
+          sourceTitle: "x",
+          sourceSizeBytes: null,
+          estimateBytes: null,
+          width: 1,
+          height: 1,
+          wholeRecording: true,
+          ...runnerOverride.job,
+        },
+      } as never;
+    },
+  };
+});
+
 const transcribeFlag = vi.hoisted(() => ({ on: false }));
 vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
 
@@ -189,7 +219,9 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^edit/i })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
-    expect(screen.queryByRole("tab", { name: "Where is it going?" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Export" })).toBeNull();
+    // A screenshot with no copy has no Copies tab either.
+    expect(screen.queryByRole("tab", { name: /^Copies/ })).toBeNull();
     // A screenshot is not a master: no "original" hint.
     expect(screen.queryByRole("button", { name: /your original stays unchanged/i })).toBeNull();
   });
@@ -373,9 +405,9 @@ describe("LibraryDetailPage", () => {
     await waitForLoaded();
     // The old "Not now" is gone: switching tabs is the dismissal.
     expect(screen.queryByRole("button", { name: "Not now" })).toBeNull();
-    openTab("Versions");
+    openTab("Details");
     expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
-    openTab("Where is it going?");
+    openTab("Export");
     fireEvent.click(screen.getByRole("button", { name: /^Open Export/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("");
@@ -568,7 +600,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     }));
     renderDetail("exp");
     await waitForLoaded();
-    const versions = await screen.findByRole("region", { name: "Versions" });
+    const versions = await screen.findByRole("region", { name: "Copies" });
     expect(
       within(versions)
         .getAllByRole("link")
@@ -578,16 +610,19 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     cleanup();
     renderDetail("src");
     await waitForLoaded();
-    const copies = await screen.findByRole("region", { name: "Versions" });
+    const copies = await screen.findByRole("region", { name: "Copies" });
     expect(within(copies).getByRole("link", { name: /original take \(export\)/i })).toHaveAttribute(
       "href",
       "/library/exp",
     );
-    // With copies, the page opens on the versions instead of asking where it is going; the
-    // destinations stay one tab away.
-    expect(screen.getByRole("tab", { name: "Versions" })).toHaveAttribute("aria-selected", "true");
+    // With copies, the page opens on the copies instead of asking where it is going; Export
+    // stays one tab away. The tab counts the finished copies only.
+    expect(screen.getByRole("tab", { name: "Copies (1)" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
-    expect(screen.getByRole("tab", { name: "Where is it going?" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Export" })).toBeVisible();
   });
 
   it("names a copy made for a destination by its destination, and keeps the copy untagged", async () => {
@@ -613,7 +648,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     }));
     renderDetail("src");
     await waitForLoaded();
-    const copies = await screen.findByRole("region", { name: "Versions" });
+    const copies = await screen.findByRole("region", { name: "Copies" });
     const row = within(copies).getByRole("link", { name: /^GitHub · Jira · Linear/ });
     expect(row).toHaveAttribute("href", "/library/gh");
     // The copy's picture size follows from the master's (2560 × 1440) and its preset.
@@ -642,6 +677,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     renderDetail("exp");
     await waitForLoaded();
     expect(await screen.findByText(/source recording was deleted/i)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Copies (1)" })).toBeVisible();
     expect(screen.queryByRole("link", { name: /gone/ })).toBeNull();
   });
 
@@ -1546,7 +1582,7 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       const router = renderWithState("/library/asset-b", { order });
       await waitForLoaded();
       fireEvent.click(
-        within(screen.getByRole("region", { name: "Versions" })).getByRole("link", {
+        within(screen.getByRole("region", { name: "Copies" })).getByRole("link", {
           name: /Copy file/,
         }),
       );
@@ -1593,6 +1629,13 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       expect(screen.queryByText("Download to edit")).toBeNull();
     });
 
+    it("a standalone GIF with no copies has no Copies tab", async () => {
+      list(gifItem);
+      renderWithState("/library/gif-1");
+      await waitForLoaded();
+      expect(screen.queryByRole("tab", { name: /^Copies/ })).toBeNull();
+    });
+
     it("a GIF's Details tab lists its frame rate", async () => {
       list({
         ...gifItem,
@@ -1615,10 +1658,7 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       await act(async () => {
         await router.navigate("/library/shot-1");
       });
-      expect(screen.getByRole("tab", { name: "Versions" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
+      expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
       expect(screen.queryByRole("menu")).toBeNull();
     });
 
@@ -1739,20 +1779,18 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       }
     });
 
-    it("opens on Where is it going? until the first copy exists", async () => {
+    it("opens on Export until the first copy exists, and has no Copies tab", async () => {
       list(exportedOnlyItem);
       renderDetail("asset-b");
       await waitForLoaded();
-      expect(screen.getByRole("tab", { name: "Where is it going?" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
+      expect(screen.queryByRole("tab", { name: /^Copies/ })).toBeNull();
+      expect(screen.getByRole("tab", { name: "Export" })).toHaveAttribute("aria-selected", "true");
       expect(screen.getByRole("tabpanel")).toContainElement(
         screen.getByRole("region", { name: "Where is it going?" }),
       );
     });
 
-    it("opens on Versions once a copy exists", async () => {
+    it("opens on Copies once a copy exists", async () => {
       const copy: LibraryItem = {
         ...exportedOnlyItem,
         assetId: "asset-copy",
@@ -1770,24 +1808,36 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       list(exportedOnlyItem, copy);
       renderDetail("asset-b");
       await waitForLoaded();
-      expect(screen.getByRole("tab", { name: "Versions" })).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: "Copies (1)" })).toHaveAttribute(
         "aria-selected",
         "true",
       );
+      // The row of the original and the copy; no "Edited project" row.
+      expect(screen.queryByText("Edited project")).toBeNull();
     });
 
-    it("a screenshot has Versions and Details only, opening on Versions", async () => {
+    it("a running export alone shows the Copies tab, without a count, and opens on it", async () => {
+      runnerOverride.job = { sourceAssetId: "asset-b" };
+      try {
+        list(exportedOnlyItem);
+        renderDetail("asset-b");
+        await waitForLoaded();
+        expect(screen.getByRole("tab", { name: "Copies" })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
+        expect(screen.queryByRole("tab", { name: /Copies \(/ })).toBeNull();
+      } finally {
+        runnerOverride.job = null;
+      }
+    });
+
+    it("a screenshot has Details only, opening on Details", async () => {
       list(screenshotItem);
       renderWithState("/library/shot-1");
       await waitForLoaded();
-      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-        "Versions",
-        "Details",
-      ]);
-      expect(screen.getByRole("tab", { name: "Versions" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Details"]);
+      expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
     });
 
     it("switches by click and by arrow keys, and Details lists the file's facts", async () => {
@@ -1795,7 +1845,7 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       renderDetail("asset-b");
       await waitForLoaded();
       const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
-      expect(tabs).toEqual(["Versions", "Details", "Where is it going?"]);
+      expect(tabs).toEqual(["Details", "Export"]);
 
       openTab("Details");
       const panel = screen.getByRole("tabpanel");
@@ -1805,16 +1855,10 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       expect(within(panel).getByText("Yes")).toBeVisible();
       expect(await within(panel).findByText("/vault/local-b.mp4")).toBeVisible();
 
-      fireEvent.keyDown(screen.getByRole("tab", { name: "Details" }), { key: "ArrowLeft" });
-      expect(screen.getByRole("tab", { name: "Versions" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
-      fireEvent.keyDown(screen.getByRole("tab", { name: "Versions" }), { key: "ArrowLeft" });
-      expect(screen.getByRole("tab", { name: "Where is it going?" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
+      fireEvent.keyDown(screen.getByRole("tab", { name: "Details" }), { key: "ArrowRight" });
+      expect(screen.getByRole("tab", { name: "Export" })).toHaveAttribute("aria-selected", "true");
+      fireEvent.keyDown(screen.getByRole("tab", { name: "Export" }), { key: "ArrowLeft" });
+      expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
     });
 
     it("Details leaves out the video-only rows for a screenshot", async () => {
@@ -2117,17 +2161,14 @@ describe("LibraryDetailPage Transcript tab (NIW2-870)", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Transcript" }));
   }
 
-  it("T1: sits right after Versions with the flag on, and the default tab does not change", async () => {
+  it("T1: sits right before Details with the flag on, and the default tab does not change", async () => {
     stubApi(null);
     list(exportedOnlyItem);
     renderDetail("asset-b");
     await waitForLoaded();
     const names = (await screen.findAllByRole("tab")).map((tab) => tab.textContent);
-    expect(names).toEqual(["Versions", "Transcript", "Details", "Where is it going?"]);
-    expect(screen.getByRole("tab", { name: "Where is it going?" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(names).toEqual(["Transcript", "Details", "Export"]);
+    expect(screen.getByRole("tab", { name: "Export" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("T1: no tab, and nothing read, with the flag off", async () => {
