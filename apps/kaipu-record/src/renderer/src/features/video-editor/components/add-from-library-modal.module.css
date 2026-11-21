@@ -1,36 +1,6 @@
-/* The Add from Library modal (NIW2-790). It fills the xwide sheet at a fixed height, so
-   switching tabs does not resize it; only the lists scroll. Hairlines and small radii, as in
-   Captures; pink only on the active tab, the selected row's outline and the primary button. */
-.sheet {
-  display: flex;
-  flex-direction: column;
-  /* Basis auto, not 0: the dialog's height is indefinite, so a 0 basis made the sheet as tall
-     as its content and an empty search collapsed it to the header. It may still shrink to the
-     dialog's max-height on a short window. */
-  flex: 0 1 auto;
-  min-height: 0;
-  height: min(772px, calc(100vh - 64px));
-  background: var(--bg-modal);
-  color: var(--text-primary);
-}
-
-.header {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 20px;
-  height: 56px;
-  padding: 0 12px 0 20px;
-  border-bottom: 1px solid var(--line);
-}
-
-/* ModalTitle brings its own bottom margin for a stacked dialog; here it sits in a row. */
-.title h3 {
-  margin: 0;
-  font-size: var(--font-size-md);
-  letter-spacing: -0.01em;
-}
-
+/* The Add from Library modal's own parts (NIW2-790): the tabs, the Screenshots card grid and its
+   side column. The sheet, header, list, preview and search are the Library picker's
+   (`features/library/picker`). */
 .tabs {
   display: flex;
   gap: 2px;
@@ -75,238 +45,12 @@
   font-size: var(--font-size-xs);
 }
 
-.spacer {
-  flex: 1;
-}
-
-.close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.close:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
 /* The tab panel: everything under the header, filling the sheet's fixed height. */
 .panel {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-}
-
-/* The search sits in the header, before the close button. */
-.search {
-  position: relative;
-  display: block;
-  flex: none;
-  width: 260px;
-}
-
-.searchIcon {
-  position: absolute;
-  top: 50%;
-  left: 10px;
-  transform: translateY(-50%);
-  color: var(--text-4);
-  pointer-events: none;
-}
-
-.searchInput {
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  padding: 0 10px 0 32px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  background: var(--bg-input);
-  color: var(--text-primary);
-  font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  outline: none;
-}
-
-.searchInput::placeholder {
-  color: var(--text-4);
-}
-
-.searchInput:focus {
-  border-color: var(--accent-primary);
-}
-
-/* ---- Notes: loading, empty, no match, read failure ---- */
-.note {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 0;
-  color: var(--text-muted);
-  font-size: var(--font-size-base);
-  text-align: center;
-}
-
-.note p {
-  margin: 0;
-}
-
-.noteTitle {
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-medium);
-}
-
-.noteHint {
-  color: var(--text-4);
-  font-size: var(--font-size-sm);
-}
-
-/* ---- Recordings: list + preview ---- */
-.split {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.list {
-  flex: none;
-  /* The design's 400 px, giving way first on a narrow window. */
-  width: min(400px, 40%);
-  margin: 0;
-  padding: 8px;
-  overflow-y: auto;
-  border-right: 1px solid var(--line);
-  list-style: none;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 3px 6px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: inherit;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    border-color var(--transition);
-}
-
-.row:hover {
-  background: var(--bg-card-hover);
-}
-
-.row[data-selected="true"] {
-  background: var(--bg-card-hover);
-  border-color: var(--accent-primary);
-}
-
-.row:focus-visible {
-  outline: 2px solid var(--accent-primary-ring);
-  outline-offset: 1px;
-}
-
-.thumb {
-  position: relative;
-  flex: none;
-  width: 96px;
-  height: 54px;
-  overflow: hidden;
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-}
-
-.thumbImage {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  pointer-events: none;
-}
-
-.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--text-muted);
-}
-
-.duration {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  padding: 0 4px;
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.78);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.02em;
-  line-height: 14px;
-}
-
-.text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.name {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.meta {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.02em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The preview takes whatever height is left (the freed room of the old destination list) and
-   gives it up first on a short window, so the placement strip and the Add button below it stay
-   on screen. Only when the window is shorter than the fixed rows alone does the column
-   scroll, so Add is never clipped out of reach. */
-.detail {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  min-height: 0;
-  padding: 16px 20px 18px;
-  overflow-y: auto;
 }
 
 /* The title and its facts on one line; only the title gives way to an ellipsis. */
@@ -338,115 +82,12 @@
   white-space: nowrap;
 }
 
-/* ---- The quick look ---- */
-.preview {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 120px;
-}
-
-/* Sized by the height the column has left, not by its width: the picture inside is contained,
-   so it keeps its own 16:9 (or any) shape with bars around it instead of being cropped. */
-.previewFrame {
-  position: relative;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-}
-
-.previewVideo {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
-}
-
 .previewImage {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
   background: #000;
-}
-
-.previewHidden {
-  visibility: hidden;
-}
-
-.previewPlaceholder,
-.previewUnavailable {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  pointer-events: none;
-}
-
-.previewBadge {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.78);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  letter-spacing: 0.02em;
-}
-
-.transport {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 10px;
-}
-
-.playButton {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.playButton:hover:not(:disabled) {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
-.playButton:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.scrub {
-  flex: 1;
-  min-width: 0;
-  height: 4px;
-  accent-color: var(--text-secondary);
-  cursor: pointer;
 }
 
 /* ---- Screenshots: card grid ---- */
@@ -566,4 +207,15 @@
   color: var(--text-muted);
   font-size: var(--font-size-base);
   text-align: center;
+}
+
+/* The Screenshots side's empty picture (a screenshot without a thumbnail). */
+.previewPlaceholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  pointer-events: none;
 }
