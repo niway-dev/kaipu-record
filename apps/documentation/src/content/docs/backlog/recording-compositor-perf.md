@@ -42,7 +42,7 @@ Revisit this when any of these show up — **especially on Intel**:
 - Noticeably higher CPU / fan / battery drain while recording.
 - Higher-resolution presets (1440p/4K) or higher fps (60) making the above worse.
 
-The honest measurement is the **[Benchmark propio](./index)** backlog item (CPU/RAM/frames
+The honest measurement is the **[Kaipu benchmarks](/specs/2026-11-15-kaipu-benchmarks-design/)** suite (CPU/RAM/frames
 dropped). **Measure before optimizing** — don't add complexity on a hunch.
 
 ## The lighter alternative — approach A (only if it hurts)

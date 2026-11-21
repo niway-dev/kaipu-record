@@ -1,0 +1,125 @@
+---
+title: "ADR 0059: Benchmarks run on the Mac mini, and on demand on a hosted runner"
+description: "The desktop benchmark suite's authoritative series runs on the Mac mini over ssh as a launchd job, never as a self-hosted Actions runner. A workflow_dispatch workflow runs it on demand on a GitHub-hosted macOS runner as a separate, clean series, and weight is measured on every pull request on a hosted runner without touching the required check."
+---
+
+# ADR 0059: Benchmarks run on the Mac mini, and on demand on a hosted runner
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — owner decisions 2026-11-15, design in a draft pull request. [NIW2-808](https://linear.app/niway/issue/NIW2-808/kaipu-benchmarks-measure-ram-cpu-and-bundle-weight-per-scenario-and). Spec: [Kaipu benchmarks — design](/specs/2026-11-15-kaipu-benchmarks-design/) |
+| Date          | 2026-11-15                                                                                                                                                                                                                                                                    |
+| Supersedes    | —                                                                                                                                                                                                                                                                             |
+| Amends        | [0027](/architecture/decisions/0027-verify-release-candidates-only/) — decision 2 and 5: ordinary pull requests also get one non-required weight job (decision 4 below); the required check is untouched                                                                      |
+| Superseded by | —                                                                                                                                                                                                                                                                             |
+
+Builds on [0044](/architecture/decisions/0044-the-ui-state-catalog-runs-the-real-app-on-the-mac-mini/)
+(the real app runs on the mini), keeps
+[0052](/architecture/decisions/0052-release-candidates-verify-only-the-component-they-ship/) as it
+is, and amends [0027](/architecture/decisions/0027-verify-release-candidates-only/) narrowly: one
+non-required weight job on ordinary pull requests (decision 4). Companions: [0060](/architecture/decisions/0060-benchmark-results-live-in-niway-dev-kaipu-benchmarks/)
+(storage) and
+[0061](/architecture/decisions/0061-benchmarks-measure-every-process-and-collect-data-before-budgets/)
+(what is measured and judged).
+
+## Context
+
+The owner wants memory, CPU, duration, output and weight measured for every scenario of the desktop
+app: idle, recording, screenshots, editing, long-video editing, playback, export at 1080p and 4K,
+and the weight a library or an animation adds. On 2026-11-14 an export held the whole encoded video
+in renderer memory (peak 6.5 GB; the owner's sampling CSV, see the spec's sources), and nothing in
+the repository measured it.
+
+The question is where the app runs while it is measured. Facts that constrain it:
+
+- **Agents never run Electron on the owner's laptop** (ADR 0044's context).
+- **The mini already runs the real app unattended** for the UI catalog: ssh, a launchd job in the
+  console session, screen-recording permission granted there.
+- **GitHub-hosted macOS runners** are M1 VMs with 3 cores and 7 GB of RAM, without Metal
+  Performance Shaders, with no known way to grant screen-recording permission non-interactively,
+  and with an unknown WebCodecs encoder path
+  ([GitHub docs](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)).
+  The release-candidate E2E (`e2e_desktop` in `pr-checks.yml`) already launches the built app and
+  exports there; which encoder it uses is not recorded. The
+  repository is public, so their standard minutes are free.
+- **GitHub says self-hosted runners "should almost never be used for public repositories"**
+  ([security guide](https://docs.github.com/en/actions/reference/security/secure-use)).
+- **ADR 0027** gives ordinary pull requests an immediate pass on the required check; the owner wants
+  fast merges.
+- The owner wants the suite run many times on the mini, and a clean environment on demand.
+- **ADR 0044 rejected a hosted macOS runner for the UI catalog.** That rejection was about
+  pictures: no GUI session for screen, camera and microphone grants, different fonts and scale,
+  and the owner wanting nothing in CI for the catalog. It does not carry over here: on 2026-11-15
+  the owner explicitly asked for an on-demand hosted run, and that run excludes recording and
+  screenshots, the parts that need a GUI session.
+
+## Decision
+
+1. **The Mac mini runs the authoritative series**, through `bun run bench:remote` over ssh as a
+   launchd job, nightly on `main`, on demand for any ref, and on the desktop release pull request.
+   It is never registered as a self-hosted Actions runner.
+2. **One host lock** on the mini is shared by benchmarks, the UI catalog and the verify flow
+   (the catalog and benchmark scripts take it in code; the manual verify recipe takes it by
+   convention, with the same command). The scenario runner refuses any host outside
+   `ui-catalog/runners.json`, as the catalog does. A
+   run that cannot take it waits up to a limit or skips and records the skip; a run that overlapped
+   another is invalid.
+3. **`.github/workflows/benchmarks.yml` runs the suite on demand** (`workflow_dispatch` only) on a
+   GitHub-hosted macOS runner, as its own series. Its numbers are never compared with the mini's.
+   It runs only the scenarios a spike proves possible there (no recording, no screenshots).
+4. **Weight is measured on every pull request** on a hosted runner, as a non-required job that
+   updates one sticky comment only when a weight layer changes. It builds the merge-base and the
+   head in the same job and compares the two, so runner drift stays out of the delta. This is the
+   one exception to ADR 0027's "no checks on ordinary pull requests"; the required check of ADR
+   0027 is untouched.
+
+## Alternatives rejected
+
+- **Only hosted runners.** They cannot record the screen or take screenshots, may export through a
+  different encoder, and their shared cores make time and CPU noisy. Rejected as the main series;
+  kept as the on-demand clean environment.
+- **A self-hosted Actions runner on the mini.** It would let workflows reach the owner's machine,
+  against GitHub's guidance for public repositories. ssh plus launchd reaches the same app without
+  exposing the machine to workflow code.
+- **Only the mini, no hosted workflow.** Loses the clean, isolated terrain the owner asked for and
+  the free per-pull-request weight measurement.
+- **A benchmark that gates ordinary pull requests.** Reverses ADR 0027's fast merges; weight stays
+  informative.
+
+## Consequences
+
+- The mini carries a third kind of job; the lock changes `ui-catalog-remote.sh` and the verify
+  skill's mini recipe as well.
+- There is no series when the mini is off; the nightly records the gap.
+- The hosted series needs a token scoped to the results repository. Only a publish job holds it:
+  it runs in a GitHub environment restricted to `main`, never runs checked-out app or bench code,
+  and commits only a schema-validated artifact. Dispatch-only, so no fork pull request reaches it.
+- On the mini, the publisher runs from the `main` checkout as a separate macOS user with its own
+  keychain; the console user that builds and runs the ref under test cannot read it. Until that
+  user exists, only the owner's own refs are benchmarked.
+- Nothing in Actions starts the mini, so a launchd poller on the mini (every 30 minutes) runs the
+  suite with `--status` on the head SHA of the open desktop release pull request when that SHA has
+  no status yet, plus a manual command. It needs a fine-grained `kaipu-record` token with commit
+  statuses write, in the publisher user's keychain.
+- A weight comment appears on pull requests that change weight; the owner sees deltas before merge.
+  A later push that removes the delta edits it to "no weight change".
+- Screen-recording grants follow the Electron binary's path (ADR 0044), so the benchmark worktree
+  needs its own grants and a capture preflight that fails, never skips, when they are missing.
+
+## Non-goals
+
+- Windows or Linux performance.
+- Running scenarios on the owner's laptop. `bench:attach` (spec) only attaches to an app the owner
+  launched.
+- Blocking any merge or release (see ADR 0061 for the release status).
+
+## What would reopen this
+
+- GitHub-hosted macOS runners gain screen-recording permission and a real GPU encoder, and their
+  run-to-run noise on the mini's metrics is within the mini's own noise: the hosted runner could
+  become the main series.
+- The mini is replaced, shared with other people, or unavailable for more than a week at a time.
+- GitHub offers a safe way to restrict a self-hosted runner on a public repository to trusted
+  workflows, and the ssh path becomes a maintenance burden.
