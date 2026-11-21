@@ -44,10 +44,14 @@ async function openSettingsApp(s: Scenario): Promise<void> {
   await expect(s.page.getByText("Kaipu Record").first()).toBeVisible({ timeout: 15_000 });
 }
 
+/** Let the switch and rail transitions finish, so a shot never catches them halfway. */
+const settle = (s: Scenario) => s.page.waitForTimeout(500);
+
 test("before: no badge and no Admin mode row", async () => {
   const s = await startScenario("admin-mode-before");
   try {
     await openSettingsApp(s);
+    await settle(s);
     await s.shot("settings-app");
   } finally {
     await s.finish();
@@ -60,6 +64,7 @@ test("user: a signed-out app with the preference on stays in User mode", async (
     await openSettingsApp(s);
     await expect(s.page.getByText("👑 Admin")).toHaveCount(0);
     await expect(s.page.getByRole("switch", { name: "Admin mode" })).toHaveCount(0);
+    await settle(s);
     await s.shot("settings-app");
   } finally {
     await s.finish();
@@ -78,6 +83,7 @@ test("after: an admin launches in Admin mode, and turning it off asks for a rest
     const toggle = s.page.getByRole("switch", { name: "Admin mode" });
     await expect(toggle).toBeChecked();
     await expect(s.page.getByText("Restart to apply")).toHaveCount(0);
+    await settle(s);
     await s.shot("settings-app-admin");
 
     await toggle.click();
@@ -86,6 +92,7 @@ test("after: an admin launches in Admin mode, and turning it off asks for a rest
     await expect(s.page.getByRole("button", { name: "Restart now" })).toBeVisible();
     // The badge stays: this process still runs in Admin mode until it restarts.
     await expect(s.page.getByText("👑 Admin")).toBeVisible();
+    await settle(s);
     await s.shot("restart-pending");
   } finally {
     await s.finish();
