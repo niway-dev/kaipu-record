@@ -15,6 +15,10 @@ Amends the premise of NIW2-603 ("flags are PostHog feature flags") for user-faci
 flags stay on PostHog until a later amendment. Follows the idiom of `FLAG_NAMES`/`FLAG_DEFAULTS`
 (`src/shared/analytics.ts`) and `KAIPU_FLAG_OVERRIDES` (`src/shared/flag-overrides.ts`).
 
+Amendment pending implementation (2026-11-21): [ADR 0067](/architecture/decisions/0067-an-admin-account-switches-the-desktop-between-user-and-admin-mode/)
+gives "release flags are owner-only" its mechanism: an admin account switches the app into Admin mode,
+which turns every release flag on ([NIW2-900](https://linear.app/niway/issue/NIW2-900)).
+
 ## Context
 
 The desktop app evaluates two PostHog flags with offline defaults and a dev-only override parser
