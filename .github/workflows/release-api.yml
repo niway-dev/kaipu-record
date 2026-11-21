@@ -112,8 +112,9 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           # Desktop Admin mode allowlist (comma-separated user ids). Empty is dropped below:
           # before the first deploy that sets it nobody is admin, but afterwards the Worker
-          # keeps its last value (--secrets-file is additive). To revoke every admin, set a
-          # placeholder id that matches no user, or delete the Worker secret directly.
+          # keeps its last value (--secrets-file is additive), and a deleted Worker secret comes
+          # back on the next release. To revoke every admin, set THIS secret to a placeholder id
+          # that matches no user (then release, or `wrangler secret put` it for effect now).
           ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
         run: |
           umask 077
