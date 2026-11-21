@@ -644,6 +644,27 @@ describe("auth-store", () => {
     expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: false });
   });
 
+  it("an older answer still applies when the newer check of the same session failed", async () => {
+    const handle = await signInWith(answerFor("user-1", false));
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    const calls: Array<{ resolve: (value: Entitlements) => void; reject: (e: Error) => void }> = [];
+    vi.spyOn(authClient, "getEntitlements").mockImplementation(
+      () => new Promise<Entitlements>((resolve, reject) => calls.push({ resolve, reject })),
+    );
+    const older = getStatus();
+    const newer = getStatus();
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+    calls[1]!.reject(new Error("offline")); // newer fails
+    await newer;
+    calls[0]!.resolve(answerFor("user-1", true)); // older succeeds after it
+    await older;
+    expect(handle.getAdminSession()).toEqual({ admin: true });
+  });
+
   it("treats a missing admin (an older server) as false", async () => {
     const handle = await signInWith(answerFor("user-1", undefined));
     expect(handle.getAdminSession()).toEqual({ admin: false });
@@ -745,7 +766,7 @@ describe("auth-store", () => {
     const status = await refresh;
 
     expect(status).not.toMatchObject({ kind: "signed-in", userId: "user-1" });
-    expect(status).toMatchObject({ kind: "unknown", lastKnownUserId: "user-2" });
+    expect(status).toMatchObject({ kind: "signed-in", userId: "user-2", email: "b@b.com" });
     expect(handle.getAdminSession()).toEqual({ admin: false });
     expect(handle.getCurrentAccount()).toEqual({ userId: "user-2", token: "tok_2" });
     expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: false });
@@ -781,6 +802,7 @@ describe("auth-store", () => {
     expect(entitlements).not.toHaveBeenCalled();
     expect(handle.getCurrentAccount()).toEqual({ userId: "user-2", token: "tok_2" });
     expect(JSON.stringify(status)).not.toContain("user-1");
+    expect(status).toMatchObject({ kind: "signed-in", userId: "user-2" });
     expect(JSON.stringify(handle.getAdminSession())).not.toContain("user-1");
   });
 

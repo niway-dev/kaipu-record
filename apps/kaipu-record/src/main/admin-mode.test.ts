@@ -68,10 +68,17 @@ describe("every renderer window takes the launch mode (AC8)", () => {
 
   it("builds the webPreferences of every window through withFlagOverrides", () => {
     const root = __dirname;
+    // Every use of `webPreferences` (key or shorthand) must be the wrapped form, counted per
+    // window rather than once per file.
+    const count = (text: string, pattern: RegExp) => (text.match(pattern) ?? []).length;
     const offenders = sourceFiles(root)
       .filter((file) => !EXEMPT.has(relative(root, file)))
-      .filter((file) => /webPreferences\s*:/.test(readFileSync(file, "utf8")))
-      .filter((file) => !/webPreferences:\s*withFlagOverrides\(/.test(readFileSync(file, "utf8")))
+      .filter((file) => {
+        const text = readFileSync(file, "utf8");
+        const uses = count(text, /\bwebPreferences\b\s*[:,}]/g);
+        const wrapped = count(text, /\bwebPreferences\s*:\s*withFlagOverrides\(/g);
+        return uses !== wrapped;
+      })
       .map((file) => relative(root, file));
     expect(offenders).toEqual([]);
   });

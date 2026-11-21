@@ -173,7 +173,10 @@ export function registerAuth(
     for (const listener of adminListeners) listener();
   }
 
+  // Numbers each plan check; an answer older than the last one applied is dropped. A newer
+  // check that failed applied nothing, so an older answer that lands after it still counts.
   let refreshRequest = 0;
+  let appliedRequest = 0;
 
   /** Re-check the plan and persist it. Failure keeps the cached copy — "couldn't ask" ≠ free. */
   async function refreshEntitlements(
@@ -190,13 +193,10 @@ export function registerAuth(
     // The session can change while the answer is in flight (sign-out, another account). An
     // answer for a session that is no longer current is dropped whole: it must not grant
     // admin to the next account, and it must not write the old account's file back to disk.
-    // A later request for the same session also wins over an older one that lands after it.
-    if (
-      token !== current ||
-      cachedIdentity?.userId !== identity.userId ||
-      request !== refreshRequest
-    )
+    // A later answer for the same session also wins over an older one that lands after it.
+    if (token !== current || cachedIdentity?.userId !== identity.userId || request < appliedRequest)
       return cachedEntitlements ?? FREE_ENTITLEMENTS;
+    appliedRequest = request;
     const fresh = planOf(answer);
     const admin = adminAnswerFor(answer, identity.userId);
     cachedEntitlements = fresh;
@@ -224,8 +224,20 @@ export function registerAuth(
     }
   }
 
-  /** What a session check that outlived its token reports: the session that is current now. */
+  /**
+   * What a session check that outlived its token reports: the session that is current now. The
+   * renderer applies this answer as is, so a session signed in since then is reported as signed
+   * in, never as the offline-style `unknown`.
+   */
   function currentStateAfterSwitch(): AuthStatus {
+    if (token && cachedIdentity) {
+      return {
+        kind: "signed-in",
+        ...cachedIdentity,
+        entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+        verificationEmailSentAt,
+      };
+    }
     return token
       ? {
           kind: "unknown",
@@ -244,7 +256,7 @@ export function registerAuth(
       const identity = await getSession(config, sent);
       // The session can change while the check is in flight (sign-out, then another account).
       // Its answer belongs to the token it was asked about: neither clear nor cache it for the
-      // account that is current now. Report the current state; the renderer re-asks.
+      // account that is current now. Report the session that is current instead.
       if (token !== sent) return currentStateAfterSwitch();
       if (!identity) {
         // Confirmed gone (a 401, or better-auth's far commoner 200 + null body). Safe to clear.
