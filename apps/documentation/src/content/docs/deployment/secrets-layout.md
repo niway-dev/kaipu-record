@@ -158,8 +158,8 @@ grants nothing" rather than "these are already published".
 sits in `/public` for the same reasons: a list of user ids that grants nothing
 without authenticating as one of them.
 
-Note the asymmetry the blast-radius test does not capture: _writing_ this value
-would grant admin to anyone you add. Write access is governed by the identity's
+Note the asymmetry the blast-radius test does not capture: _writing_ either allow-list
+(`CONSOLE_ADMIN_USER_IDS` or `ADMIN_USER_IDS`) would grant admin to anyone you add. Write access is governed by the identity's
 permissions, not by the folder, so the folder still answers the question it is
 meant to.
 
