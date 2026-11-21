@@ -54,11 +54,11 @@ flowchart LR
 
 ## Layers
 
-| #   | What it builds                                                                                                                                                                                                 | Criteria                     | Risk      | Depends on |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | --------- | ---------- |
-| 1   | API: `ADMIN_USER_IDS` parsing, `admin` in the entitlements response and its domain schema, tests                                                                                                               | AC1, AC2                     | 🟢 Low    | —          |
-| 2   | Desktop core: `admin` in the stored session (user-bound, cleared on sign-out), `adminMode` setting, launch-time effective mode, flag evaluation order, IPC to expose the effective mode and the restart, tests | AC3, AC4, AC5, AC6, AC7, AC8 | 🟡 Medium | 1          |
-| 3   | Desktop UI: title-bar badge, Settings → App row with "Restart to apply", tray check line, i18n, ui-map areas and catalog states                                                                                | AC9, AC10, AC11              | 🟢 Low    | 2          |
+| #   | What it builds                                                                                                                                                                                                                                 | Criteria                     | Risk      | Depends on |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | --------- | ---------- |
+| 1   | API: `ADMIN_USER_IDS` in the server env schema (`packages/infra-env`), wired into `release-api.yml` (env and `worker-secrets.json`) and the secrets-layout table; `userId` + `admin` in the entitlements response and its domain schema; tests | AC1, AC2                     | 🟢 Low    | —          |
+| 2   | Desktop core: `admin` in the stored session (user-bound, cleared on sign-out), `adminMode` setting, launch-time effective mode, flag evaluation order, IPC to expose the effective mode and the restart, tests                                 | AC3, AC4, AC5, AC6, AC7, AC8 | 🟡 Medium | 1          |
+| 3   | Desktop UI: title-bar badge, Settings → App row with "Restart to apply", tray check line, i18n, ui-map areas and catalog states; update `desktop/analytics-and-flags.mdx` (owner testing through Admin mode, no device targeting)              | AC9, AC10, AC11, AC12        | 🟢 Low    | 2          |
 
 ## Open questions
 
@@ -74,7 +74,9 @@ flowchart LR
 
 - A non-admin account (or a signed-out app) with `adminMode: true` written by hand into `settings.json`
   gets Admin mode.
-- An `admin: true` answer for account A arrives after A signed out and B signed in, and B gets Admin mode.
+- An `admin: true` answer for account A arrives after A signed out and B signed in, and B gets Admin mode
+  on its next launch.
+- After signing out of an admin account mid-session, the app hides that it is still in Admin mode.
 - The badge shows one mode while an open screenshot editor or main's capture flag runs the other,
   because the mode changed mid-session.
 - Admin mode turns on a feature its platform check forbids (for example `image-text` on Windows) or
@@ -90,12 +92,13 @@ flowchart LR
 - [ ] **AC3** The desktop stores `admin` with the session; an answer whose `userId` differs from the current session's is discarded; sign-out clears it (unit tests on the auth store).
 - [ ] **AC4** Effective Admin mode is `adminMode && admin`, computed once at launch; a test shows `adminMode: true` with `admin: false` (and signed out) evaluates every flag as in User mode.
 - [ ] **AC5** Changing `adminMode` during a session does not change any flag value until relaunch (test on the flag client).
-- [ ] **AC6** In Admin mode every release flag in `FLAG_NAMES` reads `true`; the dev override still wins in a dev build; in User mode the order is PostHog then default (tests on `flagState`).
+- [ ] **AC6** `RELEASE_FLAGS` is every name in `FLAG_NAMES` whose default is `false` (test pins it); in Admin mode each reads `true` and a default-`true` flag is untouched; the dev override still wins in a dev build; in User mode the order is PostHog then default (tests on `flagState`).
 - [ ] **AC7** Admin mode does not bypass platform checks: a platform-gated feature stays off on an unsupported platform with its flag forced on (test on the gate).
 - [ ] **AC8** Main and every window read the same effective mode for the session (main computes it before creating windows and passes it as a preload launch argument, like `KAIPU_FLAG_OVERRIDES`; a window has it synchronously before its first render, so the screenshot editor latches the Admin value).
 - [ ] **AC9** In Admin mode the main window's title bar shows "👑 Admin" after "Kaipu Record"; in User mode the title bar is unchanged (catalog states for both).
 - [ ] **AC10** Settings → App shows the "Admin mode" row only when the account is admin; toggling it shows "Restart to apply" with a **Restart now** button that relaunches the app (catalog state; not shown for non-admin).
 - [ ] **AC11** The tray menu shows an "Admin mode" line with a check while Admin mode is effective, and no line for non-admin accounts.
+- [ ] **AC12** Signing out or switching account while Admin mode is effective keeps the badge and shows "Restart to apply"; the next launch is in User mode unless the new account is admin with `adminMode` on (test on the launch computation). The production API receives `ADMIN_USER_IDS` from `release-api.yml`, and `desktop/analytics-and-flags.mdx` describes Admin mode instead of device targeting.
 
 ---
 

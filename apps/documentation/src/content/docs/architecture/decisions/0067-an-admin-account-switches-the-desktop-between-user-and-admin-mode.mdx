@@ -17,7 +17,8 @@ description: A server-side admin permission, from an allowlist of user ids in th
 
 Release flags (code default `false`) reach the owner's production installs through PostHog: each flag
 has one condition, `distinct_id` exact on the owner's two per-install device ids. The desktop app never
-sends the account to PostHog. Desktop 0.19.0 was the first build that reads PostHog, and on 2026-11-21
+sends the account to PostHog. Desktop 0.19.0 was the first released build with a PostHog key (earlier releases
+shipped without one, [NIW2-740](https://linear.app/niway/issue/NIW2-740)), and on 2026-11-21
 the owner found every unreleased feature on in production without having noticed. The five release
 flags then active (`image-canvas`, `image-inspect`, `image-text`, `capture-while-recording`,
 `timeline-levels`) each had that single condition at 100% ([NIW2-900](https://linear.app/niway/issue/NIW2-900)).
@@ -43,12 +44,18 @@ reports. A mode that changes mid-session would leave the badge and the running b
    the last answer offline until the next successful check.
 3. **Preference, not authority.** `adminMode: boolean` in `settings.json` (default `false`) is the
    wish. Effective Admin mode = `adminMode && admin`, computed once at launch and fixed for the session.
-4. **Applies on the next launch.** Changing the switch shows "Restart to apply" with **Restart now**.
+4. **Applies on the next launch, including sign-out.** Signing out or changing account while Admin mode
+   is effective keeps the badge (the session is still in Admin mode) and Settings → App shows "Restart
+   to apply"; the next launch computes the mode for the new account.
+   Changing the switch shows "Restart to apply" with **Restart now**.
    Main computes the mode before creating any window and hands it to each window's preload as a
    launch argument (the channel `KAIPU_FLAG_OVERRIDES` already uses), so a window reads it
    synchronously before its first render and the screenshot editor latches the right value.
 5. **Evaluation order.** dev override → Admin mode (release flags `true`) → PostHog → code default.
-   Only release flags are forced; future Labs flags (ADR 0049) are not. Platform checks and plan
+   A release flag is a flag whose code default is `false` (a `RELEASE_FLAGS` list derived from
+   `FLAG_DEFAULTS`, pinned by a test); a flag that defaults to `true` has shipped and is untouched.
+   This includes flags with no PostHog flag yet (`zoom-filmstrip`, `transcription`). Future Labs flags (ADR 0049) are
+   not forced. Platform checks and plan
    entitlements still apply.
 6. **Visible everywhere it matters.** A "👑 Admin" badge in the main window's title bar while Admin mode
    is effective; an "Admin mode" row in Settings → App only for admin accounts; an "Admin mode" check
