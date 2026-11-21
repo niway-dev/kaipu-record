@@ -8,15 +8,16 @@ description: "The flag registry lives in code (packages/domain, pinned in src/sh
 ## Status
 
 Proposed — design PR pending review (2026-11-05).
-Amendment pending implementation (2026-11-21): [ADR 0067](/architecture/decisions/0067-an-admin-account-switches-the-desktop-between-user-and-admin-mode/)
-gives "release flags are owner-only" its mechanism: an admin account switches the app into Admin mode,
-which turns every release flag on ([NIW2-900](https://linear.app/niway/issue/NIW2-900)).
 [NIW2-657](https://linear.app/niway/issue/NIW2-657/console-on-admin-kit-and-labs-typed-flags-labs-opt-in-in-settings).
 Spec: [Console on admin-kit and Labs — design](/specs/2026-11-05-console-on-admin-kit-and-labs-design/).
 Companion: [0048](/architecture/decisions/0048-console-is-the-admin-kit-panel-authorized-by-its-policies/).
 Amends the premise of NIW2-603 ("flags are PostHog feature flags") for user-facing flags; release
 flags stay on PostHog until a later amendment. Follows the idiom of `FLAG_NAMES`/`FLAG_DEFAULTS`
 (`src/shared/analytics.ts`) and `KAIPU_FLAG_OVERRIDES` (`src/shared/flag-overrides.ts`).
+
+Amendment pending implementation (2026-11-21): [ADR 0067](/architecture/decisions/0067-an-admin-account-switches-the-desktop-between-user-and-admin-mode/)
+gives "release flags are owner-only" its mechanism: an admin account switches the app into Admin mode,
+which turns every release flag on ([NIW2-900](https://linear.app/niway/issue/NIW2-900)).
 
 ## Context
 

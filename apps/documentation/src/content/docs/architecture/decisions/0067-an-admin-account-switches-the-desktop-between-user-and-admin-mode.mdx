@@ -18,8 +18,10 @@ description: A server-side admin permission, from an allowlist of user ids in th
 Release flags (code default `false`) reach the owner's production installs through PostHog: each flag
 has one condition, `distinct_id` exact on the owner's two per-install device ids. The desktop app never
 sends the account to PostHog. Desktop 0.19.0 was the first build that reads PostHog, and on 2026-11-21
-the owner found every unreleased feature on in production without having noticed (this thread; flag
-filters read from PostHog the same day). Seeing the app as a normal user meant editing PostHog.
+the owner found every unreleased feature on in production without having noticed. The five release
+flags then active (`image-canvas`, `image-inspect`, `image-text`, `capture-while-recording`,
+`timeline-levels`) each had that single condition at 100% ([NIW2-900](https://linear.app/niway/issue/NIW2-900)).
+Seeing the app as a normal user meant editing PostHog.
 
 The API has no notion of an admin: the user table has no role, and the only allowlist is the Console's
 `CONSOLE_ADMIN_USER_IDS` (`apps/console/src/lib/access.ts`). The desktop already reads
@@ -33,15 +35,18 @@ reports. A mode that changes mid-session would leave the badge and the running b
 ## Decision
 
 1. **Permission on the server.** server-hono reads `ADMIN_USER_IDS` (comma-separated user ids,
-   Infisical `/auth`) and `GET /api/v1/me/entitlements` adds `admin: boolean` for the session's user.
-   Missing or empty variable: nobody is admin.
+   Infisical `/public`, beside `CONSOLE_ADMIN_USER_IDS` and for the same reason: reading it grants
+   nothing, see `deployment/secrets-layout.md`) and `GET /api/v1/me/entitlements` adds
+   `userId` and `admin: boolean` for the session's user. Missing or empty variable: nobody is admin.
 2. **Held in main, bound to the account.** The desktop stores `admin` with the session in `auth.enc`,
-   discards an answer whose user is not the current session's, clears it on sign-out, and keeps the
-   last answer offline until the next successful check.
+   discards an answer whose `userId` is not the current session's, clears it on sign-out, and keeps
+   the last answer offline until the next successful check.
 3. **Preference, not authority.** `adminMode: boolean` in `settings.json` (default `false`) is the
    wish. Effective Admin mode = `adminMode && admin`, computed once at launch and fixed for the session.
 4. **Applies on the next launch.** Changing the switch shows "Restart to apply" with **Restart now**.
-   Every window and main see one mode per session.
+   Main computes the mode before creating any window and hands it to each window's preload as a
+   launch argument (the channel `KAIPU_FLAG_OVERRIDES` already uses), so a window reads it
+   synchronously before its first render and the screenshot editor latches the right value.
 5. **Evaluation order.** dev override → Admin mode (release flags `true`) → PostHog → code default.
    Only release flags are forced; future Labs flags (ADR 0049) are not. Platform checks and plan
    entitlements still apply.
@@ -69,7 +74,8 @@ reports. A mode that changes mid-session would leave the badge and the running b
 - A flag turned off in PostHog does not reach an admin in Admin mode: no per-flag kill switch for the
   admin. Recovery from a broken flagged feature: sign out, or set `adminMode` to `false` in
   `settings.json`, then relaunch.
-- Revoking admin takes effect at the next successful session check; offline, the last answer holds.
+- Revoking admin takes effect on the first launch after a successful session check has stored the new
+  answer; a running session keeps its mode, and offline the last answer holds.
 - The client gate is visibility, not security: the code is public (AGPL). Server permissions and plan
   entitlements stay enforced on the server.
 - Two things to keep in sync for the owner: the allowlist in Infisical and the absence of device-id

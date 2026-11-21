@@ -85,14 +85,14 @@ flowchart LR
 
 ## Acceptance criteria
 
-- [ ] **AC1** `GET /api/v1/me/entitlements` returns `admin: true` for a user id listed in `ADMIN_USER_IDS` and `admin: false` otherwise; a server test covers listed, unlisted, empty and missing variable.
+- [ ] **AC1** `GET /api/v1/me/entitlements` returns the session's `userId` and `admin: true` for a user id listed in `ADMIN_USER_IDS`, `admin: false` otherwise; a server test covers listed, unlisted, empty and missing variable.
 - [ ] **AC2** A missing or empty `ADMIN_USER_IDS` makes nobody admin, and the route still answers 200.
-- [ ] **AC3** The desktop stores `admin` with the session; an answer whose user id differs from the current session's is discarded; sign-out clears it (unit tests on the auth store).
+- [ ] **AC3** The desktop stores `admin` with the session; an answer whose `userId` differs from the current session's is discarded; sign-out clears it (unit tests on the auth store).
 - [ ] **AC4** Effective Admin mode is `adminMode && admin`, computed once at launch; a test shows `adminMode: true` with `admin: false` (and signed out) evaluates every flag as in User mode.
 - [ ] **AC5** Changing `adminMode` during a session does not change any flag value until relaunch (test on the flag client).
 - [ ] **AC6** In Admin mode every release flag in `FLAG_NAMES` reads `true`; the dev override still wins in a dev build; in User mode the order is PostHog then default (tests on `flagState`).
 - [ ] **AC7** Admin mode does not bypass platform checks: a platform-gated feature stays off on an unsupported platform with its flag forced on (test on the gate).
-- [ ] **AC8** Main and every window read the same effective mode for the session (main exposes it; windows read it through IPC at load).
+- [ ] **AC8** Main and every window read the same effective mode for the session (main computes it before creating windows and passes it as a preload launch argument, like `KAIPU_FLAG_OVERRIDES`; a window has it synchronously before its first render, so the screenshot editor latches the Admin value).
 - [ ] **AC9** In Admin mode the main window's title bar shows "👑 Admin" after "Kaipu Record"; in User mode the title bar is unchanged (catalog states for both).
 - [ ] **AC10** Settings → App shows the "Admin mode" row only when the account is admin; toggling it shows "Restart to apply" with a **Restart now** button that relaunches the app (catalog state; not shown for non-admin).
 - [ ] **AC11** The tray menu shows an "Admin mode" line with a check while Admin mode is effective, and no line for non-admin accounts.
@@ -124,7 +124,7 @@ domain schema.
 
 ### Rollout
 
-1. Owner adds `ADMIN_USER_IDS` with their user id to Infisical `/auth` (production and dev).
+1. Owner adds `ADMIN_USER_IDS` with their user id to Infisical `/public` (production and dev), beside `CONSOLE_ADMIN_USER_IDS` (see `deployment/secrets-layout.md`).
 2. Ship the API (layer 1) and a desktop release with layers 2–3.
 3. Owner installs it on the M5 and the M4, turns Admin mode on, restarts, checks the badge.
 4. Owner removes the device-id conditions from the release flags in PostHog.
@@ -132,7 +132,8 @@ domain schema.
 
 ### Weak-point review
 
-gpt-6.1-sol (high) attacked the design on 2026-11-21. Real findings and their answers: mid-session
+gpt-6.1-sol (high) attacked the design on 2026-11-21 (working notes, not committed; the findings that
+mattered are listed here). Real findings and their answers: mid-session
 switching vs latched flags (restart to apply, decision 4), leftover PostHog targeting (rollout step 4),
 cached permission across accounts (decision 2), no per-flag kill switch for the admin (accepted, ADR
 0067 consequences), badge invisible in capture workflows (tray line, decision 6).
