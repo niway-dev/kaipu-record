@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.20.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.19.0...desktop-v0.20.0) (2026-11-21)
+
+
+### Features
+
+* **capture:** recording setup opens small popovers that never push the page, shared with the capture widget (NIW2-892) ([#707](https://github.com/niway-dev/kaipu-record/issues/707)) ([07f765b](https://github.com/niway-dev/kaipu-record/commit/07f765bb1dd9bc5ffd7c9f0f659fe4c1cfec756c))
+* **export:** see what you are exporting — Pick from Library opens a modal with a live preview ([#714](https://github.com/niway-dev/kaipu-record/issues/714)) ([79e0bde](https://github.com/niway-dev/kaipu-record/commit/79e0bdea2d4ae69962a5067f1c05ac1ae76b7cf4))
+* **onboarding:** add an "Open the app" way out on the You're set step ([#710](https://github.com/niway-dev/kaipu-record/issues/710)) ([83c28ef](https://github.com/niway-dev/kaipu-record/commit/83c28ef1f96ff16e46499bb04e81498e9bb1ea00))
+
 ## [0.19.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.18.0...desktop-v0.19.0) (2026-11-20)
 
 
