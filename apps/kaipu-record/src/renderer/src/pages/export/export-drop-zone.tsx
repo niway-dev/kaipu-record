@@ -2,7 +2,7 @@ import { Download, FolderOpen, Library } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Button } from "@kaipu/ui";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { VideoPicker } from "./video-picker";
+import { usePickVideoModal } from "./pick-video-modal";
 import styles from "./export-drop-zone.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
@@ -18,8 +18,8 @@ interface ExportDropZoneProps {
 
 /**
  * Export with no video: the door for any video, from Kaipu or from outside. The drop itself is
- * caught by the whole window (`usePrepareImport`); this shows where, and offers the Library and
- * the file dialog as the other two ways in.
+ * caught by the whole window (`usePrepareImport`); this shows where, and offers the Library
+ * picker and the file dialog as the other two ways in.
  */
 export function ExportDropZone({
   active,
@@ -29,6 +29,11 @@ export function ExportDropZone({
   onBrowseFiles,
 }: ExportDropZoneProps): React.JSX.Element {
   const t = useTranslations("export");
+  const picker = usePickVideoModal({
+    videos,
+    area: uiArea("exportNew.pickVideoModal"),
+    onPick: onPickVideo,
+  });
   return (
     <div className={styles.wrap}>
       <div
@@ -43,23 +48,17 @@ export function ExportDropZone({
         </h2>
         <p className={styles.body}>{t("dropBody")}</p>
         <div className={styles.actions}>
-          <VideoPicker
-            videos={videos}
-            onPick={onPickVideo}
-            align="center"
-            trigger={(props) => (
-              <Button variant="primary" disabled={importing} {...props}>
-                <Library size={14} strokeWidth={1.8} aria-hidden />
-                {t("pickFromLibrary")}
-              </Button>
-            )}
-          />
+          <Button variant="primary" disabled={importing} onClick={picker.onOpen}>
+            <Library size={14} strokeWidth={1.8} aria-hidden />
+            {t("pickFromLibrary")}
+          </Button>
           <Button variant="outline" disabled={importing} onClick={onBrowseFiles}>
             <FolderOpen size={14} strokeWidth={1.8} aria-hidden />
             {t("browseFiles")}
           </Button>
         </div>
       </div>
+      {picker.modal}
     </div>
   );
 }

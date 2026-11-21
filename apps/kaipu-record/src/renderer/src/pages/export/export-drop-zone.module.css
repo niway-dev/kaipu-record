@@ -7,7 +7,6 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  /* Not a scroll box: the Library picker opens below its button and must not be clipped. */
 }
 
 .zone {

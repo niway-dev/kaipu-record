@@ -1,0 +1,23 @@
+/* Recorded · Size · Resolution under the scrub bar: muted labels, primary values. */
+.facts {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.fact {
+  display: flex;
+  gap: 6px;
+}
+
+.fact dt {
+  color: var(--text-muted);
+}
+
+.fact dd {
+  margin: 0;
+  color: var(--text-primary);
+}

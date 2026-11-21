@@ -19,6 +19,29 @@ export const exportNew = catalog(
         "exportNew.recentExports:list",
       ],
     },
+    "pick-video": {
+      profile: "default",
+      how: "Open Export with no video and press Pick from Library: the Pick a video to export modal lists the Library's originals, newest first, with the first one selected and its muted quick look paused at the first frame on the right.",
+      steps: [
+        { navigate: "/export" },
+        {
+          click: {
+            area: "exportNew.dropZone",
+            part: { role: "button", name: "Pick from Library" },
+          },
+        },
+        {
+          waitFor: {
+            area: "exportNew.pickVideoModal",
+            part: { role: "button", name: "Walkthrough 1" },
+          },
+        },
+        { waitFor: { video: "paused-at-start", within: "exportNew.pickVideoModal" } },
+        { waitMs: 400 },
+      ],
+      demonstrates: ["exportNew.pickVideoModal:open"],
+      ready: { area: "exportNew.pickVideoModal" },
+    },
   },
   {
     notCapturable: {

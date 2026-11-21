@@ -35,6 +35,25 @@ export const exportCatalog = catalog(
       demonstrates: ["export.stage:destinationPicked", "export.destinationRow:selected"],
       ready: { area: "export.stage" },
     },
+    "pick-video": {
+      profile: "default",
+      how: "Open “Walkthrough 1” in Export and press Change video: the Pick a video to export modal lists the Library's originals (not their copies, no screenshots) with “Walkthrough 1” selected and tagged Exporting now, and its muted quick look paused at the first frame on the right.",
+      steps: [
+        open(ASSETS.walkthrough),
+        { click: { area: "export.header", part: { role: "button", name: "Change video" } } },
+        {
+          waitFor: {
+            area: "export.pickVideoModal",
+            part: { role: "button", name: "Walkthrough 1" },
+          },
+        },
+        // The preview autoplays: hold it at 0:00, then let the row thumbnails decode.
+        { waitFor: { video: "paused-at-start", within: "export.pickVideoModal" } },
+        { waitMs: 400 },
+      ],
+      demonstrates: ["export.pickVideoModal:open"],
+      ready: { area: "export.pickVideoModal" },
+    },
     "not-exportable": {
       profile: "default",
       how: "Open a screenshot in Export: only recordings can be exported.",

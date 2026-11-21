@@ -233,6 +233,9 @@ export const UI_MAP = {
       // sheet; this page never reads it.
       stage: { states: ["nothingPicked", "destinationPicked"] },
       destinationRow: { states: ["default", "selected"] },
+      // "Change video": the Library's originals in a modal, a list beside a muted quick look,
+      // with the video on screen selected and tagged "Exporting now".
+      pickVideoModal: { states: ["open"] },
     },
   },
   exportNew: {
@@ -243,6 +246,8 @@ export const UI_MAP = {
       header: { states: ["default"] },
       dropZone: { states: ["idle", "dragging", "importing"] },
       recentExports: { states: ["list"] },
+      // "Pick from Library": the same modal with the newest original selected and no tag.
+      pickVideoModal: { states: ["open"] },
     },
   },
   prepare: { kind: "route", route: ROUTES.prepare, redirect: true },
