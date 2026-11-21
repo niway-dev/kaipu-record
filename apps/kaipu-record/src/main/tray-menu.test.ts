@@ -14,6 +14,7 @@ const labels: TrayMenuLabels = {
   takeScreenshot: "Take screenshot",
   library: "Library",
   settings: "Settings…",
+  adminMode: "Admin mode",
   quit: "Quit",
 };
 
@@ -32,6 +33,7 @@ function actions(): TrayMenuActions {
     takeScreenshot: vi.fn(),
     openLibrary: vi.fn(),
     openSettings: vi.fn(),
+    openAdminMode: vi.fn(),
     quit: vi.fn(),
   };
 }
@@ -138,6 +140,53 @@ describe("buildTrayMenuTemplate", () => {
       click(items.find((i) => i.label === label));
     }
     for (const item of submenu(items)) click(item);
-    for (const fn of Object.values(a)) expect(fn).toHaveBeenCalledTimes(1);
+    // The Admin mode line has its own tests below: it only exists for an admin.
+    const { openAdminMode, ...wired } = a;
+    for (const fn of Object.values(wired)) expect(fn).toHaveBeenCalledTimes(1);
+    expect(openAdminMode).not.toHaveBeenCalled();
+  });
+
+  describe("Admin mode line (ADR 0067)", () => {
+    const withAdmin = (
+      admin: { isAdmin: boolean; effective: boolean } | undefined,
+      a = actions(),
+    ): MenuItemConstructorOptions[] =>
+      buildTrayMenuTemplate({ labels, actions: a, shortcuts, recording: false, admin });
+    const line = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions | undefined =>
+      items.find((i) => i.label === "Admin mode");
+
+    it("shows a checked line while Admin mode is effective", () => {
+      const item = line(withAdmin({ isAdmin: true, effective: true }));
+      expect(item).toMatchObject({ type: "checkbox", checked: true });
+      expect(item?.enabled).not.toBe(false);
+    });
+
+    it("keeps the checked line after the admin signed out, while the mode is still effective", () => {
+      expect(line(withAdmin({ isAdmin: false, effective: true }))).toMatchObject({
+        type: "checkbox",
+        checked: true,
+      });
+    });
+
+    it("shows an unchecked line for an admin account in User mode", () => {
+      expect(line(withAdmin({ isAdmin: true, effective: false }))).toMatchObject({
+        type: "checkbox",
+        checked: false,
+      });
+    });
+
+    it("has no line for a non-admin account, or when no admin state is given", () => {
+      expect(line(withAdmin({ isAdmin: false, effective: false }))).toBeUndefined();
+      expect(line(withAdmin(undefined))).toBeUndefined();
+    });
+
+    it("sits right after Settings and clicking it opens Settings, App", () => {
+      const a = actions();
+      const items = withAdmin({ isAdmin: true, effective: true }, a);
+      const labelsInOrder = names(items);
+      expect(labelsInOrder.indexOf("Admin mode")).toBe(labelsInOrder.indexOf("Settings…") + 1);
+      click(line(items));
+      expect(a.openAdminMode).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -47,6 +47,7 @@
     "takeScreenshot": "Take screenshot",
     "library": "Library",
     "settings": "Settings…",
+    "adminMode": "Admin mode",
     "quit": "Quit",
     "closedToTrayTitle": "Kaipu is still running",
     "closedToTrayBody": "Find it in the system tray. Right-click the icon to quit."

@@ -47,6 +47,7 @@
     "takeScreenshot": "Tomar captura",
     "library": "Biblioteca",
     "settings": "Ajustes…",
+    "adminMode": "Modo administrador",
     "quit": "Salir",
     "closedToTrayTitle": "Kaipu sigue abierto",
     "closedToTrayBody": "Lo encuentras en la bandeja del sistema. Haz clic derecho en el icono para salir."

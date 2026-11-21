@@ -53,6 +53,7 @@ let menuDeps: TrayMenuDeps | null = null;
 let currentLocale: Locale = "en";
 let recording = false;
 let countingDown = false;
+let admin: { isAdmin: boolean; effective: boolean } = { isAdmin: false, effective: false };
 
 function buildContextMenu(locale: Locale): Menu {
   const t = createMainTranslator(locale);
@@ -71,6 +72,7 @@ function buildContextMenu(locale: Locale): Menu {
         takeScreenshot: t("tray.takeScreenshot"),
         library: t("tray.library"),
         settings: t("tray.settings"),
+        adminMode: t("tray.adminMode"),
         quit: t("tray.quit"),
       },
       actions: {
@@ -83,10 +85,12 @@ function buildContextMenu(locale: Locale): Menu {
         takeScreenshot: deps?.actions.takeScreenshot ?? noop,
         openLibrary: deps?.actions.openLibrary ?? noop,
         openSettings: deps?.actions.openSettings ?? noop,
+        openAdminMode: deps?.actions.openAdminMode ?? noop,
       },
       shortcuts: deps?.getShortcuts() ?? ({} as ShortcutSettings),
       recording,
       countingDown,
+      admin,
     }),
   );
 }
@@ -106,6 +110,16 @@ export function setTrayCountdown(pending: boolean): void {
   if (pending === countingDown) return;
   countingDown = pending;
   contextMenu = buildContextMenu(currentLocale);
+}
+
+/**
+ * Tell the tray who the account is and which mode this process runs in (ADR 0067). Rebuilds the
+ * menu only on a change, and not before the tray exists (the first build reads this state).
+ */
+export function setTrayAdmin(next: { isAdmin: boolean; effective: boolean }): void {
+  if (next.isAdmin === admin.isAdmin && next.effective === admin.effective) return;
+  admin = next;
+  if (contextMenu) contextMenu = buildContextMenu(currentLocale);
 }
 
 export function createTray(

@@ -21,7 +21,7 @@ import { join } from "path";
 import { captureWhileRecordingEnabled } from "./screenshots/capture-while-recording";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
 import { registerFlagOverridesIpc } from "./flag-overrides-ipc";
-import { isLaunchAdminModeSet, setLaunchAdminMode } from "./admin-mode";
+import { isLaunchAdminModeSet, launchAdminMode, setLaunchAdminMode } from "./admin-mode";
 import { registerAdminModeIpc } from "./admin-mode-ipc";
 import { cancelRelaunchRequest, relaunchIfRequested, requestRelaunchOnQuit } from "./relaunch";
 import { computeAdminMode } from "@shared/admin-mode";
@@ -35,7 +35,13 @@ import { hasTitleBarOverlay, mainWindowChrome, titleBarOverlay } from "./window-
 import { devAppIdentity } from "./app-identity";
 import { appShutdown, installAppShutdown } from "./app-shutdown";
 import { createMainTranslator } from "@kaipu/i18n/main";
-import { createTray, rebuildTrayMenu, setTrayCountdown, setTrayRecording } from "./tray";
+import {
+  createTray,
+  rebuildTrayMenu,
+  setTrayAdmin,
+  setTrayCountdown,
+  setTrayRecording,
+} from "./tray";
 import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
@@ -1334,6 +1340,14 @@ app.whenReady().then(async () => {
 
   // Menu-bar tray + its Capture Panel.
   capturePanel = new CapturePanelWindow();
+  // The Admin mode line: who the account is now, and the mode this process launched in.
+  const syncTrayAdmin = (): void =>
+    setTrayAdmin({
+      isAdmin: auth.getAdminSession()?.admin === true,
+      effective: launchAdminMode(),
+    });
+  syncTrayAdmin();
+  auth.onAdminChanged(syncTrayAdmin);
   tray = createTray(capturePanel, showMainWindow, getAppSettings().locale, {
     getShortcuts: () => getAppSettings().shortcuts,
     actions: {
@@ -1350,6 +1364,7 @@ app.whenReady().then(async () => {
       takeScreenshot: () => triggerShortcutCapture("captureScreenshot"),
       openLibrary: () => showMainWindowAt(ROUTES.library),
       openSettings: () => showMainWindowAt(ROUTES.settings),
+      openAdminMode: () => showMainWindowAt(`${ROUTES.settings}/app`),
     },
   });
   // Load the panel hidden so the first tray click does not pay a cold start. After
