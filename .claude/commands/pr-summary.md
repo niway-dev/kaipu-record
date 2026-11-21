@@ -29,6 +29,7 @@ Read each changed file to understand what was modified and why.
 
 Fill `.github/pull_request_template.md` in its order, keeping its headings. Put what changed and the
 result someone can observe in `## What` (no file list), where to look in the Changes table's
-`Where to look` column, and anything only the owner can do in `## Needs you`. Leave the
-`Agent context` block as the template has it.
+`Where to look` column, and anything only the owner can do in `## Needs you`. Fill the
+`Agent context` block as the template says (autonomy level, agent and model, skills), or delete it
+if a person wrote the whole change.
 Then run `wachiman pr-template check --pr <n>` and fix until it passes.
