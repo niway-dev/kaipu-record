@@ -1,4 +1,4 @@
-import { entitlementsSchema, storageUsageSchema } from "@kaipu/domain/schemas";
+import { meEntitlementsSchema, storageUsageSchema } from "@kaipu/domain/schemas";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { apiResponseSchema } from "./shared.contract";
@@ -10,7 +10,7 @@ export const setPasswordInputSchema = z.object({ newPassword: z.string().min(8).
 export const meContract = {
   entitlements: oc
     .route({ method: "GET", path: "/me/entitlements" })
-    .output(apiResponseSchema(entitlementsSchema)),
+    .output(apiResponseSchema(meEntitlementsSchema)),
   storage: oc
     .route({ method: "GET", path: "/me/storage" })
     .output(apiResponseSchema(storageUsageSchema)),

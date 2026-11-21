@@ -91,6 +91,7 @@ libraries used _by_ the apps that are.
 | `CONSOLE_API_URL`          | `/public`     | `console`                                       |
 | `CONSOLE_ENVIRONMENT`      | `/public`     | `console`                                       |
 | `CONSOLE_ADMIN_USER_IDS`   | `/public`     | `console`                                       |
+| `ADMIN_USER_IDS`           | `/public`     | `server-hono`                                   |
 | `DATABASE_URL`             | `/database`   | `server-hono` `console` `db-scripts` `web-hono` |
 | `R2_ACCESS_KEY_ID`         | `/cloudflare` | `server-hono`                                   |
 | `R2_SECRET_ACCESS_KEY`     | `/cloudflare` | `server-hono`                                   |
@@ -152,6 +153,10 @@ that. Reading it reveals which accounts are admins; it grants nothing, because
 you would still have to authenticate as one of them. It is the least public
 thing in `/public`, which is why that folder's description says "reading these
 grants nothing" rather than "these are already published".
+
+`ADMIN_USER_IDS`, the API's allow-list for the desktop's Admin mode (ADR 0067),
+sits in `/public` for the same reasons: a list of user ids that grants nothing
+without authenticating as one of them.
 
 Note the asymmetry the blast-radius test does not capture: _writing_ this value
 would grant admin to anyone you add. Write access is governed by the identity's
