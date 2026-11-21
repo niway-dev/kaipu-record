@@ -180,6 +180,8 @@
     "adminModeDescription": "Every release flag is on. Turn it off to see the app as users do.",
     "adminModeRestart": "Restart to apply",
     "adminModeRestartNow": "Restart now",
+    "adminModeChangeFailed": "Admin mode did not change. Try again.",
+    "adminModeRestartFailed": "The app could not restart. Quit and open it again.",
     "onboarding": "Onboarding",
     "onboardingDescription": "Replay the first-run setup & permissions.",
     "replay": "Replay",

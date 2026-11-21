@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AdminModeState } from "@shared/admin-mode";
+import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { AdminModeSettings } from "./admin-mode-settings";
 
 const BASE: AdminModeState = {
@@ -27,7 +28,10 @@ function stub(state: AdminModeState) {
   return { api, listeners, unsubscribe };
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  for (const toast of getToasts()) dismissToast(toast.id);
+});
 
 describe("AdminModeSettings", () => {
   it("renders nothing for an account that is not an admin and is not in Admin mode", async () => {
@@ -95,5 +99,29 @@ describe("AdminModeSettings", () => {
     expect(await screen.findByRole("switch", { name: "Admin mode" })).toBeInTheDocument();
     view.unmount();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the user when the switch could not change the mode", async () => {
+    const { api } = stub(BASE);
+    api.setAdminMode = vi.fn().mockRejectedValue(new Error("ipc down"));
+    render(<AdminModeSettings />);
+    fireEvent.click(await screen.findByRole("switch", { name: "Admin mode" }));
+    await waitFor(() =>
+      expect(getToasts().map((toast) => toast.message)).toEqual([
+        "Admin mode did not change. Try again.",
+      ]),
+    );
+  });
+
+  it("tells the user when Restart now could not restart the app", async () => {
+    const { api } = stub({ ...BASE, restartPending: true });
+    api.relaunchApp = vi.fn().mockRejectedValue(new Error("ipc down"));
+    render(<AdminModeSettings />);
+    fireEvent.click(await screen.findByRole("button", { name: "Restart now" }));
+    await waitFor(() =>
+      expect(getToasts().map((toast) => toast.message)).toEqual([
+        "The app could not restart. Quit and open it again.",
+      ]),
+    );
   });
 });

@@ -85,7 +85,12 @@ function buildContextMenu(locale: Locale): Menu {
         takeScreenshot: deps?.actions.takeScreenshot ?? noop,
         openLibrary: deps?.actions.openLibrary ?? noop,
         openSettings: deps?.actions.openSettings ?? noop,
-        openAdminMode: deps?.actions.openAdminMode ?? noop,
+        // Electron flips a checkbox item's `checked` on every click, and this menu is cached:
+        // rebuild it so the check keeps saying which mode this process runs in.
+        openAdminMode: () => {
+          (deps?.actions.openAdminMode ?? noop)();
+          contextMenu = buildContextMenu(currentLocale);
+        },
       },
       shortcuts: deps?.getShortcuts() ?? ({} as ShortcutSettings),
       recording,

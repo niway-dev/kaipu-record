@@ -180,6 +180,8 @@
     "adminModeDescription": "Todas las funciones en lanzamiento progresivo están activas. Desactívalo para ver la app como la ven los usuarios.",
     "adminModeRestart": "Reinicia para aplicar",
     "adminModeRestartNow": "Reiniciar ahora",
+    "adminModeChangeFailed": "El modo Admin no cambió. Inténtalo de nuevo.",
+    "adminModeRestartFailed": "La app no pudo reiniciarse. Ciérrala y vuelve a abrirla.",
     "onboarding": "Introducción",
     "onboardingDescription": "Vuelve a ver la configuración inicial y los permisos.",
     "replay": "Repetir",

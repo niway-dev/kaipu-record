@@ -38,12 +38,12 @@ export function AdminModeSettings(): React.JSX.Element | null {
     window.electronAPI
       .setAdminMode(enabled)
       .then(setState)
-      .catch((error: unknown) => reportError("Could not change Admin mode", error));
+      .catch((error: unknown) => reportError(t("adminModeChangeFailed"), error));
   };
   const relaunch = (): void => {
     window.electronAPI
       .relaunchApp()
-      .catch((error: unknown) => reportError("Could not restart the app", error));
+      .catch((error: unknown) => reportError(t("adminModeRestartFailed"), error));
   };
 
   return (
