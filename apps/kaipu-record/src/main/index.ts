@@ -21,6 +21,10 @@ import { join } from "path";
 import { captureWhileRecordingEnabled } from "./screenshots/capture-while-recording";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
 import { registerFlagOverridesIpc } from "./flag-overrides-ipc";
+import { setLaunchAdminMode } from "./admin-mode";
+import { registerAdminModeIpc } from "./admin-mode-ipc";
+import { cancelRelaunchRequest, relaunchIfRequested, requestRelaunchOnQuit } from "./relaunch";
+import { computeAdminMode } from "@shared/admin-mode";
 import { parseFlagOverrides } from "@shared/flag-overrides";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
@@ -969,6 +973,30 @@ app.whenReady().then(async () => {
     sendToRenderer,
   });
   completeBrowserSignIn = auth.completeBrowserSignIn;
+  // Admin mode (ADR 0067): the mode is decided HERE, once, from the stored session and the
+  // preference, before any window is created, and never changes for this process. Every window
+  // gets it as a launch argument (`withFlagOverrides`), so a renderer has it synchronously before
+  // its first render. A sign-out or a setting change later only makes a restart pending.
+  const adminMode = computeAdminMode({
+    adminModeSetting: getAppSettings().adminMode,
+    session: auth.getAdminSession(),
+  });
+  setLaunchAdminMode(adminMode);
+  if (adminMode) console.log("[admin] Admin mode: every release flag is on for this session");
+  const adminModeIpc = registerAdminModeIpc({
+    session: auth.getAdminSession,
+    setting: () => getAppSettings().adminMode,
+    setSetting: (value) => {
+      updateAppSettings({ adminMode: value });
+    },
+    // Through the quit guards (a recording or an export asks first), then start again.
+    relaunch: () => {
+      requestRelaunchOnQuit();
+      app.quit();
+    },
+  });
+  auth.onAdminChanged(adminModeIpc.notifyChanged);
+  onSettingsKeysChanged(["adminMode"], adminModeIpc.notifyChanged);
   deepLinks.start();
   initMainAnalytics(getDeviceId(), getAppSettings().diagnosticsEnabled);
   onSettingsChanged((settings) => setMainAnalyticsEnabled(settings.diagnosticsEnabled));
@@ -1376,7 +1404,10 @@ app.on("before-quit", (event) => {
       message: t("dialogs.recordingInProgress"),
       detail: t("dialogs.quitStopsDetail"),
     });
-    if (choice !== 1) return;
+    if (choice !== 1) {
+      cancelRelaunchRequest();
+      return;
+    }
     quittingWithRecording = true;
     mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     proceedWhenRecordingStops({
@@ -1403,11 +1434,18 @@ app.on("before-quit", (event) => {
       message: t("dialogs.exportInProgress"),
       detail: t("dialogs.quitCancelsExportDetail"),
     });
-    if (choice !== 1) return;
+    if (choice !== 1) {
+      cancelRelaunchRequest();
+      return;
+    }
     quittingWithExport = true;
     cancelExportThen(() => app.quit());
     return;
   }
+
+  // "Restart now" (Admin mode): every guard passed, so the quit is real; start the app again
+  // when this process ends.
+  relaunchIfRequested(() => app.relaunch());
 
   // Every guard passed: this quit is real, so the main window's close must not hide it.
   isQuitting = true;

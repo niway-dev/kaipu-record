@@ -567,6 +567,17 @@ export const IPC_CHANNELS = {
   flagOverridesGet: "flags:overrides-get",
   // Main → every renderer window: the active feature-flag overrides changed.
   flagOverridesChanged: "flags:overrides-changed",
+  // Admin mode (ADR 0067). Renderer → main (invoke): the state the Settings row reads
+  // (`AdminModeState`): stored permission, preference, the launch value and whether a restart
+  // is pending.
+  adminModeGetState: "admin-mode:get-state",
+  // Renderer → main (invoke): write the `adminMode` preference; resolves with the state. It
+  // never changes the running mode, only what the next launch computes.
+  adminModeSet: "admin-mode:set",
+  // Renderer → main (invoke): quit through the recording/export guards and start again.
+  adminModeRelaunch: "admin-mode:relaunch",
+  // Main → every renderer window: the stored permission or the preference changed.
+  adminModeChanged: "admin-mode:changed",
   // Main → renderer: global hotkey fired, run the region capture flow.
   screenshotHotkey: "screenshot:hotkey",
   // Capture overlay: one window per display (main/screenshots/capture-overlay-windows.ts).
