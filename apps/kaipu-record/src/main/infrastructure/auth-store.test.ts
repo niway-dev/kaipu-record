@@ -603,6 +603,47 @@ describe("auth-store", () => {
     expect(handle.getAdminSession()).toEqual({ admin: false });
   });
 
+  it("a failed write still keeps the fresh plan and admin answer in memory", async () => {
+    const handle = await signInWith(answerFor("user-1", false));
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    const pro = { ...answerFor("user-1", true), plan: "pro" } as Entitlements;
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(pro);
+    mockState.encryptionAvailable = false; // writeStoredSession throws
+    try {
+      const status = (await getStatus()) as { entitlements: { plan: string } };
+      expect(status.entitlements.plan).toBe("pro");
+      expect(handle.getAdminSession()).toEqual({ admin: true });
+    } finally {
+      mockState.encryptionAvailable = true;
+    }
+  });
+
+  it("of two overlapping checks of the same session, the later request's answer wins", async () => {
+    const handle = await signInWith(answerFor("user-1", false));
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    const answers: Array<(value: Entitlements) => void> = [];
+    vi.spyOn(authClient, "getEntitlements").mockImplementation(
+      () => new Promise<Entitlements>((resolve) => answers.push(resolve)),
+    );
+    const older = getStatus();
+    const newer = getStatus();
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]!(answerFor("user-1", false)); // newer: revoked
+    await newer;
+    answers[0]!(answerFor("user-1", true)); // older lands last
+    await older;
+    expect(handle.getAdminSession()).toEqual({ admin: false });
+    expect(registerAuth(config, () => null).getAdminSession()).toEqual({ admin: false });
+  });
+
   it("treats a missing admin (an older server) as false", async () => {
     const handle = await signInWith(answerFor("user-1", undefined));
     expect(handle.getAdminSession()).toEqual({ admin: false });

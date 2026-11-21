@@ -139,7 +139,10 @@ describe("the mode is the launch value, never the live setting (AC5)", () => {
     vi.clearAllMocks();
     listeners.length = 0;
   });
-  afterEach(() => Object.assign(api, original));
+  afterEach(() => {
+    Object.assign(api, original);
+    vi.unstubAllEnvs();
+  });
 
   /** Main changes the setting mid-session the ways it can: the push, the call, the reads. */
   async function changeSettingMidSession(live: {
@@ -177,6 +180,8 @@ describe("the mode is the launch value, never the live setting (AC5)", () => {
     await changeSettingMidSession({ isAdmin: false, adminModeSetting: false, effective: true });
 
     expect(readAll(client)).toEqual(before);
+    // The client never subscribes to the live state: the launch value is all it reads.
+    expect(listeners).toHaveLength(0);
   });
 
   it("turning the preference on mid-session changes no flag until relaunch", async () => {
@@ -187,5 +192,6 @@ describe("the mode is the launch value, never the live setting (AC5)", () => {
     await changeSettingMidSession({ isAdmin: true, adminModeSetting: true, effective: false });
 
     expect(readAll(client)).toEqual(before);
+    expect(listeners).toHaveLength(0);
   });
 });

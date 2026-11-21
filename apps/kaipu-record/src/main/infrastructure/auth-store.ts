@@ -173,29 +173,43 @@ export function registerAuth(
     for (const listener of adminListeners) listener();
   }
 
+  let refreshRequest = 0;
+
   /** Re-check the plan and persist it. Failure keeps the cached copy — "couldn't ask" ≠ free. */
   async function refreshEntitlements(
     current: string,
     identity: { userId: string; email: string; name: string },
   ): Promise<Entitlements> {
+    const request = ++refreshRequest;
+    let answer: Entitlements;
     try {
-      const answer = await getEntitlements(config, current);
-      // The session can change while the answer is in flight (sign-out, another account). An
-      // answer for a session that is no longer current is dropped whole: it must not grant
-      // admin to the next account, and it must not write the old account's file back to disk.
-      if (token !== current || cachedIdentity?.userId !== identity.userId)
-        return cachedEntitlements ?? FREE_ENTITLEMENTS;
-      const fresh = planOf(answer);
-      const admin = adminAnswerFor(answer, identity.userId);
-      writeStoredSession({ token: current, ...identity, entitlements: fresh, admin });
-      cachedEntitlements = fresh;
-      const changed = admin !== cachedAdmin;
-      cachedAdmin = admin;
-      if (changed) notifyAdminChanged();
-      return fresh;
+      answer = await getEntitlements(config, current);
     } catch {
       return cachedEntitlements ?? FREE_ENTITLEMENTS;
     }
+    // The session can change while the answer is in flight (sign-out, another account). An
+    // answer for a session that is no longer current is dropped whole: it must not grant
+    // admin to the next account, and it must not write the old account's file back to disk.
+    // A later request for the same session also wins over an older one that lands after it.
+    if (
+      token !== current ||
+      cachedIdentity?.userId !== identity.userId ||
+      request !== refreshRequest
+    )
+      return cachedEntitlements ?? FREE_ENTITLEMENTS;
+    const fresh = planOf(answer);
+    const admin = adminAnswerFor(answer, identity.userId);
+    cachedEntitlements = fresh;
+    const changed = admin !== cachedAdmin;
+    cachedAdmin = admin;
+    if (changed) notifyAdminChanged();
+    try {
+      writeStoredSession({ token: current, ...identity, entitlements: fresh, admin });
+    } catch (error) {
+      // The running session keeps the fresh answer; the next launch starts from the last file.
+      console.warn("[auth] could not persist the refreshed session:", error);
+    }
+    return fresh;
   }
 
   function broadcast(status: AuthStatus): void {
