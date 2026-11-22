@@ -121,18 +121,27 @@ export function VideoCard({
 
         <div className={styles.scrim} aria-hidden />
 
-        <span className={styles.kindBadge}>
-          {/* An original reads as the master (NIW2-585); the tag also says it is a recording.
-              A copy for a destination says where it is going instead. */}
-          {isMaster(video) ? (
-            <MasterTag size="sm" />
-          ) : destination ? (
-            <DestinationTag destination={destination} />
-          ) : (
-            <KindBadge kind={video.kind} />
-          )}
-          {!imported && <RecordingCaptureTag capture={video.capture} />}
-        </span>
+        {/* An original reads as the master (NIW2-585). The master tag takes its own line and
+            the kind badge (screenshots) and capture tag sit below it, so a narrow card never
+            clips them. A copy for a destination says where it is going instead. */}
+        {isMaster(video) ? (
+          <span className={styles.kindBadge} data-stacked="true">
+            <MasterTag size="sm" overMedia screenshot={video.kind === "screenshot"} />
+            <span className={styles.tagRow}>
+              {video.kind === "screenshot" && <KindBadge kind={video.kind} />}
+              {!imported && <RecordingCaptureTag capture={video.capture} />}
+            </span>
+          </span>
+        ) : (
+          <span className={styles.kindBadge}>
+            {destination ? (
+              <DestinationTag destination={destination} />
+            ) : (
+              <KindBadge kind={video.kind} />
+            )}
+            {!imported && <RecordingCaptureTag capture={video.capture} />}
+          </span>
+        )}
 
         {video.durationSeconds > 0 && (
           <span className={styles.duration}>{formatDuration(video.durationSeconds)}</span>

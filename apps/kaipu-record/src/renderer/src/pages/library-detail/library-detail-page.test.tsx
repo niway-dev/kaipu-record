@@ -1350,6 +1350,16 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/shot-1"));
   });
 
+  it("the Edit image button on the preview opens the image editor too", async () => {
+    list(shownShot);
+    const router = renderWithState("/library/shot-1");
+    await waitForLoaded();
+    // The header button comes first; the preview overlay's button is the second one.
+    const [, overlayEdit] = screen.getAllByRole("button", { name: "Edit image" });
+    fireEvent.click(overlayEdit!);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/shot-1"));
+  });
+
   describe("a capture's source line", () => {
     const sourceVideo: LibraryItem = {
       ...exportedOnlyItem,
@@ -1741,6 +1751,13 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
 
   describe("original info tip", () => {
     const infoName = "Your original stays unchanged. Edits are exported as copies.";
+
+    it("is not offered on a screenshot, which is edited in place", async () => {
+      list(screenshotItem);
+      renderWithState("/library/shot-1");
+      await waitForLoaded();
+      expect(screen.queryByRole("button", { name: infoName })).toBeNull();
+    });
 
     it("shows its text on keyboard focus, on click, and hides on Escape", async () => {
       list(exportedOnlyItem);
