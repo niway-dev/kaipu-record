@@ -87,6 +87,7 @@ export function ExportStage({
   const [open, setOpen] = useState(true);
   const [phase, setPhase] = useState<Phase>("idle");
   const [percent, setPercent] = useState(0);
+  const [savedIn, setSavedIn] = useState<WorkspaceId>(workspace);
 
   // An export in progress, or its result, is on screen for the visitor: the demo waits.
   useHold(onHold, "export", phase !== "idle");
@@ -117,7 +118,7 @@ export function ExportStage({
       : t("homeStageOriginalSize")
     : resolution;
   const file = `${t("homeStageFileName")}.${fileFormat}`;
-  const folder = workspaceFolder(workspace, workspaceName(t, workspace));
+  const folder = workspaceFolder(savedIn, workspaceName(t, savedIn));
   const targetLabel = dest ? t(DEST_COPY[dest].name) : t("homeStageDestCustom");
   const summary = dest
     ? [
@@ -136,6 +137,7 @@ export function ExportStage({
       setPhase("idle");
     };
   const start = () => {
+    setSavedIn(workspace);
     setPercent(0);
     setPhase("working");
   };
@@ -247,7 +249,7 @@ export function ExportStage({
                   </span>
                   <span className={styles.mono} data-testid="export-folder">
                     {t("homeStageExportedIn", {
-                      workspace: workspaceName(t, workspace),
+                      workspace: workspaceName(t, savedIn),
                       folder,
                     })}
                   </span>

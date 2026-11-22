@@ -606,6 +606,27 @@ describe("Workspaces", () => {
     );
   });
 
+  it("keeps a completed export in its original workspace after switching folders", () => {
+    vi.useFakeTimers();
+    renderWithProviders(<Hero />);
+    go("Export");
+    fireEvent.click(screen.getByRole("button", { name: "Export file" }));
+    tick(2000);
+    const saved = "Added to Personal · ~/Movies/Kaipu Record";
+    expect(screen.getByTestId("export-folder").textContent).toBe(saved);
+
+    switchTo("Work");
+    expect(folder()).toBe("~/Movies/Kaipu Record — Work");
+    expect(screen.getByTestId("export-folder").textContent).toBe(saved);
+
+    fireEvent.click(screen.getByRole("button", { name: "Export again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export file" }));
+    tick(2000);
+    expect(screen.getByTestId("export-folder").textContent).toBe(
+      "Added to Work · ~/Movies/Kaipu Record — Work",
+    );
+  });
+
   it("keeps a saved take where it was written when the workspace changes afterwards", () => {
     vi.useFakeTimers();
     renderWithProviders(<Hero />);

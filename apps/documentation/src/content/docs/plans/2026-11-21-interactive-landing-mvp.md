@@ -5,7 +5,7 @@ description: Current implementation spec for the home page's interactive hero de
 
 # Interactive landing hero
 
-**Status: 🟢 Ready for owner validation · 2026-11-21.** Implemented on branch `landing-interactive-hero-stage`, integrated with current `main`. Code is committed; production release and independent review remain pending. This page preserves the approved design and diagrams.
+**Status: 🟢 Ready for owner validation · 2026-11-21.** Implemented on branch `landing-interactive-hero-stage`, integrated with current `main`. Code is committed; production release remains pending. This page preserves the approved design and diagrams.
 
 ## Summary
 
@@ -152,10 +152,16 @@ The tunnel and the dev server on `localhost:3002` are temporary. Neither is evid
 
 **Implementation choices:** live recording advances after 10 seconds as part of the requested automatic demonstration. Explicit pause, stopped recording and visitor interactions hold it. Email is grouped with chat in the compact demo because both use the same preset. The mobile sticky download remains hidden while the hero is visible, keeping its controls usable. These are recorded implementation choices, not questions requiring another design round.
 
-**Still open:** rendered Mermaid visual review; full keyboard/language/theme browser audit; final owner acceptance; independent code review and production release validation. Diagram syntax checking and docs build are recorded separately from visual review.
+**Still open:** rendered Mermaid visual review; full keyboard/language/theme browser audit; final owner acceptance and production release validation. Diagram syntax checking and docs build are recorded separately from visual review.
 
 ## Out of scope
 
 - Real capture, uploads, file access and publishing integrations (YouTube, GitHub, Jira, Linear).
 - Changes to the rest of the home page, beyond Kai's position.
 - Any claim that a platform accepts an exported file.
+
+## Review hardening
+
+The final interaction fixes release stale keyboard/hover holds after removed controls, keep export progress inside its visible footer, prevent hiding an active export, and preserve the original destination of completed recordings and exports when the active workspace changes. On touch devices, the image canvas scrolls until a drawing tool is explicitly selected. Both outer and sample download links switch at 980px: smaller viewports navigate to the download section; desktop sample links open the installer separately.
+
+The independent review used Wachiman and a second-provider Codex pass. The concrete findings were addressed with regression tests; local-only review logs and the ledger are outside the source tree. Final check results belong to the delivery report rather than a second live status tracker in this design page.
