@@ -153,6 +153,14 @@ describe("InspectBar", () => {
       expect(screen.queryByTestId("inspect-picked-srgb")).toBeNull();
     });
 
+    it("tags a recent chip that shows sRGB while As captured is on", () => {
+      const recents = [px(255, 0, 0), px(0, 255, 0, { r: 1, g: 2, b: 3, a: 255 })];
+      render(<InspectBar inspect={fake({ picked: px(1, 2, 3), recents, asCaptured: true })} />);
+      const chips = within(screen.getByRole("group", { name: "Recent" })).getAllByRole("listitem");
+      expect(within(chips[0]!).getByText("sRGB")).toBeInTheDocument();
+      expect(within(chips[1]!).queryByText("sRGB")).toBeNull();
+    });
+
     it("says Copied while the value was just copied", () => {
       render(
         <InspectBar

@@ -169,8 +169,10 @@ export function readoutFor(
 
 /**
  * The text for a picked color in the bar's format. "As captured" shows the raw bytes when the
- * probe had read them at the click; otherwise the sRGB value stands in, so a pick made before
- * the probe finished still reads as a color.
+ * pick has them. A pick without them (the probe failed, or the pick was saved by an earlier
+ * session that had no probe) shows its sRGB value instead, so it still reads as a color; the bar
+ * tags that case (`isSrgbFallback`). A click never makes such a pick while the probe is only
+ * pending: it waits for the raw value.
  */
 export function pickedReadout(
   picked: PickedColor,
