@@ -1,11 +1,11 @@
-import { ChevronDown, Film, Library } from "lucide-react";
+import { Film, Library } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Button } from "@kaipu/ui";
 import { formatDuration } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { formatMB } from "@renderer/features/video-editor/export/export-size";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
-import { VideoPicker } from "./video-picker";
+import { usePickVideoModal } from "./pick-video-modal";
 import styles from "./export-header.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
@@ -29,6 +29,12 @@ export function ExportHeader({
   onChangeVideo,
 }: ExportHeaderProps): React.JSX.Element {
   const t = useTranslations("export");
+  const picker = usePickVideoModal({
+    videos,
+    currentAssetId: video.assetId,
+    area: uiArea("export.pickVideoModal"),
+    onPick: onChangeVideo,
+  });
   return (
     <header {...uiArea("export.header")} className={styles.header}>
       <span className={styles.thumb}>
@@ -54,18 +60,11 @@ export function ExportHeader({
           })}
         </p>
       </div>
-      <VideoPicker
-        videos={videos}
-        currentAssetId={video.assetId}
-        onPick={onChangeVideo}
-        trigger={(props) => (
-          <Button variant="outline" {...props}>
-            <Library size={13} strokeWidth={1.8} aria-hidden />
-            {t("changeVideo")}
-            <ChevronDown size={12} strokeWidth={1.8} aria-hidden />
-          </Button>
-        )}
-      />
+      <Button variant="outline" onClick={picker.onOpen}>
+        <Library size={13} strokeWidth={1.8} aria-hidden />
+        {t("changeVideo")}
+      </Button>
+      {picker.modal}
     </header>
   );
 }

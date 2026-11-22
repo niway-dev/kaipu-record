@@ -1,8 +1,9 @@
-import { Film, ImagePlus, Search, X } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "@kaipu/i18n";
-import { ModalOverlay, ModalTitle } from "@kaipu/ui";
+import { ModalOverlay } from "@kaipu/ui";
 import { absoluteDate, formatDuration } from "@renderer/features/library/format";
+import { LibraryPicker, useLibraryPicker } from "@renderer/features/library/picker";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { uiArea } from "@renderer/lib/ui-area";
 import {
@@ -21,7 +22,6 @@ import {
 } from "../add-from-library";
 import type { LayoutEntry } from "../timeline";
 import { AddDestinationButton } from "./add-destination-button";
-import { AddFromLibraryPreview } from "./add-from-library-preview";
 import { PlacementCard } from "./placement-strip";
 import styles from "./add-from-library-modal.module.css";
 
@@ -107,30 +107,14 @@ export function AddFromLibraryModal({
   );
   // The menu option being pointed at: the big strip draws it until the menu closes.
   const [pointed, setPointed] = useState<LibraryDestination | null>(null);
-  const query = queries[tab];
-  const needle = query.trim();
 
-  // The unfiltered lists decide the counts and which empty state to show: a query over
-  // nothing is still "empty", not "no match".
+  // The unfiltered lists decide the counts; the picker applies the search to the open tab's, and
+  // tells "empty" from "no match" by them: a query over nothing is still "empty".
   const allRecordings = useMemo(
     () => joinableRecordings(videos, openedAssetId, ""),
     [videos, openedAssetId],
   );
   const allScreenshots = useMemo(() => libraryScreenshots(videos, ""), [videos]);
-  const recordings = useMemo(
-    () => joinableRecordings(videos, openedAssetId, queries.recordings),
-    [videos, openedAssetId, queries.recordings],
-  );
-  const screenshots = useMemo(
-    () => libraryScreenshots(videos, queries.screenshots),
-    [videos, queries.screenshots],
-  );
-  // The selection is derived: with none picked yet, or the picked one filtered out or gone
-  // from the Library, the first row stands in.
-  const selected =
-    recordings.find((video) => video.assetId === selectedIds.recordings) ?? recordings[0];
-  // A screenshot has no stand-in: nothing is added until one is picked.
-  const selectedShot = screenshots.find((shot) => shot.assetId === selectedIds.screenshots);
 
   const kind: LibraryItemKind = tab === "recordings" ? "recording" : "screenshot";
   // A remembered or chosen destination the kind cannot take falls back to its default: a
@@ -154,10 +138,6 @@ export function AddFromLibraryModal({
       onAddScreenshotToSequence(item, boundary);
     }
     onRememberDestination?.(itemKind, where);
-  };
-  const addSelected = (): void => {
-    const item = tab === "recordings" ? selected : selectedShot;
-    if (item) addTo(item, kind, destination);
   };
   // The strip and the Add button for the selected item. How long the item is decides what the
   // strip draws: a recording is its own length; a screenshot floats for the floating image's
@@ -188,28 +168,34 @@ export function AddFromLibraryModal({
           kind={kind}
           value={destination}
           onChange={(next) => setChoices((prev) => ({ ...prev, [kind]: next }))}
-          onAdd={addSelected}
+          onAdd={() => addTo(item, kind, destination)}
           onPreview={setPointed}
         />
       </>
     );
   };
 
-  const shown = tab === "recordings" ? recordings : screenshots;
-  const all = tab === "recordings" ? allRecordings : allScreenshots;
-  const showBody = loaded && shown.length > 0;
+  const onRecordings = tab === "recordings";
 
   return (
     <ModalOverlay onCancel={onClose} labelledBy="add-from-library-title" size="xwide">
-      <div
+      <LibraryPicker
         {...uiArea("editorVideo.addFromLibrary")}
-        className={styles.sheet}
         data-testid="add-from-library-modal"
+        testIdPrefix="add-from-library"
+        items={onRecordings ? allRecordings : allScreenshots}
+        loading={!loaded}
+        // One search and one selection per tab: switching tabs must not carry a title typed for
+        // the other kind, nor a card picked on Screenshots into the recordings list.
+        query={queries[tab]}
+        onQueryChange={(next) => setQueries((prev) => ({ ...prev, [tab]: next }))}
+        selectedId={selectedIds[tab]}
+        onSelectedIdChange={(next) => setSelectedIds((prev) => ({ ...prev, [tab]: next }))}
+        // A screenshot has no stand-in: nothing is added until one is picked.
+        autoSelectFirst={onRecordings}
+        onActivate={onRecordings ? (video) => addTo(video, "recording", destination) : undefined}
       >
-        <header className={styles.header}>
-          <div className={styles.title}>
-            <ModalTitle id="add-from-library-title">{t("addFromLibraryTitle")}</ModalTitle>
-          </div>
+        <LibraryPicker.Header title={t("addFromLibraryTitle")} titleId="add-from-library-title">
           <div
             className={styles.tabs}
             role="tablist"
@@ -236,220 +222,192 @@ export function AddFromLibraryModal({
           >
             <TabButton
               id="add-from-library-tab-recordings"
-              active={tab === "recordings"}
+              active={onRecordings}
               label={t("addFromLibraryTabRecordings")}
               count={loaded ? allRecordings.length : null}
               onSelect={() => setTab("recordings")}
             />
             <TabButton
               id="add-from-library-tab-screenshots"
-              active={tab === "screenshots"}
+              active={!onRecordings}
               label={t("addFromLibraryTabScreenshots")}
               count={loaded ? allScreenshots.length : null}
               onSelect={() => setTab("screenshots")}
             />
           </div>
-          <span className={styles.spacer} />
-          <label className={styles.search}>
-            <Search size={14} aria-hidden className={styles.searchIcon} />
-            <input
-              type="search"
-              className={styles.searchInput}
-              value={query}
-              aria-label={
-                tab === "recordings"
-                  ? t("addFromLibrarySearch")
-                  : t("addFromLibrarySearchScreenshots")
-              }
-              placeholder={
-                tab === "recordings"
-                  ? t("addFromLibrarySearch")
-                  : t("addFromLibrarySearchScreenshots")
-              }
-              onChange={(event) => setQueries((prev) => ({ ...prev, [tab]: event.target.value }))}
-            />
-          </label>
-          <button
-            type="button"
-            className={styles.close}
-            aria-label={t("addFromLibraryClose")}
-            title={t("addFromLibraryClose")}
-            onClick={onClose}
-          >
-            <X size={14} aria-hidden />
-          </button>
-        </header>
+          <LibraryPicker.Search
+            placeholder={
+              onRecordings ? t("addFromLibrarySearch") : t("addFromLibrarySearchScreenshots")
+            }
+          />
+          <LibraryPicker.Close label={t("addFromLibraryClose")} onClick={onClose} />
+        </LibraryPicker.Header>
         <div
           className={styles.panel}
           role="tabpanel"
           id={TAB_PANEL_ID}
           aria-labelledby={`add-from-library-tab-${tab}`}
         >
-          {!showBody ? (
-            <div className={styles.note} role="status">
-              {!loaded ? (
-                <p>
-                  {tab === "recordings"
-                    ? t("addFromLibraryLoading")
-                    : t("addFromLibraryScreenshotsLoading")}
-                </p>
-              ) : all.length === 0 ? (
-                <p>
-                  {failed
-                    ? t("addFromLibraryFailed")
-                    : tab === "recordings"
-                      ? t("addFromLibraryEmpty")
-                      : t("addFromLibraryScreenshotsEmpty")}
-                </p>
-              ) : (
-                <>
-                  <p className={styles.noteTitle}>
-                    {tab === "recordings"
-                      ? t("addFromLibraryNoMatch", { query: needle })
-                      : t("addFromLibraryScreenshotsNoMatch", { query: needle })}
-                  </p>
-                  <p className={styles.noteHint}>{t("addFromLibraryNoMatchHint")}</p>
-                </>
-              )}
-            </div>
-          ) : tab === "recordings" && selected ? (
-            <div className={styles.split}>
-              <ul className={styles.list} aria-label={t("addFromLibraryTabRecordings")}>
-                {recordings.map((video) => {
-                  const resolution = resolutionLabel(video);
-                  const isSelected = video.assetId === selected.assetId;
-                  return (
-                    <li key={video.assetId}>
-                      <button
-                        type="button"
-                        className={styles.row}
-                        data-testid="add-from-library-row"
-                        data-selected={isSelected ? "true" : undefined}
-                        aria-pressed={isSelected}
-                        aria-label={video.title}
-                        onClick={() =>
-                          setSelectedIds((prev) => ({ ...prev, recordings: video.assetId }))
-                        }
-                        onDoubleClick={() => addTo(video, "recording", destination)}
-                      >
-                        <span className={styles.thumb}>
-                          {video.thumbnailUrl ? (
-                            <img className={styles.thumbImage} src={video.thumbnailUrl} alt="" />
-                          ) : (
-                            <span
-                              className={styles.placeholder}
-                              data-testid="add-from-library-placeholder"
-                            >
-                              <Film size={16} aria-hidden />
-                            </span>
-                          )}
-                          <span className={styles.duration}>
-                            {formatDuration(video.durationSeconds)}
-                          </span>
+          <LibraryPicker.Body
+            loading={
+              <LibraryPicker.Note>
+                {onRecordings ? t("addFromLibraryLoading") : t("addFromLibraryScreenshotsLoading")}
+              </LibraryPicker.Note>
+            }
+            empty={
+              <LibraryPicker.Note>
+                {failed
+                  ? t("addFromLibraryFailed")
+                  : onRecordings
+                    ? t("addFromLibraryEmpty")
+                    : t("addFromLibraryScreenshotsEmpty")}
+              </LibraryPicker.Note>
+            }
+            noMatch={(query) => (
+              <LibraryPicker.Note
+                title={
+                  onRecordings
+                    ? t("addFromLibraryNoMatch", { query })
+                    : t("addFromLibraryScreenshotsNoMatch", { query })
+                }
+                hint={t("addFromLibraryNoMatchHint")}
+              />
+            )}
+          >
+            {onRecordings ? (
+              <>
+                <LibraryPicker.List
+                  label={t("addFromLibraryTabRecordings")}
+                  renderRow={(video) => (
+                    <LibraryPicker.Row
+                      item={video}
+                      durationOnThumb
+                      meta={[absoluteDate(video.createdAt, locale), resolutionLabel(video)].filter(
+                        (line): line is string => line !== null,
+                      )}
+                    />
+                  )}
+                />
+                <LibraryPicker.Preview>
+                  {(selected) => (
+                    <>
+                      <div className={styles.titleLine}>
+                        <h4 className={styles.detailTitle}>{selected.title}</h4>
+                        <span className={styles.facts}>
+                          {[formatDuration(selected.durationSeconds), resolutionLabel(selected)]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </span>
-                        <span className={styles.text}>
-                          <span className={styles.name}>{video.title}</span>
-                          <span className={styles.meta}>
-                            {absoluteDate(video.createdAt, locale)}
-                          </span>
-                          {resolution && <span className={styles.meta}>{resolution}</span>}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              <section className={styles.detail}>
-                <AddFromLibraryPreview video={selected} />
-                <div className={styles.titleLine}>
-                  <h4 className={styles.detailTitle}>{selected.title}</h4>
-                  <span className={styles.facts}>
-                    {[formatDuration(selected.durationSeconds), resolutionLabel(selected)]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </div>
-                {placement(selected)}
-              </section>
-            </div>
-          ) : (
-            <div className={styles.split}>
-              <ul className={styles.grid} aria-label={t("addFromLibraryTabScreenshots")}>
-                {screenshots.map((shot) => {
-                  const resolution = resolutionLabel(shot);
-                  const isSelected = shot.assetId === selectedShot?.assetId;
-                  return (
-                    <li key={shot.assetId}>
-                      <button
-                        type="button"
-                        className={styles.card}
-                        data-testid="add-from-library-screenshot"
-                        data-selected={isSelected ? "true" : undefined}
-                        aria-pressed={isSelected}
-                        aria-label={shot.title}
-                        onClick={() =>
-                          setSelectedIds((prev) => ({ ...prev, screenshots: shot.assetId }))
-                        }
-                      >
-                        <span className={styles.poster}>
-                          {shot.thumbnailUrl ? (
-                            <img src={shot.thumbnailUrl} alt="" />
-                          ) : (
-                            <ImagePlus size={20} aria-hidden />
-                          )}
-                          {shot.sourceVideoAssetId === openedAssetId && (
-                            <span className={styles.tag}>
-                              {t("addFromLibraryFromThisRecording")}
-                            </span>
-                          )}
-                        </span>
-                        <span className={styles.cardTitle}>{shot.title}</span>
-                        <span className={styles.cardMeta}>
-                          {resolution
-                            ? `${absoluteDate(shot.createdAt, locale)} · ${resolution}`
-                            : absoluteDate(shot.createdAt, locale)}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              <section className={`${styles.detail} ${styles.shotSide}`}>
-                {selectedShot ? (
-                  <>
-                    <div className={styles.preview}>
-                      <div className={styles.previewFrame}>
-                        {selectedShot.thumbnailUrl ? (
-                          <img
-                            className={styles.previewImage}
-                            data-testid="add-from-library-shot-preview"
-                            src={selectedShot.thumbnailUrl}
-                            alt=""
-                          />
-                        ) : (
-                          <span className={styles.previewPlaceholder} aria-hidden>
-                            <ImagePlus size={28} />
-                          </span>
-                        )}
                       </div>
-                    </div>
-                    <div className={styles.titleLine}>
-                      <h4 className={styles.detailTitle}>{selectedShot.title}</h4>
-                      <span className={styles.facts}>
-                        {absoluteDate(selectedShot.createdAt, locale)}
-                      </span>
-                    </div>
-                    {placement(selectedShot)}
-                  </>
-                ) : (
-                  <p className={styles.pickHint}>{t("addFromLibraryPickScreenshot")}</p>
-                )}
-              </section>
-            </div>
-          )}
+                      {placement(selected)}
+                    </>
+                  )}
+                </LibraryPicker.Preview>
+              </>
+            ) : (
+              <>
+                <ScreenshotGrid
+                  label={t("addFromLibraryTabScreenshots")}
+                  openedAssetId={openedAssetId}
+                />
+                <ScreenshotSide placement={placement} />
+              </>
+            )}
+          </LibraryPicker.Body>
         </div>
-      </div>
+      </LibraryPicker>
     </ModalOverlay>
+  );
+}
+
+/** The Screenshots tab's card grid: a custom list over the picker's items and selection. */
+function ScreenshotGrid({
+  label,
+  openedAssetId,
+}: {
+  label: string;
+  openedAssetId: string;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const locale = useLocale();
+  const { visible, selected, select } = useLibraryPicker();
+  return (
+    <ul className={styles.grid} aria-label={label}>
+      {visible.map((shot) => {
+        const resolution = resolutionLabel(shot);
+        const isSelected = shot.assetId === selected?.assetId;
+        return (
+          <li key={shot.assetId}>
+            <button
+              type="button"
+              className={styles.card}
+              data-testid="add-from-library-screenshot"
+              data-selected={isSelected ? "true" : undefined}
+              aria-pressed={isSelected}
+              aria-label={shot.title}
+              onClick={() => select(shot)}
+            >
+              <span className={styles.poster}>
+                {shot.thumbnailUrl ? (
+                  <img src={shot.thumbnailUrl} alt="" />
+                ) : (
+                  <ImagePlus size={20} aria-hidden />
+                )}
+                {shot.sourceVideoAssetId === openedAssetId && (
+                  <span className={styles.tag}>{t("addFromLibraryFromThisRecording")}</span>
+                )}
+              </span>
+              <span className={styles.cardTitle}>{shot.title}</span>
+              <span className={styles.cardMeta}>
+                {resolution
+                  ? `${absoluteDate(shot.createdAt, locale)} · ${resolution}`
+                  : absoluteDate(shot.createdAt, locale)}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The Screenshots tab's right column: the still, its facts, and the strip and Add for it. */
+function ScreenshotSide({
+  placement,
+}: {
+  placement(item: LibraryVideo): React.JSX.Element;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const locale = useLocale();
+  const { selected } = useLibraryPicker();
+  return (
+    <LibraryPicker.Detail className={styles.shotSide}>
+      {selected ? (
+        <>
+          <LibraryPicker.Frame>
+            {selected.thumbnailUrl ? (
+              <img
+                className={styles.previewImage}
+                data-testid="add-from-library-shot-preview"
+                src={selected.thumbnailUrl}
+                alt=""
+              />
+            ) : (
+              <span className={styles.previewPlaceholder} aria-hidden>
+                <ImagePlus size={28} />
+              </span>
+            )}
+          </LibraryPicker.Frame>
+          <div className={styles.titleLine}>
+            <h4 className={styles.detailTitle}>{selected.title}</h4>
+            <span className={styles.facts}>{absoluteDate(selected.createdAt, locale)}</span>
+          </div>
+          {placement(selected)}
+        </>
+      ) : (
+        <p className={styles.pickHint}>{t("addFromLibraryPickScreenshot")}</p>
+      )}
+    </LibraryPicker.Detail>
   );
 }
 

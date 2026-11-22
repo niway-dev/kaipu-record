@@ -110,6 +110,12 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           # Transactional email (Resend). The API logs and skips sending when unset.
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Desktop Admin mode allowlist (comma-separated user ids). Empty is dropped below:
+          # before the first deploy that sets it nobody is admin, but afterwards the Worker
+          # keeps its last value (--secrets-file is additive), and a deleted Worker secret comes
+          # back on the next release. To revoke every admin, set THIS secret to a placeholder id
+          # that matches no user (then release, or `wrangler secret put` it for effect now).
+          ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
         run: |
           umask 077
           jq -n \
@@ -124,6 +130,7 @@ jobs:
             --arg R2_SECRET_ACCESS_KEY "$R2_SECRET_ACCESS_KEY" \
             --arg R2_BUCKET "$R2_BUCKET" \
             --arg RESEND_API_KEY "$RESEND_API_KEY" \
+            --arg ADMIN_USER_IDS "$ADMIN_USER_IDS" \
             '$ARGS.named | with_entries(select(.value != ""))' > worker-secrets.json
 
       # scripts/deploy-worker.sh pins wrangler and calls it by absolute path. Not

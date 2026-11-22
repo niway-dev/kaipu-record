@@ -122,6 +122,27 @@ describe("getEntitlements", () => {
     });
   });
 
+  it("passes the account id and the admin flag through untouched, and does not invent them", async () => {
+    const stub = (data: unknown): void =>
+      void vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(new Response(JSON.stringify({ data, error: null }), { status: 200 })),
+      );
+    stub({ ...PRO_BODY, userId: "u1", admin: true });
+    await expect(getEntitlements(config, "tok")).resolves.toMatchObject({
+      userId: "u1",
+      admin: true,
+    });
+
+    // An older server sends neither: they stay absent, which the auth store reads as not admin.
+    stub(PRO_BODY);
+    const older = await getEntitlements(config, "tok");
+    expect(older).not.toHaveProperty("admin");
+    expect(older).not.toHaveProperty("userId");
+  });
+
   it("rejects when the envelope carries an error instead of data", async () => {
     vi.stubGlobal(
       "fetch",

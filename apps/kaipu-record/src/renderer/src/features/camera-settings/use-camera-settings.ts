@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppSettings, CameraAccessStatus } from "@shared/types";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "@shared/camera-bubble";
-import { getSettingsSnapshot, watchSettings } from "@renderer/features/settings/settings-store";
+import {
+  getSettingsSnapshot,
+  loadSettings,
+  watchSettings,
+} from "@renderer/features/settings/settings-store";
 
 export interface CameraDevice {
   deviceId: string;
@@ -137,6 +141,19 @@ export function useCameraSettings(): CameraSettingsStore {
       if (timer.current) {
         clearTimeout(timer.current);
         send();
+      }
+      // Closed before the first read landed: the change is still only a patch. Save it over what
+      // is stored once that is known, never over the defaults.
+      const patch = early.current;
+      if (patch && !loaded.current) {
+        early.current = null;
+        void loadSettings()
+          .then((stored) =>
+            window.electronAPI.updateSettings({
+              cameraBubble: { ...stored.cameraBubble, ...patch },
+            }),
+          )
+          .catch(() => {});
       }
     };
   }, [send]);

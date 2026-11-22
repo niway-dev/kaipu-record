@@ -22,34 +22,35 @@ const withBubble = (patch: Partial<CameraBubbleSettings>): CameraBubbleSettings 
 });
 
 describe("CameraSetupCard secondary line", () => {
-  it("names the default camera, the shape and the size preset", () => {
+  it("names the default camera and nothing about shape or size", () => {
     render(<CameraSetupCard {...base} />);
     expect(screen.getByText("Camera")).toBeInTheDocument();
-    expect(screen.getByText("Default camera · circle, M")).toBeInTheDocument();
+    expect(screen.getByText("Default camera")).toBeInTheDocument();
   });
 
-  it("names the chosen camera and its other shape and preset", () => {
+  it("names the chosen camera, whatever the stored shape and size", () => {
     render(
       <CameraSetupCard
         {...base}
         bubble={withBubble({ deviceId: "cam-1", shape: "rounded", size: 360 })}
       />,
     );
-    expect(screen.getByText("iPhone Camera · square, L")).toBeInTheDocument();
-  });
-
-  it("shows the pixel size when the size is custom", () => {
-    render(<CameraSetupCard {...base} bubble={withBubble({ shape: "rectangle", size: 300 })} />);
-    expect(screen.getByText("Default camera · rectangle, 300 px")).toBeInTheDocument();
+    expect(screen.getByText("iPhone Camera")).toBeInTheDocument();
+    expect(screen.queryByText(/square|circle|rectangle|px/i)).not.toBeInTheDocument();
   });
 
   it("numbers an unnamed camera, and a remembered one that is unplugged", () => {
     const { rerender } = render(
       <CameraSetupCard {...base} bubble={withBubble({ deviceId: "cam-2" })} />,
     );
-    expect(screen.getByText("Camera 2 · circle, M")).toBeInTheDocument();
+    expect(screen.getByText("Camera 2")).toBeInTheDocument();
     rerender(<CameraSetupCard {...base} bubble={withBubble({ deviceId: "gone" })} />);
-    expect(screen.getByText("Camera 3 · circle, M")).toBeInTheDocument();
+    expect(screen.getByText("Camera 3")).toBeInTheDocument();
+  });
+
+  it("is what its popover is placed against", () => {
+    const { container } = render(<CameraSetupCard {...base} />);
+    expect(container.querySelector("[data-settings-anchor]")).toBeInTheDocument();
   });
 });
 

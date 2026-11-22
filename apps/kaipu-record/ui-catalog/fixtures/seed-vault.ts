@@ -1091,12 +1091,21 @@ export async function seedTranscripts(vaultDir: string, meta: string): Promise<v
     }
     const recording = RECORDINGS.find((r) => r.stem === stem);
     if (!recording) throw new Error(`seedTranscripts: no recording "${stem}"`);
+    const mediaHash = await sha256FileBase64(path.join(vaultDir, `${stem}.mp4`));
     const doc = buildFixtureTranscript({
       kind,
       durationMs: recording.cut * 1000,
-      contentHash: await sha256FileBase64(path.join(vaultDir, `${stem}.mp4`)),
+      contentHash: mediaHash,
     });
     await writeFile(target, `${JSON.stringify(doc)}\n`);
+    if (kind === "stale") {
+      // The panel re-transcribes an out-of-date transcript by itself, once per media content,
+      // and records that against the media's hash in the sidecar. Naming the hash here says
+      // "already tried", so the stale look stays idle while its screenshot is taken.
+      const sidecarPath = path.join(meta, `${stem}.json`);
+      const sidecar = JSON.parse(await readFile(sidecarPath, "utf8")) as Record<string, unknown>;
+      await writeJson(sidecarPath, { ...sidecar, autoRetranscribedSha256: mediaHash });
+    }
   }
 }
 

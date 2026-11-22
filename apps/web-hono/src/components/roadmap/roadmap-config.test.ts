@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ROADMAP_ITEMS, platformCounts, stateOf } from "./roadmap-config";
+import { ROADMAP_ITEMS, ROADMAP_STATES, platformCounts, stateOf } from "./roadmap-config";
 
 describe("roadmap config", () => {
   it("keeps ids unique, so React keys never collide", () => {
@@ -24,7 +24,48 @@ describe("roadmap config", () => {
   it("counts every row once per platform", () => {
     for (const platform of ["mac", "win"] as const) {
       const counts = platformCounts(platform);
-      expect(counts.shipped + counts.inProgress + counts.planned).toBe(ROADMAP_ITEMS.length);
+      const total = ROADMAP_STATES.reduce((sum, state) => sum + counts[state], 0);
+      expect(total).toBe(ROADMAP_ITEMS.length);
     }
+  });
+
+  describe("private beta", () => {
+    const betaIds = (platform: "mac" | "win") =>
+      ROADMAP_ITEMS.filter((item) => item[platform] === "beta").map((item) => item.id);
+
+    it("ranks beta between shipped and in progress", () => {
+      expect(ROADMAP_STATES).toEqual(["shipped", "beta", "inProgress", "planned"]);
+    });
+
+    it("marks the flagged macOS features as private beta", () => {
+      expect(betaIds("mac").sort()).toEqual(
+        [
+          "clipLevels",
+          "imageCanvas",
+          "imageInspect",
+          "localTranscription",
+          "screenshotsWhileRecording",
+          "textRecognition",
+          "zoomFilmstrip",
+        ].sort(),
+      );
+    });
+
+    it("claims no private beta on Windows, which has no build of these", () => {
+      expect(betaIds("win")).toEqual([]);
+      expect(platformCounts("win").beta).toBe(0);
+    });
+
+    it("keeps the camera moving over time planned, not beta", () => {
+      const row = ROADMAP_ITEMS.find((item) => item.id === "cameraMoves")!;
+      expect(row.mac).toBe("planned");
+      expect(stateOf(row, "all")).toBe("planned");
+    });
+
+    it("groups a beta row under beta when both platforms are shown", () => {
+      const row = ROADMAP_ITEMS.find((item) => item.id === "textRecognition")!;
+      expect(stateOf(row, "all")).toBe("beta");
+      expect(stateOf(row, "win")).toBe("planned");
+    });
   });
 });

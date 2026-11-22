@@ -6,6 +6,7 @@ import { reportError } from "@renderer/features/analytics";
 import { ModelOffer } from "@renderer/features/transcription/model-offer";
 import { STARTABLE } from "@renderer/features/transcription/transcribe-control";
 import { useTranscribeControl } from "@renderer/features/transcription/use-transcribe-control";
+import { useAutoRetranscribe } from "@renderer/features/transcription/use-auto-retranscribe";
 import { useTranscript } from "@renderer/features/transcription/use-transcript";
 import { useTranscriptionStatus } from "@renderer/features/transcription/use-transcription-status";
 import { uiArea, type UiAreaProps } from "@renderer/lib/ui-area";
@@ -95,8 +96,21 @@ export function TranscriptPanel({
     durationMs,
     // The transcript file is read by `useTranscript`; the control only drives the job.
     transcribedAt: null,
+    transcriptStale: transcript.state === "ready" && transcript.stale,
   });
   const [offerOpen, setOfferOpen] = useState(false);
+
+  // Main decided this out-of-date transcript may be redone on its own (no attempt yet for this
+  // media content, no job queued); nothing may block a new job, and the video must have audio.
+  useAutoRetranscribe(
+    `${itemId}:${transcript.mediaContentSha256 ?? ""}`,
+    transcript.state === "ready" &&
+      transcript.stale &&
+      transcript.autoRetranscribe &&
+      control.canStartAutomatically &&
+      hasAudio !== false,
+    () => control.start({ automatic: true }),
+  );
 
   const file = transcript.transcript;
   const view = panelView({
@@ -352,36 +366,7 @@ export function TranscriptPanel({
 
       {view.kind === "running" && (
         <div className={styles.block}>
-          <p className={styles.note}>{phaseLabel(t, view.phase)}</p>
-          <div
-            className={styles.track}
-            role="progressbar"
-            aria-label={t("transcriptRunning")}
-            aria-valuemin={0}
-            aria-valuemax={view.segmentsTotal > 0 ? view.segmentsTotal : undefined}
-            aria-valuenow={view.segmentsTotal > 0 ? view.segmentsDone : undefined}
-            data-testid="transcript-progress"
-          >
-            <div
-              className={styles.fill}
-              data-indeterminate={view.segmentsTotal > 0 ? undefined : ""}
-              style={
-                view.segmentsTotal > 0
-                  ? { width: `${Math.round((view.segmentsDone / view.segmentsTotal) * 100)}%` }
-                  : undefined
-              }
-            />
-          </div>
-          {view.segmentsTotal > 0 && (
-            <p className={styles.meta}>
-              {t("transcriptProgress", { done: view.segmentsDone, total: view.segmentsTotal })}
-            </p>
-          )}
-          <div className={styles.actions}>
-            <Button variant="outline" size="sm" onClick={control.cancel}>
-              {t("transcriptCancel")}
-            </Button>
-          </div>
+          <RunProgress t={t} progress={view} onCancel={control.cancel} />
         </div>
       )}
 
@@ -423,17 +408,21 @@ export function TranscriptPanel({
                   {t(`transcriptFailure_${view.failure}`)}
                 </p>
               )}
-              <div className={styles.actions}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={transcribe}
-                  disabled={!canTranscribeAgain}
-                  title={transcribeAgainHint}
-                >
-                  {t("transcriptTranscribeAgain")}
-                </Button>
-              </div>
+              {view.rerun ? (
+                <RunProgress t={t} progress={view.rerun} onCancel={control.cancel} />
+              ) : (
+                <div className={styles.actions}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={transcribe}
+                    disabled={!canTranscribeAgain}
+                    title={transcribeAgainHint}
+                  >
+                    {t("transcriptTranscribeAgain")}
+                  </Button>
+                </div>
+              )}
               {offerOpen && control.state.kind === "needs-model" && <ModelOfferHost />}
             </div>
           )}
@@ -532,6 +521,58 @@ export function TranscriptPanel({
         </>
       )}
     </Root>
+  );
+}
+
+interface RunProgressValue {
+  phase: string;
+  segmentsDone: number;
+  segmentsTotal: number;
+}
+
+/** The running job's phase, progress bar and Cancel; shared by the empty panel and the re-run banner. */
+function RunProgress({
+  t,
+  progress,
+  onCancel,
+}: {
+  t: Translator<"videoEditor">;
+  progress: RunProgressValue;
+  onCancel: () => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <p className={styles.note}>{phaseLabel(t, progress.phase)}</p>
+      <div
+        className={styles.track}
+        role="progressbar"
+        aria-label={t("transcriptRunning")}
+        aria-valuemin={0}
+        aria-valuemax={progress.segmentsTotal > 0 ? progress.segmentsTotal : undefined}
+        aria-valuenow={progress.segmentsTotal > 0 ? progress.segmentsDone : undefined}
+        data-testid="transcript-progress"
+      >
+        <div
+          className={styles.fill}
+          data-indeterminate={progress.segmentsTotal > 0 ? undefined : ""}
+          style={
+            progress.segmentsTotal > 0
+              ? { width: `${Math.round((progress.segmentsDone / progress.segmentsTotal) * 100)}%` }
+              : undefined
+          }
+        />
+      </div>
+      {progress.segmentsTotal > 0 && (
+        <p className={styles.meta}>
+          {t("transcriptProgress", { done: progress.segmentsDone, total: progress.segmentsTotal })}
+        </p>
+      )}
+      <div className={styles.actions}>
+        <Button variant="outline" size="sm" onClick={onCancel}>
+          {t("transcriptCancel")}
+        </Button>
+      </div>
+    </>
   );
 }
 

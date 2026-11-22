@@ -326,6 +326,7 @@ export function mergeSettings(
     microphone: sanitizeMicrophone(safe.microphone),
     editor: sanitizeEditorSettings(safe.editor),
     captureWidget: sanitizeCaptureWidgetSettings(safe.captureWidget),
+    adminMode: safe.adminMode === true,
   };
 }
 

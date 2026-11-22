@@ -1,5 +1,5 @@
 import { track } from "@renderer/features/video-editor/cursor/cursor-test-fixtures";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
@@ -158,6 +158,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount first: the quick look pauses its video then, and the spies must still be there.
+  cleanup();
+  vi.restoreAllMocks();
   readyStore.set(null);
   for (const t of getToasts()) dismissToast(t.id);
 });
@@ -456,14 +459,107 @@ describe("ExportPage", () => {
     });
   });
 
-  it("Change video lists the Library's recordings and opens the one picked, keeping the destination", async () => {
-    list(recording(), recording({ assetId: "asset-3", title: "Other take", createdAt: 3000 }));
-    const router = renderExport("/export/asset-1?to=github");
-    fireEvent.click(await screen.findByRole("button", { name: /Change video/ }));
-    const picker = screen.getByRole("dialog", { name: "Pick a video from your Library" });
-    fireEvent.click(within(picker).getByRole("button", { name: /Other take/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-3"));
-    expect(router.state.location.search).toBe("?to=github");
+  describe("Change video", () => {
+    beforeEach(() => {
+      // jsdom implements no media playback: the modal's quick look is recorded instead.
+      vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+      vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+      vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+      list(
+        recording(),
+        recording({ assetId: "asset-3", title: "Other take", createdAt: 3000 }),
+        preparedCopy,
+      );
+    });
+
+    const openModal = async (path = "/export/asset-1?to=github") => {
+      const router = renderExport(path);
+      fireEvent.click(await screen.findByRole("button", { name: /Change video/ }));
+      return { router, modal: screen.getByRole("alertdialog", { name: "Pick a video to export" }) };
+    };
+
+    it("opens a modal of the Library's originals with the current video selected and tagged", async () => {
+      const { modal } = await openModal();
+      const rows = within(modal).getAllByTestId("pick-video-row");
+      expect(rows.map((r) => r.getAttribute("aria-label"))).toEqual([
+        "Other take",
+        "Demo, Exporting now",
+      ]);
+      expect(rows[1]).toHaveAttribute("aria-pressed", "true");
+      expect(rows[1]).toHaveTextContent("Exporting now");
+      expect(within(modal).getByTestId("pick-video-video").getAttribute("src")).toMatch(
+        /^kaipu-media:\/\/recording\/rec-1/,
+      );
+    });
+
+    it("Export this video opens the selected one, keeping the destination", async () => {
+      const { router, modal } = await openModal();
+      fireEvent.click(within(modal).getByRole("button", { name: /Other take/ }));
+      fireEvent.click(within(modal).getByRole("button", { name: "Export this video" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-3"));
+      expect(router.state.location.search).toBe("?to=github");
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+
+    it("a double click on a row opens that one", async () => {
+      const { router, modal } = await openModal();
+      fireEvent.doubleClick(within(modal).getByRole("button", { name: /Other take/ }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-3"));
+    });
+
+    it("Escape, Cancel and ✕ close it without changing the video", async () => {
+      const { router, modal } = await openModal();
+      fireEvent.keyDown(modal, { key: "Escape" });
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /Change video/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /Change video/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(router.state.location.pathname).toBe("/export/asset-1");
+    });
+
+    it("Escape, Cancel and ✕ give focus back to Change video", async () => {
+      const { modal } = await openModal();
+      const opener = screen.getByRole("button", { name: /Change video/ });
+      fireEvent.keyDown(modal, { key: "Escape" });
+      expect(opener).toHaveFocus();
+      opener.blur();
+      fireEvent.click(opener);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(opener).toHaveFocus();
+      opener.blur();
+      fireEvent.click(opener);
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(opener).toHaveFocus();
+    });
+
+    it("confirming the recording already on screen gives focus back to Change video", async () => {
+      const { modal } = await openModal();
+      const opener = screen.getByRole("button", { name: /Change video/ });
+      fireEvent.click(within(modal).getByRole("button", { name: "Export this video" }));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(opener).toHaveFocus();
+    });
+
+    it("Enter and the arrows on the modal do not export or move the destination behind it", async () => {
+      const { modal } = await openModal("/export/asset-1?to=youtube");
+      fireEvent.keyDown(modal, { key: "Enter" });
+      fireEvent.keyDown(modal, { key: "ArrowRight" });
+      expect(exportController.start).not.toHaveBeenCalled();
+      expect(card(/^YouTube/)).toHaveAttribute("aria-checked", "true");
+    });
+
+    it("the same keys pressed on the page behind the open modal are ignored too", async () => {
+      await openModal("/export/asset-1?to=youtube");
+      // ModalOverlay does not trap focus, so a key can land on the card or on <body>.
+      fireEvent.keyDown(card(/^YouTube/), { key: "Enter" });
+      fireEvent.keyDown(document.body, { key: "Enter" });
+      fireEvent.keyDown(card(/^YouTube/), { key: "ArrowRight" });
+      expect(exportController.start).not.toHaveBeenCalled();
+      expect(card(/^YouTube/)).toHaveAttribute("aria-checked", "true");
+    });
   });
 
   it("one export at a time: while one runs, Export says so", async () => {
@@ -626,29 +722,79 @@ describe("ExportPage with no video", () => {
     expect(within(recent).queryByRole("button", { name: /Slack · Discord/ })).toBeNull();
   });
 
-  it("Pick from Library lists the originals, not their copies, and opens the one picked", async () => {
-    list(recording(), preparedCopy);
-    const router = renderExport("/export?to=github");
-    fireEvent.click(await screen.findByRole("button", { name: "Pick from Library" }));
-    const picker = screen.getByRole("dialog");
-    expect(within(picker).getAllByRole("button")).toHaveLength(1);
-    fireEvent.click(within(picker).getByRole("button", { name: /Demo/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-1"));
-    expect(router.state.location.search).toBe("?to=github");
-  });
+  describe("Pick from Library", () => {
+    beforeEach(() => {
+      vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+      vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+      vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+    });
 
-  it("the picker takes focus when it opens, and Escape gives it back to its button", async () => {
-    list(recording(), preparedCopy);
-    renderExport("/export");
-    const trigger = await screen.findByRole("button", { name: "Pick from Library" });
-    fireEvent.click(trigger);
-    const picker = screen.getByRole("dialog");
-    expect(within(picker).getByRole("button", { name: /Demo/ })).toHaveFocus();
+    it("opens a modal that lists the originals, not their copies, with the first selected and no tag", async () => {
+      list(recording(), preparedCopy);
+      renderExport("/export");
+      fireEvent.click(await screen.findByRole("button", { name: "Pick from Library" }));
+      const modal = screen.getByRole("alertdialog", { name: "Pick a video to export" });
+      const rows = within(modal).getAllByTestId("pick-video-row");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toHaveAttribute("aria-label", "Demo");
+      expect(rows[0]).toHaveAttribute("aria-pressed", "true");
+      expect(within(modal).queryByText("Exporting now")).toBeNull();
+      expect(within(modal).getByTestId("pick-video-video")).toBeInTheDocument();
+    });
 
-    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    it("Export this video opens the one picked, with the destination from the URL", async () => {
+      list(recording(), preparedCopy);
+      const router = renderExport("/export?to=github");
+      fireEvent.click(await screen.findByRole("button", { name: "Pick from Library" }));
+      fireEvent.click(screen.getByRole("button", { name: "Export this video" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-1"));
+      expect(router.state.location.search).toBe("?to=github");
+    });
 
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(trigger).toHaveFocus();
+    it("a double click on a row opens it", async () => {
+      list(recording(), preparedCopy);
+      const router = renderExport("/export");
+      fireEvent.click(await screen.findByRole("button", { name: "Pick from Library" }));
+      fireEvent.doubleClick(
+        within(screen.getByRole("alertdialog")).getByRole("button", { name: /Demo/ }),
+      );
+      await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-1"));
+    });
+
+    it("Escape closes it, pauses the video and gives focus back to the button", async () => {
+      list(recording(), preparedCopy);
+      const router = renderExport("/export");
+      const trigger = await screen.findByRole("button", { name: "Pick from Library" });
+      fireEvent.click(trigger);
+      const el = screen.getByTestId("pick-video-video");
+
+      fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+      expect(el.hasAttribute("src")).toBe(false);
+      expect(trigger).toHaveFocus();
+      expect(router.state.location.pathname).toBe("/export");
+    });
+
+    it("Cancel and ✕ close it without opening anything", async () => {
+      list(recording(), preparedCopy);
+      const router = renderExport("/export");
+      fireEvent.click(await screen.findByRole("button", { name: "Pick from Library" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Pick from Library" }));
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(router.state.location.pathname).toBe("/export");
+    });
+
+    it("an empty Library says so inside the modal", async () => {
+      list();
+      renderExport("/export");
+      fireEvent.click(await screen.findByRole("button", { name: "Pick from Library" }));
+      expect(screen.getByRole("status")).toHaveTextContent("No recordings in your Library yet.");
+    });
   });
 
   it("Browse files opens the import dialog", async () => {

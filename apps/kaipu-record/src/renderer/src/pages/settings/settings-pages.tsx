@@ -43,6 +43,7 @@ import { AppWideBadge, OverrideBlock } from "./scope/scope-controls";
 import { CountdownSettings } from "./countdown-settings";
 import { TranscriptionSettings } from "./transcription-settings";
 import { DiagnosticsSettings } from "./diagnostics-settings";
+import { AdminModeSettings } from "./admin-mode-settings";
 import { DeveloperFlagsSection } from "./developer-flags-section";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
@@ -404,6 +405,7 @@ export function AppSettingsPage(): React.JSX.Element {
       subtitle={t("appDescription")}
       scope="global"
     >
+      <AdminModeSettings />
       <Section ui={uiArea("settingsApp.app")} title={t("app")}>
         {/* The Dock and its activation policy exist only on macOS; on Windows the
             toggle would change nothing, so it is not shown at all. */}

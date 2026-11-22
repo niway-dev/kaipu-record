@@ -132,6 +132,32 @@ describe("useTranscribeControl", () => {
     await waitFor(() => expect(result.current.state.kind).toBe("model-downloading"));
   });
 
+  it("starts the job marked automatic only when start is called that way", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const { result } = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+
+    const first = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start();
+      first.finish(progress("a", "done"));
+      await outcome;
+    });
+    expect(run.mock.calls[0]![0].automatic).toBeUndefined();
+
+    // A finished job leaves the control non-startable, so the second start uses a fresh store.
+    resetTranscriptionJobStore();
+    const again = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(again.result.current.state.kind).toBe("idle"));
+    const second = controlledJob();
+    await act(async () => {
+      const outcome = again.result.current.start({ automatic: true });
+      second.finish(progress("a", "done"));
+      await outcome;
+    });
+    expect(run.mock.calls[1]![0].automatic).toBe(true);
+  });
+
   it("goes idle, running, then done, starting the job with the default model", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
     const job = controlledJob();
@@ -190,6 +216,63 @@ describe("useTranscribeControl", () => {
       job.finish(progress("a", "done"));
       await first;
     });
+  });
+
+  it("an automatic start works after a job finished this session, a manual one does not", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const { result } = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+    const first = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start();
+      first.finish(progress("a", "done"));
+      await outcome;
+    });
+    await waitFor(() => expect(result.current.state.kind).toBe("done"));
+
+    await act(async () => {
+      expect(await result.current.start()).toBeNull();
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+
+    const second = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start({ automatic: true });
+      second.finish(progress("a", "done"));
+      await outcome;
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls[1]![0].automatic).toBe(true);
+  });
+
+  it("an automatic start waits while another item's job runs, even when this item shows done", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const job = controlledJob();
+    const { result } = renderHook(() => useTranscribeControl({ ...ITEM, hasTranscript: true }));
+    await waitFor(() => expect(result.current.state.kind).toBe("done"));
+    expect(result.current.canStartAutomatically).toBe(true);
+
+    let other: Promise<unknown> = Promise.resolve();
+    act(() => {
+      other = startTranscription({
+        itemId: "b",
+        assetId: "x",
+        modelId: MODEL_ID,
+        mediaUrl: "u",
+        durationMs: 1,
+      });
+    });
+    // `done` still shows, but a new job could not run.
+    expect(result.current.state.kind).toBe("done");
+    expect(result.current.canStartAutomatically).toBe(false);
+    await expect(result.current.start({ automatic: true })).resolves.toBeNull();
+    expect(run).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      job.finish(progress("b", "cancelled"));
+      await other;
+    });
+    expect(result.current.canStartAutomatically).toBe(true);
   });
 
   it("start is a no-op when a transcript already exists", async () => {
@@ -262,6 +345,45 @@ describe("useTranscribeControl", () => {
       await retry;
     });
     expect(result.current.state.kind).toBe("done");
+  });
+
+  it("an out-of-date transcript stays retryable after a job finished this session and a later attempt failed", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const stale = { ...ITEM, transcriptStale: true };
+    const { result } = renderHook(() => useTranscribeControl(stale));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+    // A job for this item finished earlier in the session (the media was replaced since).
+    const first = controlledJob();
+    await act(async () => {
+      const outcome = result.current.start();
+      first.finish(progress("a", "done"));
+      await outcome;
+    });
+    // The transcript is still out of date, so the control does not read `done`.
+    expect(result.current.state.kind).toBe("idle");
+
+    const second = controlledJob();
+    let outcome: ReturnType<typeof result.current.start> = Promise.resolve(null);
+    act(() => {
+      outcome = result.current.start({ automatic: true });
+    });
+    await act(async () => {
+      second.finish(progress("a", "failed", { failure: "engine-failed" }));
+      await outcome;
+    });
+    expect(result.current.state).toEqual({ kind: "failed", failure: "engine-failed" });
+
+    // A manual retry is allowed.
+    const third = controlledJob();
+    let retry: ReturnType<typeof result.current.start> = Promise.resolve(null);
+    act(() => {
+      retry = result.current.start();
+    });
+    expect(run).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      third.finish(progress("a", "done"));
+      await retry;
+    });
   });
 
   it("shows failed when main refuses the start because the item changed, so the click leaves a trace", async () => {

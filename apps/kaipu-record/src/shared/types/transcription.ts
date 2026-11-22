@@ -94,6 +94,11 @@ export interface TranscriptionJobRequest {
   modelId: string;
   /** Duration of the decoded audio in ms, for progress and the segment plan. */
   durationMs: number;
+  /**
+   * The job starts by itself because the recording changed after it was transcribed (NIW2-891).
+   * Main records the attempt against the media's content hash, so it is made once per content.
+   */
+  automatic?: boolean;
 }
 
 export type TranscriptionBeginResult =
@@ -164,6 +169,30 @@ export interface TranscriptDocument {
   words: TranscriptWord[];
 }
 
+/**
+ * Whether a transcript still describes the recording: `checking` when the answer needs the
+ * media hash and the cache has none, so the words come back first and
+ * `checkTranscriptFreshness` settles it.
+ */
+export type TranscriptFreshness = "fresh" | "stale" | "checking";
+
+/** `unknown`: the file kept changing while it was hashed, or its hash could not be read. */
+export type TranscriptVerdict = "fresh" | "stale" | "unknown";
+
+export interface TranscriptFreshnessResult {
+  verdict: TranscriptVerdict;
+  /**
+   * The verdict is `stale` and no automatic attempt has been made for this media content yet, so
+   * the renderer may start a job by itself. False otherwise: the manual button stays.
+   */
+  autoRetranscribe: boolean;
+  /**
+   * The media's content hash, set when the verdict is `stale`. It identifies the content that
+   * armed an automatic attempt, so the renderer claims one attempt per content, as main does.
+   */
+  mediaContentSha256?: string;
+}
+
 export type TranscriptReadResult =
   /** No transcript file for this item. */
   | { status: "none" }
@@ -174,4 +203,6 @@ export type TranscriptReadResult =
       transcript: TranscriptDocument;
       /** The recording's media hash no longer equals the transcript's: words stay readable. */
       stale: boolean;
+      /** `checking` while the media hash is not cached; `stale` is false until it settles. */
+      freshness: TranscriptFreshness;
     };

@@ -18,6 +18,7 @@ import { nextTagColor, type TagColor } from "@kaipu/domain/constants";
 import type { MoveRefusal } from "@shared/types/workspaces";
 import { atomicWriteFile } from "../library/atomic-write";
 import { sha256FileBase64 } from "../library/content-hash";
+import { stampFields, stampMatches, type StatLike } from "../library/hash-stamp";
 import type { DragLedger } from "../library/drag-ledger";
 import { withItemLock } from "../library/item-lock";
 import {
@@ -173,10 +174,10 @@ async function existsStrict(path: string): Promise<boolean> {
   }
 }
 
-async function statOrNull(path: string): Promise<{ size: number; mtimeMs: number } | null> {
+async function statOrNull(path: string): Promise<StatLike | null> {
   try {
     const info = await stat(path);
-    return { size: info.size, mtimeMs: info.mtimeMs };
+    return { size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs, ino: info.ino };
   } catch (error) {
     if (codeOf(error) === "ENOENT") return null;
     throw error;
@@ -287,11 +288,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
   // The media's identity, for healing. A copy always hashes; a link keeps size and mtime.
   const cached =
-    record.contentSha256 &&
-    record.hashedSizeBytes === mediaInfo.size &&
-    record.hashedMtimeMs === mediaInfo.mtimeMs
-      ? record.contentSha256
-      : null;
+    record.contentSha256 && stampMatches(record, mediaInfo) ? record.contentSha256 : null;
   const sha256 = sameDevice ? cached : (cached ?? (await fs.sha256(media)));
 
   // ── 2. The journal.
@@ -407,6 +404,11 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     await writeJournal(deps.journalDir, journal);
     await after("committed");
     await rm(media, { force: true });
+    // A hard link shares the inode, and removing the source name moves its ctime: the hash
+    // stamp is written only now, or the first transcript open would hash the file again.
+    await stampMovedMedia(to, newId, journal).catch((error: unknown) =>
+      console.error("move: could not stamp the moved item's media", error),
+    );
     await after("source-media-deleted");
     await removeCompanions(from.companionPaths(id));
     await after("source-companions-deleted");
@@ -537,6 +539,24 @@ async function rollBackTarget(
 }
 
 /**
+ * Stamps the moved media's cached hash from its stat now. A copy is a new file (new inode and
+ * ctime) even when its mtime was kept; a link shares the source's inode, whose ctime moves
+ * when the source name is removed, so callers stamp again after that. The journal's hash is
+ * the one the move verified.
+ */
+async function stampMovedMedia(
+  to: LibraryVault,
+  newId: string,
+  journal: MoveJournal,
+): Promise<void> {
+  const now = await statOrNull(join(to.directory, `${newId}${journal.ext}`));
+  if (!now) return;
+  if (journal.media.sha256 && now.size === journal.media.size) {
+    await to.writeMeta(newId, { contentSha256: journal.media.sha256, ...stampFields(now) });
+  }
+}
+
+/**
  * A copied media file has a new mtime: the sidecar's hash cache and the edit project's
  * freshness stamp are rewritten for it, when they matched the source (decision 8).
  */
@@ -545,16 +565,10 @@ async function refreshFreshness(
   newId: string,
   journal: MoveJournal,
 ): Promise<void> {
+  await stampMovedMedia(to, newId, journal);
   const now = await statOrNull(join(to.directory, `${newId}${journal.ext}`));
   if (!now) return;
   if (now.mtimeMs === journal.media.mtimeMs && now.size === journal.media.size) return;
-  if (journal.media.sha256 && now.size === journal.media.size) {
-    await to.writeMeta(newId, {
-      contentSha256: journal.media.sha256,
-      hashedSizeBytes: now.size,
-      hashedMtimeMs: now.mtimeMs,
-    });
-  }
   const metaPath = to.companionPaths(newId).editMeta;
   let meta: SessionMeta;
   try {
@@ -713,6 +727,8 @@ async function healEntry(
             return "waiting";
           }
         }
+        // The unlink moved the shared inode's ctime (a linked move): stamp again.
+        await stampMovedMedia(to, targetId, journal).catch(() => {});
       }
       await removeCompanions(from.companionPaths(journal.sourceId));
     }

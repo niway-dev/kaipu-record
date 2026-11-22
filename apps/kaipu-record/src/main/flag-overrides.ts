@@ -1,5 +1,7 @@
 import type { WebPreferences } from "electron";
+import { adminModeArg } from "@shared/admin-mode";
 import { applyFlagOverride, flagOverridesArg, type FlagOverrides } from "@shared/flag-overrides";
+import { launchAdminMode } from "./admin-mode";
 
 let active: FlagOverrides = {};
 
@@ -40,14 +42,19 @@ export function changeFlagOverride(
 }
 
 /**
- * `webPreferences` for a window that loads the renderer: passes the active feature-flag
- * overrides to its preload, keeping any `additionalArguments` the window already had.
- * With no override active the preferences come back untouched.
+ * `webPreferences` for a window that loads the renderer: passes the launch arguments to its
+ * preload, keeping any `additionalArguments` the window already had. Two things ride
+ * here, and EVERY window must take them so main and all renderers agree for the whole session:
+ * the active feature-flag overrides, and the launch mode (`--kaipu-admin-mode=1` in Admin mode,
+ * ADR 0067). With neither the preferences come back untouched.
  */
 export function withFlagOverrides(webPreferences: WebPreferences): WebPreferences {
-  if (Object.keys(active).length === 0) return webPreferences;
+  const extra: string[] = [];
+  if (Object.keys(active).length > 0) extra.push(flagOverridesArg(active));
+  if (launchAdminMode()) extra.push(adminModeArg(true));
+  if (extra.length === 0) return webPreferences;
   return {
     ...webPreferences,
-    additionalArguments: [...(webPreferences.additionalArguments ?? []), flagOverridesArg(active)],
+    additionalArguments: [...(webPreferences.additionalArguments ?? []), ...extra],
   };
 }

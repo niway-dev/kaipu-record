@@ -1,0 +1,24 @@
+/* The Mic, System audio and Camera settings popover. Portalled to the body with fixed
+   coordinates measured from the card, so the window's content never moves when it opens. */
+
+.popover {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  /* The placement caps `max-height` to the room on the chosen side; the popover scrolls as a
+     whole only when even that is smaller than its content. The lists inside scroll on their own. */
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.6);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.popover:focus {
+  outline: none;
+}

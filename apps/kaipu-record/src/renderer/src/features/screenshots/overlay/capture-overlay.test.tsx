@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings, type RecordingSettings } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
@@ -17,20 +17,15 @@ import {
 } from "./capture-overlay";
 import type { OverlayQuery } from "./overlay-query";
 
-// The widget's device chevrons enumerate devices through these hooks, which need
-// `navigator.mediaDevices` (absent in jsdom). Tests choose the devices through `devices`.
+// The widget's Microphone list comes through this hook, which needs `navigator.mediaDevices`
+// (absent in jsdom); the camera popover enumerates through `navigator.mediaDevices` itself, which
+// the device popovers' tests stub. Tests choose the devices through `devices`.
 const devices = vi.hoisted(() => ({
   microphones: [] as { deviceId: string; label: string }[],
   cameras: [] as { deviceId: string; label: string }[],
 }));
 vi.mock("@renderer/features/recording/hooks/use-microphones", () => ({
   useMicrophones: () => devices.microphones,
-}));
-vi.mock("@renderer/features/camera-settings/use-camera-settings", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@renderer/features/camera-settings/use-camera-settings")
-  >()),
-  useCameras: () => devices.cameras,
 }));
 
 const BASE_SETTINGS: AppSettings = {
@@ -109,7 +104,7 @@ function fakeApi(
     isCameraEnabled: false,
     area: null,
   };
-  // The toggles and the device menus each subscribe, as in the app.
+  // The toggles and the microphone choice each subscribe, as in the app.
   const recordingListeners = new Set<(settings: RecordingSettings) => void>();
   let ackListener: (() => void) | null = null;
   // The overlay reads settings through the window's store, which asks `window.electronAPI`:
@@ -158,6 +153,8 @@ function fakeApi(
       };
     }),
   } satisfies CaptureOverlayApi;
+  // The settings popovers write through the window's bridge, as the app does.
+  window.electronAPI.updateSettings = api.updateSettings;
   return {
     api,
     getSettings,
@@ -2871,12 +2868,14 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     expect(answer).not.toHaveBeenCalled();
   });
 
-  it("Esc stops the count even when a device menu was left open as it started", async () => {
+  it("Esc stops the count even when a settings popover was left open as it started", async () => {
     devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
     const { answer, setCounting } = await renderCounting(3);
     fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
     press("Enter");
     await tick(1000);
+    // The count closes the popover: Esc is the overlay's while it runs.
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     fireEvent.keyDown(document.body, { key: "Escape" });
 
@@ -3323,8 +3322,23 @@ describe("CaptureOverlay — More settings", () => {
   });
 });
 
-describe("CaptureOverlay — the device menus", () => {
+describe("CaptureOverlay — the settings popovers", () => {
   const area = { x: 100, y: 120, width: 640, height: 360 };
+
+  beforeEach(() => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        enumerateDevices: async () =>
+          devices.cameras.map((camera) => ({ ...camera, kind: "videoinput" })),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      },
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+  });
 
   async function renderRecording() {
     const fake = fakeApi({}, FRAME_ON_42, { "42": area });
@@ -3341,12 +3355,12 @@ describe("CaptureOverlay — the device menus", () => {
     return fake;
   }
 
-  it("Enter on a device menu item reaches no overlay shortcut: it does not start the recording", async () => {
+  it("Enter inside a settings popover reaches no overlay shortcut: it does not start the recording", async () => {
     devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
     const { answer, setCounting } = await renderRecording();
 
     fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
-    fireEvent.keyDown(screen.getByRole("menuitemradio", { name: "USB mic" }), { key: "Enter" });
+    fireEvent.keyDown(screen.getByRole("radio", { name: /USB mic/ }), { key: "Enter" });
     // The confirm persists the box first, so give it time to answer before asserting nothing did.
     await flush();
 
@@ -3354,16 +3368,45 @@ describe("CaptureOverlay — the device menus", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
-  it("Esc closes an open device menu first and does not cancel the capture", async () => {
+  it.each([
+    ["Microphone", "Choose Microphone device", /USB mic/],
+    ["Camera", "Choose Camera device", /Cam Link/],
+  ] as const)(
+    "a bare 2 typed inside the %s popover does not change the capture mode",
+    async (_name, chevronName, radio) => {
+      devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
+      devices.cameras = [{ deviceId: "cam-link", label: "Cam Link" }];
+      const { setMode } = await renderRecording();
+
+      fireEvent.click(screen.getByRole("button", { name: chevronName }));
+      const row = await screen.findByRole("radio", { name: radio });
+      row.focus();
+      fireEvent.keyDown(row, { key: "2" });
+      await flush();
+
+      expect(setMode).not.toHaveBeenCalled();
+    },
+  );
+
+  it("Esc closes an open settings popover first and does not cancel the capture", async () => {
     devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
     const { answer } = await renderRecording();
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
-    expect(screen.getByRole("menu")).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("menuitemradio", { name: "USB mic" }), { key: "Escape" });
+    const chevron = screen.getByRole("button", { name: "Choose Microphone device" });
+    fireEvent.click(chevron);
+    expect(screen.getByRole("dialog", { name: "Microphone settings" })).toBeInTheDocument();
+    // A key press reaches the window handlers only if nothing on the way stopped it.
+    const reachedWindow = vi.fn();
+    window.addEventListener("keydown", reachedWindow);
+    fireEvent.keyDown(screen.getByRole("radio", { name: /USB mic/ }), { key: "Escape" });
+    window.removeEventListener("keydown", reachedWindow);
 
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(reachedWindow).not.toHaveBeenCalled();
     expect(answer).not.toHaveBeenCalled();
+    // The next Esc is the overlay's again.
+    press("Escape");
+    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
   });
 
   /**
@@ -3516,7 +3559,7 @@ describe("CaptureOverlay — the device menus", () => {
     );
   });
 
-  it("the Microphone name opens a menu of radio items; choosing one writes the shared recording settings", async () => {
+  it("the Microphone chevron opens a popover of radio devices; choosing one writes the shared recording settings", async () => {
     devices.microphones = [
       { deviceId: "built-in", label: "Built-in mic" },
       { deviceId: "usb", label: "USB mic" },
@@ -3525,32 +3568,32 @@ describe("CaptureOverlay — the device menus", () => {
 
     const chevron = screen.getByRole("button", { name: "Choose Microphone device" });
     expect(chevron).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(chevron).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(chevron);
 
-    const menu = screen.getByRole("menu", { name: "Microphone" });
+    const popover = screen.getByRole("dialog", { name: "Microphone settings" });
     expect(chevron).toHaveAttribute("aria-expanded", "true");
-    const items = within(menu).getAllByRole("menuitemradio");
-    expect(items.map((item) => item.textContent)).toEqual(["Built-in mic", "USB mic"]);
-    // Nothing is selected yet: the system default is in use.
-    expect(items.map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "false"]);
+    expect(chevron).toHaveAttribute("aria-controls", popover.id);
+    const radios = within(popover).getAllByRole("radio");
+    expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "false"]);
+    // The input level and noise suppression are part of the same popover.
+    expect(within(popover).getByRole("switch", { name: /noise/i })).toBeInTheDocument();
 
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "USB mic" }));
+    fireEvent.click(within(popover).getByRole("radio", { name: /USB mic/ }));
     expect(api.updateRecordingSettings).toHaveBeenCalledExactlyOnceWith({
       selectedMicrophone: { deviceId: "usb", label: "USB mic" },
     });
-    expect(screen.queryByRole("menu")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
-    expect(screen.getByRole("menuitemradio", { name: "USB mic" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    // Changes apply at once and the popover stays open: there is no Done button.
+    expect(screen.getByRole("dialog", { name: "Microphone settings" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("dialog")).getByRole("radio", { name: /USB mic/ }),
+    ).toHaveAttribute("aria-checked", "true");
     // Choosing a device is not a toggle: no toast, the microphone's state is untouched.
     expect(screen.queryByTestId("input-toast")).toBeNull();
   });
 
-  it("the Camera name writes the choice into the camera bubble, keeping its other settings", async () => {
+  it("the Camera chevron opens the camera popover: the list, Mirror my video, Framing and the help line, with no shape or size", async () => {
     devices.cameras = [
       { deviceId: "facetime", label: "FaceTime HD" },
       { deviceId: "cam-link", label: "Cam Link" },
@@ -3559,8 +3602,21 @@ describe("CaptureOverlay — the device menus", () => {
     const bubble = (await getSettings()).cameraBubble;
 
     fireEvent.click(screen.getByRole("button", { name: "Choose Camera device" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Cam Link" }));
+    const popover = await screen.findByRole("dialog", { name: "Camera settings" });
+    await within(popover).findByRole("radio", { name: "Cam Link" });
+    expect(within(popover).getByRole("switch", { name: "Mirror my video" })).toBeInTheDocument();
+    expect(within(popover).getByRole("switch", { name: "Framing" })).toBeInTheDocument();
+    expect(
+      within(popover).getByText(
+        "Your camera records as its own full-quality video. Change its shape, size and position in the editor after you record.",
+      ),
+    ).toBeInTheDocument();
+    // Shape, Size and the corner radius are no longer chosen before recording.
+    expect(within(popover).queryByText(/shape/i, { selector: "legend, label, span" })).toBeNull();
+    expect(within(popover).queryByRole("radiogroup", { name: /shape|size/i })).toBeNull();
+    expect(within(popover).queryByRole("slider", { name: /radius|size/i })).toBeNull();
 
+    fireEvent.click(within(popover).getByRole("radio", { name: "Cam Link" }));
     await waitFor(() =>
       expect(api.updateSettings).toHaveBeenCalledWith({
         cameraBubble: { ...bubble, deviceId: "cam-link" },
@@ -3568,23 +3624,68 @@ describe("CaptureOverlay — the device menus", () => {
     );
   });
 
-  it("says so when no device is found, and System audio has no device menu", async () => {
+  it("says so when no device is found, and System audio has no chevron", async () => {
     await renderRecording();
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose Camera device" }));
-    expect(within(screen.getByRole("menu")).getByText("No devices found")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
+    expect(
+      within(screen.getByRole("dialog")).getByText("No microphones found"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Choose System audio device" })).toBeNull();
   });
 
-  it("a press outside the menu closes it", async () => {
+  it("only one popover is open at a time", async () => {
+    await renderRecording();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
+    expect(screen.getByRole("dialog", { name: "Microphone settings" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose Camera device" }));
+
+    expect(screen.queryByRole("dialog", { name: "Microphone settings" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose Microphone device" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("the chevron closes its own popover and focus goes back to it", async () => {
+    devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
+    await renderRecording();
+    const chevron = screen.getByRole("button", { name: "Choose Microphone device" });
+
+    fireEvent.click(chevron);
+    // Focus moves in on open.
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    fireEvent.click(chevron);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(chevron);
+    fireEvent.keyDown(screen.getByRole("radio", { name: /USB mic/ }), { key: "Escape" });
+    expect(document.activeElement).toBe(chevron);
+  });
+
+  it("a press outside the popover closes it", async () => {
     devices.microphones = [{ deviceId: "usb", label: "USB mic" }];
     await renderRecording();
     fireEvent.click(screen.getByRole("button", { name: "Choose Microphone device" }));
-    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     fireEvent.pointerDown(document.body);
 
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("the window losing focus closes it", async () => {
+    await renderRecording();
+    fireEvent.click(screen.getByRole("button", { name: "Choose Camera device" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 

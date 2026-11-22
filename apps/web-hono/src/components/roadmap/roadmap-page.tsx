@@ -1,7 +1,16 @@
 import { useState, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { useRouteContext } from "@tanstack/react-router";
-import { Apple, Check, Clock, Info, Minus, ShieldAlert, TriangleAlert } from "lucide-react";
+import {
+  Apple,
+  Check,
+  Clock,
+  FlaskConical,
+  Info,
+  Minus,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 
@@ -44,6 +53,7 @@ const NARROW = "@media (min-width: 980px) and (max-width: 1199.98px)";
 
 const STATE_ICON: Record<RoadmapState, typeof Check> = {
   shipped: Check,
+  beta: FlaskConical,
   inProgress: Clock,
   planned: Minus,
 };
@@ -66,8 +76,9 @@ export function RoadmapTheme({ children }: { children: ReactNode }) {
 function StateCell({ state, label }: { state: RoadmapState; label: string }) {
   const Icon = STATE_ICON[state];
   const planned = state === "planned";
+  const beta = state === "beta";
   return (
-    <span {...stylex.props(toneOf[state], s.state, planned && s.statePlanned)}>
+    <span {...stylex.props(toneOf[state], s.state, planned && s.statePlanned, beta && s.stateBeta)}>
       <span {...stylex.props(s.stateDot, planned && s.stateDotPlanned)} aria-hidden>
         <Icon size={10} strokeWidth={3} />
       </span>
@@ -173,6 +184,7 @@ export function RoadmapList() {
   const [platform, setPlatform] = useState<PlatformFilter>("all");
   const [shown, setShown] = useState<Record<RoadmapState, boolean>>({
     shipped: true,
+    beta: true,
     inProgress: true,
     planned: true,
   });
@@ -440,6 +452,7 @@ function StepMock({ step }: { step: (typeof STEPS)[number] }) {
 /** Sets `tone` for an element and everything inside it. */
 const toneOf = stylex.create({
   shipped: { [tone.c]: palette.shipped, [tone.cTx]: palette.shippedTx },
+  beta: { [tone.c]: palette.beta, [tone.cTx]: palette.betaTx },
   inProgress: { [tone.c]: palette.progress, [tone.cTx]: palette.progressTx },
   planned: { [tone.c]: palette.planned, [tone.cTx]: palette.plannedTx },
   win: { [tone.c]: palette.win, [tone.cTx]: palette.win },
@@ -847,6 +860,8 @@ const s = stylex.create({
     color: tone.cTx,
   },
   statePlanned: { borderColor: kl.bd2, backgroundColor: "transparent" },
+  /* A dashed edge: it exists, but it is not in the download. Not colour alone. */
+  stateBeta: { borderStyle: "dashed" },
   stateDot: {
     display: "grid",
     width: 16,

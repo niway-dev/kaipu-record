@@ -79,6 +79,7 @@ describe("mergeSettings", () => {
         screenshotMode: "frame",
         trayHintShown: true,
         diagnosticsEnabled: false,
+        adminMode: true,
         microphone: { deviceId: "yeti", label: "Yeti Nano" },
       }),
     ).toEqual({
@@ -104,6 +105,7 @@ describe("mergeSettings", () => {
       screenshotMode: "frame",
       trayHintShown: true,
       diagnosticsEnabled: false,
+      adminMode: true,
       cameraBubble: {
         shape: "circle",
         cornerRadius: 0.18,
@@ -247,6 +249,13 @@ describe("mergeSettings", () => {
     expect(mergeSettings({}).diagnosticsEnabled).toBe(true);
     expect(mergeSettings({ diagnosticsEnabled: false }).diagnosticsEnabled).toBe(false);
     expect(mergeSettings({ diagnosticsEnabled: "off" as never }).diagnosticsEnabled).toBe(true);
+  });
+
+  it("keeps Admin mode off by default and takes only a boolean (ADR 0067)", () => {
+    expect(DEFAULT_SETTINGS.adminMode).toBe(false);
+    expect(mergeSettings({}).adminMode).toBe(false);
+    expect(mergeSettings({ adminMode: true }).adminMode).toBe(true);
+    expect(mergeSettings({ adminMode: "true" as never }).adminMode).toBe(false);
   });
 
   it("drops the last-used export preset keys older settings files carry (NIW2-218)", () => {

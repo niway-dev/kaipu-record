@@ -21,6 +21,10 @@ import { join } from "path";
 import { captureWhileRecordingEnabled } from "./screenshots/capture-while-recording";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
 import { registerFlagOverridesIpc } from "./flag-overrides-ipc";
+import { isLaunchAdminModeSet, launchAdminMode, setLaunchAdminMode } from "./admin-mode";
+import { registerAdminModeIpc } from "./admin-mode-ipc";
+import { cancelRelaunchRequest, relaunchIfRequested, requestRelaunchOnQuit } from "./relaunch";
+import { computeAdminMode } from "@shared/admin-mode";
 import { parseFlagOverrides } from "@shared/flag-overrides";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
@@ -31,7 +35,13 @@ import { hasTitleBarOverlay, mainWindowChrome, titleBarOverlay } from "./window-
 import { devAppIdentity } from "./app-identity";
 import { appShutdown, installAppShutdown } from "./app-shutdown";
 import { createMainTranslator } from "@kaipu/i18n/main";
-import { createTray, rebuildTrayMenu, setTrayCountdown, setTrayRecording } from "./tray";
+import {
+  createTray,
+  rebuildTrayMenu,
+  setTrayAdmin,
+  setTrayCountdown,
+  setTrayRecording,
+} from "./tray";
 import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
@@ -271,7 +281,13 @@ if (!hasSingleInstanceLock) {
 
   app.on("second-instance", (_event, argv) => {
     deepLinks.receiveArgv(argv);
-    const action = secondInstanceAction({ ready: app.isReady(), recording: !!hub?.isActive() });
+    // "Ready" also means the launch Admin mode is set (it needs the settings and the stored
+    // session, which `whenReady` registers after `initWorkspaces`): a window created before that
+    // would miss `--kaipu-admin-mode=1` and stay the main window for the whole session.
+    const action = secondInstanceAction({
+      ready: app.isReady() && isLaunchAdminModeSet(),
+      recording: !!hub?.isActive(),
+    });
     if (action === "show") showMainWindow();
     else if (action === "notify") showAlreadyRecordingNotice();
   });
@@ -396,8 +412,10 @@ function createWindow(showOnReady = true): void {
     });
     if (choice !== 1) {
       // Cancelling here aborts a quit already past `before-quit`, if one was in
-      // flight: the app keeps running, so the next close must hide again.
+      // flight: the app keeps running, so the next close must hide again, and a pending
+      // "Restart now" is dropped with the quit.
       isQuitting = false;
+      cancelRelaunchRequest();
       return true;
     }
     closingWithRecording = true;
@@ -431,8 +449,10 @@ function createWindow(showOnReady = true): void {
     });
     if (choice !== 1) {
       // Cancelling here aborts a quit already past `before-quit`, if one was in
-      // flight: the app keeps running, so the next close must hide again.
+      // flight: the app keeps running, so the next close must hide again, and a pending
+      // "Restart now" is dropped with the quit.
       isQuitting = false;
+      cancelRelaunchRequest();
       return true;
     }
     closingWithExport = true;
@@ -969,6 +989,31 @@ app.whenReady().then(async () => {
     sendToRenderer,
   });
   completeBrowserSignIn = auth.completeBrowserSignIn;
+  // Admin mode (ADR 0067): the mode is decided HERE, once, from the stored session and the
+  // preference, before any window is created, and never changes for this process. Every window
+  // gets it as a launch argument (`withFlagOverrides`), so a renderer has it synchronously before
+  // its first render. A sign-out or a setting change later only makes a restart pending.
+  const adminMode = computeAdminMode({
+    adminModeSetting: getAppSettings().adminMode,
+    session: auth.getAdminSession(),
+  });
+  setLaunchAdminMode(adminMode);
+  if (adminMode) console.log("[admin] Admin mode: every release flag is on for this session");
+  const adminModeIpc = registerAdminModeIpc({
+    getMainWindow: () => mainWindow,
+    session: auth.getAdminSession,
+    setting: () => getAppSettings().adminMode,
+    setSetting: (value) => {
+      updateAppSettings({ adminMode: value });
+    },
+    // Through the quit guards (a recording or an export asks first), then start again.
+    relaunch: () => {
+      requestRelaunchOnQuit();
+      app.quit();
+    },
+  });
+  auth.onAdminChanged(adminModeIpc.notifyChanged);
+  onSettingsKeysChanged(["adminMode"], adminModeIpc.notifyChanged);
   deepLinks.start();
   initMainAnalytics(getDeviceId(), getAppSettings().diagnosticsEnabled);
   onSettingsChanged((settings) => setMainAnalyticsEnabled(settings.diagnosticsEnabled));
@@ -1295,6 +1340,14 @@ app.whenReady().then(async () => {
 
   // Menu-bar tray + its Capture Panel.
   capturePanel = new CapturePanelWindow();
+  // The Admin mode line: who the account is now, and the mode this process launched in.
+  const syncTrayAdmin = (): void =>
+    setTrayAdmin({
+      isAdmin: auth.getAdminSession()?.admin === true,
+      effective: launchAdminMode(),
+    });
+  syncTrayAdmin();
+  auth.onAdminChanged(syncTrayAdmin);
   tray = createTray(capturePanel, showMainWindow, getAppSettings().locale, {
     getShortcuts: () => getAppSettings().shortcuts,
     actions: {
@@ -1311,6 +1364,7 @@ app.whenReady().then(async () => {
       takeScreenshot: () => triggerShortcutCapture("captureScreenshot"),
       openLibrary: () => showMainWindowAt(ROUTES.library),
       openSettings: () => showMainWindowAt(ROUTES.settings),
+      openAdminMode: () => showMainWindowAt(`${ROUTES.settings}/app`),
     },
   });
   // Load the panel hidden so the first tray click does not pay a cold start. After
@@ -1356,6 +1410,13 @@ app.whenReady().then(async () => {
   });
 });
 
+// "Restart now" (Admin mode): `will-quit` fires only once every window closed, so no guard can
+// cancel this quit any more (the main window's close guards run after `before-quit`). Start the
+// app again when this process ends.
+app.on("will-quit", () => {
+  relaunchIfRequested(() => app.relaunch());
+});
+
 // Cmd+Q / tray Quit mid-recording would otherwise leave an un-finalized .part in
 // tmpdir (no moov box → unplayable) with no recovery flow. Guard it: confirm,
 // then run the recorder's normal stop path so what's recorded so far is finalized
@@ -1376,7 +1437,10 @@ app.on("before-quit", (event) => {
       message: t("dialogs.recordingInProgress"),
       detail: t("dialogs.quitStopsDetail"),
     });
-    if (choice !== 1) return;
+    if (choice !== 1) {
+      cancelRelaunchRequest();
+      return;
+    }
     quittingWithRecording = true;
     mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     proceedWhenRecordingStops({
@@ -1403,7 +1467,10 @@ app.on("before-quit", (event) => {
       message: t("dialogs.exportInProgress"),
       detail: t("dialogs.quitCancelsExportDetail"),
     });
-    if (choice !== 1) return;
+    if (choice !== 1) {
+      cancelRelaunchRequest();
+      return;
+    }
     quittingWithExport = true;
     cancelExportThen(() => app.quit());
     return;

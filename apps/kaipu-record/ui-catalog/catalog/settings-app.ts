@@ -30,6 +30,14 @@ export const settingsApp = catalog(
   },
   {
     notCapturable: {
+      "settingsApp.adminMode:on": nc(
+        "needsApi",
+        "needs an account with the admin permission; the catalog runs signed out against no API",
+      ),
+      "settingsApp.adminMode:restartPending": nc(
+        "needsApi",
+        "needs an account with the admin permission, and a preference that differs from the launch mode",
+      ),
       "settingsApp.updates:available": nc(
         "needsApi",
         "needs an update feed; an unpackaged build has none (the Developer page that forces it is not in a production build)",

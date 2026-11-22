@@ -253,7 +253,7 @@ span.inputName {
   background: transparent;
 }
 
-/* Compact: an icon chip with its badge, and a chevron for the device menu. */
+/* Compact: an icon chip with its badge, and a chevron for the settings popover. */
 .input[data-compact] .inputToggle {
   gap: 6px;
 }
@@ -342,8 +342,7 @@ span.inputName {
   top: calc(100% + 6px);
 }
 
-.menuItem,
-.menuEmpty {
+.menuItem {
   display: block;
   width: 100%;
   padding: 7px 10px;
@@ -370,10 +369,6 @@ span.inputName {
 .menuItem[aria-checked="true"] {
   background: var(--widget-accent-soft);
   color: #fff;
-}
-
-.menuEmpty {
-  color: var(--widget-text-3);
 }
 
 /* ── Actions ──────────────────────────────────────────────────── */

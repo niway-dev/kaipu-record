@@ -129,18 +129,18 @@ export const SETTINGS_CONSUMERS: readonly SettingsConsumer[] = [
   },
   {
     file: "features/audio-settings/use-audio-settings.ts",
-    windows: ["main"],
+    windows: ["main", "capture-overlay"],
     keys: ["audio"],
     follows: "live",
-    why: "The mic level, noise suppression and system audio controls on the Record page.",
+    why: "The mic level, noise suppression and system audio controls on the Record page, and the capture widget's Microphone popover.",
     behaviour: "here",
   },
   {
     file: "features/camera-settings/use-camera-settings.ts",
-    windows: ["main"],
+    windows: ["main", "capture-overlay"],
     keys: ["cameraBubble"],
     follows: "live",
-    why: "The camera bubble's shape, size, mirroring and framing controls.",
+    why: "The camera popover's camera, mirroring and framing controls, on the Record page and in the capture widget (one overlay per display follows a pick made in another).",
     behaviour: "here",
   },
   {
@@ -180,17 +180,6 @@ export const SETTINGS_CONSUMERS: readonly SettingsConsumer[] = [
     follows: "live",
     why: "The onboarding Share usage switch, which must show what main confirmed.",
     behaviour: "here",
-  },
-  {
-    file: "features/screenshots/overlay/use-widget-devices.ts",
-    windows: ["capture-overlay"],
-    keys: ["cameraBubble"],
-    follows: "live",
-    why: "The camera the overlay's widget shows; one overlay per display follows a pick made in another.",
-    behaviour: {
-      coveredIn: "features/screenshots/overlay/use-widget-devices.test.tsx",
-      mentions: ["cameraBubble", "broadcast"],
-    },
   },
   {
     file: "features/screenshots/overlay/use-widget-expanded.ts",

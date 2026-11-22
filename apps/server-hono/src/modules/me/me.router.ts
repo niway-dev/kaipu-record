@@ -1,4 +1,5 @@
 import { getEntitlements, getStorageUsage } from "@kaipu/application";
+import { isAdminUser } from "@kaipu/domain/schemas";
 import { createDatabaseClient } from "@kaipu/infra-db/client";
 import {
   CloudAccessRepository,
@@ -24,7 +25,15 @@ export const meRouter = impl.router({
   // (verified email) from the cloud access repo. This route is where they are composed.
   entitlements: impl.entitlements.use(authMiddleware).handler(async ({ context }) => {
     const data = await getEntitlements({ repo, cloudAccessRepo, userId: context.user.id });
-    return { data, error: null };
+    // `userId` and `admin` let the desktop decide whether to offer Admin mode (ADR 0067).
+    return {
+      data: {
+        ...data,
+        userId: context.user.id,
+        admin: isAdminUser(context.user.id, env.ADMIN_USER_IDS),
+      },
+      error: null,
+    };
   }),
   storage: impl.storage.use(authMiddleware).handler(async ({ context }) => {
     const entitlements = await getEntitlements({ repo, cloudAccessRepo, userId: context.user.id });

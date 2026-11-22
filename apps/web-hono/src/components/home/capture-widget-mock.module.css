@@ -1,0 +1,471 @@
+/*
+ * The capture widget mock. The widget always floats over arbitrary screen content, so it
+ * keeps the dark Kaipu Black surface whatever the page theme, with the desktop widget's own
+ * values (capture-widget.module.css). One 12 s loop; every timed rule below shares it.
+ *
+ *   0-35 %   Screenshot + Frame      frame small, button "Capture"
+ *   35-50 %  Screenshot + Screen     frame grows to the display
+ *   50-55 %  toggle flips to Recording
+ *   55-100 % Recording + Frame       frame small again, button "Record"
+ */
+
+.stage {
+  --w-surface: #0b0b0d;
+  --w-line: rgb(232 232 237 / 0.2);
+  --w-fill: rgb(232 232 237 / 0.05);
+  --w-text: #e8e8ed;
+  --w-text-2: #c8c8d0;
+  --w-text-3: #a1a1aa;
+  --w-soft: rgb(246 5 92 / 0.14);
+  --w-pink: #f6055c;
+  --w-loop: 12s;
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 16px;
+  background: var(--kl-mock-stage);
+  box-shadow: 0 30px 80px -40px rgb(0 0 0 / 0.7);
+}
+
+/* ---- The captured screen -------------------------------------------------- */
+
+.screen {
+  position: relative;
+  aspect-ratio: 16 / 9.5;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #f4f4f7;
+}
+
+.chrome {
+  display: flex;
+  gap: 6px;
+  padding: 9px 12px;
+  background: #e9e9ee;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9c9d2;
+}
+
+.page {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.line {
+  display: block;
+  width: 46%;
+  height: 8px;
+  border-radius: 4px;
+  background: #d4d4dc;
+}
+
+.lineWide {
+  width: 68%;
+  height: 12px;
+  background: #b9b9c4;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.card {
+  display: block;
+  height: 46px;
+  border-radius: 8px;
+  background: #e1e1e8;
+}
+
+/* ---- The selection frame ---------------------------------------------------- */
+
+.frame {
+  position: absolute;
+  inset: 24% 20% 14% 20%;
+  border: 2px dashed var(--w-pink);
+  border-radius: 6px;
+  background: rgb(246 5 92 / 0.08);
+  box-shadow: 0 0 0 100vmax rgb(6 6 7 / 0.38);
+  animation: frame var(--w-loop) cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+@keyframes frame {
+  0%,
+  33% {
+    inset: 24% 20% 14% 20%;
+  }
+  40%,
+  50% {
+    inset: 0;
+  }
+  58%,
+  100% {
+    inset: 24% 20% 14% 20%;
+  }
+}
+
+.readout {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--w-surface);
+  color: var(--w-text);
+  font-family: var(--kl-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* The two readouts share one cell and cross-fade. */
+.readoutA,
+.readoutB {
+  grid-area: 1 / 1;
+}
+
+.readoutA {
+  animation: readoutA var(--w-loop) linear infinite;
+}
+
+.readoutB {
+  opacity: 0;
+  animation: readoutB var(--w-loop) linear infinite;
+}
+
+@keyframes readoutA {
+  0%,
+  33% {
+    opacity: 1;
+  }
+  38%,
+  55% {
+    opacity: 0;
+  }
+  58%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes readoutB {
+  0%,
+  35% {
+    opacity: 0;
+  }
+  40%,
+  50% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---- The widget --------------------------------------------------------------- */
+
+.widget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: center;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--w-line);
+  border-radius: 14px;
+  background: var(--w-surface);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.65),
+    0 24px 50px -20px rgb(0 0 0 / 0.8);
+  color: var(--w-text);
+  font-size: 13px;
+  user-select: none;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.seg,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--w-fill);
+  color: var(--w-text-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip {
+  gap: 5px;
+  font-family: var(--kl-font-mono);
+  font-size: 12px;
+  color: var(--w-text);
+}
+
+.caret {
+  font-size: 9px;
+  color: var(--w-text-3);
+}
+
+.kbd {
+  padding: 1px 5px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 5px;
+  background: rgb(255 255 255 / 0.06);
+  color: var(--w-text-3);
+  font-family: var(--kl-font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* The selected state: soft pink fill, pink border, white text — each control's loop. */
+.pressShot,
+.pressRec,
+.pressFrame,
+.pressScreen {
+  animation-duration: var(--w-loop);
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+.pressShot {
+  animation-name: pressFirstHalf;
+}
+.pressRec {
+  animation-name: pressSecondHalf;
+}
+.pressFrame {
+  animation-name: pressFrame;
+}
+.pressScreen {
+  animation-name: pressScreen;
+}
+
+@keyframes pressFirstHalf {
+  0%,
+  48% {
+    background: var(--w-soft);
+    border-color: var(--w-pink);
+    color: #fff;
+  }
+  52%,
+  100% {
+    background: var(--w-fill);
+    border-color: transparent;
+    color: var(--w-text-2);
+  }
+}
+
+@keyframes pressSecondHalf {
+  0%,
+  48% {
+    background: var(--w-fill);
+    border-color: transparent;
+    color: var(--w-text-2);
+  }
+  52%,
+  100% {
+    background: var(--w-soft);
+    border-color: var(--w-pink);
+    color: #fff;
+  }
+}
+
+@keyframes pressFrame {
+  0%,
+  33% {
+    background: var(--w-soft);
+    border-color: var(--w-pink);
+    color: #fff;
+  }
+  37%,
+  55% {
+    background: var(--w-fill);
+    border-color: transparent;
+    color: var(--w-text-2);
+  }
+  58%,
+  100% {
+    background: var(--w-soft);
+    border-color: var(--w-pink);
+    color: #fff;
+  }
+}
+
+@keyframes pressScreen {
+  0%,
+  33% {
+    background: var(--w-fill);
+    border-color: transparent;
+    color: var(--w-text-2);
+  }
+  37%,
+  55% {
+    background: var(--w-soft);
+    border-color: var(--w-pink);
+    color: #fff;
+  }
+  58%,
+  100% {
+    background: var(--w-fill);
+    border-color: transparent;
+    color: var(--w-text-2);
+  }
+}
+
+/* The confirm button: "Capture" for a screenshot, "Record" (with the live dot) for a take. */
+.go {
+  display: inline-grid;
+  height: 40px;
+  min-width: 96px;
+  padding: 0 16px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--w-pink);
+  color: #fff;
+  font-weight: 700;
+}
+
+.goLabelA,
+.goLabelB {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.goLabelA {
+  animation: labelA var(--w-loop) linear infinite;
+}
+
+.goLabelB {
+  opacity: 0;
+  animation: labelB var(--w-loop) linear infinite;
+}
+
+@keyframes labelA {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  52%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes labelB {
+  0%,
+  48% {
+    opacity: 0;
+  }
+  52%,
+  100% {
+    opacity: 1;
+  }
+}
+
+.rec {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ---- Paused off screen, still under reduced motion ------------------------------- */
+
+.stage[data-paused] * {
+  animation-play-state: paused !important;
+}
+
+/*
+ * Reduced motion holds the first frame: Screenshot + Frame, "Capture". The animations are
+ * removed and the first-frame state is written out, because a removed animation leaves each
+ * control at its base style.
+ */
+.stage[data-static] * {
+  animation: none !important;
+}
+
+.stage[data-static] .pressShot,
+.stage[data-static] .pressFrame {
+  background: var(--w-soft);
+  border-color: var(--w-pink);
+  color: #fff;
+}
+
+.stage[data-static] .readoutB,
+.stage[data-static] .goLabelB {
+  opacity: 0;
+}
+
+/* ---- Phones ----------------------------------------------------------------------- */
+
+@media (width < 640px) {
+  .stage {
+    gap: 12px;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .screen {
+    aspect-ratio: 16 / 11;
+  }
+
+  .card {
+    height: 34px;
+  }
+
+  /* Copy and Esc are shortcuts for a keyboard; the toolbar keeps its place to the pink button. */
+  .optional,
+  .divider {
+    display: none;
+  }
+
+  .widget {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .seg,
+  .chip {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .go {
+    height: 36px;
+    flex: 1 1 100%;
+  }
+}

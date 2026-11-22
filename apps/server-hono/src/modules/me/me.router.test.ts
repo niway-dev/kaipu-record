@@ -9,9 +9,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   verified: true,
   usage: { usedBytes: 0, reservedBytes: 0, pendingUploads: 0 },
+  env: { DATABASE_URL: "postgres://test" } as { DATABASE_URL: string; ADMIN_USER_IDS?: string },
 }));
 
-vi.mock("../../env", () => ({ env: { DATABASE_URL: "postgres://test" } }));
+vi.mock("../../env", () => ({ env: state.env }));
 vi.mock("@kaipu/infra-db/client", () => ({ createDatabaseClient: () => ({}) }));
 vi.mock("../../lib/auth", () => ({
   auth: {
@@ -72,5 +73,44 @@ describe("me router — Free plan", () => {
       usedBytes: 600_000_000,
       availableBytes: 0,
     });
+  });
+});
+
+describe("me router — admin permission (ADR 0067)", () => {
+  beforeEach(() => {
+    state.verified = true;
+    state.env.ADMIN_USER_IDS = undefined;
+  });
+
+  const entitlements = () => call(meRouter.entitlements, undefined, { context });
+
+  it("returns the session user id", async () => {
+    expect((await entitlements()).data?.userId).toBe("u1");
+  });
+
+  it("is admin when the user id is listed", async () => {
+    state.env.ADMIN_USER_IDS = "u9,u1";
+    expect((await entitlements()).data?.admin).toBe(true);
+  });
+
+  it("is not admin when the user id is not listed", async () => {
+    state.env.ADMIN_USER_IDS = "u2,u3";
+    expect((await entitlements()).data?.admin).toBe(false);
+  });
+
+  it("handles whitespace and stray commas around ids", async () => {
+    state.env.ADMIN_USER_IDS = " u2 , , u1 ,";
+    expect((await entitlements()).data?.admin).toBe(true);
+  });
+
+  it("makes nobody admin when the list is an empty string", async () => {
+    state.env.ADMIN_USER_IDS = "";
+    expect((await entitlements()).data?.admin).toBe(false);
+  });
+
+  it("makes nobody admin and still answers when the variable is missing", async () => {
+    const res = await entitlements();
+    expect(res.error).toBeNull();
+    expect(res.data).toMatchObject({ plan: "free", userId: "u1", admin: false });
   });
 });

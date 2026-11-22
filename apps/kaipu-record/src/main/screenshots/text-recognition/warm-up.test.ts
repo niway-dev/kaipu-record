@@ -91,6 +91,18 @@ describe("TextRecognitionWarmUp", () => {
     expect(t.recognize).not.toHaveBeenCalled();
   });
 
+  it("an Admin-forced `image-text` flag does not warm anything up off macOS (ADR 0067)", async () => {
+    // Admin mode makes the renderer report `image-text` as on; the platform check is separate.
+    for (const platform of ["win32", "linux"] as const) {
+      const t = setup({ platform });
+      t.warmUp.start();
+      t.warmUp.setEnabled(true);
+      t.fireIdle();
+      await t.warmUp.whenSettled();
+      expect(t.recognize).not.toHaveBeenCalled();
+    }
+  });
+
   it("does nothing off macOS, with the flag off, or when the helper is missing", async () => {
     const win = setup({ platform: "win32" });
     win.warmUp.start();

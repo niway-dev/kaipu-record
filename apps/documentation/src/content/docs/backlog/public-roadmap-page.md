@@ -5,8 +5,8 @@ description: The /roadmap page that shows what Kaipu Record already ships and wh
 
 # Public roadmap page
 
-> **Status: 🟢 Ready to validate.** Redesigned on 2026-10-18 with a state per platform
-> (see [refresh log](#refresh-log)). The page builds clean; it has not been reviewed in
+> **Status: 🟢 Ready to validate.** Redesigned on 2026-10-18 with a state per platform,
+> and given a private beta state on 2026-11-20 (see [refresh log](#refresh-log)). The page builds clean; it has not been reviewed in
 > production or on a real device yet.
 
 A public roadmap at `https://kaipu.app/roadmap`: one row per feature, with a **macOS** and a
@@ -23,14 +23,19 @@ the repo instead.
 
 ## Where it lives
 
-| Piece           | Path                                                                 |
-| --------------- | -------------------------------------------------------------------- |
-| Route           | `apps/web-hono/src/routes/roadmap.tsx`                               |
-| Page sections   | `apps/web-hono/src/components/roadmap/roadmap-page.tsx`              |
-| Styles (StyleX) | `stylex.create` in `roadmap-page.tsx`; tokens in `roadmap.stylex.ts` |
-| Source of truth | `apps/web-hono/src/components/roadmap/roadmap-config.ts`             |
-| Copy (en + es)  | `roadmap` namespace in `packages/i18n/messages/{en,es}.json`         |
-| Entry points    | `TopNav`, `Footer`, `apps/web-hono/public/sitemap.xml`               |
+| Piece           | Path                                                                          |
+| --------------- | ----------------------------------------------------------------------------- |
+| Route           | `apps/web-hono/src/routes/roadmap.tsx`                                        |
+| Page sections   | `apps/web-hono/src/components/roadmap/roadmap-page.tsx`                       |
+| Styles (StyleX) | `stylex.create` in `roadmap-page.tsx`; tokens in `roadmap.stylex.ts`          |
+| Source of truth | `apps/web-hono/src/components/roadmap/roadmap-config.ts`                      |
+| Copy (en + es)  | `roadmap` namespace in `packages/i18n/messages/{en,es}.json`                  |
+| Entry points    | `TopNav`, `Footer`, `apps/web-hono/public/sitemap.xml`                        |
+| On the way band | `apps/web-hono/src/components/home/on-the-way-tiles.ts` reads `ROADMAP_ITEMS` |
+
+Changing a row's `mac` state also changes a badge on the home page: each tile of the home's
+"On the way" band is a roadmap row, and its badge is that row's macOS state, read at render
+time. Measure and Pick colors are two tiles over the one `imageInspect` row.
 
 The page renders inside `HomeShell` with the chapter rail off (`chapterNav={false}`), so it
 shares the home's top bar, `--kl-*` tokens, theme cookie and locale switcher. Its route
@@ -59,7 +64,8 @@ group reads "available somewhere today" and the two cells say where.
 ## How to update it
 
 1. Edit `ROADMAP_ITEMS` in `roadmap-config.ts` — add an entry, or change its `mac` / `win`
-   state between `shipped`, `inProgress` and `planned`. `note: true` adds a caveat line.
+   state between `shipped`, `beta`, `inProgress` and `planned`. `beta` means merged and
+   flagged on macOS, not in the download. `note: true` adds a caveat line.
 2. Add `items.<id>.title` and `items.<id>.description` (and `items.<id>.note` when the row
    has one) to **both** `en.json` and `es.json`.
 3. A **planned** row needs a design doc under `backlog/` before anyone builds it, and a row
@@ -83,16 +89,31 @@ Shipped rows added on 2026-10-14 point at the doc that describes what the downlo
 | `screenshotPdf` | [Screenshot export formats](./export-formats)                   |
 | `captureTitle`  | [Editor — name the capture before saving](./editor-title-input) |
 
+### Beta rows and their docs
+
+Beta rows (macOS `beta`, Windows `planned`) point at the doc that describes the flagged work:
+
+| Id                          | Doc                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| `textRecognition`           | [Image editor — text recognition](./image-editor-text-recognition)            |
+| `imageInspect`              | [Image editor — inspect](./image-editor-inspect)                              |
+| `imageCanvas`               | [Image editor — canvas](./image-editor-canvas)                                |
+| `screenshotsWhileRecording` | [Capture while recording](./capture-while-recording)                          |
+| `clipLevels`                | [Clips levels design](/specs/2026-11-13-clips-levels-added-media-design/)     |
+| `zoomFilmstrip`             | [Zoom-aware filmstrip design](/specs/2026-11-16-zoom-aware-filmstrip-design/) |
+| `localTranscription`        | [Local transcription](./local-transcription)                                  |
+
 ### Planned rows and their design docs
 
-| Id                 | Design doc                                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------------------------- |
-| Windows column     | [Windows beta — recording first, screenshots later](./windows-beta) — replaces the `windowsBeta` row |
-| `signedInstaller`  | Windows only: [Windows release design](/specs/2026-10-15-windows-release-design/), decision 4        |
-| `cloudUpload`      | [Cloud recordings upload](./cloud-recordings-upload) · [desktop sync gap](./desktop-cloud-sync-gap)  |
-| `photoZoom`        | [Zoom and pan in the image viewer](./image-viewer-zoom)                                              |
-| `watermarkUpgrade` | None yet — reworded on 2026-10-07 (below); needs a doc before building                               |
-| `brandIdentity`    | [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/)                            |
+| Id                 | Design doc                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows column     | [Windows beta — recording first, screenshots later](./windows-beta) — replaces the `windowsBeta` row                                               |
+| `signedInstaller`  | Windows only: [Windows release design](/specs/2026-10-15-windows-release-design/), decision 4                                                      |
+| `cloudUpload`      | [Cloud recordings upload](./cloud-recordings-upload) · [desktop sync gap](./desktop-cloud-sync-gap)                                                |
+| `photoZoom`        | [Zoom and pan in the image viewer](./image-viewer-zoom)                                                                                            |
+| `cameraMoves`      | [Camera sections](/specs/2026-11-15-camera-sections-first-version-design/) · [drag-first parts](/specs/2026-11-16-camera-parts-drag-first-design/) |
+| `watermarkUpgrade` | None yet — reworded on 2026-10-07 (below); needs a doc before building                                                                             |
+| `brandIdentity`    | [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/)                                                                          |
 
 Two guardrails make a half-finished edit fail loudly instead of shipping:
 
@@ -180,6 +201,13 @@ now downloads `download/latest/kaipu-setup.exe`, its badge and copy say "Beta" r
 `WindowsComingSoon` → `WindowsBeta`. **No Windows cell flipped:** each one waits for owner
 QA on Windows hardware (Windows release design, decision 10), tracked in
 [Platform parity](/desktop/platform-parity/).
+
+### 2026-11-20 — Private beta state and the home's On the way band
+
+Added the `beta` state and seven beta rows (`textRecognition`, `imageInspect`, `imageCanvas`,
+`screenshotsWhileRecording`, `clipLevels`, `zoomFilmstrip`, `localTranscription`), each mapped
+to its doc in [Beta rows and their docs](#beta-rows-and-their-docs). The home's "On the way"
+band now reads these rows through `on-the-way-tiles.ts`.
 
 ## What to validate in production
 

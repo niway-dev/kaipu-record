@@ -267,8 +267,10 @@ export function registerSettings(): void {
   applySideEffects();
 
   ipcMain.handle(IPC_CHANNELS.getSettings, (): AppSettings => effective);
-  ipcMain.handle(
-    IPC_CHANNELS.updateSettings,
-    (_e, patch: Partial<AppSettings>): AppSettings => updateAppSettings(patch),
-  );
+  ipcMain.handle(IPC_CHANNELS.updateSettings, (_e, patch: Partial<AppSettings>): AppSettings => {
+    // `adminMode` is written only through the admin-mode IPC, which accepts the main window
+    // alone; a renderer's generic write (or a stale full snapshot) never changes it.
+    const { adminMode: _adminMode, ...rest } = patch ?? {};
+    return updateAppSettings(rest);
+  });
 }

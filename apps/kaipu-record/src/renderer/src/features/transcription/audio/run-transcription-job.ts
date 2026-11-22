@@ -47,6 +47,8 @@ export async function runTranscriptionJob(args: {
   modelId: string;
   mediaUrl: string;
   durationMs: number;
+  /** Set when the app, not a click, started this job; main records it as the item's one automatic attempt. */
+  automatic?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: TranscriptionJobProgress) => void;
   progressTimeoutMs?: number;
@@ -57,6 +59,7 @@ export async function runTranscriptionJob(args: {
     modelId,
     mediaUrl,
     durationMs,
+    automatic = false,
     signal,
     onProgress,
     progressTimeoutMs = TRANSCRIPTION_PROGRESS_TIMEOUT_MS,
@@ -64,7 +67,13 @@ export async function runTranscriptionJob(args: {
   if (signal?.aborted) throw new DOMException("The transcription was aborted", "AbortError");
 
   const api = window.electronAPI;
-  const begin = await api.beginTranscription({ id, assetId, modelId, durationMs });
+  const begin = await api.beginTranscription({
+    id,
+    assetId,
+    modelId,
+    durationMs,
+    ...(automatic ? { automatic: true } : {}),
+  });
   if (begin.status === "refused") return { status: "refused", reason: begin.reason };
   const { jobId } = begin;
 

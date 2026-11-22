@@ -1,4 +1,4 @@
-import { Crop, Scissors, Search, Video } from "lucide-react";
+import { Crop, Scissors, Search, Send } from "lucide-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { LazyHydrate } from "@/components/lazy-hydrate";
@@ -7,12 +7,13 @@ import { Hero } from "@/components/home/hero";
 import { Moments } from "@/components/home/moments";
 import { Kai } from "@/components/home/kai";
 import { Chapter } from "@/components/home/chapter";
-import { MockRecord } from "@/components/home/mock-record";
-import { MockCapture } from "@/components/home/mock-capture";
-import { MockEdit } from "@/components/home/mock-edit";
+import { CaptureWidgetMock } from "@/components/home/capture-widget-mock";
 import { MockFind } from "@/components/home/mock-find";
+import { OnTheWay } from "@/components/home/on-the-way";
+import { DemoCard } from "@/components/demos";
 import { Files } from "@/components/home/files";
 import { Closing } from "@/components/home/closing";
+import styles from "@/components/home/find-chapter.module.css";
 import { pageHead, softwareJsonLd } from "@/lib/seo";
 import { getHomeRedirect } from "@/server-functions/get-home-redirect";
 
@@ -50,24 +51,30 @@ function HomePage() {
         <Moments />
       </LazyHydrate>
       <LazyHydrate>
-        <Chapter id="record" tint="c1" number="01" icon={Video} keyPrefix="homeChapter1">
-          <MockRecord />
+        <Chapter id="capture" tint="c1" number="01" icon={Crop} keyPrefix="homeChapter2">
+          <CaptureWidgetMock />
         </Chapter>
       </LazyHydrate>
       <LazyHydrate>
-        <Chapter id="capture" tint="c2" number="02" icon={Crop} keyPrefix="homeChapter2">
-          <MockCapture />
+        <Chapter id="edit" tint="c3" number="02" icon={Scissors} keyPrefix="homeChapter3">
+          <DemoCard id="editor" />
         </Chapter>
       </LazyHydrate>
       <LazyHydrate>
-        <Chapter id="edit" tint="c3" number="03" icon={Scissors} keyPrefix="homeChapter3">
-          <MockEdit />
+        <Chapter id="share" tint="c2" number="03" icon={Send} keyPrefix="homeChapter5">
+          <DemoCard id="share" />
         </Chapter>
       </LazyHydrate>
       <LazyHydrate>
         <Chapter id="find" tint="c4" number="04" icon={Search} keyPrefix="homeChapter4">
-          <MockFind />
+          <div className={styles.find}>
+            <DemoCard id="workspaces" />
+            <MockFind />
+          </div>
         </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <OnTheWay />
       </LazyHydrate>
       <LazyHydrate>
         <Files />

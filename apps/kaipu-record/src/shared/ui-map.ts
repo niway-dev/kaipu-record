@@ -105,12 +105,12 @@ export const UI_MAP = {
         states: ["on", "off", "toggleHover", "deviceHover"],
         gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }, { permission: "microphone" }],
       },
-      micSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
+      micPopover: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
       audio: {
         states: ["on", "off", "unavailable"],
         gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }],
       },
-      audioSettings: {
+      audioPopover: {
         states: ["open"],
         gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }],
       },
@@ -118,7 +118,7 @@ export const UI_MAP = {
         states: ["on", "off", "blocked"],
         gatedBy: [{ recordingSetting: "isCameraEnabled" }, { permission: "camera" }],
       },
-      cameraSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isCameraEnabled" }] },
+      cameraPopover: { states: ["open"], gatedBy: [{ recordingSetting: "isCameraEnabled" }] },
       // Drawn only when the input is on and its permission is denied.
       micNotice: {
         states: ["denied"],
@@ -198,18 +198,19 @@ export const UI_MAP = {
         gatedBy: [{ flag: "transcription" }],
       },
       transcribeModelDialog: { states: ["open"], gatedBy: [{ flag: "transcription" }] },
+      // Tab states keep their ids: "destinations" is the Export tab, "versions" the Copies tab.
       tabs: { states: ["destinations", "versions", "transcript", "details", "captures"] },
       // The Transcript tab (NIW2-870): the editor's TranscriptPanel beside the detail video, behind
       // the `transcription` flag; the states are the panel's own views, see `viewState`.
       transcriptPanel: {
-        states: ["idle", "needsModel", "transcribing", "done", "stale"],
+        states: ["idle", "needsModel", "transcribing", "done", "stale", "staleRerunning"],
         gatedBy: [{ flag: "transcription" }],
       },
-      // VersionsList: the original alone; with its edited project; with the copies made from
-      // it; a copy viewed on its own page (the Viewing pill sits on that row); a copy being
-      // made; a copy whose original was deleted.
+      // VersionsList, the "Copies" tab (shown only with a copy or a running export, NIW2-894): the
+      // original with the copies made from it; a copy viewed on its own page (the Viewing pill
+      // sits on that row); a copy being made; a copy whose original was deleted.
       versions: {
-        states: ["original", "edited", "withCopies", "copy", "running", "sourceDeleted"],
+        states: ["withCopies", "copy", "running", "sourceDeleted"],
       },
       itemDetails: { states: ["recording", "screenshot", "gif"] },
       // The frame captures taken from this video in the editor (NIW2-764), under the tab's
@@ -233,6 +234,9 @@ export const UI_MAP = {
       // sheet; this page never reads it.
       stage: { states: ["nothingPicked", "destinationPicked"] },
       destinationRow: { states: ["default", "selected"] },
+      // "Change video": the Library's originals in a modal, a list beside a muted quick look,
+      // with the video on screen selected and tagged "Exporting now".
+      pickVideoModal: { states: ["open"] },
     },
   },
   exportNew: {
@@ -243,6 +247,8 @@ export const UI_MAP = {
       header: { states: ["default"] },
       dropZone: { states: ["idle", "dragging", "importing"] },
       recentExports: { states: ["list"] },
+      // "Pick from Library": the same modal with the newest original selected and no tag.
+      pickVideoModal: { states: ["open"] },
     },
   },
   prepare: { kind: "route", route: ROUTES.prepare, redirect: true },
@@ -322,7 +328,8 @@ export const UI_MAP = {
       // and opens its offer; `downloading` shows the offer's progress; `transcribing` the job's
       // progress with Cancel; `done` the paragraphs; `unresolved` the same with the stretches the
       // engine could not recognise marked and a note; `stale` a banner over the old words after
-      // the recording changed; `failed` the reason and Try again (also an unreadable file);
+      // the recording changed; `staleRerunning` the same banner while the automatic re-run (or
+      // Transcribe again) works: progress and Cancel replace its button; `failed` the reason and Try again (also an unreadable file);
       // `noAudio` a video without an audio track; `unavailable` an engine that cannot run here;
       // `busy` another video's job holds the engine; `loading` while the file is read.
       transcriptPanel: {
@@ -334,6 +341,7 @@ export const UI_MAP = {
           "done",
           "unresolved",
           "stale",
+          "staleRerunning",
           "failed",
           "noAudio",
           "unavailable",
@@ -735,6 +743,8 @@ export const UI_MAP = {
     route: "/settings/app",
     areas: {
       page: { states: ["default"] },
+      // Admin accounts only (ADR 0067); absent for everyone else, which is the default look.
+      adminMode: { states: ["on", "restartPending"] },
       app: { states: ["default"], gatedBy: [{ setting: "showInDock" }] },
       privacy: { states: ["default"] },
       updates: { states: ["idle", "available", "ready"] },
@@ -819,6 +829,10 @@ export const UI_MAP = {
           { recordingSetting: "isCameraEnabled" },
         ],
       },
+      // The Microphone and Camera chevrons open the same popovers as the Capture page's cards
+      // (NIW2-892), anchored to the widget and flipped above it when it sits at the bottom.
+      micPopover: { states: ["open"] },
+      cameraPopover: { states: ["open"] },
       // The display badge of Screen mode: number, name, size.
       screenCard: { states: ["default", "highlighted"] },
       windowPicker: { states: ["noWindow", "hovered"] },
@@ -870,7 +884,7 @@ export const UI_MAP = {
   shell: {
     kind: "chrome",
     areas: {
-      titleBar: { states: ["default", "withSwitcher"] },
+      titleBar: { states: ["default", "withSwitcher", "admin"] },
       historyArrows: { states: ["atStart", "canGoBack"] },
       workspaceSwitcher: { states: ["closed", "hint", "notConnected", "locked"] },
       workspaceMenu: { states: ["open"] },

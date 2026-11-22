@@ -321,6 +321,12 @@ export interface AppSettings {
    * with the Control key on the overlay (NIW2-883).
    */
   captureWidget: CaptureWidgetSettings;
+  /**
+   * Admin mode preference (ADR 0067): the wish to run with every release flag on. It grants
+   * nothing alone: the mode is effective only when the signed-in account also holds the admin
+   * permission, and main computes that once at launch (see `shared/admin-mode.ts`).
+   */
+  adminMode: boolean;
 }
 
 /**
@@ -359,6 +365,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   microphone: null,
   editor: DEFAULT_EDITOR_SETTINGS,
   captureWidget: DEFAULT_CAPTURE_WIDGET_SETTINGS,
+  adminMode: false,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */
@@ -534,6 +541,8 @@ export const IPC_CHANNELS = {
   /** main → renderer, `TranscriptionJobProgress` on every phase change and finished segment. */
   transcriptionJobProgress: "transcription:job-progress",
   transcriptionReadTranscript: "transcription:read-transcript",
+  /** Settles a `checking` read: hashes the media once per item and answers fresh/stale/unknown. */
+  transcriptionCheckFreshness: "transcription:check-freshness",
   screenshotSave: "screenshot:save",
   // Read the image on the system clipboard as PNG (the Editor's New → Paste).
   clipboardReadImage: "clipboard:read-image",
@@ -558,6 +567,17 @@ export const IPC_CHANNELS = {
   flagOverridesGet: "flags:overrides-get",
   // Main → every renderer window: the active feature-flag overrides changed.
   flagOverridesChanged: "flags:overrides-changed",
+  // Admin mode (ADR 0067). Renderer → main (invoke): the state the Settings row reads
+  // (`AdminModeState`): stored permission, preference, the launch value and whether a restart
+  // is pending.
+  adminModeGetState: "admin-mode:get-state",
+  // Renderer → main (invoke): write the `adminMode` preference; resolves with the state. It
+  // never changes the running mode, only what the next launch computes.
+  adminModeSet: "admin-mode:set",
+  // Renderer → main (invoke): quit through the recording/export guards and start again.
+  adminModeRelaunch: "admin-mode:relaunch",
+  // Main → every renderer window: the stored permission or the preference changed.
+  adminModeChanged: "admin-mode:changed",
   // Main → renderer: global hotkey fired, run the region capture flow.
   screenshotHotkey: "screenshot:hotkey",
   // Capture overlay: one window per display (main/screenshots/capture-overlay-windows.ts).

@@ -30,6 +30,11 @@ export const serverEnvSchema = z.object({
   // Transactional email (Resend). Optional so the API still boots without
   // email configured — send hooks log an error and skip instead of crashing.
   RESEND_API_KEY: z.string().optional(),
+  /**
+   * Comma-separated user ids allowed to use the desktop's Admin mode (ADR 0067).
+   * Optional: missing or empty means nobody is admin, and the API still boots.
+   */
+  ADMIN_USER_IDS: z.string().optional(),
   /** Sender identity; defaults to the Niway convention when unset. */
   AUTH_EMAIL_FROM: z.string().optional(),
   /** Public web origin used to build email links; defaults to https://kaipu.app. */
