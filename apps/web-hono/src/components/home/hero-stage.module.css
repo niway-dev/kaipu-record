@@ -1,0 +1,1380 @@
+/*
+ * The hero's demo screen. Flat on purpose: borders and surfaces from the
+ * landing tokens, no glow, no gradients. Everything inside `.screen` sizes
+ * itself from the screen's own box (container units), so the same picture
+ * serves the 1040px desktop stage and the phone's compact one.
+ */
+
+.slot {
+  display: block;
+}
+
+/* The phone overview's picture (see `OverviewPreview`): hidden on desktop, where the brand statement is the overview. */
+.preview {
+  display: none;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 18px;
+  background: var(--kl-mock-chrome);
+  text-align: left;
+  animation: rise 0.35s var(--kl-ease-reveal) both;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.mono {
+  color: var(--kl-faint);
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- The screen ----------------------------------------------------------- */
+
+.screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--kl-mock-bg);
+  container-type: size;
+}
+
+.sample {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5cqh;
+  padding: 6cqh 6cqw;
+  color: var(--kl-tx);
+  text-align: center;
+}
+
+.sampleTitle {
+  margin: 0;
+  font-size: clamp(18px, min(7.2cqw, 14cqh), 84px);
+  font-weight: 600;
+  letter-spacing: var(--kl-tracking-h1);
+  line-height: 1.03;
+}
+
+.sampleTitle > span {
+  display: block;
+}
+
+/*
+ * The highlighter swash behind the last word of the brand statement: a bright
+ * Kaipu-pink marker stroke with uneven edges, drawn in once. The word stays
+ * white on it in both themes (white on the accent, as the buttons do); the
+ * stroke is the highlight, the text is never pink. Sized in em, so it follows
+ * the headline and the sample screen alike.
+ */
+.marker {
+  position: relative;
+  z-index: 0;
+  display: inline-block;
+  isolation: isolate;
+  padding: 0 0.14em;
+  margin: 0 -0.02em;
+  background: none;
+  color: #fff;
+}
+
+.marker::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 9% -3% 0 -3%;
+  background: var(--kl-pink);
+  clip-path: polygon(
+    0 16%,
+    3% 5%,
+    36% 9%,
+    70% 0,
+    97% 7%,
+    100% 22%,
+    98% 54%,
+    100% 86%,
+    93% 100%,
+    56% 94%,
+    22% 100%,
+    3% 96%,
+    1% 62%
+  );
+  transform: rotate(-1.4deg);
+  transform-origin: 0 50%;
+  animation: swash 0.7s 0.3s var(--kl-ease-reveal) both;
+}
+
+@keyframes swash {
+  from {
+    transform: rotate(-1.4deg) scaleX(0);
+  }
+}
+
+.samplePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.85em 1.5em;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: clamp(9px, min(1.5cqw, 3.4cqh), 16px);
+  font-weight: 600;
+}
+
+/* The pill as a real link: same picture, plus a pointer, hover and a focus ring. */
+.samplePillLink {
+  position: relative;
+  z-index: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+
+.samplePillLink:hover {
+  filter: brightness(1.08);
+}
+
+.samplePillLink:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 3px;
+}
+
+/* One of the two is shown: the installer on a desktop, the download section on a phone (same 980px as the page's CTA). */
+.samplePhone {
+  display: none;
+}
+
+@media (width < 980px) {
+  .sampleDesktop {
+    display: none;
+  }
+
+  .samplePhone {
+    display: inline-flex;
+    /* The phone's pill is the working download link: a readable size and a tap target, not the picture's 9px floor. */
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .samplePillLink {
+    transition: none;
+  }
+}
+
+/* ---- Toolbar and shared controls ---------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--kl-bd);
+}
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 10px;
+}
+
+.segBtn,
+.tool,
+.anchor,
+.link,
+.dockBtn,
+.dockIcon,
+.dockPrimary,
+.play {
+  border: 0;
+  background: none;
+  color: var(--kl-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.segBtn {
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.segBtn:hover,
+.tool:hover:not(:disabled),
+.dockBtn:hover,
+.dockIcon:hover,
+.play:hover {
+  color: var(--kl-tx);
+}
+
+.segOn {
+  background: var(--kl-card-2);
+  color: var(--kl-tx);
+}
+
+/* An export is running: the settings stay visible but cannot be changed. */
+.segBtn[aria-disabled="true"],
+.destBtn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tools {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.tool {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolOn {
+  background: var(--kl-card-2);
+  color: var(--kl-tx);
+}
+
+.anchor {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 8px;
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+}
+
+.segBtn:focus-visible,
+.tool:focus-visible,
+.anchor:focus-visible,
+.link:focus-visible,
+.dockBtn:focus-visible,
+.dockIcon:focus-visible,
+.dockPrimary:focus-visible,
+.play:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 2px;
+}
+
+/* The floating bar at the bottom centre: recording bar and capture bar. */
+.dock {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  display: flex;
+  max-width: calc(100% - 20px);
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  background: var(--kl-mock-chrome);
+  color: var(--kl-tx);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.dockIcon {
+  display: inline-flex;
+  min-width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border-radius: 999px;
+}
+
+.dockIcon:hover {
+  background: var(--kl-card-2);
+}
+
+.dockOff {
+  color: var(--kl-faint);
+}
+
+.dockBtn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+
+.dockPrimary {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dockPrimary:hover {
+  filter: brightness(1.08);
+}
+
+.dockText {
+  padding: 0 4px;
+  color: var(--kl-dim);
+  font-size: 13px;
+}
+
+.stop {
+  background: var(--kl-pink);
+  color: #fff;
+}
+
+.stop:hover {
+  background: var(--kl-pink);
+  filter: brightness(1.08);
+}
+
+.timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  font-family: var(--kl-font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.recDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--kl-faint);
+}
+
+.recDotLive {
+  background: var(--kl-pink);
+}
+
+.levels {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.levelBar {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--kl-pink-tx);
+}
+
+.done {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+}
+
+/* ---- Record: the webcam bubble ---------------------------------------------- */
+
+.bubble {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  width: clamp(52px, 24cqh, 120px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 2px solid var(--kl-bd-2);
+  border-radius: 999px;
+  background: var(--kl-mock-stage);
+}
+
+.bubbleFox {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---- Screenshot: the selection ---------------------------------------------------- */
+
+.select {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.select[data-touch="select"] {
+  touch-action: none;
+}
+
+.selectFull {
+  cursor: default;
+}
+
+.region {
+  position: absolute;
+  border: 1.5px dashed var(--kl-pink);
+  /* Everything outside the selection is dimmed by the shadow the region casts. */
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.55);
+  pointer-events: none;
+}
+
+.regionFull {
+  border-style: solid;
+  box-shadow: none;
+}
+
+.regionSize {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--kl-mock-chrome);
+  color: var(--kl-tx);
+  font-family: var(--kl-font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--kl-mock-chrome);
+  color: var(--kl-dim);
+  font-size: 12.5px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* ---- Edit: the image canvas and its annotations ------------------------------------ */
+
+.shot {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.ink {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  /* A swipe scrolls the page until a tool is picked; then touch draws (see EditStage). */
+  touch-action: pan-y;
+}
+
+.ink[data-touch="draw"] {
+  touch-action: none;
+}
+
+/* The export preview's copy of the marks: the same box as the canvas, nothing to press. */
+.inkStatic {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The edited image in the export preview: same box and crop as the canvas it came from. */
+.exportPicture {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.inkSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: var(--kl-pink-tx);
+  pointer-events: none;
+}
+
+.stroke {
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.note {
+  position: absolute;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  transform: translate(-6px, -50%);
+  white-space: nowrap;
+}
+
+.chip {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  background: var(--kl-mock-chrome);
+  color: var(--kl-dim);
+  font-family: var(--kl-font-mono);
+  font-size: 11.5px;
+  pointer-events: none;
+}
+
+.shutter {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  animation: shutter 0.45s ease-out both;
+}
+
+/* ---- Edit: the video timeline --------------------------------------------------- */
+
+.timecode {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--kl-mock-chrome);
+  color: var(--kl-tx);
+  font-family: var(--kl-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--kl-pink);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--kl-bd);
+}
+
+.timelineHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.play {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  color: var(--kl-tx);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.statusChip {
+  padding: 3px 10px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  color: var(--kl-dim);
+  font-family: var(--kl-font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusOn {
+  border-color: var(--kl-pink);
+  color: var(--kl-tx);
+}
+
+.track {
+  --thumb: 14px;
+
+  position: relative;
+  height: 40px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.lane,
+.keptBar {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  border-radius: 8px;
+}
+
+.lane {
+  right: 0;
+  left: 0;
+  border: 1px solid var(--kl-bd);
+  background: var(--kl-mock-deep);
+}
+
+.keptBar {
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--from));
+  right: calc(var(--thumb) / 2 + (100% - var(--thumb)) * (1 - var(--to)));
+  border: 1px solid var(--kl-pink);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--kl-pink) 24%, var(--kl-mock-stage));
+}
+
+.range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 40px;
+  background: transparent;
+}
+
+.range::-moz-range-track {
+  height: 40px;
+  background: transparent;
+}
+
+.range::-webkit-slider-thumb {
+  width: var(--thumb);
+  height: 30px;
+  margin-top: 5px;
+  appearance: none;
+  border: 0;
+  border-radius: 5px;
+  background: var(--kl-pink);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+.range::-moz-range-thumb {
+  width: var(--thumb);
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--kl-pink);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+.rangePlayhead::-webkit-slider-thumb {
+  height: 40px;
+  margin-top: 0;
+  border-radius: 0;
+  background: linear-gradient(var(--kl-tx), var(--kl-tx)) center / 2px 100% no-repeat;
+}
+
+.rangePlayhead::-moz-range-thumb {
+  height: 40px;
+  border-radius: 0;
+  background: linear-gradient(var(--kl-tx), var(--kl-tx)) center / 2px 100% no-repeat;
+}
+
+.range:focus-visible {
+  outline: none;
+}
+
+.range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--kl-tx);
+  outline-offset: 1px;
+}
+
+.range:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--kl-tx);
+  outline-offset: 1px;
+}
+
+/* ---- Export: the panel anchored over the screen --------------------------------------- */
+
+.panel {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  width: min(380px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 14px;
+  background: var(--kl-mock-chrome);
+  color: var(--kl-tx);
+  animation: rise 0.25s var(--kl-ease-reveal) both;
+}
+
+.destGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.destBtn {
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  background: none;
+  color: var(--kl-dim);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.destBtn:hover {
+  color: var(--kl-tx);
+}
+
+.destOn {
+  border-color: var(--kl-pink);
+  background: var(--kl-card-2);
+  color: var(--kl-tx);
+}
+
+.destBtn:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 2px;
+}
+
+.destInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.destLine {
+  color: var(--kl-dim);
+  font-size: 13px;
+}
+
+.faintNote {
+  color: var(--kl-faint);
+  font-size: 12px;
+}
+
+.panelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panelLabel {
+  color: var(--kl-faint);
+  font-size: 12.5px;
+}
+
+.panelFoot {
+  position: sticky;
+  bottom: -14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: -14px;
+  padding: 6px 0 14px;
+  /* On a short screen the options scroll; the Export button and its progress stay in view. */
+  background: var(--kl-mock-chrome);
+}
+
+.panelFootRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.anchor[aria-disabled="true"] {
+  cursor: default;
+}
+
+@container (height < 240px) {
+  .panel {
+    gap: 6px;
+    padding: 10px 10px 14px;
+  }
+
+  .destGroup {
+    gap: 4px;
+  }
+
+  .destBtn {
+    min-height: 24px;
+    padding: 2px 8px;
+  }
+}
+
+.progressText {
+  color: var(--kl-dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--kl-card-2);
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--kl-pink);
+  transition: width 0.14s linear;
+}
+
+.result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.result .done {
+  width: 30px;
+  height: 30px;
+  margin: 0;
+}
+
+.resultText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resultName {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.resultNote {
+  color: var(--kl-pink-tx);
+  font-size: 12.5px;
+}
+
+.link {
+  color: var(--kl-dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- Workspace bar: which folder everything lands in -------------------------------- */
+
+.wsBar {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--kl-bd);
+}
+
+.wsButton {
+  display: inline-flex;
+  min-height: 30px;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 9px;
+  background: none;
+  color: var(--kl-tx);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.wsButton:hover {
+  background: var(--kl-card-2);
+}
+
+.wsButton:focus-visible,
+.wsRow:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 2px;
+}
+
+.wsTile {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.wsName {
+  white-space: nowrap;
+}
+
+.wsSaving {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  color: var(--kl-faint);
+  font-size: 12px;
+}
+
+.wsSaving svg {
+  flex: none;
+}
+
+.wsLabel {
+  flex: none;
+}
+
+.wsPath {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--kl-dim);
+  font-family: var(--kl-font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsMenu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 8px;
+  display: flex;
+  width: min(360px, calc(100% - 16px));
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 12px;
+  background: var(--kl-mock-chrome);
+  animation: rise 0.2s var(--kl-ease-reveal) both;
+}
+
+.wsRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--kl-tx);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wsRow:hover:not(:disabled),
+.wsRowOn {
+  background: var(--kl-card-2);
+}
+
+.wsRow:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.wsRowText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.wsRowName {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.wsRowPath {
+  overflow: hidden;
+  color: var(--kl-faint);
+  font-family: var(--kl-font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsNote {
+  margin: 2px 6px 2px;
+  color: var(--kl-faint);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ---- Motion ------------------------------------------------------------------------ */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes shutter {
+  from {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage,
+  .panel,
+  .shutter,
+  .wsMenu,
+  .marker::before {
+    animation: none;
+  }
+
+  .barFill,
+  .segBtn,
+  .tool,
+  .destBtn,
+  .dockIcon {
+    transition: none;
+  }
+}
+
+/* ---- Compact: a phone, or any narrow screen -------------------------------------------- */
+
+@container (max-width: 520px) {
+  .bubble {
+    top: 10px;
+    right: 10px;
+    bottom: auto;
+    left: auto;
+    width: 46px;
+  }
+
+  .levels,
+  .hint {
+    display: none;
+  }
+
+  .timer {
+    padding: 0 6px 0 8px;
+  }
+
+  .dockIcon {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 7px;
+  }
+
+  .dock {
+    bottom: 10px;
+    gap: 2px;
+  }
+
+  .panel {
+    top: 6px;
+    right: 6px;
+    left: 6px;
+    width: auto;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  /* The saved folder and length are the only place that says where the take went: keep them, on a line of their own above the buttons. */
+  .dockSaved {
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 18px;
+  }
+
+  /* Reserve the saved dock's two rows so the sample's download link cannot cover its folder. */
+  .screen[data-record-state="stopped"] .sample {
+    bottom: 88px;
+  }
+
+  .dockText {
+    flex: 1 0 100%;
+    order: -1;
+    overflow: hidden;
+    padding: 2px 8px 0;
+    font-size: 12px;
+    text-align: center;
+    text-overflow: ellipsis;
+  }
+
+  .wsLabel {
+    display: none;
+  }
+}
+
+@media (width < 640px) {
+  .toolLabel {
+    display: none;
+  }
+
+  .tool {
+    padding: 4px 8px;
+  }
+}
+
+@media (width < 1080px) {
+  .slot,
+  .stage {
+    grid-area: stage;
+    width: 100%;
+    max-width: 640px;
+  }
+
+  /* The preview is the same box as a step's screen, so the overview does not jump in size. */
+  .preview {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--kl-bd-2);
+    border-radius: 18px;
+    background: var(--kl-mock-chrome);
+    pointer-events: none;
+    text-align: left;
+    user-select: none;
+  }
+
+  .screen {
+    flex: none;
+    aspect-ratio: 16 / 10;
+  }
+
+  .previewFrame {
+    position: absolute;
+    inset: 13% 8% 27% 8%;
+    border: 1.5px dashed var(--kl-pink);
+    border-radius: 4px;
+  }
+
+  .previewFrame i {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid var(--kl-pink);
+    background: var(--kl-mock-bg);
+  }
+
+  .previewFrame i:nth-of-type(1) {
+    top: -5px;
+    left: -5px;
+  }
+
+  .previewFrame i:nth-of-type(2) {
+    top: -5px;
+    right: -5px;
+  }
+
+  .previewFrame i:nth-of-type(3) {
+    bottom: -5px;
+    left: -5px;
+  }
+
+  .previewFrame i:nth-of-type(4) {
+    right: -5px;
+    bottom: -5px;
+  }
+
+  .previewCursor {
+    position: absolute;
+    right: -4px;
+    bottom: -8px;
+    color: var(--kl-tx);
+    fill: var(--kl-tx);
+    filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35));
+  }
+
+  .previewArrow {
+    position: absolute;
+    top: 18%;
+    left: 11%;
+    width: 13%;
+    color: var(--kl-pink);
+  }
+
+  .previewStop {
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  .preview .dock {
+    bottom: 10px;
+  }
+
+  .preview .dockIcon {
+    cursor: default;
+  }
+
+  /* The export screen is not a 16:10 box here: its height follows its content (the panel is in flow, see `.exportScreen` below). */
+  .stage[data-stage="export"] .screen {
+    aspect-ratio: auto;
+  }
+}
+
+/* A phone fills the width: the demo is the point of the page, not a card inside a column. */
+@media (width < 640px) {
+  .slot,
+  .stage {
+    width: auto;
+    max-width: none;
+    justify-self: stretch;
+    margin-inline: calc(10px - var(--kl-gutter));
+  }
+}
+
+@media (width >= 1080px) {
+  .slot,
+  .stage {
+    grid-area: stage;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+/* Keep the export preview visible beside its controls, and above them on phones. */
+@media (width >= 1080px) {
+  .exportPicture {
+    right: 404px;
+  }
+
+  .exportScreen .exportPicture .sample {
+    right: 0;
+  }
+
+  .exportScreen .sample {
+    right: 404px;
+    padding: 24px;
+  }
+
+  .exportScreen .sampleTitle {
+    font-size: clamp(20px, 4cqw, 48px);
+  }
+}
+
+@media (width < 1080px) {
+  .exportPicture,
+  .exportPicture .shot {
+    position: relative;
+    inset: auto;
+  }
+
+  .stage[data-stage="export"] .exportScreen {
+    display: flex;
+    height: auto;
+    flex-direction: column;
+    container-type: inline-size;
+  }
+
+  .exportScreen .sample {
+    position: relative;
+    min-height: 180px;
+    gap: 16px;
+    padding: 24px 16px;
+  }
+
+  .exportScreen .sampleTitle {
+    font-size: clamp(20px, 6cqw, 36px);
+  }
+
+  .exportScreen .samplePill {
+    padding: 10px 16px;
+  }
+
+  .exportScreen .panel {
+    position: relative;
+    inset: auto;
+    width: auto;
+    max-height: none;
+    margin: 0 8px 8px;
+    overflow: visible;
+  }
+}
+
+@media (width < 640px) {
+  .wsLabel {
+    display: none;
+  }
+}

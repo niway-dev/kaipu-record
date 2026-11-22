@@ -92,7 +92,7 @@ is the complete, detailed catalogue the home links to: "everything Kaipu does".
 
 ## Brand (follow strictly)
 - Name: Kaipu (site kaipu.app). Signature: "This. Captured." Landing promise:
-  "Show it. Get back to work." Workflow line: "Capture it. Make it clear. Find it again."
+  "From your screen. To the world." (2026-11-21; replaced "Show it. Get back to work.") Workflow line: "Capture it. Make it clear. Find it again."
 - Mascot: Kai, a flat black fox bust on Kaipu pink with two cream eyes. Use him
   sparingly (header or closing), never as a joke on every card.
 - Pink is the recognition cue. Light AND dark themes are both first-class.

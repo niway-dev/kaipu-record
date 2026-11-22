@@ -45,7 +45,7 @@ export function HomeShell({
       {chapterNav && <ChapterStrip chapters={chapters} />}
       {chapterNav && <Rail chapters={chapters} />}
       <main>{children}</main>
-      <StickyCta />
+      <StickyCta hideOverHero={page === "home"} />
     </div>
   );
 }
