@@ -3,7 +3,9 @@ import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
 import type { ResolvedImage } from "@renderer/features/screenshots/image-source";
 import { formatCaptured, formatColor, type ColorFormat, type Rgba } from "./color";
+import type { PickedColor } from "@shared/image-inspect-settings";
 import { inspectKeyAction } from "./inspect-keys";
+import { usePickedColors } from "./use-picked-colors";
 import {
   assetClientRect,
   clientToBasePixel,
@@ -79,13 +81,13 @@ export interface InspectController {
   asCaptured: boolean;
   setAsCaptured(on: boolean): void;
   hover: InspectHover | null;
-  /** The text the chip shows and the C key copies; null while the value is not known yet.
-   * The bar's Copy writes the same, but falls back to the last pixel after the pointer left. */
+  /** The text the chip shows and the C key copies; null while the value is not known yet. */
   readout: string | null;
   loupe: Uint8ClampedArray | null;
   onPointerMove(e: { clientX: number; clientY: number; shiftKey?: boolean }): void;
   onPointerLeave(): void;
-  copy(): Promise<boolean>;
+  /** Copy a value the bar shows (the picked color, a recent one). False when it failed. */
+  copyValue(text: string): Promise<boolean>;
   /** True for a moment after a successful copy. */
   copied: boolean;
   /** The text that copy wrote, while `copied` is true: the pointer may be on another pixel by then. */
@@ -123,6 +125,18 @@ export interface InspectController {
   }): boolean;
   /** Pin the run under the cursor. False when no run is shown. */
   pin(): boolean;
+  /**
+   * Pick the pixel under the cursor into the Color box (NIW2-911): the previous pick goes to
+   * the recents. False when the pointer is not on an image pixel.
+   */
+  pick(point?: { clientX: number; clientY: number }): boolean;
+  /** The color the last click picked, kept across sessions. */
+  picked: PickedColor | null;
+  /** The colors the picks replaced, newest first, at most three. */
+  recents: readonly PickedColor[];
+  /** Whether the loupe shows next to the pointer; kept across sessions. */
+  loupeShown: boolean;
+  setLoupeShown(on: boolean): void;
 }
 
 interface Options {
@@ -151,6 +165,30 @@ export function readoutFor(
   if (!hover) return null;
   if (asCaptured) return hover.captured ? formatCaptured(hover.captured, format) : null;
   return formatColor(hover.color, format);
+}
+
+/**
+ * The text for a picked color in the bar's format. "As captured" shows the raw bytes when the
+ * pick has them. A pick without them shows its sRGB value instead, so it still reads as a color;
+ * the bar tags that case (`isSrgbFallback`). Such picks come from a failed probe, from an earlier
+ * session without a probe, and from a quick click with As captured off, before the probe read
+ * the pixel. With As captured on, a click waits for the raw value instead.
+ */
+export function pickedReadout(
+  picked: PickedColor,
+  format: ColorFormat,
+  asCaptured: boolean,
+): string {
+  if (asCaptured && picked.captured) return formatCaptured(picked.captured, format);
+  return formatColor(picked.color, format);
+}
+
+/**
+ * Whether a pick shows its sRGB value although As captured is on: it was saved without raw
+ * bytes (see `pickedReadout`), so the bar tags it instead of passing sRGB off as captured.
+ */
+export function isSrgbFallback(picked: PickedColor, asCaptured: boolean): boolean {
+  return asCaptured && !picked.captured;
 }
 
 /** The ruler's line in client coordinates for a run on an image shown at `rect`. */
@@ -197,6 +235,9 @@ export function useInspect({
   const [run, setRun] = useState<InspectRun | null>(null);
   const [toleranceShown, setToleranceShown] = useState(false);
   const [empty, setEmpty] = useState<{ clientX: number; clientY: number } | null>(null);
+  const picks = usePickedColors(enabled);
+  const picksRef = useRef(picks);
+  picksRef.current = picks;
   const toleranceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rulerRef = useRef<RulerAxis | null>(null);
   const toleranceRef = useRef(DEFAULT_TOLERANCE);
@@ -221,8 +262,6 @@ export function useInspect({
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const probing = useRef(false);
   const hoverRef = useRef<InspectHover | null>(null);
-  // The last pixel the pointer rested on: survives pointer leave so the bar's Copy still has it.
-  const lastHoverRef = useRef<InspectHover | null>(null);
   const watchFrame = useRef<number | null>(null);
   const watchRect = useRef<string>("");
   const imageRef = useRef(image);
@@ -238,8 +277,6 @@ export function useInspect({
   const readout = readoutFor(hover, format, asCaptured);
   const readoutRef = useRef(readout);
   readoutRef.current = readout;
-  const formatRef = useRef(format);
-  formatRef.current = format;
   const asCapturedRef = useRef(asCaptured);
   asCapturedRef.current = asCaptured;
 
@@ -251,8 +288,7 @@ export function useInspect({
   const publish = useCallback(
     (next: InspectHover | null) => {
       hoverRef.current = next;
-      if (next) lastHoverRef.current = next;
-      else publishRun(null);
+      if (!next) publishRun(null);
       setHover(next);
     },
     [publishRun],
@@ -449,7 +485,6 @@ export function useInspect({
         restTimer.current = null;
         lastPointer.current = null;
         stopWatch();
-        lastHoverRef.current = null;
         publish(null);
         setLoupe(null);
         setEmpty(null);
@@ -550,18 +585,27 @@ export function useInspect({
     [t],
   );
 
-  /** The bar's Copy: the pixel under the pointer, or the last one if the pointer moved to the bar. */
-  const copy = useCallback(
-    (): Promise<boolean> =>
-      copyText(
-        readoutFor(
-          hoverRef.current ?? lastHoverRef.current,
-          formatRef.current,
-          asCapturedRef.current,
-        ),
-      ),
-    [copyText],
-  );
+  const pick = useCallback((point?: { clientX: number; clientY: number }): boolean => {
+    // The hover is published once per animation frame, so it can lag the click: re-sample at the
+    // click's own coordinates before reading it.
+    if (point && activeRef.current) {
+      lastPointer.current = { clientX: point.clientX, clientY: point.clientY };
+      flushRef.current();
+    }
+    const at = hoverRef.current;
+    if (!activeRef.current || !at) return false;
+    // As captured is on and the probe has not read this pixel yet: the chip still says "…", so
+    // there is nothing honest to pick. (A probe that failed falls back to the sRGB value.)
+    if (asCapturedRef.current && !at.captured && !probeBroken.current) return false;
+    picksRef.current.pick({
+      color: { ...at.color },
+      ...(at.captured ? { captured: { ...at.captured } } : {}),
+      ...(at.outOfGamut !== undefined ? { outOfGamut: at.outOfGamut } : {}),
+    });
+    return true;
+  }, []);
+
+  const setLoupeShown = useCallback((on: boolean): void => picksRef.current.setLoupe(on), []);
   // The C key keeps copying only what the chip shows.
   const copyKeyRef = useRef(() => copyText(readoutRef.current));
   copyKeyRef.current = () => copyText(readoutRef.current);
@@ -631,7 +675,6 @@ export function useInspect({
     setBuffer(null);
     bytesRef.current = null;
     tileRef.current = null;
-    lastHoverRef.current = null;
     // The readout still shows the old image's pixel: drop it until the new buffer is read.
     publish(null);
     setLoupe(null);
@@ -671,7 +714,7 @@ export function useInspect({
     loupe,
     onPointerMove,
     onPointerLeave,
-    copy,
+    copyValue: copyText,
     copied,
     copiedText,
     status,
@@ -689,5 +732,10 @@ export function useInspect({
     run,
     onWheel,
     pin,
+    pick,
+    picked: picks.picked,
+    recents: picks.recents,
+    loupeShown: picks.loupe,
+    setLoupeShown,
   };
 }

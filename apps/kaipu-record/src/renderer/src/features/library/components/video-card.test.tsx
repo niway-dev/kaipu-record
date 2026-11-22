@@ -49,6 +49,20 @@ describe("VideoCard", () => {
     expect(screen.queryByText(/FRAME|SCREEN|WINDOW/)).toBeNull();
   });
 
+  it("puts a master recording's capture tag on the line below the master tag", () => {
+    render(
+      <VideoCard
+        video={{ ...video, capture: { mode: "area", width: 1280, height: 720, ratio: "16:9" } }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const stack = screen.getByText("Master · full quality").closest('[data-stacked="true"]');
+    const capture = screen.getByText("FRAME · 16:9");
+    expect(stack?.contains(capture)).toBe(true);
+    expect(capture.closest('[data-stacked="true"] > *:not(:first-child)')).not.toBeNull();
+  });
+
   it("marks a webcam recording's thumbnail pending until the bubble is composited (NIW2-845)", () => {
     const cam = { ...video, webcam: { startOffsetMs: 0 } } as LibraryVideo;
     const { container, rerender } = render(
@@ -84,6 +98,24 @@ describe("VideoCard", () => {
     expect(screen.queryByRole("button", { name: "Export a copy" })).toBeNull();
   });
 
+  it("tags an original screenshot as the master and keeps its Screenshot badge", () => {
+    render(
+      <VideoCard
+        video={{ ...video, kind: "screenshot", durationSeconds: 0 }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const master = screen.getByText("Master · full quality");
+    const badge = screen.getByText("Screenshot");
+    // The master tag takes its own line; the kind badge sits on the line below it, so a
+    // narrow card stacks the tags instead of clipping the second one.
+    const stack = master.closest('[data-stacked="true"]');
+    expect(stack).not.toBeNull();
+    expect(stack?.contains(badge)).toBe(true);
+    expect(badge.closest('[data-stacked="true"] > *:not(:first-child)')).not.toBeNull();
+  });
+
   it("tags an original as the master instead of a plain Recording badge (NIW2-585)", () => {
     const { rerender } = render(
       <VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />,
@@ -92,7 +124,7 @@ describe("VideoCard", () => {
     expect(screen.queryByText("Recording")).toBeNull();
     for (const notMaster of [
       { ...video, derivedFromAssetId: "src" },
-      { ...video, kind: "screenshot" as const },
+      { ...video, kind: "screenshot" as const, derivedFromAssetId: "src" },
       { ...video, kind: "gif" as const, derivedFromAssetId: "src" },
     ]) {
       rerender(<VideoCard video={notMaster} onNavigate={vi.fn()} onDelete={vi.fn()} />);

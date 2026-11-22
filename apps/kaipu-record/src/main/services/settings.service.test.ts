@@ -123,6 +123,7 @@ describe("mergeSettings", () => {
       microphone: { deviceId: "yeti", label: "Yeti Nano" },
       editor: { hiddenTracks: [] },
       captureWidget: { screenshotExpanded: false, recordingExpanded: false },
+      imageInspect: { picked: null, recents: [], loupe: true },
     });
   });
 
@@ -837,5 +838,35 @@ describe("mergeSettings — captureWidget", () => {
       screenshotExpanded: false,
       recordingExpanded: false,
     });
+  });
+});
+
+describe("mergeSettings — imageInspect", () => {
+  it("starts with no picked color, no recents and the loupe on", () => {
+    expect(mergeSettings(null).imageInspect).toEqual({ picked: null, recents: [], loupe: true });
+  });
+
+  it("keeps a stored pick, at most three recents and the loupe choice", () => {
+    const c = (r: number): { color: { r: number; g: number; b: number; a: number } } => ({
+      color: { r, g: 0, b: 0, a: 255 },
+    });
+    expect(
+      mergeSettings({
+        imageInspect: { picked: c(1), recents: [c(2), c(3), c(4), c(5)], loupe: false },
+      } as never).imageInspect,
+    ).toEqual({ picked: c(1), recents: [c(2), c(3), c(4)], loupe: false });
+  });
+
+  it("survives a wrong shape and drops unreadable colors", () => {
+    expect(mergeSettings({ imageInspect: "x" } as never).imageInspect).toEqual({
+      picked: null,
+      recents: [],
+      loupe: true,
+    });
+    expect(
+      mergeSettings({
+        imageInspect: { picked: { color: { r: 300 } }, recents: [null, 7] },
+      } as never).imageInspect,
+    ).toEqual({ picked: null, recents: [], loupe: true });
   });
 });

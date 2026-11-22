@@ -39,8 +39,8 @@ export const MAX_GROUPS = 200;
 export const MIN_AREA_PX = 16;
 /** From this many exact values an image is treated as a photograph. */
 export const PHOTO_MIN_DISTINCT = 1000;
-/** Share of the counted pixels the groups shown for a photograph must cover. */
-export const PHOTO_COVERAGE = 0.8;
+/** A photograph lists every group with at least this share of the counted pixels. */
+export const PHOTO_GROUP_SHARE = 0.01;
 /** Rows between progress reports are chosen so there are about this many. */
 const PROGRESS_STEPS = 20;
 
@@ -288,15 +288,16 @@ export const isPhoto = (analysis: ColorAnalysis): boolean =>
   analysis.distinct >= PHOTO_MIN_DISTINCT;
 
 /**
- * For a photograph: the largest groups that together cover `PHOTO_COVERAGE` of the counted
- * pixels (at least one), and how many pixels are left outside them ("Other").
+ * For a photograph: every group with at least `PHOTO_GROUP_SHARE` of the counted pixels (the
+ * largest one always, so the list is never empty), and how many pixels are left outside them
+ * ("Other"). Groups come most frequent first, so the first one under the share ends the list.
  */
 export function coverageGroups(analysis: ColorAnalysis): { groups: ColorGroup[]; other: number } {
-  const goal = analysis.counted * PHOTO_COVERAGE;
+  const floor = analysis.counted * PHOTO_GROUP_SHARE;
   const groups: ColorGroup[] = [];
   let covered = 0;
   for (const g of analysis.groups) {
-    if (groups.length > 0 && covered >= goal) break;
+    if (groups.length > 0 && g.count < floor) break;
     groups.push(g);
     covered += g.count;
   }
