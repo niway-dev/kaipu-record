@@ -44,6 +44,20 @@ describe("pickColor", () => {
     expect(pickColor(s, px(0, 200, 0))).toBe(s);
   });
 
+  it("updates the stored pick when a click repeats its sRGB value with other captured bytes", () => {
+    const first: PickedColor = { ...RED, captured: { r: 250, g: 10, b: 90, a: 255 } };
+    const again: PickedColor = {
+      ...RED,
+      captured: { r: 251, g: 11, b: 91, a: 255 },
+      outOfGamut: true,
+    };
+    const s = pickColor(pickColor(DEFAULT_IMAGE_INSPECT_SETTINGS, GREEN), first);
+    const next = pickColor(s, again);
+    expect(next.picked).toEqual(again);
+    expect(next.recents).toEqual(s.recents);
+    expect(pickColor(next, { ...again })).toBe(next);
+  });
+
   it("never lists the same color twice in a row, whatever is clicked", () => {
     let s: ImageInspectSettings = DEFAULT_IMAGE_INSPECT_SETTINGS;
     for (const c of [RED, RED, GREEN, GREEN, RED, RED, BLUE, BLUE, GREEN]) {

@@ -71,6 +71,25 @@ describe("usePickedColors (imageInspect, follows main's broadcast)", () => {
     });
   });
 
+  it("waits for the first read and builds on the stored value, never on the defaults", async () => {
+    const stored = withInspect({ picked: RED, recents: [GREEN], loupe: false });
+    const ipc = installSettingsIpc(stored, { deferRead: true });
+    const update = installUpdate(ipc, stored);
+    const { result } = renderHook(() => usePickedColors(true));
+    await waitFor(() => expect(ipc.getSettings).toHaveBeenCalled());
+    act(() => result.current.pick(BLUE));
+    act(() => result.current.setLoupe(true));
+    expect(update).not.toHaveBeenCalled();
+    await act(async () => ipc.resolveRead(stored));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update.mock.calls[0]?.[0]).toEqual({
+      imageInspect: { picked: BLUE, recents: [RED, GREEN], loupe: false },
+    });
+    expect(update.mock.calls[1]?.[0]).toEqual({
+      imageInspect: { picked: BLUE, recents: [RED, GREEN], loupe: true },
+    });
+  });
+
   it("pushes the replaced pick to the front of the recents and keeps three (AC2)", async () => {
     const ipc = installSettingsIpc(BASE);
     const update = installUpdate(ipc, BASE);

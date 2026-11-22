@@ -129,7 +129,7 @@ export interface InspectController {
    * Pick the pixel under the cursor into the Color box (NIW2-911): the previous pick goes to
    * the recents. False when the pointer is not on an image pixel.
    */
-  pick(): boolean;
+  pick(point?: { clientX: number; clientY: number }): boolean;
   /** The color the last click picked, kept across sessions. */
   picked: PickedColor | null;
   /** The colors the picks replaced, newest first, at most three. */
@@ -169,10 +169,10 @@ export function readoutFor(
 
 /**
  * The text for a picked color in the bar's format. "As captured" shows the raw bytes when the
- * pick has them. A pick without them (the probe failed, or the pick was saved by an earlier
- * session that had no probe) shows its sRGB value instead, so it still reads as a color; the bar
- * tags that case (`isSrgbFallback`). A click never makes such a pick while the probe is only
- * pending: it waits for the raw value.
+ * pick has them. A pick without them shows its sRGB value instead, so it still reads as a color;
+ * the bar tags that case (`isSrgbFallback`). Such picks come from a failed probe, from an earlier
+ * session without a probe, and from a quick click with As captured off, before the probe read
+ * the pixel. With As captured on, a click waits for the raw value instead.
  */
 export function pickedReadout(
   picked: PickedColor,
@@ -184,8 +184,8 @@ export function pickedReadout(
 }
 
 /**
- * Whether a pick shows its sRGB value although As captured is on: it was made without the
- * raw bytes (the probe had failed), so the bar tags it instead of passing sRGB off as captured.
+ * Whether a pick shows its sRGB value although As captured is on: it was saved without raw
+ * bytes (see `pickedReadout`), so the bar tags it instead of passing sRGB off as captured.
  */
 export function isSrgbFallback(picked: PickedColor, asCaptured: boolean): boolean {
   return asCaptured && !picked.captured;
@@ -585,7 +585,13 @@ export function useInspect({
     [t],
   );
 
-  const pick = useCallback((): boolean => {
+  const pick = useCallback((point?: { clientX: number; clientY: number }): boolean => {
+    // The hover is published once per animation frame, so it can lag the click: re-sample at the
+    // click's own coordinates before reading it.
+    if (point && activeRef.current) {
+      lastPointer.current = { clientX: point.clientX, clientY: point.clientY };
+      flushRef.current();
+    }
     const at = hoverRef.current;
     if (!activeRef.current || !at) return false;
     // As captured is on and the probe has not read this pixel yet: the chip still says "…", so

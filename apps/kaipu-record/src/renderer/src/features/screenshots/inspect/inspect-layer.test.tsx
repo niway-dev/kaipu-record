@@ -233,11 +233,13 @@ function click(layer: HTMLElement, at = { clientX: 100, clientY: 100 }): void {
 describe("InspectLayer click", () => {
   it("picks the pixel color when no measurement is shown", () => {
     const pin = vi.fn(() => false);
-    const pick = vi.fn(() => true);
+    const pick = vi.fn((_point?: { clientX: number; clientY: number }) => true);
     render(<InspectLayer inspect={controller({ hover: hoverAt(100, 100), pin, pick })} />);
-    click(screen.getByTestId("inspect-layer"));
+    click(screen.getByTestId("inspect-layer"), { clientX: 101, clientY: 99 });
     expect(pin).toHaveBeenCalledTimes(1);
     expect(pick).toHaveBeenCalledTimes(1);
+    // The click's own coordinates go with it, so the pick never reads a stale hover.
+    expect(pick).toHaveBeenCalledWith({ clientX: 101, clientY: 99 });
   });
 
   it("only pins the measurement while a run is shown, without picking", () => {

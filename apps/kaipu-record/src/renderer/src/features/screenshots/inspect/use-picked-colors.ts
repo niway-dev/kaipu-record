@@ -3,6 +3,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
 import {
   getSettingsSnapshot,
+  loadSettings,
   subscribeSettings,
   updateSettings,
 } from "@renderer/features/settings/settings-store";
@@ -87,18 +88,42 @@ export function usePickedColors(enabled: boolean): PickedColors {
     [t],
   );
 
-  const pick = useCallback(
-    (color: PickedColor): void => {
-      const next = pickColor(latest.current, color);
-      if (next !== latest.current) write(next);
+  /**
+   * Apply a change on top of the stored value. Before the first read lands the hook shows the
+   * defaults, which are not what is stored: a write built on them would overwrite the saved
+   * pick, recents and loupe. So the change waits for the read and then builds on its value.
+   */
+  const change = useCallback(
+    (build: (base: ImageInspectSettings) => ImageInspectSettings): void => {
+      const apply = (): void => {
+        const next = build(latest.current);
+        if (next !== latest.current) write(next);
+      };
+      if (readStored() !== null || inFlight.current > 0) {
+        apply();
+        return;
+      }
+      loadSettings()
+        .then((loaded) => {
+          if (inFlight.current === 0) latest.current = loaded.imageInspect;
+          apply();
+        })
+        .catch((error: unknown) => {
+          reportError(t("inspectPicksSaveError"), error, {
+            context: { phase: "inspect-picks-save" },
+          });
+        });
     },
-    [write],
+    [t, write],
+  );
+
+  const pick = useCallback(
+    (color: PickedColor): void => change((base) => pickColor(base, color)),
+    [change],
   );
   const setLoupe = useCallback(
-    (on: boolean): void => {
-      if (latest.current.loupe !== on) write({ ...latest.current, loupe: on });
-    },
-    [write],
+    (on: boolean): void => change((base) => (base.loupe === on ? base : { ...base, loupe: on })),
+    [change],
   );
 
   return { picked: current.picked, recents: current.recents, loupe: current.loupe, pick, setLoupe };

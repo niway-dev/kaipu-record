@@ -348,7 +348,7 @@ export function InspectLayer({ inspect }: { inspect: InspectController }): React
         if (!start || start.id !== e.pointerId) return;
         if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_SLOP) return;
         // A run on show is pinned as a measurement; otherwise the click picks the color.
-        if (!inspect.pin()) inspect.pick();
+        if (!inspect.pin()) inspect.pick({ clientX: e.clientX, clientY: e.clientY });
       }}
       onPointerCancel={() => {
         press.current = null;

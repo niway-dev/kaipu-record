@@ -1044,6 +1044,8 @@ export const editorImage = catalog(
       steps: [
         open(ASSETS.p3Shot),
         inspectToggle,
+        // 256 x 64 sheet, 32 px blocks: the centers of row 0's first four swatches (black,
+        // white, grey 128, grey 250 in p3-swatches.json), four distinct sRGB colors.
         ...pickSwatch(0.0625, 0.25),
         ...pickSwatch(0.1875, 0.25),
         ...pickSwatch(0.3125, 0.25),

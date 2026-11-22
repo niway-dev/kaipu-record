@@ -96,15 +96,30 @@ export function samePickedColor(a: PickedColor, b: PickedColor): boolean {
   );
 }
 
+const sameChannels = (a: PickedColor["captured"], b: PickedColor["captured"]): boolean =>
+  a === undefined || b === undefined
+    ? a === b
+    : a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a;
+
+/** Whether two picks are identical: the sRGB bytes, the captured bytes and the gamut mark. */
+export function identicalPick(a: PickedColor, b: PickedColor): boolean {
+  return (
+    samePickedColor(a, b) && sameChannels(a.captured, b.captured) && a.outOfGamut === b.outOfGamut
+  );
+}
+
 /**
  * The settings after a click picked `next`: it replaces the picked color and the one it
  * replaces goes to the front of the recents, which keep `MAX_RECENT_COLORS` (the oldest drops).
- * Picking the color that is already picked changes nothing, and a color is not pushed next to
- * an equal one, so the recents never show the same color twice in a row.
+ * Picking the pick that is already stored changes nothing. A click that repeats the picked sRGB
+ * value with other captured bytes updates the stored pick in place (the recents stay as they
+ * are), and a color is not pushed next to an equal one, so the recents never show the same
+ * color twice in a row.
  */
 export function pickColor(settings: ImageInspectSettings, next: PickedColor): ImageInspectSettings {
   const { picked, recents } = settings;
-  if (picked && samePickedColor(picked, next)) return settings;
+  if (picked && identicalPick(picked, next)) return settings;
+  if (picked && samePickedColor(picked, next)) return { ...settings, picked: next };
   const pushed =
     picked && !(recents[0] && samePickedColor(recents[0], picked)) ? [picked, ...recents] : recents;
   return { ...settings, picked: next, recents: pushed.slice(0, MAX_RECENT_COLORS) };
