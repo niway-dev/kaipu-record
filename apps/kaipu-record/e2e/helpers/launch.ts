@@ -61,7 +61,7 @@ export async function localIdForAssetId(vaultDir: string, assetId: string): Prom
  *     (what makes a recording editable — see LibraryDetailPage).
  *   - `<screenshot>.png` + a `.kaipu/<id>.json` sidecar. `.png` files classify as
  *     `kind: "screenshot"` in the vault (LibraryVault.describe), so the detail page shows the
- *     "Edit"/"Copy" screenshot actions.
+ *     "Edit image"/"Copy" screenshot actions.
  * Seeding both at launch (rather than after) avoids any list-refresh race: the library reads
  * the vault fresh on mount.
  */
