@@ -71,24 +71,22 @@ describe("ColorsPanel photo card", () => {
       />,
     );
 
-  it("says the share the groups shown actually cover when the goal is reached", () => {
-    // Three groups of 30 pixels cover 90 of 100: the 80% goal is reached at the third.
-    ready(photoAnalysis(100, [30, 30, 30, 5, 5]));
-    expect(
-      screen.getByText(/Showing the 3 groups that cover 90% of the image/),
-    ).toBeInTheDocument();
+  it("lists every group of at least 1% and says the share they cover", () => {
+    // 1000 pixels: three groups are over 1% (10 pixels) and cover 900; the two of 5 are Other.
+    ready(photoAnalysis(1000, [400, 300, 200, 5, 5]));
+    expect(screen.getByText(/Showing 3 groups covering 90% of the image/)).toBeInTheDocument();
   });
 
-  it("does not claim 80% when the groups sent end before reaching it", () => {
-    // 200 groups of 2 pixels cover 400 of 1000: the list ends first, so 40%, not 80%.
+  it("lists only the largest group when none reaches 1%, and does not claim a share it lacks", () => {
+    // 200 groups of 2 pixels in 1000 are 0.2% each: the largest is kept, covering 0%.
     ready(
       photoAnalysis(
         1000,
         Array.from({ length: 200 }, () => 2),
       ),
     );
-    const body = screen.getByText(/Showing the 200 groups/);
-    expect(body).toHaveTextContent("cover 40% of the image");
+    const body = screen.getByText(/Showing 1 group/);
+    expect(body).toHaveTextContent("covering 0% of the image");
     expect(body).not.toHaveTextContent("80%");
   });
 
@@ -100,6 +98,6 @@ describe("ColorsPanel photo card", () => {
         Array.from({ length: 57 }, () => 1),
       ),
     );
-    expect(screen.getByText(/Showing the 57 groups/)).toHaveTextContent("cover 57% of the image");
+    expect(screen.getByText(/Showing 57 groups/)).toHaveTextContent("covering 57% of the image");
   });
 });

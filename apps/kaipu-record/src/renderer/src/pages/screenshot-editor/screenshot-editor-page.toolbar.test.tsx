@@ -748,11 +748,14 @@ describe("tool panel: the Tool tab of the side panel", () => {
     fireEvent.click(btn("Inspect (I)"));
     expect(tab("Tool")).toHaveAttribute("aria-selected", "true");
     expect(toolPanelState()).toBe("inspect");
-    for (const name of ["Width", "Height", "Outer", "Copy color", "Colors"]) {
+    for (const name of ["Color", "Ruler", "Width", "Height", "Outer", "Copy", "Loupe", "Colors"]) {
       expect(within(panel()).getByText(name)).toBeInTheDocument();
     }
     // Nothing of Inspect is left in the top bar except its mode switch.
     expect(within(toolbar()).queryByRole("button", { name: "Copy color" })).toBeNull();
+    expect(within(toolbar()).queryByRole("button", { name: "Loupe" })).toBeNull();
+    // The old generic Copy color button is gone from the panel as well.
+    expect(within(panel()).queryByRole("button", { name: "Copy color" })).toBeNull();
     press("Escape");
     expect(tab("Beautify")).toHaveAttribute("aria-selected", "true");
   });

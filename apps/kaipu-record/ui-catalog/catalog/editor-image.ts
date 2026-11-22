@@ -184,6 +184,22 @@ const clickAt = (x: number, y: number): Step => ({
   click: { area: "editorImage.canvas" },
   at: { x, y },
 });
+/** A click at a point of the shown image (fractions of it), as a pick of the Inspect layer. */
+const clickOnImage = (x: number, y: number): Step => ({
+  click: { area: "editorImage.canvas", part: { css: "img" } },
+  at: { x, y },
+});
+/** The layer reads the pixel under the pointer once per frame: let one pass before a click. */
+const pointerRested: Step = { waitMs: 200 };
+/**
+ * Pick the swatch at a point of the P3 sheet (two rows of eight, in fractions of the image):
+ * rest the pointer on it, then click.
+ */
+const pickSwatch = (x: number, y: number): readonly Step[] => [
+  hoverAt(x, y, { css: "img" }),
+  pointerRested,
+  clickOnImage(x, y),
+];
 const inCanvas = (css: string) => ({
   waitFor: { area: "editorImage.canvas" as const, part: { css } },
 });
@@ -989,7 +1005,7 @@ export const editorImage = catalog(
     },
     "inspect-on": {
       profile: "image-inspect",
-      how: "With the flag forced on, open “Settings page” and press Inspect: the button turns on and the side panel's Tool tab shows the Inspect controls (Width, Height, Outer, color format, As captured, Tolerance, Copy color, Colors).",
+      how: "With the flag forced on, open “Settings page” and press Inspect: the button turns on and the side panel's Tool tab shows the Inspect controls in two sections: Color (an empty picked-color box, the color format, As captured, Colors) and Ruler (Width, Height, Outer, Tolerance, Loupe).",
       steps: [
         open(ASSETS.settingsShot),
         inspectToggle,
@@ -999,8 +1015,60 @@ export const editorImage = catalog(
         "editorImage.inspectToggle:on",
         "editorImage.inspectBar:hex",
         "editorImage.inspectRuler:off",
+        "editorImage.inspectColor:empty",
         "editorImage.toolPanel:inspect",
       ],
+    },
+    "inspect-picked-color": {
+      profile: "image-inspect",
+      how: "With the flag forced on, open “Settings page”, press Inspect, rest the pointer on the image and click: the pixel's color fills the Color box in the side panel's Tool tab (swatch, value in the current format and a Copy button that names the value).",
+      steps: [
+        open(ASSETS.settingsShot),
+        inspectToggle,
+        hoverAt(0.3, 0.4, { css: "img" }),
+        pointerRested,
+        clickOnImage(0.3, 0.4),
+        {
+          waitFor: {
+            area: "editorImage.inspectColor",
+            part: { css: "[data-testid='inspect-picked-value']" },
+          },
+        },
+      ],
+      keepPointer: true,
+      demonstrates: ["editorImage.inspectColor:picked"],
+    },
+    "inspect-recents": {
+      profile: "image-inspect",
+      how: "With the flag forced on, open “P3 swatches”, press Inspect and click four different swatches in turn: the last one is in the Color box and the three before it are listed under it as Recent, newest first.",
+      steps: [
+        open(ASSETS.p3Shot),
+        inspectToggle,
+        // 256 x 64 sheet, 32 px blocks: the centers of row 0's first four swatches (black,
+        // white, grey 128, grey 250 in p3-swatches.json), four distinct sRGB colors.
+        ...pickSwatch(0.0625, 0.25),
+        ...pickSwatch(0.1875, 0.25),
+        ...pickSwatch(0.3125, 0.25),
+        ...pickSwatch(0.4375, 0.25),
+        {
+          waitFor: { area: "editorImage.inspectColor", part: { css: "ul li:nth-child(3)" } },
+        },
+      ],
+      keepPointer: true,
+      demonstrates: ["editorImage.inspectColor:recents"],
+    },
+    "inspect-loupe-off": {
+      profile: "image-inspect",
+      how: "With the flag forced on, open “Settings page”, press Inspect, turn the Loupe switch off in the Ruler section and rest the pointer on the image: the colour chip follows the pointer without the magnifier.",
+      steps: [
+        open(ASSETS.settingsShot),
+        inspectToggle,
+        inspectButton("Loupe"),
+        hoverCanvas,
+        hudShown,
+      ],
+      keepPointer: true,
+      demonstrates: ["editorImage.inspectRuler:loupeOff"],
     },
     "inspect-as-captured": {
       profile: "image-inspect",
@@ -1125,7 +1193,7 @@ export const editorImage = catalog(
     },
     "colors-photo": {
       profile: "image-inspect",
-      how: "With the flag forced on, open “Landscape photo”, press Inspect, then Colors: the groups that cover 80% of the image, an Other row last, and a card that says it looks like a photo (mock F4).",
+      how: "With the flag forced on, open “Landscape photo”, press Inspect, then Colors: every group of at least 1% of the image, an Other row last, and a card that says it looks like a photo (mock F4).",
       steps: [
         ...colorsPanelOpen(ASSETS.photoShot),
         {

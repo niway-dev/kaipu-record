@@ -1,4 +1,5 @@
 import type { TrackKey } from "@shared/editor-settings";
+import type { PickedColor } from "@shared/image-inspect-settings";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 
@@ -44,4 +45,5 @@ export const STUB_SETTINGS = {
   microphone: null,
   editor: { hiddenTracks: [] as TrackKey[] },
   captureWidget: { screenshotExpanded: false, recordingExpanded: false },
+  imageInspect: { picked: null, recents: [] as PickedColor[], loupe: true },
 } as const;

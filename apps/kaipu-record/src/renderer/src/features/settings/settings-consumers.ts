@@ -193,6 +193,17 @@ export const SETTINGS_CONSUMERS: readonly SettingsConsumer[] = [
     },
   },
   {
+    file: "features/screenshots/inspect/use-picked-colors.ts",
+    windows: ["main"],
+    keys: ["imageInspect"],
+    follows: "live",
+    why: "The image editor's Inspect picked color, its recent picks and the Loupe switch; a change made here shows at once and stands until main reports it back.",
+    behaviour: {
+      coveredIn: "features/screenshots/inspect/use-picked-colors.test.tsx",
+      mentions: ["imageInspect", "broadcast"],
+    },
+  },
+  {
     file: "features/screenshots/overlay/capture-overlay.tsx",
     windows: ["capture-overlay"],
     keys: ["recordingCountdownSeconds", "recordingArea", "screenshotFrame", "lastFrameDisplay"],
