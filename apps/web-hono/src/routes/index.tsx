@@ -41,16 +41,13 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
   return (
-    <HomeShell>
+    <HomeShell chapterNav={false}>
       <Hero />
       {/* Everything below the hero hydrates lazily: its HTML is server-rendered
           and stays in the document, but its client work waits until the section
           is near the viewport. See LazyHydrate. */}
       <LazyHydrate>
         <Moments />
-      </LazyHydrate>
-      <LazyHydrate>
-        <Kai />
       </LazyHydrate>
       <LazyHydrate>
         <Chapter id="record" tint="c1" number="01" icon={Video} keyPrefix="homeChapter1">
@@ -74,6 +71,10 @@ function HomePage() {
       </LazyHydrate>
       <LazyHydrate>
         <Files />
+      </LazyHydrate>
+      {/* The brand story comes after the features: first what Kaipu does, then who Kai is. */}
+      <LazyHydrate>
+        <Kai />
       </LazyHydrate>
       <LazyHydrate>
         <Closing />

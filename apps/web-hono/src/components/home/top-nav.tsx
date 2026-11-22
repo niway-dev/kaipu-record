@@ -68,7 +68,6 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
         </a>
 
         <nav className={styles.center}>
-          <a {...tab("home")}>{t("homeNavProduct")}</a>
           <a {...tab("features")}>{t("homeNavFeatures")}</a>
           <a {...tab("roadmap")}>{tRoadmap("navLabel")}</a>
         </nav>

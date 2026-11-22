@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { ArrowRight, Monitor } from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
@@ -19,8 +20,22 @@ import styles from "./sticky-cta.module.css";
  */
 export function StickyCta() {
   const t = useTranslations("landing");
+  const [heroVisible, setHeroVisible] = useState(true);
+
+  useEffect(() => {
+    const hero = document.getElementById("top");
+    if (!hero || typeof IntersectionObserver === "undefined") {
+      setHeroVisible(false);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry) setHeroVisible(entry.isIntersecting);
+    });
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div className={styles.bar}>
+    <div className={styles.bar} hidden={heroVisible}>
       <DownloadLink
         placement="sticky"
         href={downloadUrls.macArm64}

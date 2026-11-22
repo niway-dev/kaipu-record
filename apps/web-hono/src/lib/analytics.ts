@@ -20,7 +20,14 @@ export const ANALYTICS_EVENTS = {
 } as const;
 
 export type DownloadPlatform = "mac-arm64" | "mac-x64" | "windows";
-export type DownloadPlacement = "hero" | "sticky" | "closing" | "dashboard" | "nav" | "roadmap";
+export type DownloadPlacement =
+  | "hero"
+  | "sticky"
+  | "closing"
+  | "dashboard"
+  | "nav"
+  | "roadmap"
+  | "hero-demo";
 
 /** The properties each custom event carries. No PII: no email, name or user id. */
 export interface AnalyticsEventProperties {
