@@ -60,10 +60,7 @@
 .center {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px;
-  border: 1px solid var(--kl-bd);
-  border-radius: 999px;
+  gap: 8px;
 }
 
 .tab {
@@ -83,7 +80,6 @@
 }
 
 .tabActive {
-  background: var(--kl-card-2);
   color: var(--kl-tx);
 }
 

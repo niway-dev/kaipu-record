@@ -137,7 +137,7 @@ style (fields, buttons, pill tabs, notices).
 
 ## Brand (follow strictly)
 - Name: Kaipu (site kaipu.app). Signature: "This. Captured." Promise:
-  "Show it. Get back to work." Do not invent new taglines.
+  "From your screen. To the world." (2026-11-21; replaced "Show it. Get back to work.") Do not invent new taglines.
 - Type: Geist 400–700 for UI and headings (tight tracking on headings), Geist Mono
   500–600 for data, labels, sizes and dates (uppercase labels, .14em tracking),
   Instrument Serif italic in pink text only for a short second voice in page
