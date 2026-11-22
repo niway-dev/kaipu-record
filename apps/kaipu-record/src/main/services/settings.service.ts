@@ -23,6 +23,7 @@ import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { sanitizeQuality } from "@shared/recording-quality";
 import { sanitizeAudioSettings } from "@shared/audio-settings";
 import { sanitizeCaptureWidgetSettings } from "@shared/capture-widget-settings";
+import { sanitizeImageInspectSettings } from "@shared/image-inspect-settings";
 import { sanitizeEditorSettings } from "@shared/editor-settings";
 import { sanitizeCameraBubble } from "@shared/camera-bubble";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
@@ -326,6 +327,7 @@ export function mergeSettings(
     microphone: sanitizeMicrophone(safe.microphone),
     editor: sanitizeEditorSettings(safe.editor),
     captureWidget: sanitizeCaptureWidgetSettings(safe.captureWidget),
+    imageInspect: sanitizeImageInspectSettings(safe.imageInspect),
     adminMode: safe.adminMode === true,
   };
 }

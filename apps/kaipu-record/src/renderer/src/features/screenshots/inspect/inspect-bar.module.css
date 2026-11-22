@@ -10,6 +10,138 @@
   gap: var(--space-sm);
 }
 
+/* One labeled section of the Tool tab (Color, Ruler): a small title over its controls. */
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: stretch;
+  gap: var(--space-sm);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ie-mut);
+}
+
+/* The picked color: swatch, the value in the current format, and its Copy. */
+.pickedBox {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 8px;
+  padding: 4px 4px 4px 8px;
+  border-radius: 6px;
+  background: var(--ie-hover);
+  box-shadow: inset 0 0 0 1px var(--ie-strong);
+}
+
+.pickedSwatch {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 1px solid rgb(255 255 255 / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+
+/* Nothing picked yet: a hatched swatch, as the empty loupe is. */
+.pickedSwatchEmpty {
+  background: repeating-linear-gradient(45deg, var(--ie-panel) 0 4px, var(--ie-hover) 4px 8px);
+}
+
+.pickedValue,
+.pickedHint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickedValue {
+  font-family: var(--ie-font-mono);
+  font-size: 12px;
+  color: var(--ie-tx);
+}
+
+.pickedHint {
+  font-size: 11.5px;
+  color: var(--ie-mut);
+}
+
+.recents {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 4px;
+}
+
+.recentsLabel {
+  font-size: 11.5px;
+  color: var(--ie-mut);
+}
+
+.recentsList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recentChip {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ie-tx2);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.recentChip:hover {
+  background: var(--ie-hover);
+  color: var(--ie-tx);
+}
+
+.recentSwatch {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: 3px;
+  border: 1px solid rgb(255 255 255 / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+
+.recentCheck {
+  flex-shrink: 0;
+  color: var(--ie-ok);
+}
+
+.recentValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ie-font-mono);
+  font-size: 11.5px;
+}
+
 .barRow {
   display: flex;
   flex-wrap: wrap;

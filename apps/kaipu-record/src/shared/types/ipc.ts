@@ -26,6 +26,10 @@ import {
   DEFAULT_CAPTURE_WIDGET_SETTINGS,
   type CaptureWidgetSettings,
 } from "../capture-widget-settings";
+import {
+  DEFAULT_IMAGE_INSPECT_SETTINGS,
+  type ImageInspectSettings,
+} from "../image-inspect-settings";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
 
 /**
@@ -322,6 +326,11 @@ export interface AppSettings {
    */
   captureWidget: CaptureWidgetSettings;
   /**
+   * The image editor's Inspect mode: the color a click picked, the last colors it replaced and
+   * whether the loupe shows (NIW2-911). Raw captured values, formatted again on display.
+   */
+  imageInspect: ImageInspectSettings;
+  /**
    * Admin mode preference (ADR 0067): the wish to run with every release flag on. It grants
    * nothing alone: the mode is effective only when the signed-in account also holds the admin
    * permission, and main computes that once at launch (see `shared/admin-mode.ts`).
@@ -365,6 +374,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   microphone: null,
   editor: DEFAULT_EDITOR_SETTINGS,
   captureWidget: DEFAULT_CAPTURE_WIDGET_SETTINGS,
+  imageInspect: DEFAULT_IMAGE_INSPECT_SETTINGS,
   adminMode: false,
 };
 

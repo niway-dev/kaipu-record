@@ -5,7 +5,7 @@ import {
   MAX_GROUPS,
   MAX_MEMBERS,
   MIN_AREA_PX,
-  PHOTO_COVERAGE,
+  PHOTO_GROUP_SHARE,
   PHOTO_MIN_DISTINCT,
   analyzeColors,
   binOf,
@@ -295,21 +295,69 @@ describe("photo summary", () => {
     expect(isPhoto(analysis(PHOTO_MIN_DISTINCT, [1]))).toBe(true);
   });
 
-  it("keeps the groups that cover PHOTO_COVERAGE and folds the rest into other", () => {
-    expect(PHOTO_COVERAGE).toBe(0.8);
-    const a = analysis(2000, [50, 20, 10, 10, 10]);
+  it("lists every group with at least PHOTO_GROUP_SHARE of the pixels and folds the rest into other", () => {
+    expect(PHOTO_GROUP_SHARE).toBe(0.01);
+    // 100 pixels: 50, 20, 10, 10, 5, then four of 1 (exactly 1% is listed) and one of 0.
+    const a = analysis(2000, [50, 20, 10, 10, 5, 1, 1, 1, 1]);
     const { groups, other } = coverageGroups(a);
-    expect(groups.map((g) => g.id)).toEqual([0, 1, 2]);
-    expect(other).toBe(20);
+    expect(groups.map((g) => g.id)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(other).toBe(0);
+    const many = analysis(2000, [900, 50, 20, ...Array.from({ length: 30 }, () => 1)]);
+    const folded = coverageGroups(many);
+    expect(folded.groups.map((g) => g.id)).toEqual([0, 1, 2]);
+    expect(folded.other).toBe(30);
   });
 
   it("keeps at least one group", () => {
     const { groups, other } = coverageGroups(
       analysis(2000, [10, 10, 10, 10, 10, 10, 10, 10, 10, 10]),
     );
-    expect(groups.length).toBe(8);
-    expect(other).toBe(20);
+    expect(groups.length).toBe(10);
+    expect(other).toBe(0);
     expect(coverageGroups(analysis(2000, [1])).groups.length).toBe(1);
+    // Every group is under 1%: the largest is still listed.
+    const tiny = coverageGroups(
+      analysis(
+        2000,
+        Array.from({ length: 200 }, () => 1),
+      ),
+    );
+    expect(tiny.groups.length).toBe(1);
+    expect(tiny.other).toBe(199);
+  });
+
+  it("lists a ~3% accent that the old 80% coverage cut hid, on a synthetic photo", () => {
+    // 100 x 100: four flat blocks of 20% (80% together), a 3% red accent, and 17% of a
+    // gradient whose exact values are all different, so the image is a photograph.
+    const flats: Px[] = [
+      [255, 255, 255],
+      [0, 0, 0],
+      [0, 0, 200],
+      [0, 160, 0],
+    ];
+    const accent: Px = [255, 0, 60];
+    const runs: [Px, number][] = flats.map((c) => [c, 2000]);
+    runs.push([accent, 300]);
+    for (let i = 0; i < 1700; i++)
+      runs.push([[(i * 5) % 251, (i >> 3) % 251, (i * 7 + 3) % 253], 1]);
+    const img = image(runs);
+    const { analysis: a } = analyzeColors(img.data, img.width, img.height);
+    expect(isPhoto(a)).toBe(true);
+    expect(a.counted).toBe(10000);
+    const accentGroup = a.groups.find((g) => g.rgb === packRgb(255, 0, 60));
+    // A few gradient values land near the red and join its group: about 3%, not exactly.
+    expect(accentGroup!.count).toBeGreaterThanOrEqual(300);
+    expect(accentGroup!.count).toBeLessThan(400);
+    // Before: the four flat groups already covered 80% of the pixels, so the cut stopped there.
+    const before = [...a.groups]
+      .filter((g) => g.count > accentGroup!.count)
+      .reduce((n, g) => n + g.count, 0);
+    expect(before).toBeGreaterThanOrEqual(a.counted * 0.8);
+    const { groups, other } = coverageGroups(a);
+    expect(groups.map((g) => g.id)).toContain(accentGroup!.id);
+    // Every listed group has at least 1% and everything else is "Other".
+    for (const g of groups) expect(g.count).toBeGreaterThanOrEqual(a.counted * PHOTO_GROUP_SHARE);
+    expect(other).toBe(a.counted - groups.reduce((n, g) => n + g.count, 0));
   });
 });
 

@@ -542,6 +542,13 @@ export const UI_MAP = {
         states: ["hex", "asCaptured"],
         gatedBy: [{ flag: "image-inspect" }],
       },
+      // The Tool tab's Color section (NIW2-911): the picked color's box with its Copy, and the
+      // recent picks under it. `empty` is before any click; `picked` has the box filled;
+      // `recents` has three recent picks listed.
+      inspectColor: {
+        states: ["empty", "picked", "recents"],
+        gatedBy: [{ flag: "image-inspect" }],
+      },
       inspectHud: { states: ["reading"], gatedBy: [{ flag: "image-inspect" }] },
       // The readout while the pointer is off the image (NIW2-712).
       inspectEmpty: { states: ["shown"], gatedBy: [{ flag: "image-inspect" }] },
@@ -585,8 +592,9 @@ export const UI_MAP = {
       },
       // The ruler (NIW2-702): its row in the Inspect bar, the run drawn under the cursor, and
       // a run pinned as a `measure` annotation.
+      // `loupeOff`: the Ruler section's Loupe switch is off and the magnifier is hidden (NIW2-911).
       inspectRuler: {
-        states: ["off", "horizontal", "vertical"],
+        states: ["off", "horizontal", "vertical", "loupeOff"],
         gatedBy: [{ flag: "image-inspect" }],
       },
       inspectRun: { states: ["horizontal", "vertical"], gatedBy: [{ flag: "image-inspect" }] },

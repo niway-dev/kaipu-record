@@ -200,7 +200,7 @@ function Hud({
         className={`${styles.hud} ${flipY ? styles.hudFlipY : ""}`}
         style={{ left, top }}
       >
-        <Loupe pixels={inspect.loupe} />
+        {inspect.loupeShown && <Loupe pixels={inspect.loupe} />}
         <div className={styles.chip}>
           <span
             className={`${styles.chipSwatch} ${inspect.copied ? styles.chipSwatchCopied : ""}`}
@@ -267,9 +267,11 @@ function Hud({
 function EmptyHud({
   at,
   layer,
+  loupe,
 }: {
   at: Point;
   layer: React.RefObject<HTMLDivElement | null>;
+  loupe: boolean;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const { ref, left, top, flipX, flipY } = useHudPlacement(layer, at);
@@ -282,9 +284,11 @@ function EmptyHud({
       className={`${styles.hud} ${flipY ? styles.hudFlipY : ""}`}
       style={{ left, top }}
     >
-      <div className={`${styles.loupeFrame} ${styles.loupeEmpty}`}>
-        <span className={styles.loupeEmptyLabel}>{t("inspectEmptyLoupe")}</span>
-      </div>
+      {loupe && (
+        <div className={`${styles.loupeFrame} ${styles.loupeEmpty}`}>
+          <span className={styles.loupeEmptyLabel}>{t("inspectEmptyLoupe")}</span>
+        </div>
+      )}
       <div className={styles.chip}>
         <span className={`${styles.chipSwatch} ${styles.chipSwatchEmpty}`} />
         <span className={`${styles.chipText} ${styles.chipTextMuted}`}>
@@ -299,7 +303,8 @@ function EmptyHud({
  * Covers the canvas while Inspect is on and draws the HUD next to the cursor. Pointer move and
  * leave drive the readout. Wheel and pointerdown bubble to the canvas, so pan and zoom keep
  * working, EXCEPT while the ruler shows a run: then a plain wheel changes the tolerance and a
- * click pins the run. It sits above the annotation layer, so nothing is drawn or moved meanwhile.
+ * click pins the run; with no run shown a click picks the pixel's color into the Tool tab's
+ * Color box (NIW2-911). It sits above the annotation layer, so nothing is drawn or moved meanwhile.
  */
 export function InspectLayer({ inspect }: { inspect: InspectController }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
@@ -342,7 +347,8 @@ export function InspectLayer({ inspect }: { inspect: InspectController }): React
         press.current = null;
         if (!start || start.id !== e.pointerId) return;
         if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_SLOP) return;
-        inspect.pin();
+        // A run on show is pinned as a measurement; otherwise the click picks the color.
+        if (!inspect.pin()) inspect.pick();
       }}
       onPointerCancel={() => {
         press.current = null;
@@ -359,7 +365,7 @@ export function InspectLayer({ inspect }: { inspect: InspectController }): React
         </div>
       )}
       {hover && <Hud inspect={inspect} layer={ref} />}
-      {!hover && empty && <EmptyHud at={empty} layer={ref} />}
+      {!hover && empty && <EmptyHud at={empty} layer={ref} loupe={inspect.loupeShown} />}
     </div>
   );
 }

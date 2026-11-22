@@ -22,7 +22,18 @@ it, `Esc` to leave. While it is on, over the image:
 - **Live color.** The color of the pixel under the cursor and its position in image pixels. The
   value is the pixel converted once to sRGB, so it matches what a designer typed in CSS or Figma.
 - **Formats.** hex (default), rgb, hsl, oklch. A translucent pixel shows its alpha.
-- **Copy.** `C` or the Copy color button copies the value as shown.
+- **Picked color.** A click on the image, with no ruler run shown, picks that pixel into the
+  **Color** box in the Tool tab: a swatch, the value in the current format and a Copy button
+  that names the value ("Copy #ff0052"). A new click replaces the picked color and the old one
+  moves to the front of **Recent**, which keeps three (the oldest drops; the same color twice in
+  a row is not listed). A click while a run is shown pins the run and does not pick. Picks are
+  stored as raw values, so Format and As captured re-render the box and the recents. The picked
+  color, the recents and the Loupe switch persist across sessions in the app settings
+  (`imageInspect`) ([NIW2-911](https://linear.app/niway/issue/NIW2-911)).
+- **Copy.** `C` copies the value under the pointer as shown; the Copy button in the Color box
+  and each recent chip copy their own value.
+- **Loupe switch.** The Ruler section has a Loupe toggle (on by default) that shows or hides the
+  magnifier next to the pointer; the crosshair and the color chip stay.
 - **As captured.** Shows the raw value in the profile the image was captured in (only hex and
   rgb: those numbers are not sRGB, so hsl and oklch would be wrong).
 - **Out of sRGB.** A pixel whose color lies outside sRGB is marked; the hex shown is the clipped
@@ -70,7 +81,7 @@ NIW2-708 can restyle it.
 
 ## Colors panel
 
-The **Colors** button in the Inspect bar opens a panel with every color in the image, largest
+The **Colors** button in the Inspect bar opens a panel with the colors of the image, largest
 share first ([NIW2-704](https://linear.app/niway/issue/NIW2-704), milestone M7).
 
 - **Groups.** Near-identical colors form one group, shown with its most frequent exact value
@@ -80,6 +91,9 @@ share first ([NIW2-704](https://linear.app/niway/issue/NIW2-704), milestone M7).
   pixels and says how many there are. Clicking it again, Clear highlight, closing the panel
   or leaving Inspect removes the highlight. The highlight follows zoom and pan.
 - **Format.** Values are sRGB, in the Inspect bar's format.
+- **Photographs.** An image with 1,000 or more distinct colors lists every group of at least 1%
+  of the counted pixels and folds the rest into "Other" (it used to stop at 80% of the image,
+  which hid a small accent such as a 3% pink).
 
 How it counts: the buffer Inspect already decoded is copied once into a worker (a few
 milliseconds on the main thread), so the editor never waits on the count. The worker counts

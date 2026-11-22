@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InspectLayer } from "./inspect-layer";
 import { RULER_HALO_PX, RULER_STROKE_PX, RULER_TICK_PX } from "../ruler-line";
@@ -60,7 +60,12 @@ function controller(over: Partial<InspectController> = {}): InspectController {
     loupe: null,
     onPointerMove: vi.fn(),
     onPointerLeave: vi.fn(),
-    copy: vi.fn(),
+    copyValue: vi.fn(async () => true),
+    picked: null,
+    recents: [],
+    loupeShown: true,
+    setLoupeShown: vi.fn(),
+    pick: vi.fn(() => true),
     copied: false,
     copiedText: null,
     status: "ready",
@@ -102,6 +107,13 @@ describe("InspectLayer HUD", () => {
     // Loupe first, chip second, whatever the flip.
     expect(hud().children[0]!.querySelector('[data-testid="inspect-loupe"]')).not.toBeNull();
     expect(hud().children[1]!.children[1]).toHaveTextContent("#F6055C");
+  });
+
+  it("leaves the loupe out of the HUD when it is switched off, keeping the chip", () => {
+    render(<InspectLayer inspect={controller({ hover: hoverAt(100, 100), loupeShown: false })} />);
+    expect(screen.queryByTestId("inspect-loupe")).toBeNull();
+    // The chip now leads the HUD (it was second, after the loupe).
+    expect(hud().children[0]).toHaveTextContent("#F6055C");
   });
 
   it("draws the crosshair at the pointer and hides the system cursor", () => {
@@ -213,6 +225,49 @@ describe("InspectLayer HUD", () => {
   });
 });
 
+function click(layer: HTMLElement, at = { clientX: 100, clientY: 100 }): void {
+  fireEvent.pointerDown(layer, { button: 0, pointerId: 1, ...at });
+  fireEvent.pointerUp(layer, { button: 0, pointerId: 1, ...at });
+}
+
+describe("InspectLayer click", () => {
+  it("picks the pixel color when no measurement is shown", () => {
+    const pin = vi.fn(() => false);
+    const pick = vi.fn(() => true);
+    render(<InspectLayer inspect={controller({ hover: hoverAt(100, 100), pin, pick })} />);
+    click(screen.getByTestId("inspect-layer"));
+    expect(pin).toHaveBeenCalledTimes(1);
+    expect(pick).toHaveBeenCalledTimes(1);
+  });
+
+  it("only pins the measurement while a run is shown, without picking", () => {
+    const pin = vi.fn(() => true);
+    const pick = vi.fn(() => true);
+    render(<InspectLayer inspect={controller({ hover: hoverAt(100, 100), pin, pick })} />);
+    click(screen.getByTestId("inspect-layer"));
+    expect(pin).toHaveBeenCalledTimes(1);
+    expect(pick).not.toHaveBeenCalled();
+  });
+
+  it("does not pick when the pointer dragged past the click slop", () => {
+    const pick = vi.fn(() => true);
+    render(<InspectLayer inspect={controller({ hover: hoverAt(100, 100), pick })} />);
+    const layer = screen.getByTestId("inspect-layer");
+    fireEvent.pointerDown(layer, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(layer, { button: 0, pointerId: 1, clientX: 160, clientY: 100 });
+    expect(pick).not.toHaveBeenCalled();
+  });
+
+  it("ignores a secondary button", () => {
+    const pick = vi.fn(() => true);
+    render(<InspectLayer inspect={controller({ hover: hoverAt(100, 100), pick })} />);
+    const layer = screen.getByTestId("inspect-layer");
+    fireEvent.pointerDown(layer, { button: 2, pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(layer, { button: 2, pointerId: 1, clientX: 100, clientY: 100 });
+    expect(pick).not.toHaveBeenCalled();
+  });
+});
+
 describe("InspectLayer empty canvas", () => {
   it("renders the empty readout in its own area, not the HUD", () => {
     render(<InspectLayer inspect={controller({ empty: { clientX: 100, clientY: 100 } })} />);
@@ -227,5 +282,21 @@ describe("InspectLayer empty canvas", () => {
     render(<InspectLayer inspect={controller()} />);
     expect(document.querySelector('[data-ui-area="editorImage.inspectEmpty"]')).toBeNull();
     expect(screen.queryByTestId("inspect-crosshair")).toBeNull();
+  });
+
+  it("hides the hatched loupe on an empty spot when the loupe is switched off", () => {
+    const { rerender } = render(
+      <InspectLayer inspect={controller({ empty: { clientX: 100, clientY: 100 } })} />,
+    );
+    const hatched = (): Element | null => document.querySelector('[class*="loupeEmpty"]');
+    expect(hatched()).not.toBeNull();
+    rerender(
+      <InspectLayer
+        inspect={controller({ empty: { clientX: 100, clientY: 100 }, loupeShown: false })}
+      />,
+    );
+    expect(hatched()).toBeNull();
+    expect(screen.queryByText("NO PIXELS HERE")).toBeNull();
+    expect(screen.getByText("Nothing to read")).toBeInTheDocument();
   });
 });

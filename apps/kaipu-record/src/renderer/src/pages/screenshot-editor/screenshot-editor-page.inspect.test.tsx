@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
@@ -50,6 +50,9 @@ function fourByFour() {
 // The pointer used below sits over image pixel (3, 1): (150, 50, 100).
 const POINTER = { clientX: 150, clientY: 50 };
 const PIXEL_HEX = "#963264";
+// A second pointer position, over image pixel (1, 1): (50, 50, 100).
+const POINTER_B = { clientX: 50, clientY: 50 };
+const PIXEL_B_HEX = "#323264";
 
 const writeText = vi.fn(async (_text: string) => {});
 
@@ -72,6 +75,9 @@ beforeEach(async () => {
   window.electronAPI.getSettings = vi.fn(async () => ({
     ...base,
     screenshotCopy: "manual" as const,
+    // Every test starts with nothing picked (a test may stub saved picks, and `base` is the
+    // previous test's stub).
+    imageInspect: { picked: null, recents: [], loupe: true },
   }));
   let urls = 0;
   URL.createObjectURL = vi.fn(() => `blob:shot-${++urls}`);
@@ -148,6 +154,13 @@ const inspectButton = () => screen.queryByRole("button", { name: "Inspect (I)" }
 const press = (key: string, init: KeyboardEventInit = {}) =>
   fireEvent.keyDown(window, { key, ...init });
 const layer = () => screen.getByTestId("inspect-layer");
+const hudChip = (): HTMLElement =>
+  document.querySelector('[data-ui-area="editorImage.inspectHud"]') as HTMLElement;
+/** A plain click on the Inspect layer at a client position. */
+const clickAt = (at: { clientX: number; clientY: number }): void => {
+  fireEvent.pointerDown(layer(), { ...at, button: 0, pointerId: 1 });
+  fireEvent.pointerUp(layer(), { ...at, button: 0, pointerId: 1 });
+};
 
 async function enterAndHover(): Promise<void> {
   mount(PASTE);
@@ -261,10 +274,116 @@ describe.each([
     expect(writeText.mock.lastCall?.[0]).toMatch(/^oklch\(\d\.\d{3} \d\.\d{3} \d+\.\d\)$/);
   });
 
-  it("the Copy button does what C does", async () => {
+  it("a click picks the color into the box, and its Copy button copies that value", async () => {
     await enterAndHover();
-    fireEvent.click(screen.getByRole("button", { name: "Copy color" }));
+    expect(screen.queryByTestId("inspect-picked-value")).toBeNull();
+    clickAt(POINTER);
+    await waitFor(() =>
+      expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX),
+    );
+    fireEvent.click(screen.getByRole("button", { name: `Copy ${PIXEL_HEX}` }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(PIXEL_HEX));
+  });
+
+  it("a new click replaces the picked color and the old one becomes the first recent", async () => {
+    await enterAndHover();
+    clickAt(POINTER);
+    await waitFor(() =>
+      expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX),
+    );
+    expect(screen.queryByRole("group", { name: "Recent" })).toBeNull();
+
+    fireEvent.pointerMove(layer(), POINTER_B);
+    await waitFor(() => expect(hudChip()).toHaveTextContent(PIXEL_B_HEX));
+    clickAt(POINTER_B);
+    await waitFor(() =>
+      expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_B_HEX),
+    );
+    const recents = screen.getByRole("group", { name: "Recent" });
+    expect(within(recents).getAllByRole("listitem")).toHaveLength(1);
+    // A recent chip copies its own value.
+    fireEvent.click(within(recents).getByRole("button", { name: `Copy ${PIXEL_HEX}` }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(PIXEL_HEX));
+
+    // Picking the same color again changes nothing.
+    clickAt(POINTER_B);
+    expect(within(recents).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_B_HEX);
+  });
+
+  it("Format and As captured re-render the box and the recents from the raw values", async () => {
+    await enterAndHover();
+    clickAt(POINTER);
+    await waitFor(() =>
+      expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX),
+    );
+    fireEvent.pointerMove(layer(), POINTER_B);
+    await waitFor(() => expect(hudChip()).toHaveTextContent(PIXEL_B_HEX));
+    clickAt(POINTER_B);
+    await screen.findByRole("group", { name: "Recent" });
+
+    fireEvent.click(screen.getByRole("button", { name: "RGB" }));
+    expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent("rgb(50, 50, 100)");
+    expect(
+      within(screen.getByRole("group", { name: "Recent" })).getByRole("button", {
+        name: "Copy rgb(150, 50, 100)",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("a click with a measurement shown pins it and leaves the picked color alone", async () => {
+    await enterAndHover();
+    clickAt(POINTER);
+    await waitFor(() =>
+      expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX),
+    );
+    fireEvent.pointerMove(layer(), POINTER_B);
+    await waitFor(() => expect(hudChip()).toHaveTextContent(PIXEL_B_HEX));
+    press("1");
+    await screen.findByTestId("inspect-ruler");
+    clickAt(POINTER_B);
+    expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX);
+    expect(screen.queryByRole("group", { name: "Recent" })).toBeNull();
+  });
+
+  it("restores the picked color, the recents and the loupe switch in a new session (AC5)", async () => {
+    const base = await window.electronAPI.getSettings();
+    window.electronAPI.getSettings = vi.fn(async () => ({
+      ...base,
+      imageInspect: {
+        picked: { color: { r: 255, g: 0, b: 82, a: 255 } },
+        recents: [{ color: { r: 1, g: 2, b: 3, a: 255 } }],
+        loupe: false,
+      },
+    }));
+    mount(PASTE);
+    await loadImage();
+    fireEvent.click(inspectButton()!);
+    await screen.findByTestId("inspect-layer");
+    await waitFor(() =>
+      expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent("#ff0052"),
+    );
+    expect(screen.getByRole("button", { name: "Copy #010203" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Loupe" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.pointerMove(layer(), POINTER);
+    await screen.findByText(PIXEL_HEX);
+    expect(screen.queryByTestId("inspect-loupe")).toBeNull();
+  });
+
+  it("the Loupe switch hides and shows the magnifier, and saves the choice", async () => {
+    const update = vi.fn(async (patch: Record<string, unknown>) => patch as never);
+    window.electronAPI.updateSettings = update as never;
+    await enterAndHover();
+    expect(screen.getByTestId("inspect-loupe")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Loupe" }));
+    expect(screen.queryByTestId("inspect-loupe")).toBeNull();
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({
+        imageInspect: expect.objectContaining({ loupe: false }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Loupe" }));
+    expect(screen.getByTestId("inspect-loupe")).toBeInTheDocument();
   });
 
   it("Cmd+C keeps its own meaning and copies nothing", async () => {
@@ -421,16 +540,20 @@ describe.each([
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("#320064"));
   });
 
-  it("the Copy button still copies the last pixel after the pointer left for the bar", async () => {
+  it("the picked color and its Copy stay after the pointer left for the bar; C copies nothing there", async () => {
     await enterAndHover();
+    clickAt(POINTER);
+    await waitFor(() =>
+      expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX),
+    );
     fireEvent.pointerLeave(layer());
-    await waitFor(() => expect(screen.queryByText(PIXEL_HEX)).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: "Copy color" }));
+    await waitFor(() => expect(screen.queryByText("1, 0")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: `Copy ${PIXEL_HEX}` }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(PIXEL_HEX));
 
     fireEvent.click(screen.getByRole("button", { name: "RGB" }));
     // The label reads "Copied" for a moment after the first copy.
-    fireEvent.click(screen.getByRole("button", { name: /^(Copy color|Copied)$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^(Copy rgb\(150, 50, 100\)|Copied)$/ }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("rgb(150, 50, 100)"));
     // C keeps meaning "what the chip shows": nothing, with the pointer off the image.
     writeText.mockClear();
@@ -1122,7 +1245,7 @@ describe.each([
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
 
-  it("lists a photograph by the groups that cover most of it, with Other last and a card", async () => {
+  it("lists a photograph by the groups of at least 1%, with Other last and a card", async () => {
     decodeSrgbBuffer.mockImplementation(async () => photoLike());
     mount(PASTE);
     await loadImage();
@@ -1130,8 +1253,9 @@ describe.each([
     fireEvent.click(screen.getByRole("button", { name: "Colors" }));
     await waitFor(() => expect(panel()).toHaveAttribute("data-state", "photo"));
     expect(screen.getByText("This looks like a photo")).toBeInTheDocument();
-    expect(panel()).toHaveTextContent("2,048 colors. Showing the");
-    expect(panel()).toHaveTextContent("groups that cover 80% of the image");
+    expect(panel()).toHaveTextContent("2,048 colors. Showing");
+    expect(panel()).toHaveTextContent("covering");
+    expect(panel()).toHaveTextContent("groups under 1% of the image are folded into “Other”");
     // Group has no meaning for a photo, and its rows are groups.
     expect(screen.queryByRole("switch")).toBeNull();
     const items = Array.from(panel()!.querySelectorAll("ul > li"));

@@ -407,8 +407,8 @@ function ColorsPanelView({
                 {t("inspectColorsPhotoBody", {
                   distinct: analysis.distinct,
                   shown: shown.groups.length,
-                  // What the groups shown really cover: below PHOTO_COVERAGE when the groups
-                  // sent run out before reaching it.
+                  // What the groups shown really cover: every group of at least
+                  // PHOTO_GROUP_SHARE, so the rest (the "Other" row) is what is left.
                   percent:
                     analysis.counted > 0
                       ? Math.floor(((analysis.counted - shown.other) * 100) / analysis.counted)
