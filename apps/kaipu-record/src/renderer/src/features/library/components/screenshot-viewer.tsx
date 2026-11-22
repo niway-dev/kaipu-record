@@ -79,7 +79,7 @@ export function ScreenshotViewer({
 
   return (
     <div {...uiArea("libraryDetail.preview")} className={styles.root}>
-      {/* The frame scrolls when zoomed; the copy button sits outside it so it stays put. */}
+      {/* The frame scrolls when zoomed; the overlay buttons sit on the stage, outside the frame, so they stay put. */}
       <div className={styles.stage}>
         <div ref={frameRef} className={styles.viewer} data-zoomed={zoom > 1 ? "true" : "false"}>
           {shown ? (
