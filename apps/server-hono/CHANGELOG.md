@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/niway-dev/kaipu-record/compare/api-v0.5.0...api-v0.6.0) (2026-11-22)
+
+
+### Features
+
+* **api:** admin permission in /me/entitlements from ADMIN_USER_IDS (NIW2-900) ([#716](https://github.com/niway-dev/kaipu-record/issues/716)) ([f2e036e](https://github.com/niway-dev/kaipu-record/commit/f2e036ebf2a1192603730e8a8e154a75d47af09a))
+
 ## [0.5.0](https://github.com/niway-dev/kaipu-record/compare/api-v0.4.0...api-v0.5.0) (2026-10-20)
 
 
