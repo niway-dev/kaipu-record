@@ -1,11 +1,24 @@
 import { useRef, useState } from "react";
-import { Apple, ArrowUpRight, Mail, MousePointer2, Monitor, Pause, Play } from "lucide-react";
+import {
+  Apple,
+  ArrowUpRight,
+  Crop,
+  Download,
+  Monitor,
+  MousePointer2,
+  Pause,
+  Play,
+  Scissors,
+  Share,
+  Video,
+  type LucideIcon,
+} from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 
 import { DownloadLink } from "@/components/download-link";
 import { downloadUrls } from "@/lib/download";
 import { HeroStage } from "./hero-stage";
-import { HERO_MODES, type HeroMode } from "./hero-modes";
+import { HERO_MODES, type HeroMode, type HeroStep } from "./hero-modes";
 import { DEFAULT_WORKSPACE, type WorkspaceId } from "./hero-stage-model";
 import { BrandStatement } from "./stage-parts";
 import { useAutoDemo } from "./use-auto-demo";
@@ -13,6 +26,14 @@ import styles from "./hero.module.css";
 
 const RING_RADIUS = 9;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+/** The phone's picker draws each step as a card: an icon, the step and what it handles. */
+const STEP_ICON = {
+  record: Video,
+  screenshot: Crop,
+  edit: Scissors,
+  export: Share,
+} satisfies Record<HeroStep, LucideIcon>;
 
 /**
  * The page's opening. On the overview the brand statement is the whole screen;
@@ -23,8 +44,11 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
  * waits whenever the visitor is using it, the tab is hidden or the hero is out of
  * view; with reduced motion it starts paused. Picking a step is always manual.
  *
- * On a phone the copy and download button come first, as they always did, and
- * the compact screen follows them.
+ * Below 1080px the hero is one column built for a phone: what Kaipu is (a stable
+ * category line and headline, whichever step is showing), a 2x2 picker of the
+ * four steps, the screen at nearly the full width, then the step's caption and
+ * the download button. The countdown shrinks to a ring and a pause button on the
+ * category line. One set of controls serves both layouts; CSS restyles them.
  */
 export function Hero() {
   const t = useTranslations("landing");
@@ -53,9 +77,27 @@ export function Hero() {
       export: t("homeStageExport"),
     })[m];
 
+  const hint = (m: HeroStep) =>
+    ({
+      record: t("homeStageRecordHint"),
+      screenshot: t("homeStageScreenshotHint"),
+      edit: t("homeStageEditHint"),
+      export: t("homeStageExportHint"),
+    })[m];
+
   return (
     <section id="top" className={styles.hero} data-mode={mode} ref={root}>
       <div className={styles.grid}>
+        {/* Phone and tablet only: what Kaipu is, stable across the demo's steps (the h1 below is the step's caption there). */}
+        <p className={styles.compactEyebrow}>{t("homeHeroMobileEyebrow")}</p>
+        <p className={styles.compactTitle}>
+          {/* One line per sentence: it reads as two statements and never strands a word. */}
+          {t("homeHeroMobileTitle")
+            .split(/(?<=[.!?])\s+/)
+            .map((sentence) => (
+              <span key={sentence}>{sentence}</span>
+            ))}
+        </p>
         <p className={styles.demoNote}>{t("homeStageDemo")}</p>
         <div
           className={styles.modes}
@@ -67,11 +109,20 @@ export function Hero() {
             <button
               key={m}
               type="button"
-              className={`${styles.mode} ${m === mode ? styles.modeActive : ""}`}
+              className={`${styles.mode} ${m === mode ? styles.modeActive : ""} ${
+                m === "overview" ? styles.modeOverview : ""
+              }`}
               aria-pressed={m === mode}
+              aria-label={label(m)}
               onClick={() => pick(m)}
             >
-              {label(m)}
+              {m !== "overview" && <ModeIcon step={m} />}
+              <span className={styles.modeLabel}>{label(m)}</span>
+              {m !== "overview" && (
+                <span className={styles.modeHint} aria-hidden>
+                  {hint(m)}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -143,7 +194,7 @@ export function Hero() {
         />
 
         <div className={styles.ctas}>
-          {/* Two primaries swapped by CSS: a phone cannot install a .dmg, so it offers the link by mail. */}
+          {/* Two primaries swapped by CSS: a phone cannot install a .dmg, so it points to the download options. */}
           <DownloadLink
             placement="hero"
             href={downloadUrls.macArm64}
@@ -162,7 +213,7 @@ export function Hero() {
             {t("downloadWindowsBeta")}
           </DownloadLink>
           <a href="#download" className={`${styles.ctaPrimary} ${styles.mobileOnly}`}>
-            <Mail size={17} aria-hidden />
+            <Download size={17} aria-hidden />
             {t("homeHeroCtaMobile")}
           </a>
         </div>
@@ -170,5 +221,15 @@ export function Hero() {
         <p className={`${styles.footnote} ${styles.mobileOnly}`}>{t("homeHeroMobileNote")}</p>
       </div>
     </section>
+  );
+}
+
+/** The card's icon: drawn on a phone, hidden by CSS on desktop's plain tabs. */
+function ModeIcon({ step }: { step: HeroStep }) {
+  const Icon = STEP_ICON[step];
+  return (
+    <span className={styles.modeIcon} aria-hidden>
+      <Icon size={18} />
+    </span>
   );
 }

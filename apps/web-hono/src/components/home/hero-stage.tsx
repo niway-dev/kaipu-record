@@ -13,6 +13,7 @@ import type { HeroMode } from "./hero-modes";
 import styles from "./hero-stage.module.css";
 import { EditStage, type EditKind } from "./stage-edit";
 import { ExportStage } from "./stage-export";
+import { OverviewPreview } from "./stage-overview";
 import { RecordStage } from "./stage-record";
 import { ScreenshotStage } from "./stage-screenshot";
 import { WorkspaceBar, type WorkspaceLock } from "./stage-parts";
@@ -25,7 +26,8 @@ import { WorkspaceBar, type WorkspaceLock } from "./stage-parts";
  * State that must survive a change of step lives here: the capture the editor
  * opens, the marks drawn on it and the clip's trim. Each step's own state
  * (the recording timer, a drag in progress) lives in the step and resets when
- * the visitor leaves it. The overview shows no screen at all.
+ * the visitor leaves it. On desktop the overview shows no screen at all; below
+ * 1080px it shows a still picture of the product (`OverviewPreview`).
  */
 export function HeroStage({
   mode,
@@ -53,7 +55,13 @@ export function HeroStage({
   const [kind, setKind] = useState<EditKind>("image");
   const [clip, setClip] = useState<Clip>(INITIAL_CLIP);
 
-  if (mode === "overview") return <div className={styles.slot} />;
+  if (mode === "overview") {
+    return (
+      <div className={styles.slot}>
+        <OverviewPreview t={t} />
+      </div>
+    );
+  }
 
   const captured = (region: Region) => {
     setCapture(region);
