@@ -132,7 +132,7 @@ export function ScreenshotViewer({
                 type="button"
                 className={styles.toolButton}
                 data-copied={copied ? "true" : "false"}
-                aria-label={tLibrary("copyImage")}
+                aria-label={copied ? tLibrary("copied") : tLibrary("copyImage")}
                 title={tLibrary("copyImage")}
                 onClick={() => void copy()}
               >
