@@ -44,8 +44,8 @@ flowchart TB
 
 - The home page turns off the chapter rail (`chapterNav={false}`) to avoid duplicate navigation.
 - The Product link was removed from the top bar, because the wordmark already returns home.
-- On a phone, the copy and download buttons come before the compact screen.
-- The sticky download button is hidden while the hero is in view and returns below it. This is a parent adjustment after the mobile Export check. It was not in the owner's approval list.
+- On a phone, the category copy and the mode grid come first, then the compact screen, then the download-options button (see Mobile presentation).
+- On the home page only, the sticky download button is hidden while the hero is in view and returns below it; the features and roadmap pages keep it visible. This is a parent adjustment after the mobile Export check. It was not in the owner's approval list.
 
 ## Mode flow
 
@@ -141,7 +141,7 @@ The design has been implemented on `landing-interactive-hero-stage`; release and
 
 ## Review hardening
 
-The final interaction fixes release stale keyboard/hover holds after removed controls, keep export progress inside its visible footer, prevent hiding an active export, and preserve the original destination of completed recordings and exports when the active workspace changes. On touch devices, the image canvas scrolls until a drawing tool is explicitly selected. Both outer and sample download links switch at 980px: smaller viewports navigate to the download section; desktop sample links open the installer separately.
+The final interaction fixes release stale keyboard/hover holds after removed controls (including a control removed within the same step), track each touch pointer separately so a second finger lifting elsewhere does not end the press hold, hold Edit for marks or a trim whichever asset is showing, lock the export settings while an export runs, carry the image's crop and marks into the export preview, pause the overview picture's animation with the demo, keep export progress inside its visible footer, prevent hiding an active export, and preserve the original destination of completed recordings and exports when the active workspace changes. On touch devices, the image canvas scrolls until a drawing tool is explicitly selected. Annotation placement in the demo is pointer-only: the tool, Undo and Reset controls are keyboard-operable, but drawing on the canvas is not. A keyboard-operable canvas cursor is out of scope for this MVP and is left to the real editor in the app. Both outer and sample download links switch at 980px: smaller viewports navigate to the download section; desktop sample links open the installer separately.
 
 The independent review used Wachiman and a second-provider Codex pass. The concrete findings were addressed with regression tests; local-only review logs and the ledger are outside the source tree. Final check results belong to the delivery report rather than a second live status tracker in this design page.
 
@@ -151,6 +151,6 @@ The owner annotated the phone layout: the demo label, tab row and verbose countd
 
 The mobile composition puts explicit product/category copy first, uses a compact feature grid as the mode selector, gives the interactive screen nearly the phone's full width, and places the download-options CTA after the demonstration. The countdown becomes a small secondary control rather than a separate headline-sized band. Desktop keeps its reviewed stage, layout and compatibility-footnote fit. Mobile Overview should expose a useful product preview immediately.
 
-Acceptance: inspect first viewports at 360, 390, 400 and 430px (plus a narrow320px overflow check); show meaningful product content before scrolling past a large CTA; keep touch/keyboard interactions, autoplay holds, workspace/export snapshots and locale parity; no horizontal overflow. The implementation keeps one mode-control tree and restyles it into a 2×2 feature grid below 1080px. Mobile has stable localized category/title, a compact ring/pause control, a near-full-width screen and the CTA below it. Overview gets a decorative product preview with no interactive controls or timers; the actual steps remain interactive. Desktop retains its original overview and tabs.
+Acceptance: inspect first viewports at 360, 390, 400 and 430px (plus a narrow 320px overflow check); show meaningful product content before scrolling past a large CTA; keep touch/keyboard interactions, autoplay holds, workspace/export snapshots and locale parity; no horizontal overflow. The implementation keeps one mode-control tree and restyles it into a 2×2 feature grid below 1080px. Mobile has stable localized category/title, a compact ring/pause control, a near-full-width screen and the CTA below it. Overview gets a decorative product preview with no interactive controls or timers; the actual steps remain interactive. Desktop retains its original overview and tabs.
 
 Mobile CTA correction: the owner noted that the page does not send a link. The button now says “View downloads” / “Ver descargas”, uses a download icon and navigates to the existing `#download` options. The note names Mac and Windows beta, without promising email delivery.
