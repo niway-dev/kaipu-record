@@ -233,6 +233,36 @@ describe("Edit image", () => {
     expect(within(surface()).getByText("Look here")).toBeTruthy();
   });
 
+  describe("on a touch screen", () => {
+    const swipe = (type: "pointerDown" | "pointerMove" | "pointerUp", x: number, y: number) =>
+      fireEvent[type](surface(), { clientX: x, clientY: y, pointerId: 7, pointerType: "touch" });
+
+    it("a swipe on the image scrolls the page instead of drawing", () => {
+      open();
+      swipe("pointerDown", 100, 100);
+      swipe("pointerMove", 100, 300);
+      swipe("pointerUp", 100, 300);
+      expect(marks("pencil")).toBe(0);
+      expect(surface().getAttribute("data-touch")).toBe("scroll");
+    });
+
+    it("draws once the visitor picks a tool", () => {
+      open();
+      fireEvent.click(screen.getByRole("button", { name: "Pencil" }));
+      expect(surface().getAttribute("data-touch")).toBe("draw");
+      swipe("pointerDown", 100, 100);
+      swipe("pointerMove", 300, 300);
+      swipe("pointerUp", 300, 300);
+      expect(marks("pencil")).toBe(1);
+    });
+
+    it("a mouse still draws with the default pencil", () => {
+      open();
+      drag(surface(), [100, 100], [300, 200]);
+      expect(marks("pencil")).toBe(1);
+    });
+  });
+
   it("ignores an arrow that was only a click", () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: "Arrow" }));
@@ -429,6 +459,39 @@ describe("Export", () => {
     expect(screen.getByRole("button", { name: "Export file" })).toBeTruthy();
   });
 
+  it("cannot be closed from the format button while it exports or shows its result", () => {
+    vi.useFakeTimers();
+    open();
+    const anchor = () =>
+      document.querySelector<HTMLElement>("[aria-controls='kl-stage-export-panel']")!;
+    fireEvent.click(screen.getByRole("button", { name: "Export file" }));
+    tick(140);
+    expect(anchor().getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(anchor());
+    expect(screen.getByText(/Exporting… \d+%/)).toBeTruthy();
+
+    tick(2000);
+    expect(screen.getByText("Export complete")).toBeTruthy();
+    fireEvent.click(anchor());
+    expect(screen.getByText("Export complete")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export again" }));
+    expect(anchor().getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(anchor());
+    expect(screen.queryByRole("button", { name: "Export file" })).toBeNull();
+    expect(anchor().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("shows the progress bar as part of the footer that stays in view", () => {
+    vi.useFakeTimers();
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Export file" }));
+    tick(140);
+    const bar = screen.getByTestId("export-progress");
+    expect(bar.closest("[data-testid='export-footer']")).not.toBeNull();
+    expect(bar.firstElementChild).toHaveProperty("style.width", "12%");
+  });
+
   it.each([
     ["GitHub · Jira · Linear", "Drag it into a GitHub comment, or a Jira or Linear ticket."],
     ["Slack · Discord · Email", "Drop it into a chat, or attach it to an email."],
@@ -541,6 +604,25 @@ describe("Workspaces", () => {
     expect(screen.getByTestId("export-folder").textContent).toBe(
       "Added to Work · ~/Movies/Kaipu Record — Work",
     );
+  });
+
+  it("keeps a saved take where it was written when the workspace changes afterwards", () => {
+    vi.useFakeTimers();
+    renderWithProviders(<Hero />);
+    go("Record");
+    tick(2000);
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(screen.getByText("Saved in ~/Movies/Kaipu Record · 00:02")).toBeTruthy();
+
+    switchTo("Work");
+    expect(folder()).toBe("~/Movies/Kaipu Record — Work");
+    expect(screen.getByText("Saved in ~/Movies/Kaipu Record · 00:02")).toBeTruthy();
+    expect(screen.queryByText(/Saved in ~\/Movies\/Kaipu Record — Work/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Record again" }));
+    tick(1000);
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(screen.getByText("Saved in ~/Movies/Kaipu Record — Work · 00:01")).toBeTruthy();
   });
 
   it("will not switch while recording or exporting, like the app", () => {
@@ -693,6 +775,61 @@ describe("Auto demo", () => {
     act(() => mic.blur());
     run(AUTO_STEP_MS);
     expect(step()).toBe("Screenshot");
+  });
+
+  it("moves on after a keyboard Capture, whose focused button the capture removes", () => {
+    start();
+    go("Screenshot");
+    const capture = screen.getByRole("button", { name: "Capture" });
+    act(() => capture.focus());
+    expect(status()).toBe("On hold while you use the demo");
+    fireEvent.click(capture);
+    expect(step()).toBe("Edit");
+    expect(screen.queryByRole("button", { name: "Capture" })).toBeNull();
+    run(AUTO_STEP_MS);
+    expect(step()).toBe("Export");
+  });
+
+  it("moves on after the screen a mouse rested on is replaced by the Overview", () => {
+    start();
+    go("Record");
+    const stage = screen.getByRole("group", { name: "Demo screen" });
+    fireEvent.pointerEnter(stage, { pointerType: "mouse" });
+    const overview = tab("Overview");
+    act(() => overview.focus());
+    fireEvent.click(overview);
+    expect(step()).toBe("Overview");
+    expect(screen.queryByRole("group", { name: "Demo screen" })).toBeNull();
+    act(() => overview.blur());
+    run(AUTO_STEP_MS);
+    expect(step()).toBe("Record");
+  });
+
+  it("keeps waiting while a mouse still rests on a screen that changed step", () => {
+    start();
+    go("Screenshot");
+    const stage = screen.getByRole("group", { name: "Demo screen" });
+    fireEvent.pointerEnter(stage, { pointerType: "mouse" });
+    fireEvent.click(screen.getByRole("button", { name: "Capture" }));
+    expect(step()).toBe("Edit");
+    run(AUTO_STEP_MS * 3);
+    expect(step()).toBe("Edit");
+    fireEvent.pointerLeave(screen.getByRole("group", { name: "Demo screen" }));
+    run(AUTO_STEP_MS);
+    expect(step()).toBe("Export");
+  });
+
+  it("keeps waiting on work after a mode change that clears the pointer holds", () => {
+    start();
+    go("Record");
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit it" }));
+    expect(step()).toBe("Edit");
+    fireEvent.click(screen.getByRole("button", { name: "Video" }));
+    fireEvent.change(screen.getByRole("slider", { name: "Trim end" }), { target: { value: "20" } });
+    run(AUTO_STEP_MS * 3);
+    expect(step()).toBe("Edit");
   });
 
   it("does not pull a recording away that is paused or stopped", () => {
@@ -869,6 +1006,21 @@ describe("Download button inside the demo screen", () => {
     go("Edit");
     expect(links("hero-demo")).toHaveLength(0);
     expect(screen.getByTestId("annotation-surface")).toBeTruthy();
+  });
+
+  it("pairs the installer link with an in-page link for phones, so a phone never downloads a .dmg", () => {
+    renderWithProviders(<Hero />);
+    go("Record");
+    const pair = within(screen.getByRole("group", { name: "Demo screen" })).getAllByRole("link", {
+      name: /Download Kaipu for Mac/,
+    });
+    const hrefs = pair.map((a) => a.getAttribute("href")).sort();
+    expect(hrefs).toEqual(["#download", downloadUrls.macArm64].sort());
+    const phone = pair.find((a) => a.getAttribute("href") === "#download")!;
+    expect(phone.getAttribute("target")).toBeNull();
+    expect(phone.getAttribute("data-placement")).toBeNull();
+    expect(phone.closest("[aria-hidden='true']")).toBeNull();
+    expect(links("hero-demo")).toHaveLength(1);
   });
 
   it("leaves the outer downloads exactly as they were", () => {

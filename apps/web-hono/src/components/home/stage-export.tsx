@@ -149,7 +149,9 @@ export function ExportStage({
           className={`${styles.anchor} ${open ? styles.toolOn : ""}`}
           aria-expanded={open}
           aria-controls="kl-stage-export-panel"
-          onClick={() => setOpen((v) => !v)}
+          // While an export runs or shows its result the panel is the only place that says so.
+          aria-disabled={phase !== "idle" || undefined}
+          onClick={() => phase === "idle" && setOpen((v) => !v)}
         >
           <Download size={15} aria-hidden />
           {dest ? targetLabel : `${fileFormat.toUpperCase()} · ${resolution}`}
@@ -256,25 +258,27 @@ export function ExportStage({
                 </button>
               </div>
             ) : (
-              <div className={styles.panelFoot}>
-                <span className={styles.mono}>
-                  {fileFormat === "png" ? size : `${formatTime(seconds)} · ${size}`}
-                </span>
-                {phase === "working" ? (
-                  <span className={styles.progressText} role="status">
-                    {t("homeStageExporting", { percent })}
+              <div className={styles.panelFoot} data-testid="export-footer">
+                <div className={styles.panelFootRow}>
+                  <span className={styles.mono}>
+                    {fileFormat === "png" ? size : `${formatTime(seconds)} · ${size}`}
                   </span>
-                ) : (
-                  <button type="button" className={styles.dockPrimary} onClick={start}>
-                    {t("homeStageExportCta")}
-                  </button>
+                  {phase === "working" ? (
+                    <span className={styles.progressText} role="status">
+                      {t("homeStageExporting", { percent })}
+                    </span>
+                  ) : (
+                    <button type="button" className={styles.dockPrimary} onClick={start}>
+                      {t("homeStageExportCta")}
+                    </button>
+                  )}
+                </div>
+                {phase === "working" && (
+                  <span className={styles.bar} data-testid="export-progress">
+                    <span className={styles.barFill} style={{ width: `${percent}%` }} />
+                  </span>
                 )}
               </div>
-            )}
-            {phase === "working" && (
-              <span className={styles.bar}>
-                <span className={styles.barFill} style={{ width: `${percent}%` }} />
-              </span>
             )}
           </div>
         )}

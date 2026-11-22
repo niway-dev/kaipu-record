@@ -20,7 +20,9 @@ export type T = Translator<"landing">;
  * above it owns the pointer (the Screenshot selection, the Edit annotation
  * canvas): a click there draws, it never downloads. Where nothing covers it
  * (`download`, as in Record) the button is a real installer link that opens in
- * a new tab, so the demo the visitor is using stays where it was. Only the
+ * a new tab, so the demo the visitor is using stays where it was; below 980px,
+ * where the page's own download button offers the link by mail, it is a link to
+ * that section instead and never starts a download. Only the
  * headline is hidden from assistive tech then; hiding the link would nest an
  * interactive element in `aria-hidden`.
  */
@@ -31,16 +33,26 @@ export function SampleScreen({ t, download = false }: { t: T; download?: boolean
         <BrandStatement t={t} />
       </p>
       {download ? (
-        <DownloadLink
-          placement="hero-demo"
-          href={downloadUrls.macArm64}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`${styles.samplePill} ${styles.samplePillLink}`}
-        >
-          <Apple size={14} aria-hidden />
-          {t("homeHeroCtaPrimary")}
-        </DownloadLink>
+        <>
+          {/* Two links, one shown by CSS: a phone cannot install a .dmg, so there it goes to the download section. */}
+          <DownloadLink
+            placement="hero-demo"
+            href={downloadUrls.macArm64}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${styles.samplePill} ${styles.samplePillLink} ${styles.sampleDesktop}`}
+          >
+            <Apple size={14} aria-hidden />
+            {t("homeHeroCtaPrimary")}
+          </DownloadLink>
+          <a
+            href="#download"
+            className={`${styles.samplePill} ${styles.samplePillLink} ${styles.samplePhone}`}
+          >
+            <Apple size={14} aria-hidden />
+            {t("homeHeroCtaPrimary")}
+          </a>
+        </>
       ) : (
         <span className={styles.samplePill}>
           <Apple size={14} aria-hidden />

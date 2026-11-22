@@ -41,6 +41,8 @@ export function RecordStage({
   const [seconds, setSeconds] = useState(0);
   const [mic, setMic] = useState(true);
   const [camera, setCamera] = useState(true);
+  // Where this take was written: the workspace at the moment of Stop, not whichever is active later.
+  const [savedIn, setSavedIn] = useState<WorkspaceId>(workspace);
 
   useEffect(() => {
     if (phase !== "recording") return;
@@ -48,6 +50,10 @@ export function RecordStage({
     return () => clearInterval(id);
   }, [phase]);
 
+  const stop = () => {
+    setSavedIn(workspace);
+    setPhase("stopped");
+  };
   const again = () => {
     setSeconds(0);
     setPhase("recording");
@@ -78,7 +84,7 @@ export function RecordStage({
           </span>
           <span className={styles.dockText}>
             {t("homeStageRecSaved", {
-              folder: workspaceFolder(workspace, workspaceName(t, workspace)),
+              folder: workspaceFolder(savedIn, workspaceName(t, savedIn)),
               time: formatTime(seconds),
             })}
           </span>
@@ -137,7 +143,7 @@ export function RecordStage({
             type="button"
             className={`${styles.dockIcon} ${styles.stop}`}
             aria-label={t("homeStageStop")}
-            onClick={() => setPhase("stopped")}
+            onClick={stop}
           >
             <Square size={12} fill="currentColor" aria-hidden />
           </button>

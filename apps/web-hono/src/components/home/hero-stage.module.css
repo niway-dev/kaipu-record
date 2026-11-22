@@ -154,6 +154,21 @@
   outline-offset: 3px;
 }
 
+/* One of the two is shown: the installer on a desktop, the download section on a phone (same 980px as the page's CTA). */
+.samplePhone {
+  display: none;
+}
+
+@media (width < 980px) {
+  .sampleDesktop {
+    display: none;
+  }
+
+  .samplePhone {
+    display: inline-flex;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .samplePillLink {
     transition: none;
@@ -472,6 +487,11 @@
   position: absolute;
   inset: 0;
   cursor: crosshair;
+  /* A swipe scrolls the page until a tool is picked; then touch draws (see EditStage). */
+  touch-action: pan-y;
+}
+
+.ink[data-touch="draw"] {
   touch-action: none;
 }
 
@@ -788,14 +808,24 @@
   position: sticky;
   bottom: -14px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 34px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: -14px;
   padding: 6px 0 14px;
   /* On a short screen the options scroll; the Export button and its progress stay in view. */
   background: var(--kl-mock-chrome);
+}
+
+.panelFootRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.anchor[aria-disabled="true"] {
+  cursor: default;
 }
 
 @container (height < 240px) {

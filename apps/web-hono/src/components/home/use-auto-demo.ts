@@ -15,6 +15,8 @@ export const AUTO_TICK_MS = 100;
 export type AutoStatus = "running" | "paused" | "holding" | "away";
 
 type Zone = {
+  /** Marks the element so a step change can tell which zones are still on screen. */
+  "data-auto-zone": "stage" | "bar";
   onPointerEnter?: (e: React.PointerEvent) => void;
   onPointerLeave?: (e: React.PointerEvent) => void;
   onPointerDown: () => void;
@@ -144,7 +146,20 @@ export function useAutoDemo({
     };
   }, [hold]);
 
+  // A step change can remove the very button that held keyboard focus, or the whole screen
+  // under a resting mouse. The browser then sends no blur or pointerleave to React, so those
+  // two holds would never end. Settle them against what is actually on screen. The other
+  // holds (marks, a clip, an export, a recording) belong to the step and release themselves.
+  useEffect(() => {
+    const focused = document.activeElement;
+    if (!(focused instanceof Element) || !focused.closest("[data-auto-zone]")) {
+      hold("focus", false);
+    }
+    if (!rootRef.current?.querySelector('[data-auto-zone="stage"]')) hold("hover", false);
+  }, [mode, hold, rootRef]);
+
   const zone = (hover: boolean): Zone => ({
+    "data-auto-zone": hover ? "stage" : "bar",
     ...(hover && {
       onPointerEnter: (e: React.PointerEvent) => e.pointerType === "mouse" && hold("hover", true),
       onPointerLeave: () => hold("hover", false),

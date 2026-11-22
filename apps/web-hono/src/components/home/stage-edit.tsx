@@ -55,6 +55,13 @@ type EditProps = {
 export function EditStage(props: EditProps) {
   const { t, kind, onKind } = props;
   const [tool, setTool] = useState<Tool>("pencil");
+  // A finger or a pen scrolls the page until the visitor picks a tool: the pencil is only the
+  // mouse's default. Otherwise a swipe that starts on the image draws instead of scrolling.
+  const [touchDraws, setTouchDraws] = useState(false);
+  const pick = (next: Tool) => {
+    setTool(next);
+    setTouchDraws(true);
+  };
   // Marks on the image, or a trim on the clip, are work the demo must not take away.
   const trimmed = props.clip.start !== INITIAL_CLIP.start || props.clip.end !== INITIAL_CLIP.end;
   useHold(props.onHold, "edit", kind === "image" ? props.marks.length > 0 : trimmed);
@@ -70,9 +77,13 @@ export function EditStage(props: EditProps) {
             { value: "video", label: t("homeStageVideo") },
           ]}
         />
-        {kind === "image" && <ImageTools {...props} tool={tool} onTool={setTool} />}
+        {kind === "image" && <ImageTools {...props} tool={tool} onTool={pick} />}
       </div>
-      {kind === "image" ? <ImageCanvas {...props} tool={tool} /> : <VideoView {...props} />}
+      {kind === "image" ? (
+        <ImageCanvas {...props} tool={tool} touchDraws={touchDraws} />
+      ) : (
+        <VideoView {...props} />
+      )}
     </>
   );
 }
@@ -138,7 +149,8 @@ function ImageCanvas({
   marks,
   onMarks,
   tool,
-}: EditProps & { tool: Tool }) {
+  touchDraws,
+}: EditProps & { tool: Tool; touchDraws: boolean }) {
   const layer = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<Mark | null>(null);
   const px = regionPixels(capture);
@@ -152,6 +164,7 @@ function ImageCanvas({
   };
 
   const down = (e: PointerEvent) => {
+    if (e.pointerType !== "mouse" && !touchDraws) return;
     const at = point(e);
     if (tool === "text") {
       onMarks([...marks, { kind: "text", at }]);
@@ -195,6 +208,7 @@ function ImageCanvas({
         ref={layer}
         className={styles.ink}
         data-testid="annotation-surface"
+        data-touch={touchDraws ? "draw" : "scroll"}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
