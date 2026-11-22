@@ -181,6 +181,14 @@ export function pickedReadout(
   return formatColor(picked.color, format);
 }
 
+/**
+ * Whether a pick shows its sRGB value although As captured is on: it was made without the
+ * raw bytes (the probe had failed), so the bar tags it instead of passing sRGB off as captured.
+ */
+export function isSrgbFallback(picked: PickedColor, asCaptured: boolean): boolean {
+  return asCaptured && !picked.captured;
+}
+
 /** The ruler's line in client coordinates for a run on an image shown at `rect`. */
 export function runLine(
   run: PixelRun,

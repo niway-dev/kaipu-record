@@ -1380,6 +1380,8 @@
     "inspectCopyValue": "Copiar {color}",
     "inspectColorSection": "Color",
     "inspectPickedEmpty": "Haz clic en la imagen para elegir un color",
+    "inspectPickedSrgb": "sRGB",
+    "inspectPickedSrgbTitle": "No se leyó del perfil de la pantalla; se muestra en sRGB",
     "inspectRecents": "Recientes",
     "inspectLoupe": "Lupa",
     "inspectLoupeTitle": "Mostrar u ocultar la lupa junto al puntero",

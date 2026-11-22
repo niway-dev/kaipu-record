@@ -141,6 +141,18 @@ describe("InspectBar", () => {
       expect(screen.getByTestId("inspect-picked-value").textContent).toBe("#ff0052");
     });
 
+    it("tags a pick shown as sRGB while As captured is on, and not one with raw bytes", () => {
+      const withCaptured = px(255, 0, 82, { r: 250, g: 10, b: 90, a: 255 });
+      const { rerender } = render(
+        <InspectBar inspect={fake({ picked: px(255, 0, 82), asCaptured: true })} />,
+      );
+      expect(screen.getByTestId("inspect-picked-srgb")).toHaveTextContent("sRGB");
+      rerender(<InspectBar inspect={fake({ picked: withCaptured, asCaptured: true })} />);
+      expect(screen.queryByTestId("inspect-picked-srgb")).toBeNull();
+      rerender(<InspectBar inspect={fake({ picked: px(255, 0, 82), asCaptured: false })} />);
+      expect(screen.queryByTestId("inspect-picked-srgb")).toBeNull();
+    });
+
     it("says Copied while the value was just copied", () => {
       render(
         <InspectBar

@@ -1380,6 +1380,8 @@
     "inspectCopyValue": "Copy {color}",
     "inspectColorSection": "Color",
     "inspectPickedEmpty": "Click the image to pick a color",
+    "inspectPickedSrgb": "sRGB",
+    "inspectPickedSrgbTitle": "Not read from the display profile; shown as sRGB",
     "inspectRecents": "Recent",
     "inspectLoupe": "Loupe",
     "inspectLoupeTitle": "Show or hide the magnifier next to the pointer",

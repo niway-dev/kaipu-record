@@ -5,7 +5,7 @@ import { uiArea } from "@renderer/lib/ui-area";
 import { COLOR_FORMATS, capturedFormat, type ColorFormat } from "./color";
 import type { ColorsController } from "./colors/use-colors";
 import { MAX_TOLERANCE, MIN_TOLERANCE } from "./pixel-run";
-import { pickedReadout, type InspectController } from "./use-inspect";
+import { isSrgbFallback, pickedReadout, type InspectController } from "./use-inspect";
 import type { PickedColor } from "@shared/image-inspect-settings";
 import styles from "./inspect-bar.module.css";
 
@@ -88,6 +88,15 @@ export function InspectBar({
           ) : (
             <span className={styles.pickedHint}>{t("inspectPickedEmpty")}</span>
           )}
+          {picked && isSrgbFallback(picked, inspect.asCaptured) && (
+            <span
+              className={styles.srgbTag}
+              data-testid="inspect-picked-srgb"
+              title={t("inspectPickedSrgbTitle")}
+            >
+              {t("inspectPickedSrgb")}
+            </span>
+          )}
           <button
             type="button"
             className={styles.barBtn}
@@ -136,6 +145,11 @@ export function InspectBar({
                         />
                       )}
                       <span className={styles.recentValue}>{value}</span>
+                      {isSrgbFallback(color, inspect.asCaptured) && (
+                        <span className={styles.srgbTag} title={t("inspectPickedSrgbTitle")}>
+                          {t("inspectPickedSrgb")}
+                        </span>
+                      )}
                     </button>
                   </li>
                 );

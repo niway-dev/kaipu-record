@@ -21,7 +21,9 @@ const BLUE = px(0, 0, 255);
 const GRAY = px(128, 128, 128);
 
 /** Main's side of `updateSettings`: keeps the value and broadcasts it like the real service. */
-function installUpdate(ipc: SettingsIpc, initial: AppSettings): ReturnType<typeof vi.fn> {
+type UpdateMock = ReturnType<typeof vi.fn<(patch: Partial<AppSettings>) => Promise<AppSettings>>>;
+
+function installUpdate(ipc: SettingsIpc, initial: AppSettings): UpdateMock {
   let latest = initial;
   const update = vi.fn(async (patch: Partial<AppSettings>): Promise<AppSettings> => {
     latest = { ...latest, ...patch };
@@ -86,7 +88,7 @@ describe("usePickedColors (imageInspect, follows main's broadcast)", () => {
     expect(result.current.recents).toEqual([GRAY, BLUE, GREEN]);
     await waitFor(() => expect(update).toHaveBeenCalledTimes(5));
     // Saved one after another, in order.
-    expect(update.mock.calls.map(([patch]) => patch.imageInspect.picked)).toEqual([
+    expect(update.mock.calls.map(([patch]) => patch.imageInspect?.picked)).toEqual([
       RED,
       GREEN,
       BLUE,
