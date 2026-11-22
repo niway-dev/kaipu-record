@@ -1164,6 +1164,11 @@
     border-radius: 18px;
   }
 
+  /* Reserve the saved dock's two rows so the sample's download link cannot cover its folder. */
+  .screen[data-record-state="stopped"] .sample {
+    bottom: 88px;
+  }
+
   .dockText {
     flex: 1 0 100%;
     order: -1;
@@ -1311,6 +1316,14 @@
 
 /* Keep the export preview visible beside its controls, and above them on phones. */
 @media (width >= 1080px) {
+  .exportPicture {
+    right: 404px;
+  }
+
+  .exportScreen .exportPicture .sample {
+    right: 0;
+  }
+
   .exportScreen .sample {
     right: 404px;
     padding: 24px;

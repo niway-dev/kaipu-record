@@ -187,7 +187,7 @@ export function ExportStage({
               <SampleScreen t={t} download />
             </div>
             {marks.length > 0 && (
-              <div className={styles.inkStatic} data-testid="export-marks">
+              <div className={styles.inkStatic} data-testid="export-marks" aria-hidden>
                 <InkMarks t={t} marks={marks} />
               </div>
             )}

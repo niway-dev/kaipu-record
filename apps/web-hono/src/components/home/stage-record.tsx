@@ -64,7 +64,7 @@ export function RecordStage({
   useWorkspaceLock(onLock, phase === "stopped" ? null : "recording");
 
   return (
-    <div className={styles.screen}>
+    <div className={styles.screen} data-record-state={phase}>
       <SampleScreen t={t} download />
 
       {camera && phase !== "stopped" && (
