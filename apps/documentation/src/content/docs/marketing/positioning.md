@@ -87,7 +87,7 @@ The earlier phrase “Recordly makes a beautiful video once; Kaipu is where all 
 
 ## Landing proposal
 
-**Hero:** “Show it. Get back to work.”
+**Hero:** “Show it. Get back to work.” _(Superseded as the landing promise on 2026-11-21 by “From your screen. To the world.”; see [brand identity](/marketing/brand-identity/).)_
 
 **Supporting copy:** “Capture a bug, explain a change, or annotate a screenshot. Make it clear, and keep everything in a library on your Mac.”
 

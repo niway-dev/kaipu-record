@@ -7,7 +7,7 @@ description: A product-led chapter experience, revised bilingual copy, and an as
 
 **2026-09-27 · Copy implemented; visual concept proposed.** The current landing structure is retained. New navigation, layout, illustrations, and media described below are not implemented.
 
-**Brand alignment:** read [Brand identity](/marketing/brand-identity/) first. “This. Captured.” is the brand signature; “Show it. Get back to work.” remains the benefit-led hero. Kai's preferred direction is a living knot, with pixel art optional. Inspect the creator's new logo/notch artwork before generating more. Execution and validation live in the [rollout plan](/plans/2026-09-27-brand-and-website-rollout/).
+**Brand alignment:** read [Brand identity](/marketing/brand-identity/) first. “This. Captured.” is the brand signature; “Show it. Get back to work.” was the benefit-led hero until 2026-11-21, when “From your screen. To the world.” replaced it as the landing promise ([brand identity](/marketing/brand-identity/)). Kai's preferred direction is a living knot, with pixel art optional. Inspect the creator's new logo/notch artwork before generating more. Execution and validation live in the [rollout plan](/plans/2026-09-27-brand-and-website-rollout/).
 
 ## Creative direction
 

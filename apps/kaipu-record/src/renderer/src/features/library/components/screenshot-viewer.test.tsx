@@ -120,6 +120,23 @@ describe("ScreenshotViewer", () => {
     expect(copy.dataset.copied).toBe("true");
   });
 
+  it("labels the copy button Copy, then Copied", async () => {
+    render(<ScreenshotViewer src="kaipu-media://screenshot/a" onCopy={async () => true} />);
+    const copy = screen.getByRole("button", { name: "Copy image" });
+    expect(copy.textContent).toBe("Copy");
+    await act(async () => {
+      fireEvent.click(copy);
+    });
+    expect(copy.textContent).toBe("Copied");
+  });
+
+  it("opens the editor from an edit button over the image", () => {
+    const onEdit = vi.fn();
+    render(<ScreenshotViewer src="kaipu-media://screenshot/a" onEdit={onEdit} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit image" }));
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
   it("does not mark the button copied when the copy failed", async () => {
     render(<ScreenshotViewer src="kaipu-media://screenshot/a" onCopy={async () => false} />);
     const copy = screen.getByRole("button", { name: "Copy image" });

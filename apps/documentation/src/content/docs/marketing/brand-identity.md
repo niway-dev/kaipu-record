@@ -25,10 +25,12 @@ The creator adopted this explanation explicitly on 2026-09-27. The original nami
 | Role            | Spanish                                 | English                                   |
 | --------------- | --------------------------------------- | ----------------------------------------- |
 | Brand signature | **Esto, registrado.**                   | **This. Captured.**                       |
-| Landing promise | Muestra lo que pasa. Sigue con lo tuyo. | Show it. Get back to work.                |
+| Landing promise | De tu pantalla. Al mundo.               | From your screen. To the world.           |
 | Workflow        | Captura. Explica. Vuelve a encontrarlo. | Capture it. Make it clear. Find it again. |
 
 “This. Captured.” is the chosen advertising adaptation, not a literal translation. Avoid “This registered.” The signature explains the identity; the landing promise explains the immediate benefit. They can coexist without becoming competing taglines.
+
+**Landing update (2026-11-21):** the creator approved “From your screen. To the world.” for the interactive hero. It replaces “Show it. Get back to work.” as the landing promise; the brand signature and name origin remain unchanged. Kai may appear as the simulated webcam presenter in the hero. See the [interactive landing MVP](/plans/2026-11-21-interactive-landing-mvp/).
 
 ## Reusable origin story
 
@@ -88,7 +90,7 @@ The artwork is a black fox bust on Kaipu pink, a flat silhouette with two cream 
 
 Where Kai appears, and what he does not do:
 
-- **Website:** a dedicated "Meet Kai" introduction after the hero's transition; Kai as an intentionally nonliteral subject in the recording illustration's camera bubble; `done` in the closing invitation. No floating mascot, no constant animation.
+- **Website:** in the hero's Record step, Kai stands in for the webcam as an intentionally nonliteral subject; a dedicated "Meet Kai" introduction after the feature chapters and Files, before the closing invitation; `done` in the closing invitation. No floating mascot, no constant animation.
 - **App:** the menu-bar mark follows the capture mode; `permissions` and `done` open and close onboarding.
 - **Never** as an assistant, a chatbot, automatic editing, or a promise that a recording cannot be lost.
 

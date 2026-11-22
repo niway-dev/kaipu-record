@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.13.0...web-v0.14.0) (2026-11-22)
+
+
+### Features
+
+* **web:** list the desktop 0.18 features and correct the privacy claim ([3840308](https://github.com/niway-dev/kaipu-record/commit/38403080efee0cdfd41f773d673ee1670f145712))
+* **web:** one Capture chapter, live onboarding demos, export and Private beta roadmap (NIW2-897) ([#711](https://github.com/niway-dev/kaipu-record/issues/711)) ([b1b60bb](https://github.com/niway-dev/kaipu-record/commit/b1b60bb308809209edef4feab73c8f8593c9b6a8))
+* **web:** show visitors the features shipped in desktop 0.15–0.18 and stop overclaiming privacy ([60194ee](https://github.com/niway-dev/kaipu-record/commit/60194ee7e40b7ef72ec583741ad0f81c64b8e120))
+
 ## [0.13.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.12.1...web-v0.13.0) (2026-11-13)
 
 
