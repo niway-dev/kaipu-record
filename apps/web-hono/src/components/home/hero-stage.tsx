@@ -115,7 +115,16 @@ export function HeroStage({
         />
       )}
       {mode === "export" && (
-        <ExportStage t={t} clip={clip} workspace={workspace} onHold={onHold} onLock={setLock} />
+        <ExportStage
+          t={t}
+          kind={kind}
+          capture={capture}
+          marks={marks}
+          clip={clip}
+          workspace={workspace}
+          onHold={onHold}
+          onLock={setLock}
+        />
       )}
     </div>
   );

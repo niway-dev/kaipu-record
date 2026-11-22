@@ -49,6 +49,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // A test may override the tab's visibility; never let a failed assertion leak it into the next test.
+  Reflect.deleteProperty(document, "visibilityState");
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -440,7 +442,7 @@ describe("Export", () => {
     expect(summary()).toBe("MP4 · 2560 × 1440");
   });
 
-  it("GitHub says whether the copy fits the free plan's 10 MB, and nothing else about limits", () => {
+  it("GitHub says whether the copy fits the free plan's 10 MB", () => {
     open();
     choose("GitHub · Jira · Linear");
     expect(screen.getByText("Fits GitHub Free (10 MB)")).toBeTruthy();
@@ -871,7 +873,7 @@ describe("Auto demo", () => {
     expect(step()).toBe("Export");
   });
 
-  it("keeps waiting on work after a mode change that clears the pointer holds", () => {
+  it("keeps a trim hold across the Record to Edit switch", () => {
     start();
     go("Record");
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
@@ -884,7 +886,7 @@ describe("Auto demo", () => {
     expect(step()).toBe("Edit");
   });
 
-  it("does not pull a recording away that is paused or stopped", () => {
+  it("does not pull a recording away that is paused", () => {
     start();
     go("Record");
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
@@ -1083,5 +1085,180 @@ describe("Download button inside the demo screen", () => {
     for (const a of outer) {
       expect(a.getAttribute("target")).toBeNull();
     }
+  });
+});
+
+describe("Review round: interaction regressions", () => {
+  const status = () => screen.getByTestId("auto-status").textContent;
+  const HOLD = "On hold while you use the demo";
+  const labels = ["Overview", "Record", "Screenshot", "Edit", "Export"];
+  const step = () => labels.find((n) => pressed(tab(n)) === "true");
+  const start = () => {
+    vi.useFakeTimers();
+    return renderWithProviders(<Hero />);
+  };
+  const menuButton = () => screen.getByRole("button", { name: /Switch workspace/ });
+  const prefersReducedMotion = () =>
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("reduce"),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+
+  it("closes the workspace menu when a screenshot control is pressed", () => {
+    start();
+    go("Screenshot");
+    fireEvent.click(menuButton());
+    expect(menuButton().getAttribute("aria-expanded")).toBe("true");
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Full screen" }));
+    expect(menuButton().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("holds the demo as soon as a screenshot control is pressed", () => {
+    start();
+    go("Screenshot");
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Area" }));
+    expect(status()).toBe(HOLD);
+  });
+
+  it("keeps the press hold until the pointer that started it is released", () => {
+    start();
+    go("Screenshot");
+    const stage = screen.getByRole("group", { name: "Demo screen" });
+    fireEvent.pointerDown(stage, { pointerId: 1, pointerType: "touch" });
+    fireEvent.pointerUp(document.body, { pointerId: 2, pointerType: "touch" });
+    expect(status()).toBe(HOLD);
+    fireEvent.pointerUp(document.body, { pointerId: 1, pointerType: "touch" });
+    expect(status()).not.toBe(HOLD);
+  });
+
+  it("holds until every pointer that started inside the demo is released", () => {
+    start();
+    go("Screenshot");
+    const stage = screen.getByRole("group", { name: "Demo screen" });
+    fireEvent.pointerDown(stage, { pointerId: 1, pointerType: "touch" });
+    fireEvent.pointerDown(stage, { pointerId: 2, pointerType: "touch" });
+    fireEvent.pointerUp(document.body, { pointerId: 1, pointerType: "touch" });
+    expect(status()).toBe(HOLD);
+    fireEvent.pointerCancel(document.body, { pointerId: 2, pointerType: "touch" });
+    expect(status()).not.toBe(HOLD);
+  });
+
+  it("holds on the saved bar after a recording stops", () => {
+    start();
+    go("Record");
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    tick(AUTO_STEP_MS * 3);
+    expect(step()).toBe("Record");
+    fireEvent.click(screen.getByRole("button", { name: "Record again" }));
+    tick(AUTO_STEP_MS);
+    expect(step()).toBe("Screenshot");
+  });
+
+  it("does not interrupt a running export when a setting is pressed", () => {
+    start();
+    go("Export");
+    fireEvent.click(screen.getByRole("button", { name: "Export file" }));
+    tick(140);
+    const destinations = within(screen.getByRole("group", { name: "Destination" }));
+    const youtube = destinations.getByRole("button", { name: "YouTube" });
+    const reels = screen.getByRole("button", { name: "Reels · TikTok · Shorts" });
+    expect(reels.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByRole("button", { name: "4K" }).getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(youtube);
+    fireEvent.click(reels);
+    fireEvent.click(screen.getByRole("button", { name: "4K" }));
+    expect(screen.getByText(/Exporting… \d+%/)).toBeTruthy();
+    expect(pressed(youtube)).toBe("true");
+    tick(2000);
+    expect(screen.getByText("Export complete")).toBeTruthy();
+    fireEvent.click(reels);
+    expect(screen.getByRole("button", { name: "Export file" })).toBeTruthy();
+  });
+
+  it("holds Edit for a trimmed clip even while the image is showing", () => {
+    start();
+    go("Edit");
+    fireEvent.click(screen.getByRole("button", { name: "Video" }));
+    fireEvent.change(screen.getByRole("slider", { name: "Trim end" }), { target: { value: "20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Image" }));
+    tick(AUTO_STEP_MS * 3);
+    expect(step()).toBe("Edit");
+  });
+
+  it("holds Edit for marks on the image even while the video is showing", () => {
+    start();
+    go("Edit");
+    drag(screen.getByTestId("annotation-surface"), [100, 100], [400, 300]);
+    fireEvent.click(screen.getByRole("button", { name: "Video" }));
+    tick(AUTO_STEP_MS * 3);
+    expect(step()).toBe("Edit");
+  });
+
+  it("carries the crop and the marks of the image into the export preview", () => {
+    start();
+    go("Screenshot");
+    drag(screen.getByTestId("selection-surface"), [100, 100], [500, 300]);
+    fireEvent.click(screen.getByRole("button", { name: "Capture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Arrow" }));
+    drag(screen.getByTestId("annotation-surface"), [200, 100], [400, 300]);
+    const edited = screen.getByTestId("captured-image").style.transform;
+    go("Export");
+    const shot = screen.getByTestId("export-image");
+    expect(shot.style.transform).toBe(edited);
+    expect(screen.getByTestId("export-marks").querySelectorAll('[data-mark="arrow"]')).toHaveLength(
+      1,
+    );
+  });
+
+  it("shows no image marks in the export of a recording", () => {
+    start();
+    go("Edit");
+    drag(screen.getByTestId("annotation-surface"), [100, 100], [400, 300]);
+    fireEvent.click(screen.getByRole("button", { name: "Video" }));
+    go("Export");
+    expect(screen.queryByTestId("export-marks")).toBeNull();
+  });
+
+  it("moves on after Export again removes the focused button within the same step", () => {
+    start();
+    go("Export");
+    fireEvent.click(screen.getByRole("button", { name: "Export file" }));
+    tick(AUTO_STEP_MS);
+    const again = screen.getByRole("button", { name: "Export again" });
+    act(() => again.focus());
+    expect(status()).toBe(HOLD);
+    fireEvent.click(again);
+    expect(screen.queryByRole("button", { name: "Export again" })).toBeNull();
+    tick(AUTO_STEP_MS);
+    expect(step()).toBe("Overview");
+  });
+
+  it("clears the capture flash at once when reduced motion keeps it from playing", () => {
+    prefersReducedMotion();
+    start();
+    go("Screenshot");
+    fireEvent.click(screen.getByRole("button", { name: "Capture" }));
+    expect(step()).toBe("Edit");
+    expect(screen.queryByTestId("capture-shutter")).toBeNull();
+  });
+
+  it("plays the capture flash once when motion is allowed", () => {
+    start();
+    go("Screenshot");
+    fireEvent.click(screen.getByRole("button", { name: "Capture" }));
+    const flash = screen.getByTestId("capture-shutter");
+    fireEvent.animationEnd(flash);
+    expect(screen.queryByTestId("capture-shutter")).toBeNull();
+  });
+
+  it("marks the page while the auto demo is paused, so the overview picture can stand still", () => {
+    start();
+    const section = document.getElementById("top")!;
+    expect(section.hasAttribute("data-paused")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Pause the auto demo" }));
+    expect(section.hasAttribute("data-paused")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Play the auto demo" }));
+    expect(section.hasAttribute("data-paused")).toBe(false);
   });
 });

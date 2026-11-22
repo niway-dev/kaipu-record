@@ -5,9 +5,6 @@ export type HeroMode = (typeof HERO_MODES)[number];
 /** A step of the product: every mode but the resting `overview`. */
 export type HeroStep = Exclude<HeroMode, "overview">;
 
-/** The four steps a visitor can pick; `overview` is the resting state. */
-export const HERO_STEPS = HERO_MODES.filter((m) => m !== "overview") as HeroStep[];
-
 /** How long each step of the auto demo stays before the next one starts. */
 export const AUTO_STEP_MS = 10_000;
 

@@ -64,7 +64,8 @@ export function EditStage(props: EditProps) {
   };
   // Marks on the image, or a trim on the clip, are work the demo must not take away.
   const trimmed = props.clip.start !== INITIAL_CLIP.start || props.clip.end !== INITIAL_CLIP.end;
-  useHold(props.onHold, "edit", kind === "image" ? props.marks.length > 0 : trimmed);
+  // Both assets are retained across the Image / Video switch, so either one's work holds the step.
+  useHold(props.onHold, "edit", props.marks.length > 0 || trimmed);
   return (
     <>
       <div className={styles.toolbar}>
@@ -141,6 +142,72 @@ function ImageTools({
   );
 }
 
+/** The marks as the canvas draws them. The export preview reuses it, so what was drawn is what is shown. */
+export function InkMarks({ t, marks }: { t: T; marks: readonly Mark[] }) {
+  const pct = (n: number) => `${n * 100}%`;
+  return (
+    <>
+      <svg className={styles.inkSvg} aria-hidden>
+        <defs>
+          <marker
+            id="kl-stage-arrowhead"
+            markerUnits="userSpaceOnUse"
+            markerWidth="16"
+            markerHeight="16"
+            refX="13"
+            refY="8"
+            orient="auto"
+          >
+            <path d="M1 2 L14 8 L1 14 z" fill="currentColor" />
+          </marker>
+        </defs>
+        {marks.map((m, i) =>
+          m.kind === "pencil" ? (
+            <g key={i} data-mark="pencil">
+              {m.points.map((p, j) => {
+                const prev = m.points[j - 1] ?? p;
+                return (
+                  <line
+                    key={j}
+                    x1={pct(prev.x)}
+                    y1={pct(prev.y)}
+                    x2={pct(p.x)}
+                    y2={pct(p.y)}
+                    className={styles.stroke}
+                  />
+                );
+              })}
+            </g>
+          ) : m.kind === "arrow" ? (
+            <line
+              key={i}
+              data-mark="arrow"
+              x1={pct(m.from.x)}
+              y1={pct(m.from.y)}
+              x2={pct(m.to.x)}
+              y2={pct(m.to.y)}
+              className={styles.stroke}
+              markerEnd="url(#kl-stage-arrowhead)"
+            />
+          ) : null,
+        )}
+      </svg>
+      {marks.map((m, i) =>
+        m.kind === "text" ? (
+          <span
+            key={i}
+            data-mark="text"
+            className={styles.note}
+            style={{ left: pct(m.at.x), top: pct(m.at.y) }}
+          >
+            {t("homeStageNote")}
+          </span>
+        ) : null,
+      )}
+    </>
+  );
+}
+
 function ImageCanvas({
   t,
   capture,
@@ -154,6 +221,12 @@ function ImageCanvas({
   const layer = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<Mark | null>(null);
   const px = regionPixels(capture);
+
+  // With reduced motion the flash has no animation, so `animationend` never fires to consume it.
+  // Clear it here, or it would play later, on an old capture, once motion is allowed again.
+  useEffect(() => {
+    if (fresh && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) onFreshDone();
+  }, [fresh, onFreshDone]);
 
   const point = (e: PointerEvent): Pt => {
     const box = layer.current!.getBoundingClientRect();
@@ -192,7 +265,6 @@ function ImageCanvas({
   };
 
   const shown = draft ? [...marks, draft] : marks;
-  const pct = (n: number) => `${n * 100}%`;
 
   return (
     <div className={styles.screen}>
@@ -214,67 +286,18 @@ function ImageCanvas({
         onPointerUp={up}
         onPointerCancel={up}
       >
-        <svg className={styles.inkSvg} aria-hidden>
-          <defs>
-            <marker
-              id="kl-stage-arrowhead"
-              markerUnits="userSpaceOnUse"
-              markerWidth="16"
-              markerHeight="16"
-              refX="13"
-              refY="8"
-              orient="auto"
-            >
-              <path d="M1 2 L14 8 L1 14 z" fill="currentColor" />
-            </marker>
-          </defs>
-          {shown.map((m, i) =>
-            m.kind === "pencil" ? (
-              <g key={i} data-mark="pencil">
-                {m.points.map((p, j) => {
-                  const prev = m.points[j - 1] ?? p;
-                  return (
-                    <line
-                      key={j}
-                      x1={pct(prev.x)}
-                      y1={pct(prev.y)}
-                      x2={pct(p.x)}
-                      y2={pct(p.y)}
-                      className={styles.stroke}
-                    />
-                  );
-                })}
-              </g>
-            ) : m.kind === "arrow" ? (
-              <line
-                key={i}
-                data-mark="arrow"
-                x1={pct(m.from.x)}
-                y1={pct(m.from.y)}
-                x2={pct(m.to.x)}
-                y2={pct(m.to.y)}
-                className={styles.stroke}
-                markerEnd="url(#kl-stage-arrowhead)"
-              />
-            ) : null,
-          )}
-        </svg>
-        {shown.map((m, i) =>
-          m.kind === "text" ? (
-            <span
-              key={i}
-              data-mark="text"
-              className={styles.note}
-              style={{ left: pct(m.at.x), top: pct(m.at.y) }}
-            >
-              {t("homeStageNote")}
-            </span>
-          ) : null,
-        )}
+        <InkMarks t={t} marks={shown} />
       </div>
 
       <span className={styles.chip}>{t("homeStageSaved", { size: `${px.w} × ${px.h}` })}</span>
-      {fresh && <span className={styles.shutter} aria-hidden onAnimationEnd={onFreshDone} />}
+      {fresh && (
+        <span
+          className={styles.shutter}
+          data-testid="capture-shutter"
+          aria-hidden
+          onAnimationEnd={onFreshDone}
+        />
+      )}
     </div>
   );
 }
@@ -369,7 +392,7 @@ function VideoView({ t, clip, onClip, onHold }: EditProps) {
           />
           <input
             type="range"
-            className={`${styles.range} ${styles.rangeTrim}`}
+            className={styles.range}
             min={0}
             max={CLIP_SECONDS}
             step={1}
@@ -379,7 +402,7 @@ function VideoView({ t, clip, onClip, onHold }: EditProps) {
           />
           <input
             type="range"
-            className={`${styles.range} ${styles.rangeTrim}`}
+            className={styles.range}
             min={0}
             max={CLIP_SECONDS}
             step={1}

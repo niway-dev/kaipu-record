@@ -78,7 +78,11 @@ export function RecordStage({
       </span>
 
       {phase === "stopped" ? (
-        <div className={styles.dock} role="group" aria-label={t("homeStageRecording")}>
+        <div
+          className={`${styles.dock} ${styles.dockSaved}`}
+          role="group"
+          aria-label={t("homeStageRecording")}
+        >
           <span className={styles.done}>
             <Check size={14} aria-hidden />
           </span>

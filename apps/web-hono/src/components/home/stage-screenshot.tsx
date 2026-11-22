@@ -96,12 +96,7 @@ export function ScreenshotStage({
         {kind === "area" && <span className={styles.hint}>{t("homeStageDragHint")}</span>}
       </div>
 
-      <div
-        className={styles.dock}
-        onPointerDown={(e) => e.stopPropagation()}
-        role="group"
-        aria-label={t("homeStageScreenshot")}
-      >
+      <div className={styles.dock} role="group" aria-label={t("homeStageScreenshot")}>
         <Segmented<Kind>
           label={t("homeStageScreenshot")}
           value={kind}

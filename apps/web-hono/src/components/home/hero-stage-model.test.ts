@@ -209,6 +209,11 @@ describe("destinations still match the desktop app", () => {
     expect(presets).toContain("GITHUB_PAID_LIMIT_BYTES = 100 * MB");
     expect(presets).toContain("canvas: { width: 2560, height: 1440 }");
     expect(presets).toContain("canvas: { width: 3840, height: 2160 }");
+    // The 8 Mbps at 1080p base, the two social canvases and the 24 fps cap are copied too.
+    expect(presets).toContain("BITRATE_1080_LOW_FPS = 8_000_000");
+    expect(presets).toContain("canvas: { width: 1080, height: 1920 }");
+    expect(presets).toContain("canvas: { width: 1080, height: 1080 }");
+    expect(presets.match(/maxFps: 24,/g)).toHaveLength(2);
   });
 });
 

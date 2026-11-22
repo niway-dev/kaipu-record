@@ -3,6 +3,8 @@ import { Check, ChevronDown, Download } from "lucide-react";
 
 import {
   DESTINATIONS,
+  cropClip,
+  cropTransform,
   EXPORT_FORMATS,
   EXPORT_RESOLUTIONS,
   YOUTUBE_RESOLUTIONS,
@@ -14,6 +16,8 @@ import {
   workspaceFolder,
   type Clip,
   type DestinationId,
+  type Mark,
+  type Region,
   type ExportFormat,
   type ExportResolution,
   type ExportTarget,
@@ -29,6 +33,7 @@ import {
   type T,
   type WorkspaceLock,
 } from "./stage-parts";
+import { InkMarks, type EditKind } from "./stage-edit";
 import { useHold } from "./use-auto-demo";
 
 type Phase = "idle" | "working" | "done";
@@ -69,12 +74,19 @@ const DEST_COPY = {
  */
 export function ExportStage({
   t,
+  kind,
+  capture,
+  marks,
   clip,
   workspace,
   onHold,
   onLock,
 }: {
   t: T;
+  /** What Edit was showing: an image is previewed with its crop and marks, a recording as the page. */
+  kind: EditKind;
+  capture: Region;
+  marks: readonly Mark[];
   clip: Clip;
   workspace: WorkspaceId;
   onHold: (id: string, active: boolean) => void;
@@ -133,6 +145,9 @@ export function ExportStage({
   const change =
     <V,>(set: (v: V) => void) =>
     (v: V) => {
+      // A running export is not cancelled by a press (the controls say so with aria-disabled).
+      // After the result, a press starts afresh.
+      if (phase === "working") return;
       set(v);
       setPhase("idle");
     };
@@ -162,7 +177,24 @@ export function ExportStage({
       </div>
 
       <div className={`${styles.screen} ${styles.exportScreen}`}>
-        <SampleScreen t={t} download />
+        {kind === "image" ? (
+          <div className={styles.exportPicture}>
+            <div
+              className={styles.shot}
+              data-testid="export-image"
+              style={{ transform: cropTransform(capture), clipPath: cropClip(capture) }}
+            >
+              <SampleScreen t={t} download />
+            </div>
+            {marks.length > 0 && (
+              <div className={styles.inkStatic} data-testid="export-marks">
+                <InkMarks t={t} marks={marks} />
+              </div>
+            )}
+          </div>
+        ) : (
+          <SampleScreen t={t} download />
+        )}
 
         {open && (
           <div className={styles.panel} id="kl-stage-export-panel">
@@ -173,6 +205,7 @@ export function ExportStage({
                   type="button"
                   className={`${styles.destBtn} ${id === target ? styles.destOn : ""}`}
                   aria-pressed={id === target}
+                  aria-disabled={phase === "working" || undefined}
                   onClick={() => change(setTarget)(id)}
                 >
                   {id === "custom" ? t("homeStageDestCustom") : t(DEST_COPY[id].name)}
@@ -206,6 +239,7 @@ export function ExportStage({
                 <Segmented<YoutubeResolution>
                   label={t("homeStageResolution")}
                   value={youtube}
+                  disabled={phase === "working"}
                   onChange={change(setYoutube)}
                   options={YOUTUBE_RESOLUTIONS.map((r) => ({ value: r, label: r }))}
                 />
@@ -218,6 +252,7 @@ export function ExportStage({
                   <Segmented<ExportFormat>
                     label={t("homeStageFormat")}
                     value={format}
+                    disabled={phase === "working"}
                     onChange={change(setFormat)}
                     options={EXPORT_FORMATS.map((f) => ({ value: f, label: f.toUpperCase() }))}
                   />
@@ -227,6 +262,7 @@ export function ExportStage({
                   <Segmented<ExportResolution>
                     label={t("homeStageResolution")}
                     value={resolution}
+                    disabled={phase === "working"}
                     onChange={change(setResolution)}
                     options={EXPORT_RESOLUTIONS.map((r) => ({ value: r, label: r }))}
                   />
@@ -266,7 +302,7 @@ export function ExportStage({
                     {fileFormat === "png" ? size : `${formatTime(seconds)} · ${size}`}
                   </span>
                   {phase === "working" ? (
-                    <span className={styles.progressText} role="status">
+                    <span className={styles.progressText}>
                       {t("homeStageExporting", { percent })}
                     </span>
                   ) : (

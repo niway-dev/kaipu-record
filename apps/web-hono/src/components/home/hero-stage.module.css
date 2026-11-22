@@ -171,6 +171,8 @@
 
   .samplePhone {
     display: inline-flex;
+    /* The phone's pill is the working download link: a readable size and a tap target, not the picture's 9px floor. */
+    font-size: 13px;
   }
 }
 
@@ -236,6 +238,13 @@
 .segOn {
   background: var(--kl-card-2);
   color: var(--kl-tx);
+}
+
+/* An export is running: the settings stay visible but cannot be changed. */
+.segBtn[aria-disabled="true"],
+.destBtn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .tools {
@@ -502,6 +511,20 @@
 
 .ink[data-touch="draw"] {
   touch-action: none;
+}
+
+/* The export preview's copy of the marks: the same box as the canvas, nothing to press. */
+.inkStatic {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The edited image in the export preview: same box and crop as the canvas it came from. */
+.exportPicture {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 .inkSvg {
@@ -1134,8 +1157,21 @@
     padding: 10px;
   }
 
+  /* The saved folder and length are the only place that says where the take went: keep them, on a line of their own above the buttons. */
+  .dockSaved {
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 18px;
+  }
+
   .dockText {
-    display: none;
+    flex: 1 0 100%;
+    order: -1;
+    overflow: hidden;
+    padding: 2px 8px 0;
+    font-size: 12px;
+    text-align: center;
+    text-overflow: ellipsis;
   }
 
   .wsLabel {
@@ -1247,9 +1283,8 @@
     cursor: default;
   }
 
-  /* The export panel (destinations, details, the button) needs more room than a 16:10 screen. */
+  /* The export screen is not a 16:10 box here: its height follows its content (the panel is in flow, see `.exportScreen` below). */
   .stage[data-stage="export"] .screen {
-    height: 440px;
     aspect-ratio: auto;
   }
 }
@@ -1287,6 +1322,12 @@
 }
 
 @media (width < 1080px) {
+  .exportPicture,
+  .exportPicture .shot {
+    position: relative;
+    inset: auto;
+  }
+
   .stage[data-stage="export"] .exportScreen {
     display: flex;
     height: auto;

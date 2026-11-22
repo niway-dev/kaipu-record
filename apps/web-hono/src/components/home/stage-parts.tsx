@@ -101,7 +101,7 @@ const TILE: Record<WorkspaceId, { initials: string; color: string }> = {
 };
 
 /** The workspace's square: its initial on its own color, as in the app's switcher. */
-function Tile({ id }: { id: WorkspaceId }) {
+export function Tile({ id }: { id: WorkspaceId }) {
   return (
     <span className={styles.wsTile} style={{ background: TILE[id].color }} aria-hidden>
       {TILE[id].initials}
@@ -235,12 +235,15 @@ export function Segmented<V extends string>({
   options,
   onChange,
   className,
+  disabled = false,
 }: {
   label: string;
   value: V;
   options: readonly { value: V; label: ReactNode; name?: string }[];
   onChange: (value: V) => void;
   className?: string;
+  /** Looks and reads as unavailable (`aria-disabled`) and ignores presses, but stays focusable. */
+  disabled?: boolean;
 }) {
   return (
     <div className={`${styles.seg} ${className ?? ""}`} role="group" aria-label={label}>
@@ -251,7 +254,8 @@ export function Segmented<V extends string>({
           className={`${styles.segBtn} ${o.value === value ? styles.segOn : ""}`}
           aria-pressed={o.value === value}
           aria-label={o.name}
-          onClick={() => onChange(o.value)}
+          aria-disabled={disabled || undefined}
+          onClick={() => !disabled && onChange(o.value)}
         >
           {o.label}
         </button>

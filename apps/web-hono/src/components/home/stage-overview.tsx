@@ -3,7 +3,7 @@ import { KaipuLogo } from "@kaipu/brand";
 
 import { workspaceFolder } from "./hero-stage-model";
 import styles from "./hero-stage.module.css";
-import { SampleScreen, workspaceName, type T } from "./stage-parts";
+import { SampleScreen, Tile, workspaceName, type T } from "./stage-parts";
 
 /**
  * What the screen shows on a phone's overview: the sample page with the four
@@ -23,9 +23,7 @@ export function OverviewPreview({ t }: { t: T }) {
       {/* The same top bar every step has, so the picture is as tall as the steps and nothing below it jumps. */}
       <div className={styles.wsBar}>
         <span className={styles.wsButton}>
-          <span className={styles.wsTile} style={{ background: "var(--kl-c1)" }}>
-            P
-          </span>
+          <Tile id="personal" />
           <span className={styles.wsName}>{name}</span>
           <ChevronsUpDown size={13} />
         </span>

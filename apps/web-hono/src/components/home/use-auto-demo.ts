@@ -19,7 +19,7 @@ type Zone = {
   "data-auto-zone": "stage" | "bar";
   onPointerEnter?: (e: React.PointerEvent) => void;
   onPointerLeave?: (e: React.PointerEvent) => void;
-  onPointerDown: () => void;
+  onPointerDown: (e: React.PointerEvent) => void;
   onFocus: (e: React.FocusEvent) => void;
   onBlur: (e: React.FocusEvent) => void;
 };
@@ -135,9 +135,16 @@ export function useAutoDemo({
     if (!holding) setElapsed(0);
   }, [holding]);
 
-  // Releasing the pointer anywhere ends the "press" hold, even if it left the demo mid-drag.
+  // The "press" hold lasts while any pointer that went down inside the demo is still down. Each
+  // pointer is tracked by id: a second finger lifting elsewhere on the page must not end it, and
+  // releasing outside the demo, even mid-drag, still does.
+  const pressing = useRef<Set<number>>(new Set());
   useEffect(() => {
-    const release = () => hold("press", false);
+    const down = pressing.current;
+    const release = (e: PointerEvent) => {
+      if (!down.delete(e.pointerId ?? 0)) return;
+      if (down.size === 0) hold("press", false);
+    };
     window.addEventListener("pointerup", release);
     window.addEventListener("pointercancel", release);
     return () => {
@@ -150,13 +157,15 @@ export function useAutoDemo({
   // under a resting mouse. The browser then sends no blur or pointerleave to React, so those
   // two holds would never end. Settle them against what is actually on screen. The other
   // holds (marks, a clip, an export, a recording) belong to the step and release themselves.
+  // A control can also vanish inside one step (Export again removes its own button), so this runs
+  // whenever the set of holds changes too, not only when the step does.
   useEffect(() => {
     const focused = document.activeElement;
     if (!(focused instanceof Element) || !focused.closest("[data-auto-zone]")) {
       hold("focus", false);
     }
     if (!rootRef.current?.querySelector('[data-auto-zone="stage"]')) hold("hover", false);
-  }, [mode, hold, rootRef]);
+  }, [mode, holders, hold, rootRef]);
 
   const zone = (hover: boolean): Zone => ({
     "data-auto-zone": hover ? "stage" : "bar",
@@ -164,7 +173,10 @@ export function useAutoDemo({
       onPointerEnter: (e: React.PointerEvent) => e.pointerType === "mouse" && hold("hover", true),
       onPointerLeave: () => hold("hover", false),
     }),
-    onPointerDown: () => hold("press", true),
+    onPointerDown: (e) => {
+      pressing.current.add(e.pointerId ?? 0);
+      hold("press", true);
+    },
     onFocus: (e) => hold("focus", isKeyboardFocus(e.target)),
     onBlur: (e) => {
       if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) {
@@ -184,7 +196,7 @@ export function useAutoDemo({
     hold,
     /** For the screen: hovering with a mouse, pressing and keyboard focus all hold. */
     stageProps: zone(true),
-    /** For the picker and the pause control: pressing and keyboard focus hold. */
+    /** For the picker only: pressing and keyboard focus hold. The pause control sits outside it on purpose, so focus resting on it never freezes the demo. */
     barProps: zone(false),
   };
 }
