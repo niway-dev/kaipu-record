@@ -189,6 +189,26 @@ describe("Screenshot", () => {
     expect(region().textContent).toBe("1920 × 1080");
   });
 
+  it("lets touch scroll until Area is explicitly selected, and restores scrolling for Full screen", () => {
+    renderWithProviders(<Hero />);
+    go("Screenshot");
+    const surface = screen.getByTestId("selection-surface");
+    const swipe = () => {
+      fireEvent.pointerDown(surface, { pointerType: "touch", clientX: 100, clientY: 50 });
+      fireEvent.pointerMove(surface, { pointerType: "touch", clientX: 600, clientY: 300 });
+      fireEvent.pointerUp(surface, { pointerType: "touch" });
+    };
+    swipe();
+    expect(region().textContent).toBe("1306 × 605");
+    expect(surface.getAttribute("data-touch")).toBe("scroll");
+    fireEvent.click(screen.getByRole("button", { name: "Area" }));
+    swipe();
+    expect(region().textContent).toBe("960 × 540");
+    expect(surface.getAttribute("data-touch")).toBe("select");
+    fireEvent.click(screen.getByRole("button", { name: "Full screen" }));
+    expect(surface.getAttribute("data-touch")).toBe("scroll");
+  });
+
   it("Capture opens the image canvas on the selected area", () => {
     renderWithProviders(<Hero />);
     go("Screenshot");
@@ -724,8 +744,19 @@ describe("Auto demo", () => {
     run(AUTO_STEP_MS * 3);
     expect(step()).toBe("Overview");
     const play = screen.getByRole("button", { name: "Play the auto demo" });
-    expect(pressed(play)).toBe("true");
+    expect(play.hasAttribute("aria-pressed")).toBe(false);
     fireEvent.click(play);
+    run(AUTO_STEP_MS);
+    expect(step()).toBe("Record");
+  });
+
+  it("plays while its play button retains keyboard focus", () => {
+    start();
+    fireEvent.click(screen.getByRole("button", { name: "Pause the auto demo" }));
+    const play = screen.getByRole("button", { name: "Play the auto demo" });
+    act(() => play.focus());
+    fireEvent.click(play);
+    expect(status()).toBe("Next: Record in 10s");
     run(AUTO_STEP_MS);
     expect(step()).toBe("Record");
   });

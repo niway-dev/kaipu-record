@@ -431,6 +431,10 @@
   inset: 0;
   overflow: hidden;
   cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.select[data-touch="select"] {
   touch-action: none;
 }
 
@@ -1312,5 +1316,11 @@
     max-height: none;
     margin: 0 8px 8px;
     overflow: visible;
+  }
+}
+
+@media (width < 640px) {
+  .wsLabel {
+    display: none;
   }
 }

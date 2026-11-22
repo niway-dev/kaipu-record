@@ -93,9 +93,9 @@ export function Hero() {
         <p className={styles.compactTitle}>
           {/* One line per sentence: it reads as two statements and never strands a word. */}
           {t("homeHeroMobileTitle")
-            .split(/(?<=[.!?])\s+/)
-            .map((sentence) => (
-              <span key={sentence}>{sentence}</span>
+            .match(/[^.!?]+[.!?]?/g)
+            ?.map((sentence) => (
+              <span key={sentence}>{sentence.trim()}</span>
             ))}
         </p>
         <p className={styles.demoNote}>{t("homeStageDemo")}</p>
@@ -127,7 +127,7 @@ export function Hero() {
           ))}
         </div>
 
-        <div className={styles.auto} {...auto.barProps} data-status={auto.status}>
+        <div className={styles.auto} data-status={auto.status}>
           <span className={styles.ring} aria-hidden>
             <svg viewBox="0 0 24 24" width="24" height="24">
               <circle className={styles.ringTrack} cx="12" cy="12" r={RING_RADIUS} />
@@ -157,7 +157,6 @@ export function Hero() {
             type="button"
             className={styles.autoToggle}
             aria-label={auto.playing ? t("homeStageAutoPause") : t("homeStageAutoPlay")}
-            aria-pressed={!auto.playing}
             onClick={auto.toggle}
           >
             {auto.playing ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}

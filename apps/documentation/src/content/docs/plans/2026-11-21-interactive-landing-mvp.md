@@ -64,7 +64,7 @@ Any mode button switches to that mode at once, from any state, and restarts the 
 
 ## Behaviour by step
 
-**Overview.** The brand statement is the headline. "world" has a pink marker stroke behind it. Each part of the headline is its own message key, so a language can move the marker to the word that carries the idea. Subtle motion: selection corners, a cursor and a capture scan. Reduced motion shows the static version. No sample screen is shown.
+**Overview.** The brand statement is the headline. "world" has a pink marker stroke behind it. Each part of the headline is its own message key, so a language can move the marker to the word that carries the idea. Subtle motion: selection corners, a cursor and a capture scan. Reduced motion shows the static version. No sample screen is shown on desktop; mobile Overview shows a decorative product preview.
 
 **Record.** The sample page is the recorded screen. Kai (the plain fox artwork) sits in a circular bubble, standing in for the webcam. A timer counts up. Pause and resume, Stop, and the microphone and camera toggles change local state only. After Stop, the demo shows "Saved in {folder} · {time}", with Edit it (opens the video editor) and Record again. The workspace cannot be switched while a recording is live or paused.
 
@@ -127,32 +127,11 @@ Screenshot and Edit image keep the sample pill decorative because those surfaces
 
 Parent verification through the public tunnel intercepted the `.dmg` request without downloading the binary. The installer URL was `https://updates.kaipu.app/download/latest/kaipu-arm64.dmg`; the original page remained on the demo and Pause still changed to Resume.
 
-## Verification
+## Validation and delivery
 
-Each row names who ran the check. "This pass" is the docs-only work that produced this page. The other rows were run earlier, by the parent agent or an implementation worker, and were not rerun for this page.
+The pull request carries current check results and attached desktop/mobile captures. Diagram syntax is checked separately from the documentation build. Local `.evidence/` files and temporary preview-server configuration are not production assets and are not committed.
 
-| Check                                                                                                         | Result                                                                             | Source                           |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------- |
-| `bun run check-types` in `apps/web-hono`                                                                      | exit 0, after the last mobile correction                                           | Parent, 2026-11-21               |
-| `bun run build` in `apps/web-hono`                                                                            | exit 0, after the last mobile correction                                           | Parent, 2026-11-21               |
-| Web tests (423 passing, 49 files) after merging current main; earlier i18n tests (22 passing)                 | Web: exit 0 on M5 and Mac mini at commit `9d0168309`; i18n: worker-reported exit 0 | Parent and earlier worker report |
-| `git diff --check`                                                                                            | exit 0                                                                             | Parent, after the polish         |
-| Public tunnel: Export, then GitHub, Jira and Linear selected; document width 390 px on a 390 px phone         | observed                                                                           | Parent, after the polish         |
-| Captures inspected: desktop Record, Screenshot and Edit (second iteration); corrected desktop Export (polish) | inspected                                                                          | Parent                           |
-| Mobile Export recaptured through the tunnel after the sticky-download change                                  | recaptured                                                                         | Parent                           |
-| Docs site build, `bun run build` in `apps/documentation`                                                      | exit 0, 452 pages; only warning: sitemap skipped (no `site` option)                | This pass                        |
-
-The tunnel and the dev server on `localhost:3002` are temporary. Neither is evidence of a production deployment.
-
-**Captures.** `.evidence/landing-polish/` holds `export-desktop.png`, `export-mobile-stage.png` and `export-mobile.png`. Captures from earlier iterations are not in this worktree.
-
-**Final viewport verification:** parent measured Overview at 1440×900, 1366×768, 1280×800 and 2000×1250 after the merge. The footnote bottom was respectively 852.875, 720.875, 752.875 and 1077.875 px, inside each viewport. Implementation worker also measured all five modes at those sizes. The headline size is retained. Short desktop Export panels scroll their options while keeping the export action visible.
-
-**Mac mini validation:** a clean tracked-source archive of `9d0168309` passed web types, all 423 web tests and production build (exit 0). The validation ran in an isolated temporary directory without changing the mini's existing checkout or copying generated environments. The repository has no `validate_on_mini.sh`, so equivalent web-only checks ran directly.
-
-**Implementation choices:** live recording advances after 10 seconds as part of the requested automatic demonstration. Explicit pause, stopped recording and visitor interactions hold it. Email is grouped with chat in the compact demo because both use the same preset. The mobile sticky download remains hidden while the hero is visible, keeping its controls usable. These are recorded implementation choices, not questions requiring another design round.
-
-**Still open:** rendered Mermaid visual review; full keyboard/language/theme browser audit; final owner acceptance and production release validation. Diagram syntax checking and docs build are recorded separately from visual review.
+The design has been implemented on `landing-interactive-hero-stage`; release and final merge follow the normal repository workflow. Recording advances after ten seconds in the automatic demonstration unless a visitor pauses or interacts. Email is grouped with chat because it uses the same export preset. Mobile's persistent download CTA stays hidden while the hero is visible so it cannot cover controls.
 
 ## Out of scope
 
@@ -166,14 +145,12 @@ The final interaction fixes release stale keyboard/hover holds after removed con
 
 The independent review used Wachiman and a second-provider Codex pass. The concrete findings were addressed with regression tests; local-only review logs and the ledger are outside the source tree. Final check results belong to the delivery report rather than a second live status tracker in this design page.
 
-## Mobile presentation iteration — implemented locally for owner validation
+## Mobile presentation
 
 The owner annotated the phone layout: the demo label, tab row and verbose countdown consume the first screen, while the actual product preview sits below the download action and a long Mac-installation note. A mobile visitor must first understand that Kaipu captures screens and edits videos and images.
 
-The next mobile composition puts explicit product/category copy first, uses a compact feature grid as the mode selector, gives the interactive screen nearly the phone's full width, and places the download-options CTA after the demonstration. The countdown becomes a small secondary control rather than a separate headline-sized band. Desktop keeps its reviewed stage, layout and compatibility-footnote fit. Mobile Overview should expose a useful product preview immediately.
+The mobile composition puts explicit product/category copy first, uses a compact feature grid as the mode selector, gives the interactive screen nearly the phone's full width, and places the download-options CTA after the demonstration. The countdown becomes a small secondary control rather than a separate headline-sized band. Desktop keeps its reviewed stage, layout and compatibility-footnote fit. Mobile Overview should expose a useful product preview immediately.
 
 Acceptance: inspect first viewports at 360, 390, 400 and 430px (plus a narrow320px overflow check); show meaningful product content before scrolling past a large CTA; keep touch/keyboard interactions, autoplay holds, workspace/export snapshots and locale parity; no horizontal overflow. The implementation keeps one mode-control tree and restyles it into a 2×2 feature grid below 1080px. Mobile has stable localized category/title, a compact ring/pause control, a near-full-width screen and the CTA below it. Overview gets a decorative product preview with no interactive controls or timers; the actual steps remain interactive. Desktop retains its original overview and tabs.
-
-Mobile implementation worker reported all 451 web tests and 22 i18n tests passing, types exit 0 and touched-file lint/format clean. Browser captures cover English at 360/390/400px and Spanish at 390px. The stage starts at 348px on 390×844 and 337px on 400×844; no horizontal overflow was observed from 320 to 430px. Export remains taller to preserve its complete options. Parent inspected mobile Overview in English/Spanish and mobile Export, and reran the production build. New mobile changes remain uncommitted during this owner-preview iteration.
 
 Mobile CTA correction: the owner noted that the page does not send a link. The button now says “View downloads” / “Ver descargas”, uses a download icon and navigates to the existing `#download` options. The note names Mac and Windows beta, without promising email delivery.

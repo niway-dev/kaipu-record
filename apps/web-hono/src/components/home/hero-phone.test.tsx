@@ -178,7 +178,7 @@ describe("the countdown on a phone", () => {
     expect(status()).toBe("Next: Record in 6s");
     fireEvent.click(tab("Pause the auto demo"));
     expect(status()).toBe("Auto demo paused");
-    expect(tab("Play the auto demo").getAttribute("aria-pressed")).toBe("true");
+    expect(tab("Play the auto demo").hasAttribute("aria-pressed")).toBe(false);
   });
 });
 

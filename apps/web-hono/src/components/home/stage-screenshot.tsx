@@ -32,6 +32,7 @@ export function ScreenshotStage({
   onHold: (id: string, active: boolean) => void;
 }) {
   const [kind, setKind] = useState<Kind>("area");
+  const [touchSelects, setTouchSelects] = useState(false);
   const [area, setArea] = useState<Region>(DEFAULT_AREA);
   const screen = useRef<HTMLDivElement>(null);
   const anchor = useRef<Pt | null>(null);
@@ -51,7 +52,7 @@ export function ScreenshotStage({
   };
 
   const start = (e: PointerEvent) => {
-    if (kind !== "area") return;
+    if (kind !== "area" || (e.pointerType !== "mouse" && !touchSelects)) return;
     anchor.current = point(e);
     setArea({ ...anchor.current, w: 0, h: 0 });
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -72,6 +73,7 @@ export function ScreenshotStage({
       <div
         className={`${styles.select} ${kind === "full" ? styles.selectFull : ""}`}
         data-testid="selection-surface"
+        data-touch={kind === "area" && touchSelects ? "select" : "scroll"}
         onPointerDown={start}
         onPointerMove={move}
         onPointerUp={end}
@@ -103,7 +105,10 @@ export function ScreenshotStage({
         <Segmented<Kind>
           label={t("homeStageScreenshot")}
           value={kind}
-          onChange={setKind}
+          onChange={(value) => {
+            setKind(value);
+            setTouchSelects(value === "area");
+          }}
           options={[
             { value: "area", label: t("homeStageArea") },
             { value: "full", label: t("homeStageFullScreen") },
