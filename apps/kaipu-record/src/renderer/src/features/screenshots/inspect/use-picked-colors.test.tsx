@@ -149,6 +149,28 @@ describe("usePickedColors (imageInspect, follows main's broadcast)", () => {
     await waitFor(() => expect(result.current.picked).toBeNull());
   });
 
+  it("keeps the optimistic value when an earlier save fails while a later one is queued", async () => {
+    const ipc = installSettingsIpc(BASE);
+    const update = installUpdate(ipc, BASE);
+    let calls = 0;
+    window.electronAPI.updateSettings = vi.fn(async (patch: Partial<AppSettings>) => {
+      calls += 1;
+      if (calls === 1) throw new Error("disk full");
+      return update(patch);
+    }) as unknown as typeof window.electronAPI.updateSettings;
+    const { result } = renderHook(() => usePickedColors(true));
+    await waitFor(() => expect(ipc.getSettings).toHaveBeenCalled());
+    act(() => {
+      result.current.pick(RED);
+      result.current.pick(GREEN);
+    });
+    await waitFor(() => expect(reportError).toHaveBeenCalledTimes(1));
+    // The second save carried both picks, so the box never fell back to empty.
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(result.current.picked).toEqual(GREEN);
+    expect(result.current.recents).toEqual([RED]);
+  });
+
   it("never asks main for the settings while it is not enabled", () => {
     const ipc = installSettingsIpc(BASE);
     const { result } = renderHook(() => usePickedColors(false));

@@ -54,6 +54,7 @@ export function usePickedColors(enabled: boolean): PickedColors {
   const latest = useRef(current);
   latest.current = current;
   const writes = useRef<Promise<unknown>>(Promise.resolve());
+  const inFlight = useRef(0);
   // Every value the store takes: the optimistic one ends when the store reaches it (a broadcast
   // of an older save still in flight leaves it standing).
   useEffect(() => {
@@ -67,11 +68,17 @@ export function usePickedColors(enabled: boolean): PickedColors {
     (next: ImageInspectSettings): void => {
       latest.current = next;
       setPending(next);
+      inFlight.current += 1;
       writes.current = writes.current
         .then(() => updateSettings({ imageInspect: next }))
+        .then(() => {
+          inFlight.current -= 1;
+        })
         .catch((error: unknown) => {
-          // The store re-read main before it rethrew: drop the value that never stuck.
-          setPending(null);
+          inFlight.current -= 1;
+          // The store re-read main before it rethrew: drop the value that never stuck, unless
+          // a later save is still queued (it carries this value and settles the store itself).
+          if (inFlight.current === 0) setPending(null);
           reportError(t("inspectPicksSaveError"), error, {
             context: { phase: "inspect-picks-save" },
           });

@@ -297,7 +297,7 @@ describe("photo summary", () => {
 
   it("lists every group with at least PHOTO_GROUP_SHARE of the pixels and folds the rest into other", () => {
     expect(PHOTO_GROUP_SHARE).toBe(0.01);
-    // 100 pixels: 50, 20, 10, 10, 5, then four of 1 (exactly 1% is listed) and one of 0.
+    // 100 pixels: 50, 20, 10, 10, 5, then four of 1 (exactly 1% is listed).
     const a = analysis(2000, [50, 20, 10, 10, 5, 1, 1, 1, 1]);
     const { groups, other } = coverageGroups(a);
     expect(groups.map((g) => g.id)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);

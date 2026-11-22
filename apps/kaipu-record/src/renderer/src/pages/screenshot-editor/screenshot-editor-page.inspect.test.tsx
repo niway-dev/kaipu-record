@@ -313,22 +313,39 @@ describe.each([
 
   it("Format and As captured re-render the box and the recents from the raw values", async () => {
     await enterAndHover();
+    // The probe has read the pixel: the pick keeps its raw captured bytes (1, 2, 3).
+    await screen.findByText("Out of sRGB");
     clickAt(POINTER);
     await waitFor(() =>
       expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX),
     );
     fireEvent.pointerMove(layer(), POINTER_B);
     await waitFor(() => expect(hudChip()).toHaveTextContent(PIXEL_B_HEX));
+    await screen.findByText("Out of sRGB");
     clickAt(POINTER_B);
-    await screen.findByRole("group", { name: "Recent" });
+    const recents = await screen.findByRole("group", { name: "Recent" });
 
     fireEvent.click(screen.getByRole("button", { name: "RGB" }));
     expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent("rgb(50, 50, 100)");
     expect(
-      within(screen.getByRole("group", { name: "Recent" })).getByRole("button", {
-        name: "Copy rgb(150, 50, 100)",
-      }),
+      within(recents).getByRole("button", { name: "Copy rgb(150, 50, 100)" }),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "As captured" }));
+    expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent("rgb(1, 2, 3)");
+    expect(within(recents).getByRole("button", { name: "Copy rgb(1, 2, 3)" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "HEX" }));
+    expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent("#010203");
+  });
+
+  it("with As captured on, a click before the probe read the pixel picks nothing", async () => {
+    // The probe never answers: the chip keeps saying "…" and there is no raw value to pick.
+    probeCaptured.mockImplementation(() => new Promise(() => {}));
+    await enterAndHover();
+    fireEvent.click(screen.getByRole("button", { name: "As captured" }));
+    await waitFor(() => expect(hudChip()).toHaveTextContent("…"));
+    clickAt(POINTER);
+    expect(screen.queryByTestId("inspect-picked-value")).toBeNull();
   });
 
   it("a click with a measurement shown pins it and leaves the picked color alone", async () => {
@@ -547,7 +564,9 @@ describe.each([
       expect(screen.getByTestId("inspect-picked-value")).toHaveTextContent(PIXEL_HEX),
     );
     fireEvent.pointerLeave(layer());
-    await waitFor(() => expect(screen.queryByText("1, 0")).toBeNull());
+    await waitFor(() =>
+      expect(document.querySelector('[data-ui-area="editorImage.inspectHud"]')).toBeNull(),
+    );
     fireEvent.click(screen.getByRole("button", { name: `Copy ${PIXEL_HEX}` }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(PIXEL_HEX));
 

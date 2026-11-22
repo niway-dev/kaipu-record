@@ -267,6 +267,8 @@ export function useInspect({
   const readout = readoutFor(hover, format, asCaptured);
   const readoutRef = useRef(readout);
   readoutRef.current = readout;
+  const asCapturedRef = useRef(asCaptured);
+  asCapturedRef.current = asCaptured;
 
   const publishRun = useCallback((next: InspectRun | null) => {
     runRef.current = next;
@@ -576,6 +578,9 @@ export function useInspect({
   const pick = useCallback((): boolean => {
     const at = hoverRef.current;
     if (!activeRef.current || !at) return false;
+    // As captured is on and the probe has not read this pixel yet: the chip still says "…", so
+    // there is nothing honest to pick. (A probe that failed falls back to the sRGB value.)
+    if (asCapturedRef.current && !at.captured && !probeBroken.current) return false;
     picksRef.current.pick({
       color: { ...at.color },
       ...(at.captured ? { captured: { ...at.captured } } : {}),
