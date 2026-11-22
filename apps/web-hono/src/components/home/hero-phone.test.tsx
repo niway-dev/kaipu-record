@@ -215,4 +215,34 @@ describe("the layout contract", () => {
     expect(phone).toMatch(/margin-inline: calc\(10px - var\(--kl-gutter\)\)/);
     expect(phone).toMatch(/max-width: none/);
   });
+  it("keeps the saved folder and length on a phone instead of hiding them", () => {
+    const compact = css("hero-stage.module.css").split("@container (max-width: 520px)")[1]!;
+    expect(compact).not.toMatch(/\.dockText \{[^}]*display: none/);
+    expect(compact).toMatch(/\.dockText \{[^}]*flex: 1 0 100%/);
+  });
+
+  it("lets reduced motion win over the phone's card transitions, which come earlier in the file", () => {
+    const hero = css("hero.module.css");
+    const last = hero.lastIndexOf("@media (prefers-reduced-motion: reduce)");
+    expect(last).toBeGreaterThan(hero.lastIndexOf("@media (width < 1080px)"));
+    expect(hero.slice(last)).toMatch(/\.mode,\s*\.modeIcon \{\s*transition: none;/);
+  });
+
+  it("stops the overview picture's animations while the demo is paused", () => {
+    expect(css("hero.module.css")).toMatch(
+      /\.hero\[data-paused\] \.frame,\s*\.hero\[data-paused\] \.frame::after,\s*\.hero\[data-paused\] \.cursor \{\s*animation-play-state: paused;/,
+    );
+  });
+
+  it("sizes the headline's selection frame from the headline, not from the body text", () => {
+    const hero = css("hero.module.css");
+    expect(hero).toMatch(/\.titleWrap \{[^}]*font-size: clamp\(48px, 6vw, 88px\)/);
+    expect(hero).toMatch(/\.titleWrap \.title \{[^}]*font-size: inherit/);
+    expect(hero).toMatch(/\[data-mode="overview"\] \.titleWrap \{\s*font-size: clamp\(64px/);
+  });
+
+  it("gives the phone's download pill a readable size", () => {
+    const narrow = mediaWith("hero-stage.module.css", "width < 980px", ".samplePhone")!;
+    expect(narrow).toMatch(/\.samplePhone \{[^}]*font-size: 13px/);
+  });
 });

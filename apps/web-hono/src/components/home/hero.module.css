@@ -200,11 +200,14 @@
   position: relative;
   display: inline-block;
   max-width: 100%;
+  /* The headline's size lives here, so the frame's em offsets scale with the words and not with the body text. */
+  font-size: clamp(48px, 6vw, 88px);
 }
 
 .titleWrap .title {
   position: relative;
   z-index: 1;
+  font-size: inherit;
 }
 
 .frame {
@@ -266,6 +269,13 @@
   fill: var(--kl-tx);
   filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35));
   animation: cursorNudge 11s ease-in-out infinite;
+}
+
+/* The visitor's pause control stops the picture too, not only the countdown. */
+.hero[data-paused] .frame,
+.hero[data-paused] .frame::after,
+.hero[data-paused] .cursor {
+  animation-play-state: paused;
 }
 
 @keyframes frameDrag {
@@ -763,11 +773,22 @@ p.deskOnly {
     padding-top: 0;
   }
 
-  [data-mode="overview"] .title {
+  [data-mode="overview"] .titleWrap {
     font-size: clamp(64px, 7.6vw, 112px);
   }
 
   [data-mode="overview"] .body {
     margin-top: 28px;
+  }
+}
+
+/*
+ * Last on purpose: the phone and tablet block above re-declares these transitions at the same
+ * specificity, so a reduced-motion override earlier in the file would lose to it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .mode,
+  .modeIcon {
+    transition: none;
   }
 }

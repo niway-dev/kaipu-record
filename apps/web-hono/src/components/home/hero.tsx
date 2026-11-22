@@ -86,7 +86,13 @@ export function Hero() {
     })[m];
 
   return (
-    <section id="top" className={styles.hero} data-mode={mode} ref={root}>
+    <section
+      id="top"
+      className={styles.hero}
+      data-mode={mode}
+      data-paused={auto.status === "paused" || undefined}
+      ref={root}
+    >
       <div className={styles.grid}>
         {/* Phone and tablet only: what Kaipu is, stable across the demo's steps (the h1 below is the step's caption there). */}
         <p className={styles.compactEyebrow}>{t("homeHeroMobileEyebrow")}</p>
