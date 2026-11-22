@@ -17,13 +17,17 @@ import styles from "./sticky-cta.module.css";
  *
  * The Mac installer is the main action; the Windows beta sits beside it as a
  * smaller chip so it is reachable without competing with the primary.
+ *
+ * On the home page (`hideOverHero`) the bar stays out of the way while the interactive hero
+ * (`#top`) is on screen, since the hero has its own download buttons; it returns below it.
  */
-export function StickyCta() {
+export function StickyCta({ hideOverHero = false }: { hideOverHero?: boolean }) {
   const t = useTranslations("landing");
-  const [heroVisible, setHeroVisible] = useState(true);
+  const [heroVisible, setHeroVisible] = useState(hideOverHero);
 
   useEffect(() => {
-    const hero = document.getElementById("top");
+    // Only the home page's hero carries its own download buttons and demo; other pages keep the bar.
+    const hero = hideOverHero ? document.getElementById("top") : null;
     if (!hero || typeof IntersectionObserver === "undefined") {
       setHeroVisible(false);
       return;
@@ -33,7 +37,7 @@ export function StickyCta() {
     });
     observer.observe(hero);
     return () => observer.disconnect();
-  }, []);
+  }, [hideOverHero]);
   return (
     <div className={styles.bar} hidden={heroVisible}>
       <DownloadLink
