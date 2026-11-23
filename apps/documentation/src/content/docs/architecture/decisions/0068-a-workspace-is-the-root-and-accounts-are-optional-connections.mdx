@@ -35,9 +35,11 @@ connections, as Obsidian does with a vault and Obsidian Sync.
    usable without signing in.
 3. **The first connection type is a cloud folder:** a provider account plus a folder inside that
    account's synced root, for example Google Drive, account `you@company.com`, folder
-   `folder1/kaipu-assets`. Kaipu records the provider, the synced root and the folder relative to
-   that root. The root's label comes from its name where the provider encodes one: Google Drive's
-   `~/Library/CloudStorage/GoogleDrive-<account>` names the account; OneDrive's
+   `folder1/kaipu-assets`. Kaipu records the provider, the account, the synced root and the folder
+   relative to that root. For Google Drive the account folder is
+   `~/Library/CloudStorage/GoogleDrive-<account>`, whose name gives the account, and the synced
+   roots inside it are `My Drive` and each Shared drive (`Shared drives/<name>`, layout confirmed
+   by layer 0); the example's folder is relative to `My Drive`; OneDrive's
    roots are expected to be `OneDrive-Personal` or `OneDrive-<organization>`, naming the kind of
    account, not the address (unverified until layer 0);
    iCloud Drive has one root per macOS user and is labelled "iCloud Drive". The spec's layer 0
