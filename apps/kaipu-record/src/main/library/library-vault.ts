@@ -32,6 +32,7 @@ import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-na
 import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
 import {
   type PlacedFile,
+  placeByRename,
   placeNew,
   placeNoReplace,
   removeIfSame,
@@ -905,6 +906,9 @@ export class LibraryVault {
               // Strict: a companion that cannot be checked is not skipped, since the
               // old companions are deleted after the commit.
               if (!(await existsStrict(from[key]))) continue;
+              // A synced folder: copying an offloaded companion would download it, so the
+              // rename stops (the title is saved) rather than start that download.
+              await this.assertLocal([from[key]]);
               // A clone where the volume has them: the webcam file is as large as a take.
               await copyFile(
                 from[key],
@@ -914,6 +918,10 @@ export class LibraryVault {
               created.push(to[key]);
             }
             if (await existsStrict(from.assetsDir)) {
+              if (this.synced) {
+                const names = await readdir(from.assetsDir);
+                await this.assertLocal(names.map((name) => join(from.assetsDir, name)));
+              }
               created.push(to.assetsDir);
               await cp(from.assetsDir, to.assetsDir, {
                 recursive: true,
@@ -1054,7 +1062,9 @@ export class LibraryVault {
       try {
         const placed = caseOnly
           ? await renameCaseOnly(from, to)
-          : await placeNoReplace(from, to, { stuck: "rollback" });
+          : this.synced
+            ? await placeByRename(from, to)
+            : await placeNoReplace(from, to, { stuck: "rollback" });
         return placed === "taken" ? "taken" : null;
       } catch (error) {
         const code = errorCode(error);
@@ -1635,7 +1645,13 @@ export class LibraryVault {
    * Resolves the identity of the file placed, for a later undo (`discardCreated`).
    */
   private async placeNewFile(target: string, bytes: Uint8Array): Promise<PlacedFile> {
-    const part = uniqueTempPath(target, "part");
+    // A synced workspace stages outside its folder (no `.part` for the provider to upload) and
+    // places by rename: a hard link inside a synced folder renames the cloud item (ADR 0069).
+    if (this.stagingDir) await mkdir(this.stagingDir, { recursive: true });
+    const part = uniqueTempPath(
+      this.stagingDir ? join(this.stagingDir, basename(target)) : target,
+      "part",
+    );
     try {
       const handle = await open(part, "wx");
       try {
@@ -1644,7 +1660,7 @@ export class LibraryVault {
       } finally {
         await handle.close();
       }
-      const placed = await placeNew(part, target);
+      const placed = this.synced ? await placeByRename(part, target) : await placeNew(part, target);
       if (placed === "taken") throw takenError(target);
       return placed;
     } catch (error) {

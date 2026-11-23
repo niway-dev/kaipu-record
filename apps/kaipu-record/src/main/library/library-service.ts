@@ -120,7 +120,11 @@ export class LibraryService {
     if (busy) return { status: "busy", activity: busy };
     try {
       const { findings } = await this.activity.run("library", async () =>
-        scanVault({ directory: this.deps.vaultDir(), cloud: await this.cloudIds() }),
+        scanVault({
+          directory: this.deps.vaultDir(),
+          vault: this.deps.vault(),
+          cloud: await this.cloudIds(),
+        }),
       );
       const listed = findings
         .filter((f) => !f.fixable)
@@ -153,6 +157,7 @@ export class LibraryService {
     }
     try {
       const report = await fixVault(this.deps.vaultDir(), {
+        vault: this.deps.vault(),
         cloud: await this.cloudIds(),
         isEditing: options.isEditing,
         skip: options.skip,

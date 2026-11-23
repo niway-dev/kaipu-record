@@ -18,7 +18,7 @@ import type {
   ReconcileReport,
 } from "@shared/types/library-reconcile";
 import { atomicWriteFile } from "./atomic-write";
-import { placeNoReplace, type Placement } from "./safe-place";
+import { placeByRename, placeNoReplace, type Placement } from "./safe-place";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { fsFold, isVaultOwnedStem } from "./file-stem";
 import {
@@ -117,6 +117,8 @@ export interface ScanFinding extends ReconcileFinding {
 
 export interface ScanInput {
   directory: string;
+  /** The active workspace's vault (a synced one stays out of every hard link). */
+  vault?: LibraryVault;
   /** Identities in the cached cloud catalog, or "unknown" (signed out). */
   cloud: ReadonlySet<string> | "unknown";
 }
@@ -199,7 +201,7 @@ interface LiveItem extends Media {
  */
 export async function scanVault(input: ScanInput): Promise<VaultScan> {
   const { directory } = input;
-  const vault = new LibraryVault(directory);
+  const vault = input.vault ?? new LibraryVault(directory);
   const findings: ScanFinding[] = [];
 
   // 1. The vault root: media candidates, and stems whose companions are protected.
@@ -595,6 +597,7 @@ class OrphanRun {
   constructor(
     private readonly directory: string,
     private readonly now: () => number,
+    private readonly byRename = false,
   ) {}
 
   /** Vault-relative path of the run folder, or null when nothing moved. */
@@ -627,7 +630,7 @@ class OrphanRun {
     };
     manifest.entries.push(entry);
     await writeManifest(folder, manifest);
-    const { moved, problems } = await moveFiles(this.directory, folder, entry);
+    const { moved, problems } = await moveFiles(this.directory, folder, entry, this.byRename);
     // A file that did not move keeps the entry pending: the next run finishes this bundle
     // here, instead of classifying the leftover again into another one.
     if (isEntryComplete(entry)) entry.status = "complete";
@@ -655,6 +658,7 @@ async function moveFiles(
   directory: string,
   folder: string,
   entry: ManifestEntry,
+  byRename = false,
 ): Promise<{ moved: number; problems: string[] }> {
   let moved = 0;
   const problems: string[] = [];
@@ -679,7 +683,7 @@ async function moveFiles(
     }
     try {
       await mkdir(dirname(to), { recursive: true });
-      if ((await moveIntoRun(from, to)) === "taken") {
+      if ((await moveIntoRun(from, to, byRename)) === "taken") {
         // Arrived since the check: kept, and the source stays (as for a present destination).
         file.state = "conflict";
         problems.push(file.from);
@@ -701,11 +705,13 @@ async function moveFiles(
  * symlink is renamed as itself (a link or copy would follow it); the destination was checked
  * absent in this run's own folder, which no other process names.
  */
-async function moveIntoRun(from: string, to: string): Promise<Placement> {
+async function moveIntoRun(from: string, to: string, byRename: boolean): Promise<Placement> {
   if (!(await lstat(from)).isFile()) {
     await rename(from, to);
     return "placed";
   }
+  // A synced workspace: a hard link in the provider's folder renames the cloud item (ADR 0069).
+  if (byRename) return (await placeByRename(from, to)) === "taken" ? "taken" : "placed";
   return placeNoReplace(from, to, { stuck: "rollback" });
 }
 
@@ -784,7 +790,10 @@ async function readOrphanRuns(
  * its replay moves them (the caller keeps them out of a fresh classification). When any
  * run's manifest is `unreadable`, nothing is replayed and the caller must not act at all.
  */
-export async function resumeOrphanManifests(directory: string): Promise<{
+export async function resumeOrphanManifests(
+  directory: string,
+  byRename = false,
+): Promise<{
   moved: number;
   conflicts: string[];
   failed: string[];
@@ -801,7 +810,7 @@ export async function resumeOrphanManifests(directory: string): Promise<{
     const pending = manifest.entries.filter((entry) => entry.status === "pending");
     if (pending.length === 0) continue;
     for (const entry of pending) {
-      const result = await moveFiles(directory, folder, entry);
+      const result = await moveFiles(directory, folder, entry, byRename);
       moved += result.moved;
       for (const path of result.problems) {
         const state = entry.files.find((f) => f.from === path)?.state;
@@ -820,6 +829,8 @@ export async function resumeOrphanManifests(directory: string): Promise<{
 
 export interface FixOptions {
   cloud: ReadonlySet<string> | "unknown";
+  /** The active workspace's vault; a synced one places by rename, never a hard link. */
+  vault?: LibraryVault;
   /** The item is open in the video editor: its file keeps its name (C2). */
   isEditing?: (id: string, assetId: string) => boolean;
   /** An export may be streaming a file (never true in maintenance mode; kept for safety). */
@@ -861,8 +872,8 @@ export function skipPaths(value: unknown): ReadonlySet<string> {
 
 export async function fixVault(directory: string, options: FixOptions): Promise<ReconcileReport> {
   const now = options.now ?? Date.now;
-  const vault = new LibraryVault(directory);
-  const orphans = new OrphanRun(directory, now);
+  const vault = options.vault ?? new LibraryVault(directory);
+  const orphans = new OrphanRun(directory, now, vault.synced);
   const report: ReconcileReport = {
     counts: {},
     fixed: 0,
@@ -877,7 +888,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
     report.failed.push({ path, error: error instanceof Error ? error.message : String(error) });
   };
 
-  const resumed = await resumeOrphanManifests(directory);
+  const resumed = await resumeOrphanManifests(directory, vault.synced);
   if (resumed.unreadable.length > 0) {
     // Fail closed: that run's files are unknown, so any move, adoption or rename could split
     // its bundle or take one of its files. Listed until someone repairs or removes it.

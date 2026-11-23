@@ -341,6 +341,15 @@ export function activeScratch(): string | null {
 }
 
 /**
+ * Where the active synced workspace stages what it writes (`<scratch>/tmp`), or null for a
+ * workspace that is not synced (it stages in `.kaipu/tmp`).
+ */
+export function activeStagingDir(): string | null {
+  const active = requireRegistry().active();
+  return syncStates.of(active) === null ? null : scratchTmp(app.getPath("userData"), active.id);
+}
+
+/**
  * The scratch staging folder of the workspace registered at `vaultDir`, synced or not (the
  * stranded-take sweep reads it whenever it exists), or null for a folder no workspace holds.
  */

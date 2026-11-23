@@ -28,6 +28,7 @@ vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ lo
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
   activeEvictionProbe: () => null,
+  activeStagingDir: () => null,
   activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({

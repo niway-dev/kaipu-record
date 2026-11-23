@@ -31,6 +31,8 @@ export function validateGifBytes(bytes: Uint8Array): void {
 
 export interface GifSaveDeps {
   vaultDir: () => string;
+  /** The active workspace's vault; a synced workspace stages outside its folder. */
+  vault?: () => LibraryVault;
   now?: () => number;
 }
 
@@ -41,7 +43,7 @@ export async function saveGif(
 ): Promise<LocalRecording> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   validateGifBytes(bytes);
-  const vault = new LibraryVault(deps.vaultDir());
+  const vault = deps.vault?.() ?? new LibraryVault(deps.vaultDir());
   const createdAt = (deps.now ?? Date.now)();
   // The file name follows the title (ADR 0035); the stub sidecar reserves it.
   const reservation = await vault.reserve({ kind: "gif", title: meta.title, createdAt });

@@ -36,6 +36,7 @@ import { withItemLock } from "./item-lock";
 import { friendlyDragName } from "./drag-name";
 import {
   activeEvictionProbe,
+  activeStagingDir,
   activeScratch,
   activeWorkspace,
   ownsLegacyCloud,
@@ -68,7 +69,13 @@ export function broadcastLibraryChanged(): void {
 export function currentVault(): LibraryVault {
   const active = activeWorkspace();
   // A synced workspace asks which files are evicted, so no URL it hands out downloads one.
-  return new LibraryVault(active.path, active.id, undefined, activeEvictionProbe());
+  return new LibraryVault(
+    active.path,
+    active.id,
+    undefined,
+    activeEvictionProbe(),
+    activeStagingDir(),
+  );
 }
 
 /** The active workspace's folder. */
@@ -362,7 +369,7 @@ export function registerLibraryVaultHandlers(deps: {
   handleVault(IPC_CHANNELS.localRecordingPath, (id: string) => localRecordingFile(id));
   // NIW2-217: GIF export. Bytes are validated (GIF89a, ≤ 64 MB) and the path is chosen here.
   handleVault(IPC_CHANNELS.gifSave, async (bytes: ArrayBuffer, meta: GifSaveMeta) => {
-    const recording = await saveGif({ vaultDir: vaultPath }, bytes, meta);
+    const recording = await saveGif({ vaultDir: vaultPath, vault: currentVault }, bytes, meta);
     broadcastLibraryChanged();
     return recording;
   });
@@ -416,6 +423,7 @@ export function registerLibraryVaultHandlers(deps: {
   // runs inside the workspace gate and under one vault lease, like every other vault write.
   const importDeps: ImportVideoDeps = {
     vaultDir: vaultPath,
+    vault: currentVault,
     newId: (now) => importedId(now),
   };
   const importAndBroadcast = async (stamp: unknown, paths: unknown): Promise<ImportVideoResult> =>

@@ -60,7 +60,9 @@ export function openTranscriptionVault(): TranscriptionVault {
   const vault = currentVault();
   const workspaceId = activeWorkspace().id;
   return {
-    tmpDir: join(vault.directory, META_DIR, "tmp"),
+    // A synced workspace stages its decoded audio and partials in its scratch folder, never in
+    // the folder the provider uploads (ADR 0069).
+    tmpDir: vault.stagingDirectory ?? join(vault.directory, META_DIR, "tmp"),
     async resolve({ id, assetId }) {
       if (!isPlainItemId(id)) return null;
       const item = await vault.describe(id);

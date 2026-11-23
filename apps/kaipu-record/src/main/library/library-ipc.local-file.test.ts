@@ -28,6 +28,7 @@ vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
   activeEvictionProbe: () => (paths: string[]) =>
     Promise.resolve(new Set(paths.filter((path) => state.evicted.has(path)))),
+  activeStagingDir: () => join(state.dir, "scratch"),
   activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({

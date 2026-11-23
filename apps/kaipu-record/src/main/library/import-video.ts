@@ -18,7 +18,7 @@ import {
 } from "@shared/import-video";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { uniqueTempPath } from "./atomic-write";
-import { type PlacedFile, placeNew, takenError } from "./safe-place";
+import { type PlacedFile, placeByRename, placeNew, takenError } from "./safe-place";
 import { LibraryVault } from "./library-vault";
 
 /** What the vault stores about an imported video, read from its container. */
@@ -59,6 +59,8 @@ export async function probeVideoFile(path: string): Promise<VideoProbeResult> {
 
 export interface ImportVideoDeps {
   vaultDir: () => string;
+  /** The active workspace's vault; a synced workspace stages outside its folder. */
+  vault?: () => LibraryVault;
   /** The id stem for an item imported at `now`; a numeric suffix is added on a clash. */
   newId: (now: number) => string;
   now?: () => number;
@@ -149,7 +151,8 @@ async function commitImport(
   const dest = join(vault.directory, `${id}${ext}`);
   let placed: PlacedFile | "taken";
   try {
-    placed = await placeNew(staged, dest);
+    // A synced workspace places by rename: a hard link in its folder renames the cloud item.
+    placed = vault.synced ? await placeByRename(staged, dest) : await placeNew(staged, dest);
   } catch (error) {
     await vault.releaseReservation(reservation).catch(() => {});
     throw error;
@@ -187,7 +190,7 @@ export async function importVideoFile(
   path: string,
   deps: ImportVideoDeps,
 ): Promise<LocalRecording | ImportVideoFailureReason> {
-  const vault = new LibraryVault(deps.vaultDir());
+  const vault = deps.vault?.() ?? new LibraryVault(deps.vaultDir());
   const source = await validateImportSource(path, vault.directory);
   if (!source.ok) return source.reason;
 
@@ -197,7 +200,10 @@ export async function importVideoFile(
   let id: string | null = null;
   try {
     await mkdir(vault.directory, { recursive: true });
-    staged = uniqueTempPath(join(vault.directory, `import${source.ext}`), "part");
+    // A synced workspace stages in its scratch folder, so no `.part` is ever uploaded.
+    const stagingRoot = vault.stagingDirectory ?? vault.directory;
+    await mkdir(stagingRoot, { recursive: true });
+    staged = uniqueTempPath(join(stagingRoot, `import${source.ext}`), "part");
     await copyDurably(source.path, staged);
     // Probe the copy, not the source: what was checked is exactly what the vault keeps.
     const probed = await probe(staged);

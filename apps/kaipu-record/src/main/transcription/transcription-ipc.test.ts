@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   dir: "",
   handle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   sent: [] as string[],
+  staging: null as string | null,
 }));
 
 vi.mock("electron", () => ({
@@ -42,6 +43,7 @@ vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ lo
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
   activeEvictionProbe: () => null,
+  activeStagingDir: () => state.staging,
   activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({
@@ -728,6 +730,15 @@ describe("with a real vault", () => {
   });
 
   describe("the vault the job sees", () => {
+    it("stages in the scratch folder, never in the synced folder, in a synced workspace", () => {
+      state.staging = join(state.dir, "scratch", "tmp");
+      try {
+        expect(openTranscriptionVault().tmpDir).toBe(state.staging);
+      } finally {
+        state.staging = null;
+      }
+    });
+
     it("resolves an item only under its own identity, and only a recording", async () => {
       const item = await addMedia("takes");
       const jobVault = openTranscriptionVault();
