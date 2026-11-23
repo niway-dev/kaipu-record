@@ -550,12 +550,14 @@ export class RecordingWriter {
     const session = this.sessions.get(sessionKey(sessionId, "screen"));
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
     const webcam = this.webcamOf(session);
-    await replaceConfirmed(session.tempPath, destPath); // the save dialog confirmed replacing
+    // The save dialog confirmed replacing. A take staged in a synced workspace's scratch folder
+    // moves by rename: the destination may be a provider folder, where a hard link misbehaves.
+    await replaceConfirmed(session.tempPath, destPath, session.byRename ?? false);
     this.forget(session);
     if (webcam?.stranded) {
       this.forget(webcam);
       // The save dialog only confirmed replacing the screen file: never a webcam file there.
-      await placeWebcamBeside(webcam.tempPath, destPath).catch((error) =>
+      await placeWebcamBeside(webcam.tempPath, destPath, webcam.byRename ?? false).catch((error) =>
         console.error("webcam salvage failed", error),
       );
     }
@@ -657,13 +659,23 @@ interface PlacedWebcam {
 /**
  * Place a salvaged webcam part beside its screen file as `<name>.webcam.mp4`, or
  * `<name>.webcam-<n>.mp4` from 2 up when that is taken: never replacing a file there
- * (`safe-place`), so an existing webcam file beside it is kept.
+ * (`safe-place`), so an existing webcam file beside it is kept. A take staged in a synced
+ * workspace's scratch folder moves by rename, never a hard link.
  */
-async function placeWebcamBeside(from: string, screenPath: string): Promise<string> {
+async function placeWebcamBeside(
+  from: string,
+  screenPath: string,
+  byRename: boolean,
+): Promise<string> {
   const first = webcamSiblingPath(screenPath);
   for (let n = 1; n < 1000; n++) {
     const candidate = n === 1 ? first : first.replace(/\.webcam\.mp4$/, `.webcam-${n}.mp4`);
-    if ((await placeNoReplace(from, candidate)) === "placed") return candidate;
+    const placed = byRename
+      ? (await placeByRename(from, candidate)) === "taken"
+        ? "taken"
+        : "placed"
+      : await placeNoReplace(from, candidate);
+    if (placed === "placed") return candidate;
   }
   throw new Error(`No free webcam file name beside "${screenPath}"`);
 }

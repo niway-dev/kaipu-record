@@ -18,7 +18,7 @@ import { useMoveUi } from "./move-store";
  * - "This recording has 2 exports in Work. Move them too?" (ADR 0033, decision 15): Move all 3
  *   (primary) or Move only the recording.
  * - The confirmation before a move out of a synced workspace (decision 15), which says the
- *   copy is checked before the original goes.
+ *   file is deleted from the cloud on every device.
  */
 export function MoveExportsDialogHost(): React.JSX.Element | null {
   const t = useTranslations("move");

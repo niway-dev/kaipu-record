@@ -415,6 +415,13 @@ export interface VaultReader {
 
 const fsReader: VaultReader = { readText: (path) => readFile(path, "utf-8") };
 
+/**
+ * The longest a synced vault waits for one sidecar. A provider can offload that small file too,
+ * and reading it downloads it: a stalled or offline provider would hang a Library listing, so
+ * the read gives up and the item is listed read-only (spec AC13, ADR 0069 decision 5).
+ */
+export const SYNCED_SIDECAR_READ_TIMEOUT_MS = 5_000;
+
 /** Prefix of the stand-in `assetId` of an item whose sidecar cannot be read; never persisted. */
 export const UNREADABLE_ASSET_PREFIX = "unreadable:";
 
@@ -483,6 +490,28 @@ export class LibraryVault {
     private readonly evictionProbe: EvictionProbe | null = null,
     private readonly stagingDir: string | null = null,
   ) {}
+
+  /**
+   * One sidecar read through the vault's reader. A synced vault bounds it: an offloaded sidecar
+   * is downloaded by the read, and a stalled provider must not hang the Library. A read that
+   * times out fails like any unreadable file (`ETIMEDOUT`).
+   */
+  private async readSidecarText(path: string): Promise<string> {
+    if (!this.synced) return this.reader.readText(path);
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(Object.assign(new Error(`reading "${path}" timed out`), { code: "ETIMEDOUT" })),
+        SYNCED_SIDECAR_READ_TIMEOUT_MS,
+      );
+    });
+    try {
+      return await Promise.race([this.reader.readText(path), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   /**
    * The workspace folder is synced by a provider (spec, Synced folders). A synced vault stages
@@ -1365,7 +1394,7 @@ export class LibraryVault {
     const path = this.sidecarPath(id);
     let raw: string;
     try {
-      raw = await this.reader.readText(path);
+      raw = await this.readSidecarText(path);
     } catch (error) {
       if (errorCode(error) === "ENOENT") return { status: "missing" };
       return { status: "unreadable", error: String(error) };
@@ -1415,7 +1444,7 @@ export class LibraryVault {
     const path = this.sidecarPath(id);
     let raw: string;
     try {
-      raw = await this.reader.readText(path);
+      raw = await this.readSidecarText(path);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
       throw new SidecarUnavailableError("unreadable", path, { cause: error });

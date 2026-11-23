@@ -546,7 +546,7 @@ export class TranscriptionService {
         }
         // Offloaded by a sync provider: the audio could not be read without downloading it.
         if ((error as { code?: string }).code === "EVICTED") {
-          return { status: "refused", reason: "invalid-item" };
+          return { status: "refused", reason: "evicted" };
         }
         throw error;
       }

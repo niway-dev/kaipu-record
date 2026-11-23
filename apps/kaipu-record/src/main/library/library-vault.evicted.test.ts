@@ -3,7 +3,12 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EvictedFileError } from "./dataless";
-import { LibraryVault, SyncedLocalCopyError } from "./library-vault";
+import {
+  LibraryVault,
+  SYNCED_SIDECAR_READ_TIMEOUT_MS,
+  SyncedLocalCopyError,
+  type VaultReader,
+} from "./library-vault";
 
 /**
  * Synced folders (decision 15): rendering the Library must not download an evicted file. The
@@ -116,6 +121,47 @@ describe("LibraryVault — evicted files get no image URL", () => {
     });
     const [listed] = await vault.list();
     expect(listed).toMatchObject({ id: "clip", evicted: "media" });
+  });
+
+  it("a synced vault gives up on a sidecar the provider never delivers and lists the item read-only", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await seedVideo("clip");
+      let reading: () => void = () => {};
+      const started = new Promise<void>((resolve) => (reading = resolve));
+      const never: VaultReader = {
+        readText: () => {
+          reading();
+          return new Promise<string>(() => {});
+        },
+      };
+      const vault = new LibraryVault(directory, "ws-1", never, async () => new Set<string>());
+      const listing = vault.list();
+      await started;
+      await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
+      const [item] = await listing;
+      expect(item).toMatchObject({ id: "clip", metadataIssue: expect.anything() });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a plain workspace puts no deadline on a sidecar read", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await seedVideo("clip");
+      let resolveRead: (text: string) => void = () => {};
+      const slow: VaultReader = {
+        readText: () => new Promise<string>((resolve) => (resolveRead = resolve)),
+      };
+      const vault = new LibraryVault(directory, "ws-1", slow);
+      const sidecar = vault.sidecar("clip");
+      await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS * 2);
+      resolveRead("{}");
+      await expect(sidecar).resolves.toEqual({});
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a plain (not synced) workspace never probes", async () => {

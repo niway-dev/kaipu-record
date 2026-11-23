@@ -9,6 +9,11 @@ const state = vi.hoisted(() => ({
   dir: "",
   evicted: new Set<string>(),
   handle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  on: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  /** Whether the poster loads as a drag icon (the real one is empty without a file). */
+  iconPresent: false,
+  /** Every set of paths the eviction probe was asked about. */
+  probed: [] as string[][],
 }));
 
 vi.mock("electron", () => ({
@@ -16,18 +21,23 @@ vi.mock("electron", () => ({
   ipcMain: {
     handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) =>
       state.handle.set(channel, fn),
-    on: () => {},
+    on: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) =>
+      state.on.set(channel, fn),
   },
   BrowserWindow: { getAllWindows: () => [], fromWebContents: () => null },
   dialog: { showOpenDialog: vi.fn(), showMessageBox: vi.fn() },
-  nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
+  nativeImage: {
+    createFromPath: () => ({ isEmpty: () => !state.iconPresent, resize: () => ({}) }),
+  },
   shell: { openPath: vi.fn(async () => ""), showItemInFolder: vi.fn() },
 }));
 vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ locale: "en" }) }));
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
-  activeEvictionProbe: () => (paths: string[]) =>
-    Promise.resolve(new Set(paths.filter((path) => state.evicted.has(path)))),
+  activeEvictionProbe: () => (paths: string[]) => {
+    state.probed.push(paths);
+    return Promise.resolve(new Set(paths.filter((path) => state.evicted.has(path))));
+  },
   activeStagingDir: () => join(state.dir, "scratch"),
   activeScratch: () => null,
   ownsLegacyCloud: () => true,
@@ -78,6 +88,8 @@ describe("library IPC — openLocalRecording and localRecordingPath (NIW2-669)",
   });
   beforeEach(() => {
     state.evicted.clear();
+    state.probed.length = 0;
+    state.iconPresent = false;
     vi.mocked(shell.openPath).mockClear();
     vi.mocked(shell.openPath).mockResolvedValue("");
   });
@@ -169,5 +181,39 @@ describe("library IPC — openLocalRecording and localRecordingPath (NIW2-669)",
       "no local recording",
     );
     expect(shell.openPath).not.toHaveBeenCalled();
+  });
+
+  describe("startFileDrag in a synced workspace", () => {
+    const startDrag = vi.fn();
+    /** Sends the drag and waits until the handler has asked the provider, then lets it finish. */
+    async function drag(id: string): Promise<void> {
+      const fn = state.on.get(IPC_CHANNELS.startFileDrag);
+      if (!fn) throw new Error("no listener registered for startFileDrag");
+      state.probed.length = 0;
+      fn({ sender: { startDrag } }, STAMP, id);
+      await vi.waitFor(() => expect(state.probed.length).toBeGreaterThan(0));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    beforeEach(() => {
+      startDrag.mockClear();
+      state.iconPresent = true;
+    });
+
+    it("starts the drag of a file the provider holds locally (the control for the two refusals)", async () => {
+      await drag("item-1");
+      expect(startDrag).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops the drag of an evicted file: a copy of it would download it", async () => {
+      state.evicted.add(join(vault, "item-1.mp4"));
+      await drag("item-1");
+      expect(startDrag).not.toHaveBeenCalled();
+    });
+
+    it("stops the drag when only the poster is evicted: the drag icon reads it", async () => {
+      state.evicted.add(join(vault, ".kaipu", "item-1.jpg"));
+      await drag("item-1");
+      expect(startDrag).not.toHaveBeenCalled();
+    });
   });
 });

@@ -140,6 +140,7 @@ describe("transcription job store", () => {
   it.each([
     ["busy", "busy"],
     ["invalid-item", "item-changed"],
+    ["evicted", "evicted"],
   ] as const)(
     "passes main's %s refusal through, leaves nothing running and records it as the item's failure",
     async (reason, failure) => {

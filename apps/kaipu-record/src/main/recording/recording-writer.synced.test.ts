@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -70,10 +70,9 @@ describe("RecordingWriter — a synced workspace", () => {
 
   it("the stranded sweep recovers a take left in the scratch folder, without a link", async () => {
     const w = writer();
-    const { tempPath } = await w.create("s1");
+    await w.create("s1");
     await w.write("s1", new TextEncoder().encode("bytes").buffer, 0);
     // The app dies here: the part stays in the scratch folder.
-    void tempPath;
     const result = await recoverStrandedRecordings({
       vaultDir,
       extraStagingDirs: [scratch],
@@ -141,12 +140,11 @@ describe("RecordingWriter — a synced workspace", () => {
 
   it("a take with a webcam stages both parts in the scratch folder and places both by rename", async () => {
     const w = writer();
-    const { tempPath } = await w.create("s1");
+    await w.create("s1");
     const webcam = await w.create("s1", "webcam");
     expect(webcam.tempPath.startsWith(scratch)).toBe(true);
     await w.write("s1", new TextEncoder().encode("screen").buffer, 0);
     await w.write("s1", new TextEncoder().encode("camera").buffer, 0, "webcam");
-    void tempPath;
     const rec = await w.finalize("s1", {
       title: "T",
       durationSeconds: 1,
@@ -154,7 +152,7 @@ describe("RecordingWriter — a synced workspace", () => {
       webcam: webcamMeta,
     });
     const webcamFile = join(vaultDir, ".kaipu", "T.webcam.mp4");
-    // A hard link of either file into the synced folder would renames its cloud item.
+    // A hard link of either file into the synced folder would rename its cloud item.
     expect(hooks.links).toEqual([]);
     expect(rec.webcam).toBeTruthy();
     expect(await readFile(webcamFile, "utf-8")).toBe("camera");
@@ -185,5 +183,30 @@ describe("RecordingWriter — a synced workspace", () => {
     await expect(stat(join(vaultDir, ".kaipu", "T.webcam.mp4"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("a salvaged take (and its webcam) leaves scratch by rename, never a link, wherever the user saves it", async () => {
+    const w = writer();
+    const { tempPath } = await w.create("s1");
+    const webcam = await w.create("s1", "webcam");
+    await w.write("s1", new TextEncoder().encode("screen").buffer, 0);
+    await w.write("s1", new TextEncoder().encode("camera").buffer, 0, "webcam");
+    vi.spyOn(LibraryVault.prototype, "writeMeta").mockImplementationOnce(async () => {
+      throw new Error("disk full");
+    });
+    await expect(
+      w.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000, webcam: webcamMeta }),
+    ).rejects.toThrow();
+    // The save dialog can point at another synced folder (a link there leaves the item unsynced).
+    const picked = join(root, "OneDrive", "mine.mp4");
+    await mkdir(join(root, "OneDrive"), { recursive: true });
+    await writeFile(picked, "old take");
+    await w.salvage("s1", picked);
+    expect(hooks.links).toEqual([]);
+    expect(await readFile(picked, "utf-8")).toBe("screen");
+    expect(await readFile(join(root, "OneDrive", "mine.webcam.mp4"), "utf-8")).toBe("camera");
+    expect((await stat(picked)).nlink).toBe(1);
+    await expect(stat(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(webcam.tempPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

@@ -500,6 +500,54 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     });
   });
 
+  it("a source edit project saved after the copy is kept with its media, and the move is left for review", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        hooks: {
+          // Another Mac saves the edit project into the synced source folder during the copy.
+          after: async (step) => {
+            if (step === "committed") {
+              await writeFile(join(src.directory, ".kaipu", "Demo.edit.json"), '{"scene":2}');
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, id: "Demo", keptOriginal: "source-changed" });
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    expect(await readFile(join(src.directory, ".kaipu", "Demo.edit.json"), "utf-8")).toBe(
+      '{"scene":2}',
+    );
+    const journals = await readdir(journalDir);
+    expect(JSON.parse(await readFile(join(journalDir, journals[0]!), "utf-8"))).toMatchObject({
+      quarantined: "source edit project changed after the move committed",
+    });
+  });
+
+  it("a source record that now belongs to another item is not deleted with the media", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        hooks: {
+          after: async (step) => {
+            if (step === "committed") {
+              const path = join(src.directory, ".kaipu", "Demo.json");
+              const record = JSON.parse(await readFile(path, "utf-8"));
+              await writeFile(path, JSON.stringify({ ...record, assetId: "someone-else" }));
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+  });
+
   it("a source whose only difference is its mtime, with the same bytes, is removed as normal", async () => {
     const item = await seedItem(src.directory);
     const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
@@ -660,6 +708,56 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     expect(calls).toBe(1);
     expect(await readFile(finalPath, "utf-8")).toBe("someone else's file");
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+  });
+
+  it("healing asks once per workspace, and not at all for the target of an entry whose source is away", async () => {
+    const crash = deps({
+      hooks: {
+        after: (at) => {
+          if (at === "media-placed") throw new SimulatedCrash(at);
+        },
+      },
+    });
+    for (const id of ["Demo", "Other"]) {
+      await seedItem(src.directory, id, { tags: [] });
+      await expect(moveItem({ source: src, target: dst, id }, crash)).rejects.toBeInstanceOf(
+        SimulatedCrash,
+      );
+    }
+    // The target's provider does not answer: each answer would cost the availability bound.
+    const asked: string[] = [];
+    const report = await heal({
+      resolve: async (side) => {
+        asked.push(side.workspaceId);
+        return side.workspaceId === dst.workspaceId ? null : side.directory;
+      },
+    });
+    expect(report).toMatchObject({ healed: 0, waiting: 2 });
+    expect(asked.filter((w) => w === dst.workspaceId)).toHaveLength(1);
+  });
+
+  it("healing does not ask for the target while the source is not connected", async () => {
+    const item = await seedItem(src.directory);
+    await expect(
+      moveItem(
+        { source: src, target: dst, id: item.id },
+        deps({
+          hooks: {
+            after: (at) => {
+              if (at === "media-placed") throw new SimulatedCrash(at);
+            },
+          },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(SimulatedCrash);
+    const asked: string[] = [];
+    await heal({
+      resolve: async (side) => {
+        asked.push(side.workspaceId);
+        return side.workspaceId === src.workspaceId ? null : side.directory;
+      },
+    });
+    expect(asked).toEqual([src.workspaceId]);
   });
 
   it("healing waits, without reading, while the target copy is offloaded on a synced side", async () => {

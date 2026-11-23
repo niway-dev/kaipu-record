@@ -243,6 +243,18 @@ export function useLocalLibrary(): LocalLibrary {
     return window.electronAPI.onLibraryChanged(() => void refresh());
   }, [refresh, refreshCloud]);
 
+  // Synced folders: the provider downloads a file on its own, outside the app, and nothing in
+  // main watches the folder. While some item still reads "Not downloaded", coming back to the
+  // window re-lists, so the page does not stay on a state the file has already left. Nothing is
+  // listened to when no item is offloaded, so a plain workspace pays nothing.
+  const anyEvicted = useMemo(() => videos.some((v) => v.evicted !== undefined), [videos]);
+  useEffect(() => {
+    if (!anyEvicted) return;
+    const onFocus = (): void => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [anyEvicted, refresh]);
+
   return {
     videos,
     isLoading,

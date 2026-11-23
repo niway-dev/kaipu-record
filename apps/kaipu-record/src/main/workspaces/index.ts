@@ -181,8 +181,13 @@ export async function refreshActiveWorkspaceSettings(): Promise<void> {
  * root (spec, Availability and Synced folders). Unanswered, a folder that `stat` still sees is
  * available under its registered id, unverified; one that `stat` cannot see is missing.
  */
-async function availabilityOf(id: string): Promise<{ availability: Availability; id: string }> {
+async function availabilityOf(
+  requestedId: string,
+): Promise<{ availability: Availability; id: string }> {
   const reg = requireRegistry();
+  // The id the registry knows the entry by now: a pending entry adopts its folder's own id the
+  // first time it is checked, and every later ask uses the adopted one.
+  let id = requestedId;
   let entry = reg.get(id);
   if (!entry || syncStates.of(entry) === null) {
     syncStates.answered(id); // relocated to a plain folder: nothing is left to verify
@@ -194,7 +199,8 @@ async function availabilityOf(id: string): Promise<{ availability: Availability;
     if (!entry || plain.availability.state !== "available" || !syncStates.needsRecheck(plain.id)) {
       return plain;
     }
-    entry = reg.get(plain.id) ?? entry;
+    id = plain.id;
+    entry = reg.get(id) ?? entry;
     if ((await syncStates.refresh(entry)) === null) return plain;
   }
   const answered = await boundedProbe(reg.availability(id), null);

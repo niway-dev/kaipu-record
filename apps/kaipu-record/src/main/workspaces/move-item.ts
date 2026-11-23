@@ -485,8 +485,18 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     // The copy of a synced file can take long, and the provider may bring a newer version of the
     // source in meanwhile: only the file that was copied goes. Otherwise the journal is left
     // for review, the same way healing keeps the source (`healEntry`), and the outcome says so.
-    if (await sourceChangedSinceCopy(media, mediaInfo, journal, source.scratch !== undefined, fs)) {
-      const reason = "source media changed after the move committed";
+    // The small files go with the media, so they get the same check the healing path makes: the
+    // record is still this item's, and the edit project is the one that was copied.
+    const reason = (await sourceChangedSinceCopy(
+      media,
+      mediaInfo,
+      journal,
+      source.scratch !== undefined,
+      fs,
+    ))
+      ? "source media changed after the move committed"
+      : await sourceCompanionsChanged(from, to, id, newId, journal.assetId);
+    if (reason) {
       await writeJournal(deps.journalDir, { ...journal, quarantined: reason });
       console.error(`move ${journal.moveId} of "${id}" kept for review: ${reason}`);
       await rm(staging, { recursive: true, force: true }).catch(() => {});
@@ -736,6 +746,17 @@ export async function healMoves(deps: HealDeps): Promise<HealReport> {
   } catch {
     return report;
   }
+  // One run asks each workspace once: a provider that does not answer costs the whole
+  // availability bound per ask, and k pending entries must not pay it k times (twice each).
+  const answers = new Map<string, Promise<string | null>>();
+  const resolve = (side: MoveSide): Promise<string | null> => {
+    let answer = answers.get(side.workspaceId);
+    if (!answer) {
+      answer = deps.resolve(side);
+      answers.set(side.workspaceId, answer);
+    }
+    return answer;
+  };
   for (const name of names.filter((n) => n.endsWith(".json"))) {
     let journal: MoveJournal;
     try {
@@ -749,7 +770,7 @@ export async function healMoves(deps: HealDeps): Promise<HealReport> {
       continue;
     }
     const outcome = await withItemLock(journal.source.workspaceId, journal.sourceId, () =>
-      healEntry(journal, { ...deps, fs }),
+      healEntry(journal, { ...deps, resolve, fs }),
     ).catch((error: unknown) => {
       console.error(`healing move ${journal.moveId} failed; it is retried later`, error);
       return "waiting" as const;
@@ -765,10 +786,12 @@ async function healEntry(
   journal: MoveJournal,
   deps: { journalDir: string; resolve(side: MoveSide): Promise<string | null>; fs: MoverFs },
 ): Promise<"healed" | "waiting" | MoveJournal> {
+  // A workspace that is not connected waits: its side cannot be inspected. The target is not
+  // asked while the source is away (each ask can cost the availability bound).
   const sourceDir = await deps.resolve(journal.source);
+  if (sourceDir === null) return "waiting";
   const targetDir = await deps.resolve(journal.target);
-  // A workspace that is not connected waits: its side cannot be inspected.
-  if (sourceDir === null || targetDir === null) return "waiting";
+  if (targetDir === null) return "waiting";
   const from = new LibraryVault(sourceDir);
   const to = new LibraryVault(targetDir);
   const staging = stagingDir(targetDir, journal.moveId, journal.target.scratch);
@@ -923,6 +946,30 @@ async function editProjectChanged(
   } catch {
     return true;
   }
+}
+
+/**
+ * Why the source's small files must stay, or null: its record now carries another item's
+ * identity, or its edit project is not the one that was copied (another Mac saved it into the
+ * synced source folder during a long copy). The same two checks `healEntry` makes.
+ */
+async function sourceCompanionsChanged(
+  from: LibraryVault,
+  to: LibraryVault,
+  sourceId: string,
+  targetId: string,
+  assetId: string,
+): Promise<string | null> {
+  const record = await readSidecarStrict(from.sidecarPath(sourceId));
+  if (record.status === "ok" && record.sidecar.assetId !== assetId) {
+    return "source record changed after the move committed";
+  }
+  if (record.status !== "ok" && record.status !== "missing") {
+    return "source record unreadable after the move committed";
+  }
+  return (await editProjectChanged(from, to, sourceId, targetId))
+    ? "source edit project changed after the move committed"
+    : null;
 }
 
 /** The file at `path` is the journal's media: same size, and the same mtime or sha256. */

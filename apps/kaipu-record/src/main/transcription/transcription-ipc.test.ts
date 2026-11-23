@@ -723,12 +723,15 @@ describe("with a real vault", () => {
       const ensure = vi
         .spyOn(LibraryVault.prototype, "ensureContentHash")
         .mockRejectedValue(new Error("EROFS: read-only file system"));
+      // The first guard (before the cache) passes; only the one before the plain hash rejects.
       const assertLocal = vi
         .spyOn(LibraryVault.prototype, "assertLocal")
+        .mockResolvedValueOnce(undefined)
         .mockRejectedValue(new EvictedFileError(item.filePath));
       try {
         hashSpy.mockClear();
         await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "EVICTED" });
+        expect(assertLocal).toHaveBeenCalledTimes(2);
         expect(hashSpy).not.toHaveBeenCalled();
       } finally {
         ensure.mockRestore();

@@ -525,6 +525,46 @@ describe("useLocalLibrary", () => {
     await waitFor(() => expect(result.current.videos).toHaveLength(0));
   });
 
+  describe("an item the provider has not downloaded (synced workspace)", () => {
+    const evictedItems: LibraryItem[] = [
+      { ...items[0]!, local: { ...items[0]!.local!, evicted: "media" } },
+      items[1]!,
+    ];
+
+    it("re-lists when the window regains focus, so a file downloaded in Finder opens without leaving the page", async () => {
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: null })
+        .mockResolvedValue({ items, vaultError: null, catalogVerifiedAt: null });
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+      expect(list).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBeUndefined());
+      expect(list).toHaveBeenCalledTimes(2);
+    });
+
+    it("listens to focus only while something is not downloaded", async () => {
+      const list = vi.fn(async () => ({ items, vaultError: null, catalogVerifiedAt: null }));
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos).toHaveLength(2));
+      list.mockClear();
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(list).not.toHaveBeenCalled();
+    });
+  });
+
   it("removeLocalCopy re-lists on success and reports a blocked reason", async () => {
     window.electronAPI.removeLocalCopy = vi.fn(async () => ({
       ok: false,

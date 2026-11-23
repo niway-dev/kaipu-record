@@ -1327,7 +1327,7 @@ describe("commit", () => {
     vi.mocked(h.deps.hashMedia).mockRejectedValue(
       Object.assign(new Error("Not downloaded"), { code: "EVICTED" }),
     );
-    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "invalid-item" });
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "evicted" });
     expect(h.runBatch).not.toHaveBeenCalled();
   });
 

@@ -574,12 +574,27 @@ async function moveBack(temp: string, from: string): Promise<void> {
  * only replacing placement. The bytes go into an exclusively created temporary sibling first
  * (linked, or copied and flushed), which then replaces `to` in one rename. A failure removes
  * only that temporary file: the existing destination and the source are untouched. The source
- * is removed once the destination holds the bytes and its folder is flushed.
+ * is removed once the destination holds the bytes and its folder is flushed. `byRename` (a
+ * synced workspace's scratch file) moves it with a plain rename instead, never a hard link.
  */
-export async function replaceConfirmed(from: string, to: string): Promise<void> {
+export async function replaceConfirmed(from: string, to: string, byRename = false): Promise<void> {
   // Replacing a file with itself (the dialog pointed at the take's own path) is a no-op: going
   // through a temporary sibling would leave the bytes under that hidden name.
   if (resolve(from) === resolve(to) || (await isSameFile(from, to))) return;
+  if (byRename) {
+    // `from` is a synced workspace's scratch file and `to` may sit in a provider folder: a hard
+    // link between the two leaves the cloud item unsynced (ADR 0069), so move it with one
+    // rename, which also replaces `to` atomically. Across volumes the link below fails with
+    // EXDEV too, so the copy that follows never links.
+    try {
+      await rename(from, to);
+      await syncDir(dirname(to)).catch(() => {});
+      await syncDir(dirname(from)).catch(() => {});
+      return;
+    } catch (error) {
+      if (codeOf(error) !== "EXDEV") throw error;
+    }
+  }
   const temp = siblingTemp(to, "replace");
   const source = await open(from, "r");
   let sourceId: PlacedFile;
