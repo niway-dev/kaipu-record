@@ -51,8 +51,10 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
   Cloud (our own storage) is the place to serve ranges, without a third party's approval.
 - **Drive share links.** Need the API, and compete with Kaipu Cloud's own links, which the
   [cloud product spec](/specs/2026-09-09-cloud-product/) defines with consent and revocation.
-- **A local hidden copy plus the Drive copy.** Two copies of every 4 GB take. The scratch file
-  becomes the workspace file by `rename` on the same volume, so there is only ever one.
+- **A local hidden copy plus the Drive copy.** Two copies of every 4 GB take. The design keeps
+  one: the scratch file becomes the workspace file by `rename` on the same volume, as PR #483 built
+  it. Whether each provider accepts a file renamed into its folder without a copy, and uploads it,
+  is untested; the spec's layer 0 checks it with a 4 GB file before anything builds on it.
 
 ## Consequences
 
