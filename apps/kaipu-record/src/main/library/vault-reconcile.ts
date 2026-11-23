@@ -972,7 +972,16 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
         report.fixed += 1;
       } else if (finding.kind === "missing-identity") {
         // Counted only when this run wrote the identity: one that arrived meanwhile changed nothing.
-        if ((await vault.mintIdentity(finding.stem))?.minted) report.fixed += 1;
+        const minted = await vault.mintIdentity(finding.stem);
+        if (minted?.minted) {
+          report.fixed += 1;
+        } else {
+          // The rename step must not follow a record that changed or is gone.
+          stopped.add(finding.path);
+          // `null`: the item or its record is gone; otherwise an identity arrived meanwhile.
+          if (minted === null) fail(finding.path, "the item is gone or its record is unreadable");
+          else report.kept.push({ path: finding.path, reason: "changed" });
+        }
       } else if (finding.kind === "missing-media" || finding.kind === "orphan-companion") {
         const { moved, problems } = await orphans.move(finding);
         report.movedToOrphans += moved;
