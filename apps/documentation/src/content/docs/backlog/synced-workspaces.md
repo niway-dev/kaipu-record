@@ -5,8 +5,8 @@ description: "Proposal: connect a workspace to a specific folder of a specific c
 
 # Synced workspaces
 
-> **Status: 🔵 Proposed** (2026-11-22). Decisions approved by the owner in conversation; the spec
-> is in its design PR. Design:
+> **Status: 🔵 Proposed** (2026-11-22). Direction agreed with the owner in conversation; the design PR
+> is pending the owner's go. Design:
 > [Synced workspaces](/specs/2026-11-22-synced-workspaces-design/) · ADRs
 > [0068](/architecture/decisions/0068-a-workspace-is-the-root-and-accounts-are-optional-connections/)
 > and
