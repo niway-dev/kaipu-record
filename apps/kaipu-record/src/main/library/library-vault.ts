@@ -474,7 +474,7 @@ export class LibraryVault {
    * `evictionProbe` is set for a synced workspace (spec, Synced folders): it says which files
    * the provider has offloaded, so `describe()` never hands out a URL that would download one.
    * `stagingDir` is set for a synced workspace too: where this vault stages a file it writes
-   * (a GIF, a screenshot), so no `.part` ever appears inside the folder the provider syncs.
+   * (a GIF, a screenshot, a sidecar, a poster), so no temp file ever appears inside the folder the provider syncs.
    */
   constructor(
     readonly directory: string,
@@ -490,6 +490,15 @@ export class LibraryVault {
    */
   get synced(): boolean {
     return this.evictionProbe !== null || this.stagingDir !== null;
+  }
+
+  /**
+   * Sidecars, posters and cursor tracks: written through a temp file, then renamed over the
+   * target. A synced vault keeps that temp file in its scratch folder, so the provider never
+   * uploads and deletes it (an EXDEV rename falls back to a file beside the target).
+   */
+  private writeAtomic(target: string, data: string | Uint8Array): Promise<void> {
+    return atomicWriteFile(target, data, "tmp", this.stagingDir);
   }
 
   /** Where a synced vault stages what it writes (its scratch folder), or null for `.kaipu/tmp`. */
@@ -658,7 +667,7 @@ export class LibraryVault {
         createdAt: input.createdAt,
         title: input.title,
       };
-      await atomicWriteFile(this.sidecarPath(id), JSON.stringify(stub, null, 2));
+      await this.writeAtomic(this.sidecarPath(id), JSON.stringify(stub, null, 2));
       return { id, assetId };
     });
   }
@@ -675,7 +684,7 @@ export class LibraryVault {
         (await this.stemState(candidate)) === "free" ? { id: candidate, mode: "free" } : null,
       );
       await mkdir(this.metaDirectory(), { recursive: true });
-      await atomicWriteFile(
+      await this.writeAtomic(
         this.sidecarPath(id),
         JSON.stringify({ ...record, sidecarVersion: 2 }, null, 2),
       );
@@ -776,7 +785,7 @@ export class LibraryVault {
       if (!(await this.hasMedia(id))) return false;
       await mkdir(this.metaDirectory(), { recursive: true });
       const record: Sidecar = { sidecarVersion: 2, assetId: randomUUID(), ...fields };
-      await atomicWriteFile(path, JSON.stringify(record, null, 2));
+      await this.writeAtomic(path, JSON.stringify(record, null, 2));
       return true;
     });
   }
@@ -838,7 +847,7 @@ export class LibraryVault {
         };
         delete meta.localRemovedAt;
         await mkdir(this.metaDirectory(), { recursive: true });
-        await atomicWriteFile(oldSidecar, JSON.stringify(meta, null, 2));
+        await this.writeAtomic(oldSidecar, JSON.stringify(meta, null, 2));
         const describeOld = async (): Promise<LocalRecording> => {
           const recording = await this.describe(id);
           if (!recording) throw new ItemNotFoundError(id);
@@ -891,7 +900,7 @@ export class LibraryVault {
           if (target.mode === "leftover") await this.removeCompanions(to);
           const created: string[] = [];
           try {
-            await atomicWriteFile(to.sidecar, JSON.stringify(meta, null, 2));
+            await this.writeAtomic(to.sidecar, JSON.stringify(meta, null, 2));
             created.push(to.sidecar);
             const copied = [
               "thumbnail",
@@ -1499,7 +1508,7 @@ export class LibraryVault {
     }
     const current = read.status === "ok" ? read.sidecar : {};
     await mkdir(this.metaDirectory(), { recursive: true });
-    await atomicWriteFile(
+    await this.writeAtomic(
       this.sidecarPath(id),
       JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
     );
@@ -1592,7 +1601,7 @@ export class LibraryVault {
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
     await withLock(this.sidecarPath(id), async () => {
-      await atomicWriteFile(this.thumbnailPath(id), jpg);
+      await this.writeAtomic(this.thumbnailPath(id), jpg);
       await this.clearWebcamThumbnailMarker(id);
     });
   }
@@ -1627,7 +1636,7 @@ export class LibraryVault {
       const webcam = webcamTrackState(await exists(this.webcamFilePath(id)), sidecar.webcam);
       if (!webcam.meta || !(await this.hasMedia(id))) return false;
       await mkdir(this.metaDirectory(), { recursive: true });
-      await atomicWriteFile(this.thumbnailPath(id), jpg);
+      await this.writeAtomic(this.thumbnailPath(id), jpg);
       await this.writeMetaLocked(id, { thumbnailWebcam: WEBCAM_THUMBNAIL_REVISION });
       return true;
     });
@@ -1637,7 +1646,7 @@ export class LibraryVault {
   /** Atomic (unique temp + rename): a crash mid-write never leaves a truncated track. */
   async writeCursorTrack(id: string, json: string): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
-    await atomicWriteFile(this.cursorTrackPath(id), json);
+    await this.writeAtomic(this.cursorTrackPath(id), json);
   }
 
   /** The raw track JSON, or null when this recording has none. */

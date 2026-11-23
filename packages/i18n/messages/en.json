@@ -3616,6 +3616,7 @@
     "resultNone": "Nothing moved to {target}. {list}",
     "resultSkipped": "{count, plural, one {# wasn't started} other {# weren't started}}",
     "resultKeptOriginal": "Copied to {target}, but {count, plural, one {the original stayed} other {the originals stayed}} in {source} because {count, plural, one {it changed} other {they changed}} during the move. Check both workspaces: {list}",
+    "resultExportsNotDownloaded": "{count, plural, one {# export of these recordings stayed in {source}: it is not downloaded yet. Download it in Finder, then move it.} other {# exports of these recordings stayed in {source}: they are not downloaded yet. Download them in Finder, then move them.}}",
     "resultItem": "{title} — {reason}",
     "resultUnknown": "The result of the move could not be read. Check both workspaces.",
     "switchAction": "Switch",

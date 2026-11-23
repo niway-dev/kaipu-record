@@ -174,10 +174,11 @@ async function availabilityOf(id: string): Promise<{ availability: Availability;
   if (!entry || syncStates.of(entry) === null) {
     syncStates.answered(id); // relocated to a plain folder: nothing is left to verify
     const plain = await reg.availability(id);
+    syncStates.rekey(id, plain.id); // a pending entry may have adopted its folder's id
     // "Not synced" was decided while the folder had no identity file to ask about (the mount
     // was not up at launch). Now it is there, so ask again: a synced folder must not keep
     // hard links and in-folder staging for the whole session.
-    if (!entry || plain.availability.state !== "available" || !syncStates.needsRecheck(id)) {
+    if (!entry || plain.availability.state !== "available" || !syncStates.needsRecheck(plain.id)) {
       return plain;
     }
     entry = reg.get(plain.id) ?? entry;
@@ -185,7 +186,8 @@ async function availabilityOf(id: string): Promise<{ availability: Availability;
   }
   const answered = await boundedProbe(reg.availability(id), null);
   if (answered) {
-    syncStates.answered(id);
+    syncStates.rekey(id, answered.id); // the entry may have adopted its folder's id
+    syncStates.answered(answered.id);
     return answered;
   }
   const seen = await boundedProbe(

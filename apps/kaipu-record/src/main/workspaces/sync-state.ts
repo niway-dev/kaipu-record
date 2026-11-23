@@ -61,6 +61,21 @@ export class SyncStates {
     return this.unanswered.has(id);
   }
 
+  /**
+   * A pending workspace adopted its folder's own id (the registry mutates the entry in place):
+   * what was learned under the old id belongs to the new one. Without this the new id would
+   * fall back to the path rule alone and lose a detection the path cannot reproduce (a Drive
+   * folder found through its xattr), and a provisional "plain" would never be asked again.
+   */
+  rekey(from: string, to: string): void {
+    if (from === to) return;
+    const hit = this.known.get(from);
+    if (hit) this.known.set(to, hit);
+    if (this.provisional.has(from)) this.provisional.add(to);
+    if (this.unanswered.has(from)) this.unanswered.add(to);
+    this.forget(from);
+  }
+
   /** The workspace was removed from the registry. */
   forget(id: string): void {
     this.known.delete(id);

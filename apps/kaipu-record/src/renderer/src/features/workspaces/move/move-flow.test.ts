@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceView } from "@shared/types/workspaces";
 import {
+  evictedExportsOf,
   exportsToSuggest,
   moveCost,
   notMovableReason,
@@ -41,6 +42,23 @@ describe("exportsToSuggest", () => {
   it("suggests nothing for a recording without exports, or for an export moved alone", () => {
     expect(exportsToSuggest([other], [rec, exp1, other])).toEqual([]);
     expect(exportsToSuggest([exp1], [rec, exp1, exp2])).toEqual([]);
+  });
+});
+
+describe("evictedExportsOf", () => {
+  it("lists the exports of a selected recording that stay behind because they are not downloaded", () => {
+    const offloaded = item({ assetId: "exp4", derivedFromAssetId: "rec", evicted: "media" });
+    const posterOnly = item({ assetId: "exp5", derivedFromAssetId: "rec", evicted: "thumbnail" });
+    const otherOffloaded = item({ assetId: "exp6", derivedFromAssetId: "other", evicted: "media" });
+    expect(
+      evictedExportsOf([rec], [rec, exp1, cloudExport, offloaded, posterOnly, otherOffloaded]),
+    ).toEqual([offloaded, posterOnly]);
+  });
+
+  it("is empty when nothing is offloaded, or an offloaded export is itself selected", () => {
+    const offloaded = item({ assetId: "exp4", derivedFromAssetId: "rec", evicted: "media" });
+    expect(evictedExportsOf([rec], [rec, exp1])).toEqual([]);
+    expect(evictedExportsOf([rec, offloaded], [rec, offloaded])).toEqual([]);
   });
 });
 
@@ -125,6 +143,21 @@ describe("resultMessage", () => {
     expect(message).toContain('"total":2');
     expect(message).toContain("Export");
     expect(message).toContain("reason_no-room");
+  });
+
+  it("says how many exports stayed because they are not downloaded, only when something moved", () => {
+    const moved = {
+      targetId: "p",
+      moved: [{ id: "a", newId: "a" }],
+      failed: [],
+      skipped: [],
+    };
+    const message = resultMessage(moved, { ...context, notDownloaded: 2 }, t);
+    expect(message).toContain('resultExportsNotDownloaded{"count":2,"source":"Work"}');
+    expect(resultMessage(moved, context, t)).not.toContain("resultExportsNotDownloaded");
+    expect(
+      resultMessage({ ...moved, moved: [] }, { ...context, notDownloaded: 2 }, t),
+    ).not.toContain("resultExportsNotDownloaded");
   });
 
   it("names an item whose original was kept, and does not count it as moved", () => {

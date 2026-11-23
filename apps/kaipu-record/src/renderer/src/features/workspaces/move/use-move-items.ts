@@ -3,7 +3,13 @@ import { useTranslations } from "@kaipu/i18n";
 import type { MoveItemsResult, WorkspaceView } from "@shared/types/workspaces";
 import { showToast } from "@renderer/ui/toast-store";
 import { useOptionalWorkspaces } from "../workspaces-context";
-import { exportsToSuggest, orderForMove, resultMessage, type MovableItem } from "./move-flow";
+import {
+  evictedExportsOf,
+  exportsToSuggest,
+  orderForMove,
+  resultMessage,
+  type MovableItem,
+} from "./move-flow";
 import { askAboutExports, askAboutSyncedMove, setMoveProgress } from "./move-store";
 
 export interface MoveRequest {
@@ -42,12 +48,21 @@ export function useMoveItems(): MoveItemsFlow {
         return null;
       }
 
-      // 1. The target: an existing workspace, or a new one created inactive. A cancelled
-      // dialog or folder picker moves nothing and registers nothing.
       let target: Pick<WorkspaceView, "id" | "name"> | null =
         request.target === "new"
           ? null
           : (state.workspaces.find((w) => w.id === request.target) ?? null);
+      if (request.target !== "new" && !target) return null;
+
+      // 0. A move out of a synced workspace deletes the file from the provider's folder, so
+      // from the cloud on every device (decision 4): ask first, before anything is created, so a
+      // "No" registers nothing, not even a new workspace. Always on, whatever the flag.
+      if (active.sync !== null && !(await askAboutSyncedMove({ source: active.name }))) {
+        return null;
+      }
+
+      // 1. The target: an existing workspace, or a new one created inactive. A cancelled
+      // dialog or folder picker moves nothing and registers nothing.
       if (request.target === "new") {
         target = await new Promise<WorkspaceView | null>((resolve) =>
           openCreateDialog({ onCreated: resolve, onCancelled: () => resolve(null) }),
@@ -55,15 +70,12 @@ export function useMoveItems(): MoveItemsFlow {
       }
       if (!target) return null;
 
-      // 1b. A move out of a synced workspace deletes the file from the provider's folder, so
-      // from the cloud on every device (decision 4): ask first. Always on, whatever the flag.
-      if (active.sync !== null && !(await askAboutSyncedMove({ source: active.name }))) {
-        return null;
-      }
-
       // 2. The exports of the selected recordings (decision 15), from the loaded list.
       let items = [...request.items];
       const exports = exportsToSuggest(items, request.library);
+      // Exports the provider offloaded cannot move (that would download them): the result tells
+      // the user they stay, instead of leaving them to find out.
+      const notDownloaded = evictedExportsOf(items, request.library).length;
       if (exports.length > 0) {
         const answer = await askAboutExports({
           count: exports.length,
@@ -107,7 +119,7 @@ export function useMoveItems(): MoveItemsFlow {
       showToast({
         message: resultMessage(
           result,
-          { titles, target: target.name, source: active.name },
+          { titles, target: target.name, source: active.name, notDownloaded },
           (key, values) => t(key as Parameters<typeof t>[0], values as never),
         ),
         durationMs:

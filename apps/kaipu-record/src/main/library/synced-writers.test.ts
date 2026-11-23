@@ -55,6 +55,9 @@ const synced = (probe = noEviction): LibraryVault =>
   new LibraryVault(folder, "ws-synced", undefined, probe, staging);
 const stagedRenames = (): { from: string; to: string }[] =>
   hooks.renames.filter((r) => r.from.startsWith(staging));
+/** The staged renames that placed a media file (a sidecar or a poster goes to `.kaipu/`). */
+const stagedMedia = (): { from: string; to: string }[] =>
+  stagedRenames().filter((r) => !r.to.startsWith(join(folder, ".kaipu")));
 
 describe("GIF export", () => {
   const meta: GifSaveMeta = {
@@ -72,8 +75,8 @@ describe("GIF export", () => {
     const saved = await saveGif({ vaultDir: () => folder, vault: () => vault }, GIF, meta);
 
     expect(hooks.links).toBe(0);
-    expect(stagedRenames()).toHaveLength(1);
-    expect(stagedRenames()[0]!.to).toBe(join(folder, `${saved.id}.gif`));
+    expect(stagedMedia()).toHaveLength(1);
+    expect(stagedMedia()[0]!.to).toBe(join(folder, `${saved.id}.gif`));
     expect(await readFile(join(folder, `${saved.id}.gif`))).toEqual(Buffer.from(GIF));
     // Nothing of the staging is left behind, in either folder.
     expect(await readdir(staging)).toEqual([]);
@@ -92,7 +95,7 @@ describe("screenshot writer", () => {
     await vault.writeImage("shot", Buffer.from("png"));
 
     expect(hooks.links).toBe(0);
-    expect(stagedRenames()).toHaveLength(1);
+    expect(stagedMedia()).toHaveLength(1);
     expect(await readFile(join(folder, "shot.png"), "utf-8")).toBe("png");
   });
 
@@ -101,8 +104,8 @@ describe("screenshot writer", () => {
     const vault = synced();
     await vault.writeImage("shot", Buffer.from("new"), { replace: true });
 
-    expect(stagedRenames()).toHaveLength(1);
-    expect(stagedRenames()[0]!.to).toBe(join(folder, "shot.png"));
+    expect(stagedMedia()).toHaveLength(1);
+    expect(stagedMedia()[0]!.to).toBe(join(folder, "shot.png"));
     expect(hooks.renames.filter((r) => r.from.startsWith(folder))).toEqual([]);
     expect(await readFile(join(folder, "shot.png"), "utf-8")).toBe("new");
     expect(await readdir(staging)).toEqual([]);
@@ -137,7 +140,7 @@ describe("video import", () => {
     expect(typeof result).toBe("object");
     expect(probe).toHaveBeenCalledTimes(1);
     expect(hooks.links).toBe(0);
-    expect(stagedRenames()).toHaveLength(1);
+    expect(stagedMedia()).toHaveLength(1);
     expect(await readFile(join(folder, "Imported.mp4"), "utf-8")).toBe("video-bytes");
     expect((await readdir(folder)).filter((name) => name.endsWith(".part"))).toEqual([]);
   });
@@ -198,6 +201,32 @@ describe("rename", () => {
     expect(result.recording.title).toBe("Sprint demo");
     expect(await readFile(join(folder, "old.mp4"), "utf-8")).toBe("media");
     expect(await readdir(folder)).not.toContain("Sprint demo.mp4");
+    // The new sidecar was written before the companions were checked: the refusal removes it.
+    expect(
+      (await readdir(join(folder, ".kaipu"))).filter((n) => n.startsWith("Sprint demo")),
+    ).toEqual([]);
+  });
+});
+
+describe("sidecar, poster and cursor track writes", () => {
+  it("stage in the scratch folder: no temp file is created inside the synced folder", async () => {
+    const vault = synced();
+    await vault.writeThumbnail("clip", Buffer.from("jpg"));
+    await vault.writeCursorTrack("clip", "{}");
+    const { id } = await vault.reserve({ kind: "recording", title: "Clip", createdAt: 1 });
+
+    const staged = stagedRenames().map((r) => r.to);
+    expect(staged).toContain(join(folder, ".kaipu", "clip.jpg"));
+    expect(staged).toContain(join(folder, ".kaipu", `${id}.json`));
+    // Every rename that reached the folder started in the scratch folder.
+    expect(hooks.renames.filter((r) => r.from.startsWith(folder))).toEqual([]);
+    expect(await readdir(staging)).toEqual([]);
+    expect((await readdir(join(folder, ".kaipu"))).filter((n) => n.includes(".tmp"))).toEqual([]);
+  });
+
+  it("control: a plain folder writes through a temp file beside the target", async () => {
+    await new LibraryVault(folder, "ws-plain").writeThumbnail("clip", Buffer.from("jpg"));
+    expect(hooks.renames.filter((r) => r.from.startsWith(folder))).toHaveLength(1);
   });
 });
 

@@ -135,7 +135,12 @@ export function registerMediaProtocol(): void {
   });
 }
 
-/** True when the file is evicted; a probe that fails reads as not evicted (the stream then 404s). */
+/**
+ * True when the file is evicted. A probe that fails reads as evicted: the same safe side as
+ * `datalessPaths`, because the other answer streams the file and downloads it when it is
+ * offloaded. A missing file is not a probe failure (the probe answers "not evicted" for it), so
+ * it still reaches the stream and 404s.
+ */
 async function isEvictedFile(path: string): Promise<boolean> {
-  return evictions.isEvicted(path).catch(() => false);
+  return evictions.isEvicted(path).catch(() => true);
 }

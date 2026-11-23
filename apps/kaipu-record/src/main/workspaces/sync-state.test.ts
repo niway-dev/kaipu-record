@@ -29,6 +29,43 @@ describe("SyncStates", () => {
   });
 });
 
+describe("SyncStates, a pending workspace adopts its folder's id", () => {
+  const HOME = "/Users/x";
+  const path = `${HOME}/Documents/K`;
+
+  it("keeps a detection the path rule cannot reproduce under the new id", async () => {
+    const states = new SyncStates(async () => "google-drive", HOME);
+    await states.refresh({ id: "pending", path });
+    states.markUnverified("pending");
+    states.rekey("pending", "adopted");
+
+    // Without the re-key the new id would read as plain (the path is outside CloudStorage).
+    expect(states.of({ id: "adopted", path })).toBe("google-drive");
+    expect(states.isUnverified("adopted")).toBe(true);
+    expect(states.of({ id: "pending", path })).toBeNull();
+    expect(states.isUnverified("pending")).toBe(false);
+  });
+
+  it("carries a provisional plain answer, so the adopted workspace is still detected again", async () => {
+    const states = new SyncStates(
+      async () => null,
+      HOME,
+      async () => false,
+    );
+    await states.refresh({ id: "pending", path });
+    states.rekey("pending", "adopted");
+    expect(states.needsRecheck("adopted")).toBe(true);
+    expect(states.needsRecheck("pending")).toBe(false);
+  });
+
+  it("is a no-op for the same id", async () => {
+    const states = new SyncStates(async () => "google-drive", HOME);
+    await states.refresh({ id: "w", path });
+    states.rekey("w", "w");
+    expect(states.of({ id: "w", path })).toBe("google-drive");
+  });
+});
+
 describe("SyncStates, a plain answer given before the folder was there", () => {
   const HOME = "/Users/x";
   const entry = { id: "w", path: `${HOME}/Documents/K` };

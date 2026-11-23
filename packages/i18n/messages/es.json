@@ -3616,6 +3616,7 @@
     "resultNone": "No se movió nada a {target}. {list}",
     "resultSkipped": "{count, plural, one {# no se inició} other {# no se iniciaron}}",
     "resultKeptOriginal": "Copiado a {target}, pero {count, plural, one {el original se quedó} other {los originales se quedaron}} en {source} porque {count, plural, one {cambió} other {cambiaron}} durante el movimiento. Revisa ambos espacios de trabajo: {list}",
+    "resultExportsNotDownloaded": "{count, plural, one {# exportación de estas grabaciones se quedó en {source}: aún no está descargada. Descárgala en el Finder y luego muévela.} other {# exportaciones de estas grabaciones se quedaron en {source}: aún no están descargadas. Descárgalas en el Finder y luego muévelas.}}",
     "resultItem": "{title} — {reason}",
     "resultUnknown": "No se pudo leer el resultado del movimiento. Revisa ambos espacios de trabajo.",
     "switchAction": "Cambiar",

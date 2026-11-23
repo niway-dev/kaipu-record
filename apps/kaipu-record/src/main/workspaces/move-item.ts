@@ -319,7 +319,9 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
       const names = await readdir(companions.assetsDir);
       reads.push(...names.map((name) => join(companions.assetsDir, name)));
     } catch (error) {
-      if (codeOf(error) !== "ENOENT") return refuse("evicted"); // unreadable: never copy blind
+      // Unreadable (EACCES, EIO, ENOTDIR): never copy blind. It is an I/O refusal, not an
+      // eviction: "download it in Finder" would send the user to wait for nothing.
+      if (codeOf(error) !== "ENOENT") return refuse("io");
     }
     const offloaded = await fs.evicted(reads);
     if (offloaded.size > 0) return refuse("evicted");

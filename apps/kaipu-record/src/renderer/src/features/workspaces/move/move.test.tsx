@@ -283,6 +283,31 @@ describe("moving out of a synced workspace (decision 4, always on)", () => {
     await waitFor(() => expect(moveItems).toHaveBeenCalled());
   });
 
+  it("asks before the New workspace dialog opens, so Cancel registers nothing", async () => {
+    // "New workspace…" is offered when no other workspace exists.
+    setup(state({ workspaces: [SYNCED_WORK] }));
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /New workspace/ }));
+    await screen.findByText(/deleted from the cloud on every device/i);
+    // The question comes first: nothing is created (the dialog is not open) until it is answered.
+    expect(screen.queryByText("New workspace")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText(/deleted from the cloud/i)).toBeNull());
+    expect(screen.queryByText("New workspace")).toBeNull();
+    expect(moveItems).not.toHaveBeenCalled();
+  });
+
+  it("opens the New workspace dialog once Move anyway is chosen", async () => {
+    // "New workspace…" is offered when no other workspace exists.
+    setup(state({ workspaces: [SYNCED_WORK] }));
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /New workspace/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move anyway" }));
+    expect(await screen.findByText("New workspace")).toBeInTheDocument();
+  });
+
   it("a plain workspace asks nothing extra", async () => {
     setup(state());
     renderChip();

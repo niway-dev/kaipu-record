@@ -300,9 +300,12 @@ export async function placeNew(
  * spike), so a placement into or out of a synced workspace must not create a second name.
  * `rename` into Drive is atomic and the file uploads (same spike).
  *
- * The no-replace check is a `lstat` before the rename: Node has no rename-without-replace. The
- * window is the instant between the two calls, on a name the caller has just reserved (a stub
- * sidecar holds the stem), which is narrower than, and stated alongside, the threat model above.
+ * The no-replace check is a `lstat` before the rename, and it is not atomic: Node exposes no
+ * rename-without-replace (Linux `renameat2` and macOS `renamex_np` with `RENAME_EXCL` both need
+ * native code), so a file the provider creates at `to` between the two calls is replaced. The
+ * window is the instant between them, and the caller must have reserved the name first: a
+ * rename writes the new stem's sidecar before it moves the media, a move or an import reserves
+ * the stem (a stub sidecar holds it), and a staged write picks a stem it just found free.
  * A rename refused across devices falls back to an exclusive copy, then removes the source.
  */
 export async function placeByRename(

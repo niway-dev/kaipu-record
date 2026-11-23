@@ -404,6 +404,30 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     }
   });
 
+  it("refuses as io, not evicted, when the assets folder cannot be listed", async () => {
+    const item = await seedItem(src.directory);
+    // A file where the folder should be: readdir fails with ENOTDIR, not ENOENT.
+    await rm(join(src.directory, ".kaipu", `${item.id}.assets`), { recursive: true, force: true });
+    await writeFile(join(src.directory, ".kaipu", `${item.id}.assets`), "not a folder");
+    const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
+    const read: string[] = [];
+    const outcome = await moveItem(
+      { source, target: dst, id: item.id },
+      deps({
+        fs: {
+          evicted: async () => new Set(),
+          sha256: async (path) => {
+            read.push(path);
+            return sha256FileBase64(path);
+          },
+        },
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, id: item.id, reason: "io" });
+    expect(read).toEqual([]);
+    expect(await filesOf(dst.directory, item.id)).toEqual([]);
+  });
+
   it("stages a synced target's copy in its scratch folder, never inside the synced folder", async () => {
     const item = await seedItem(src.directory);
     const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };

@@ -97,6 +97,10 @@ export function broadcastJobProgress(progress: TranscriptionJobProgress): void {
 export async function hashMediaThroughCache(
   item: Pick<ResolvedItem, "id" | "mediaPath">,
 ): Promise<string> {
+  // The job decodes the audio right after this: an offloaded file would be downloaded by that
+  // read even when the cache answers the hash without reading anything (size and mtime survive
+  // an eviction). ADR 0069.
+  await currentVault().assertLocal([item.mediaPath]);
   try {
     const hashed = await currentVault().ensureContentHash(item.id);
     if (hashed) return hashed.contentSha256;

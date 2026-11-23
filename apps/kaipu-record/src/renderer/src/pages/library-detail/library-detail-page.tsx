@@ -567,7 +567,13 @@ export function LibraryDetailPage(): React.JSX.Element {
                 size="sm"
                 onClick={editVideo}
                 disabled={!canEditVideo}
-                title={canEditVideo ? undefined : t("durationUnreadable")}
+                title={
+                  canEditVideo
+                    ? undefined
+                    : video.evicted === "media"
+                      ? t("evictedHint")
+                      : t("durationUnreadable")
+                }
               >
                 <Scissors size={15} strokeWidth={1.8} />
                 {t("editVideo")}

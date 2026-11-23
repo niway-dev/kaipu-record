@@ -47,12 +47,31 @@ export function exportsToSuggest(
   selected: readonly MovableItem[],
   library: readonly MovableItem[],
 ): MovableItem[] {
+  return exportsOf(selected, library, (item) => notMovableReason(item) === null);
+}
+
+/**
+ * The exports of the selected recordings that a move leaves behind only because the provider
+ * offloaded their media or poster. They are not in "Move all N", so the result says so.
+ */
+export function evictedExportsOf(
+  selected: readonly MovableItem[],
+  library: readonly MovableItem[],
+): MovableItem[] {
+  return exportsOf(selected, library, (item) => notMovableReason(item) === "evicted");
+}
+
+function exportsOf(
+  selected: readonly MovableItem[],
+  library: readonly MovableItem[],
+  include: (item: MovableItem) => boolean,
+): MovableItem[] {
   const sources = new Set(selected.filter((i) => i.kind === "recording").map((i) => i.assetId));
   if (sources.size === 0) return [];
   const chosen = new Set(selected.map((i) => i.assetId));
   const seen = new Set<string>();
   return library.filter((item) => {
-    if (notMovableReason(item) !== null) return false;
+    if (!include(item)) return false;
     if (!item.derivedFromAssetId || !sources.has(item.derivedFromAssetId)) return false;
     if (chosen.has(item.assetId) || seen.has(item.assetId)) return false;
     seen.add(item.assetId);
@@ -86,7 +105,13 @@ type Translate = (key: string, values?: Record<string, string | number>) => stri
  */
 export function resultMessage(
   result: MoveItemsResult,
-  context: { titles: ReadonlyMap<string, string>; target: string; source: string },
+  context: {
+    titles: ReadonlyMap<string, string>;
+    target: string;
+    source: string;
+    /** Exports of the moved recordings that stayed because the provider offloaded them. */
+    notDownloaded?: number;
+  },
   t: Translate,
 ): string {
   const total = result.moved.length + result.failed.length + result.skipped.length;
@@ -127,6 +152,13 @@ export function resultMessage(
       list: kept.map(({ id }) => context.titles.get(id) ?? id).join("; "),
     });
     message = message ? `${message}. ${keptText}` : keptText;
+  }
+  if (context.notDownloaded && movedCount > 0) {
+    const stayedText = t("resultExportsNotDownloaded", {
+      count: context.notDownloaded,
+      source: context.source,
+    });
+    message = message ? `${message}. ${stayedText}` : stayedText;
   }
   return message;
 }

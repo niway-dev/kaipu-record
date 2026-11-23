@@ -60,11 +60,20 @@ describe("datalessPaths (SF_DATALESS via /usr/bin/stat, one call per batch)", ()
   });
 
   it("a missing file (stat fails for it alone) is not evicted, the others still are", async () => {
+    const lstat = vi.fn(async (path: string) => {
+      if (path === "/w/gone.jpg") throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return { size: 10, blocks: 8 };
+    });
     const result = await datalessPaths(
       ["/w/gone.jpg", "/w/a.mp4"],
-      deps({ runStat: async () => ({ stdout: `${EVICTED_FLAGS} /w/a.mp4\n`, failed: true }) }),
+      deps({
+        runStat: async () => ({ stdout: `${EVICTED_FLAGS} /w/a.mp4\n`, failed: true }),
+        lstat,
+      }),
     );
     expect([...result]).toEqual(["/w/a.mp4"]);
+    // The missing path really was looked at, and its ENOENT is what kept it out of the set.
+    expect(lstat).toHaveBeenCalledWith("/w/gone.jpg");
   });
 
   it("a path a failed stat did not print is asked again, never assumed local", async () => {

@@ -531,6 +531,24 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByText(/video unavailable/i)).toBeNull();
   });
 
+  it("an offloaded recording's Edit video is disabled with the not-downloaded hint, not the duration one", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        { ...exportedOnlyItem, local: { ...exportedOnlyItem.local!, evicted: "media" as const } },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    const edit = screen.getByRole("button", { name: "Edit video" }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toMatch(/download it in Finder/i);
+    expect(edit.title).not.toMatch(/duration/i);
+  });
+
   it("does not offer Remove local download for a file the provider already offloaded", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [

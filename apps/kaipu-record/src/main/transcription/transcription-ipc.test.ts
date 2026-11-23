@@ -700,6 +700,24 @@ describe("with a real vault", () => {
       }
     });
 
+    it("refuses an evicted file even when its stamp still matches the cache", async () => {
+      const item = await addMedia("job-hit-evicted", "some recording");
+      await hashMediaThroughCache(job(item));
+      expect((await vault.cachedContentHash("job-hit-evicted")).status).toBe("hit");
+      // Size and mtime survive an eviction, so the cache would answer without reading anything
+      // and the job would go on to decode (download) the audio.
+      const assertLocal = vi
+        .spyOn(LibraryVault.prototype, "assertLocal")
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      try {
+        hashSpy.mockClear();
+        await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "EVICTED" });
+        expect(hashSpy).not.toHaveBeenCalled();
+      } finally {
+        assertLocal.mockRestore();
+      }
+    });
+
     it("refuses an evicted file when the cache failed before its own check (a read-only vault)", async () => {
       const item = await addMedia("job-ro-evicted", "some recording");
       const ensure = vi
