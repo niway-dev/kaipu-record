@@ -381,6 +381,29 @@ describe("choosing what to fix", () => {
     expect(box).not.toBeChecked();
   });
 
+  it("a missing identity starts unticked: Fix all skips it until the user ticks it (NIW2-912)", async () => {
+    const identity: ReconcileFinding = {
+      kind: "missing-identity",
+      fixable: true,
+      path: "Demo.mp4",
+      title: "Demo",
+    };
+    scanResult = ok([rename, identity]);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
+    expect(getReconcileState().skipped).toEqual(new Set(["Demo.mp4"]));
+    fireEvent.click(await screen.findByRole("button", { name: "Fix 1 file" }));
+    expect(window.electronAPI.reconcileFix).toHaveBeenLastCalledWith(["Demo.mp4"]);
+    await act(async () => finishFix({ status: "cancelled" }));
+
+    // Ticking it sends it to be fixed; a new scan puts it back to unticked.
+    fireEvent.click(await screen.findByText("Files Kaipu doesn't know yet"));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Fix Demo" }));
+    expect(getReconcileState().skipped.size).toBe(0);
+    await act(() => rescan());
+    expect(getReconcileState().skipped).toEqual(new Set(["Demo.mp4"]));
+  });
+
   it("a new scan forgets what was unticked", async () => {
     scanResult = ok([rename, adopt]);
     mount();

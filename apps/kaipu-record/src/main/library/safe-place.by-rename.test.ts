@@ -39,6 +39,8 @@ const hooks = vi.hoisted(() => ({
   afterRename: null as null | ((to: string) => Promise<void>),
   /** Runs when this directory is opened (the flush after a copy): a provider acting after the copy. */
   atOpenDir: null as null | { path: string; run: () => void },
+  /** Runs right after this path is opened for reading the `nth` time (1 = the first): a swap while a hash reads it. */
+  afterOpenRead: null as null | { path: string; nth: number; run: () => void; seen: number },
 }));
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
@@ -59,7 +61,12 @@ vi.mock("node:fs/promises", async (importActual) => {
         hooks.atOpenDir = null;
         run();
       }
-      return (actual.open as (...args: unknown[]) => Promise<unknown>)(path, ...rest);
+      const opened = await (actual.open as (...args: unknown[]) => Promise<unknown>)(path, ...rest);
+      if (hooks.afterOpenRead && path === hooks.afterOpenRead.path && rest[0] === "r") {
+        hooks.afterOpenRead.seen += 1;
+        if (hooks.afterOpenRead.seen === hooks.afterOpenRead.nth) hooks.afterOpenRead.run();
+      }
+      return opened;
     },
     lstat: async (path: string, options?: unknown) => {
       if (hooks.atLstat && path === hooks.atLstat.path) {
@@ -114,6 +121,7 @@ function resetHooks(): void {
   hooks.exdevOnce = false;
   hooks.atOpenDir = null;
   hooks.atLstat = null;
+  hooks.afterOpenRead = null;
 }
 
 describe("placeByRename (synced folders: no hard link, ever)", () => {
@@ -291,6 +299,51 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
       // No stale copy stays under the final name for the provider to upload.
       await expect(stat(target)).rejects.toMatchObject({ code: "ENOENT" });
       expect(await readdir(join(dir, "synced"))).toEqual([]);
+    });
+
+    it("a file the provider delivers while the stale copy is being hashed is not deleted (review round 1)", async () => {
+      await mkdir(join(dir, "synced"), { recursive: true });
+      await mkdir(join(dir, "scratch"), { recursive: true });
+      const source = join(dir, "scratch", "take.mp4");
+      const target = join(dir, "synced", "Take.mp4");
+      await writeFile(source, "whole file");
+      await utimes(source, 1_700_000_000, 1_700_000_000);
+      const calls: Array<[string, string]> = [];
+      const refuse = refusingOnce(calls);
+      // The take-back reads the name a second time (the first read is the check after the copy).
+      // While it is being hashed, the provider delivers another file under the name; it holds
+      // the very same bytes, so only a second look at the file can tell it apart.
+      hooks.afterOpenRead = {
+        path: target,
+        nth: 2,
+        seen: 0,
+        run: () => {
+          writeFileSync(`${target}.delivered`, "whole file");
+          renameSync(`${target}.delivered`, target);
+        },
+      };
+      await expect(
+        placeByRename(source, target, {
+          deps: {
+            isSynced: syncedOf(dir),
+            syncRoot: () => join(dir, "synced"),
+            rename: async (from, to) => {
+              await refuse(from, to);
+              if (calls.length < 2) return;
+              // The provider re-creates the placed file (another inode); the source is rewritten.
+              writeFileSync(`${target}.provider`, "whole file");
+              renameSync(`${target}.provider`, target);
+              await writeFile(source, "WHOLE FILE");
+              await utimes(source, 1_700_000_000, 1_700_000_000);
+            },
+          },
+        }),
+      ).rejects.toMatchObject({ code: "EIO" });
+      expect(hooks.afterOpenRead?.seen).toBe(2);
+      expect(await readFile(source, "utf-8")).toBe("WHOLE FILE");
+      // The delivered file is not ours: it stays.
+      expect(await readFile(target, "utf-8")).toBe("whole file");
+      expect(await readdir(join(dir, "synced"))).toEqual(["Take.mp4"]);
     });
 
     it("with no folder outside the synced one that can stage it, fails and keeps the source (nothing partial is placed)", async () => {

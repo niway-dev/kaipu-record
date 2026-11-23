@@ -385,8 +385,9 @@ describe("LibraryVault — evicted files get no image URL", () => {
       const vault = syncedVault();
       expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
 
-      const minted = await vault.mintIdentity("clip");
-      expect(minted).toEqual(expect.any(String));
+      const result = await vault.mintIdentity("clip");
+      const minted = result?.assetId;
+      expect(result).toEqual({ assetId: expect.any(String), minted: true });
       expect(JSON.parse(await readFile(sidecarFile(), "utf-8"))).toMatchObject({
         sidecarVersion: 2,
         assetId: minted,
@@ -395,7 +396,31 @@ describe("LibraryVault — evicted files get no image URL", () => {
       });
       expect(await vault.describe("clip")).toMatchObject({ assetId: minted, title: "Legacy" });
       // A second request keeps the identity the first one minted.
-      expect(await vault.mintIdentity("clip")).toBe(minted);
+      expect(await vault.mintIdentity("clip")).toEqual({ assetId: minted, minted: false });
+    });
+
+    it("mintIdentity does not mint when an identity arrived since it read the record, and says nothing changed", async () => {
+      await seedVideo("clip");
+      await writeFile(sidecarFile(), JSON.stringify({ sidecarVersion: 1, title: "Legacy" }));
+      const vault = syncedVault();
+      // Between the first read and the write the provider delivers the other device's version.
+      const arrived = JSON.stringify({
+        sidecarVersion: 2,
+        assetId: "from-other-device",
+        title: "Legacy",
+      });
+      const inner = vault as unknown as { hasMedia: (id: string) => Promise<boolean> };
+      const hasMedia = inner.hasMedia.bind(vault);
+      inner.hasMedia = async (id) => {
+        const found = await hasMedia(id);
+        await writeFile(sidecarFile(), arrived);
+        return found;
+      };
+      expect(await vault.mintIdentity("clip")).toEqual({
+        assetId: "from-other-device",
+        minted: false,
+      });
+      expect(await readFile(sidecarFile(), "utf-8")).toBe(arrived);
     });
 
     it("mintIdentity never creates a sidecar and refuses an unreadable one", async () => {

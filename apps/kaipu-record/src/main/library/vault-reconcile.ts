@@ -957,7 +957,8 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
         await vault.writeMeta(finding.stem, { localRemovedAt: now() });
         report.fixed += 1;
       } else if (finding.kind === "missing-identity") {
-        if ((await vault.mintIdentity(finding.stem)) !== null) report.fixed += 1;
+        // Counted only when this run wrote the identity: one that arrived meanwhile changed nothing.
+        if ((await vault.mintIdentity(finding.stem))?.minted) report.fixed += 1;
       } else if (finding.kind === "missing-media" || finding.kind === "orphan-companion") {
         const { moved, problems } = await orphans.move(finding);
         report.movedToOrphans += moved;
@@ -978,7 +979,8 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
         // stale-auto-title, untitled-legacy: the title first; the rename below aligns it. The
         // user asked for this fix, so a record without an identity gets one now: a synced
         // workspace mints nowhere else, and the rename needs it.
-        if (finding.assetId === undefined) await vault.mintIdentity(finding.stem);
+        // Only a synced workspace needs it here: a plain one gets its identity from `describe`.
+        if (finding.assetId === undefined && vault.synced) await vault.mintIdentity(finding.stem);
         await vault.writeMeta(finding.stem, { title: finding.newTitle! });
         report.fixed += 1;
       }
@@ -1067,10 +1069,11 @@ async function runPlan(
     let renamed = false;
     try {
       // Reconcile mints an identity only on items it is fixing (I2). A synced workspace's
-      // `describe` never mints, so a record without one gets it here, on this explicit fix.
+      // `describe` never mints, so a record without one gets it here, on this explicit fix; a
+      // plain workspace keeps its own path (`describe` -> `ensureIdentity`).
       const assetId =
         finding.assetId ??
-        (await vault.mintIdentity(finding.stem)) ??
+        (vault.synced ? (await vault.mintIdentity(finding.stem))?.assetId : undefined) ??
         (await vault.describe(finding.stem))?.assetId;
       if (!assetId) throw new Error("the item is gone");
       const result = await vault.renameItem({ id: finding.stem, assetId }, item.title, {

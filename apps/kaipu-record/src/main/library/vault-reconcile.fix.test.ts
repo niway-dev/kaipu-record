@@ -669,6 +669,60 @@ describe("fixVault on a synced workspace: every scan reads through the workspace
     }
   });
 
+  it("counts missing-identity findings and fixes, and writes nothing for one the user unticked", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video-a",
+      ".kaipu/Demo.json": sidecar({ title: "Demo", createdAt: T0 }),
+      "Other.mp4": "video-b",
+      ".kaipu/Other.json": sidecar({ title: "Other", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const untouched = await readFile(join(directory, ".kaipu/Other.json"), "utf8");
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+      skip: new Set(["Other.mp4"]),
+    });
+
+    expect(report.failed).toEqual([]);
+    expect(report.counts["missing-identity"]).toBe(2);
+    expect(report.fixed).toBe(1);
+    expect(JSON.parse(await readFile(join(directory, ".kaipu/Demo.json"), "utf8"))).toMatchObject({
+      sidecarVersion: 2,
+      assetId: expect.any(String),
+      title: "Demo",
+    });
+    expect(await readFile(join(directory, ".kaipu/Other.json"), "utf8")).toBe(untouched);
+  });
+
+  it("does not count a fix when an identity arrived between the scan and the write", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video-a",
+      ".kaipu/Demo.json": sidecar({ title: "Demo", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const arrived = sidecar({ assetId: "from-other-device", title: "Demo", createdAt: T0 });
+    const mint = vault.mintIdentity.bind(vault);
+    vi.spyOn(vault, "mintIdentity").mockImplementation(async (id) => {
+      await writeFile(join(directory, ".kaipu/Demo.json"), arrived);
+      return mint(id);
+    });
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.counts["missing-identity"]).toBe(1);
+    expect(report.fixed).toBe(0);
+    expect(await readFile(join(directory, ".kaipu/Demo.json"), "utf8")).toBe(arrived);
+  });
+
   it("gives up on a record the provider never delivers in each scan that reads records, instead of reading it plainly", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -749,5 +803,32 @@ describe("fixVault on a synced workspace: every scan reads through the workspace
         .sort(),
     ).toEqual([".kaipu/Clip.json", ".kaipu/Dead.json"]);
     expect(late.findings.every((f) => !f.fixable)).toBe(true);
+  });
+});
+
+describe("fixVault on a plain workspace keeps its own path to an identity (NIW2-912)", () => {
+  it("retitling and renaming an identity-less record never calls mintIdentity: describe gives the identity", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+      "Wrong Name.mp4": "video-b",
+      ".kaipu/Wrong Name.json": sidecar({ title: "Right Name", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1");
+    const mint = vi.spyOn(vault, "mintIdentity");
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.failed).toEqual([]);
+    expect(report.fixed).toBe(2);
+    expect(mint).not.toHaveBeenCalled();
+    const files = await listFiles(directory);
+    expect(files).toContain("Right Name.mp4");
+    for (const item of await vault.list()) expect(item.assetId).toEqual(expect.any(String));
   });
 });

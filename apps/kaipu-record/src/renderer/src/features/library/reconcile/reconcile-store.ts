@@ -18,7 +18,7 @@ export interface ReconcileState {
   run: ReconcileRun;
   /** "Not now": hidden for the rest of the session. */
   bannerHidden: boolean;
-  /** Fixable finding paths the user unticked (NIW2-598). Cleared by every new scan. */
+  /** Fixable finding paths not ticked (NIW2-598): unticked by the user, or off by default. Reset by every new scan. */
   skipped: ReadonlySet<string>;
 }
 
@@ -59,13 +59,24 @@ export function useReconcile(): ReconcileState {
 
 const isRunning = (): boolean => state.run.phase === "waiting" || state.run.phase === "fixing";
 
+/**
+ * Findings the user must tick on purpose. A record without an identity in a synced folder may
+ * only look that way because the newer version has not arrived yet, so minting one is never
+ * part of a default "Fix all".
+ */
+function startsUnticked(scan: ReconcileScanResult): ReadonlySet<string> {
+  if (scan.status !== "ok") return new Set();
+  return new Set(scan.findings.filter((f) => f.kind === "missing-identity").map((f) => f.path));
+}
+
 /** Scan now (read-only in main). */
 export async function rescan(): Promise<void> {
   if (state.scanning) return;
   set({ scanning: true });
   try {
     // A new list means new choices: whatever was unticked described the old one.
-    set({ scan: await window.electronAPI.reconcileScan(), scanning: false, skipped: new Set() });
+    const scan = await window.electronAPI.reconcileScan();
+    set({ scan, scanning: false, skipped: startsUnticked(scan) });
   } catch (error) {
     set({ scan: { status: "error", message: String(error) }, scanning: false });
   }

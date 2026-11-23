@@ -900,23 +900,30 @@ export class LibraryVault {
    * synced workspace never mints on its own (`ensureIdentity`), and `adoptMedia` serves only a
    * missing sidecar, so without this a pre-identity record in a synced folder stays read-only.
    * Every other field is kept. Null when the record is missing or unreadable (nothing is
-   * written: a missing one may still be on its way down) or the media is gone.
+   * written: a missing one may still be on its way down) or the media is gone. `minted` is false
+   * when the record already had an identity, at the first read or when the sidecar is read again
+   * just before the write (a newer version may have arrived meanwhile): then nothing was changed.
    */
-  async mintIdentity(id: string): Promise<string | null> {
+  async mintIdentity(id: string): Promise<{ assetId: string; minted: boolean } | null> {
     if (isVaultOwnedStem(id) || !isPlainItemId(id)) return null;
     const path = this.sidecarPath(id);
     return withLock(path, async () => {
       const read = await this.readRecordStrict(path);
       if (read.status !== "ok") return null;
-      if (read.sidecar.assetId) return read.sidecar.assetId;
+      if (read.sidecar.assetId) return { assetId: read.sidecar.assetId, minted: false };
       if (!(await this.hasMedia(id))) return null;
+      // The folder is shared: a version with an identity may have arrived since the read above.
+      // Minting over it would give the item a second identity that conflicts with that one.
+      const again = await this.readRecordStrict(path);
+      if (again.status !== "ok") return null;
+      if (again.sidecar.assetId) return { assetId: again.sidecar.assetId, minted: false };
       const assetId = readOnlyIdentityMemo.get(path) ?? randomUUID();
       await this.writeAtomic(
         path,
-        JSON.stringify({ ...read.sidecar, sidecarVersion: 2, assetId }, null, 2),
+        JSON.stringify({ ...again.sidecar, sidecarVersion: 2, assetId }, null, 2),
       );
       readOnlyIdentityMemo.delete(path);
-      return assetId;
+      return { assetId, minted: true };
     });
   }
 

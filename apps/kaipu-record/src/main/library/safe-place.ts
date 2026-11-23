@@ -159,9 +159,18 @@ export async function removeIfSame(path: string, identity: FileIdentity): Promis
 async function takeBackCopy(path: string, copied: FileIdentity, digest: string): Promise<boolean> {
   if (await removeIfSame(path, copied)) return true;
   try {
-    const now = await identityAt(path);
-    if (!now || sameFile(now, copied)) return false;
+    const seen = await lstat(path, { bigint: true });
+    if (sameFile(identityOf(seen), copied)) return false;
     if ((await hashFile(path)) !== digest) return false;
+    // The hash of a large file takes seconds: the provider may have delivered another file under
+    // this name meanwhile. Delete only the very file that was hashed, unchanged.
+    const after = await lstat(path, { bigint: true });
+    if (
+      !sameFile(identityOf(after), identityOf(seen)) ||
+      !sameStamp(stampOf(after), stampOf(seen))
+    ) {
+      return false;
+    }
     await unlink(path);
     return true;
   } catch {

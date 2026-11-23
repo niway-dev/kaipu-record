@@ -445,3 +445,68 @@ describe("scanVault on a synced workspace (AC13)", () => {
     }
   });
 });
+
+describe("scanVault: a record without an identity (NIW2-912)", () => {
+  const syncedVault = (dir: string) =>
+    new LibraryVault(dir, "ws-1", undefined, async () => new Set<string>());
+  const noIdentity = (title?: string) =>
+    sidecar({ createdAt: CREATED, ...(title ? { title } : {}) });
+
+  it("a synced workspace lists a titled, aligned record with no identity as a fixable missing-identity", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video",
+      ".kaipu/Demo.json": noIdentity("Demo"),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: "missing-identity",
+      fixable: true,
+      path: "Demo.mp4",
+      title: "Demo",
+    });
+  });
+
+  it("a synced workspace lists an untitled, aligned record the same way", async () => {
+    directory = await makeVault({
+      "Plain Name.mp4": "video",
+      ".kaipu/Plain Name.json": noIdentity(),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings.map((f) => [f.kind, f.fixable])).toEqual([["missing-identity", true]]);
+  });
+
+  it("a plain workspace gets its identity on first read, so the same record is not a finding", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video",
+      ".kaipu/Demo.json": noIdentity("Demo"),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: new LibraryVault(directory, "ws-1"),
+      cloud: "unknown",
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("a record that has an identity is no finding in a synced workspace", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video",
+      ".kaipu/Demo.json": sidecar({ assetId: "a-1", title: "Demo", createdAt: CREATED }),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings).toEqual([]);
+  });
+});
