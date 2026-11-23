@@ -24,8 +24,9 @@ asking for another login.
 
 - **Connect a cloud folder…**: pick an account found on this Mac, then a folder in it (for example
   `folder1/kaipu-assets`). That folder becomes the workspace.
-- **Cloud folder features**, a per-workspace switch under Settings → Workspaces → Connections. Off
-  by default; a user who never turns it on never sees any provider wording.
+- **Cloud folder features**, a per-workspace switch under Settings → Workspaces → Connections. On for
+  a workspace made with "Connect a cloud folder…", off for a folder that became synced some other
+  way; a user who never turns it on never sees any provider wording.
 - **Download from the cloud** for a file the provider has offloaded, with a message and progress.
 - **Where each file is**: "On this Mac" or "Cloud only" (and "Uploading"/"Uploaded" if macOS
   reports it for that provider).

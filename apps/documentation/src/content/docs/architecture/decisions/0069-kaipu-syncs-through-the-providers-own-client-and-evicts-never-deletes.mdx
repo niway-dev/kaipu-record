@@ -41,7 +41,9 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
 4. **Kaipu claims "uploaded" only when macOS says so.** Without that signal it shows only what it
    can observe: on this Mac, or cloud only.
 5. **The safety rules for a synced folder are not optional:** no partial files in the folder, no
-   hard links, no implicit reads of evicted files. They run whenever the folder is synced.
+   hard links, no implicit reads of evicted media. They run whenever the folder is synced. The one
+   exception is small `.kaipu/` files (identity, settings, sidecars, `tags.json`), which may be read
+   when evicted, with a timeout, as the several workspaces spec allows.
 
 ## Alternatives rejected
 
@@ -53,8 +55,8 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
   [cloud product spec](/specs/2026-09-09-cloud-product/) defines with consent and revocation.
 - **A local hidden copy plus the Drive copy.** Two copies of every 4 GB take. The design keeps
   one: the scratch file becomes the workspace file by `rename` on the same volume, as PR #483 built
-  it. Whether each provider accepts a file renamed into its folder without a copy, and uploads it,
-  is untested; the spec's layer 0 checks it with a 4 GB file before anything builds on it.
+  it. The 2026-10-30 spike proved that a file renamed into Google Drive is accepted and uploads; the
+  spec's layer 0 checks a 4 GB file, OneDrive and iCloud.
 
 ## Consequences
 
