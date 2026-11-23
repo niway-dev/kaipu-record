@@ -31,9 +31,11 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
 
 1. **No provider web API, no OAuth, no streaming, no provider share links.** Kaipu reads and writes
    files in the folder; the provider's client syncs them.
-2. **A download is a read through macOS.** Kaipu triggers it on the user's request (a coordinated
-   read or a plain read of the file), shows progress from the file's allocated size, and never
-   opens a file before it is fully local.
+2. **A download is a read through macOS.** Kaipu triggers it on the user's request by reading the
+   file (a plain read is the proven trigger; a coordinated read only if the spec's layer 0 shows it
+   adds something), shows progress as far as macOS exposes it (the spec's decision 7), and never
+   opens a file before it is fully local. Anything beyond a plain read that needs native code ships
+   as an explicitly built helper, never through an install script.
 3. **Freeing space is eviction, never deletion.** Deleting a file in a synced folder deletes it in
    the cloud and on every device, so no code path for "Free up space" may call `unlink`. When macOS
    does not let Kaipu evict another provider's file, Kaipu reveals it in Finder for the provider's
