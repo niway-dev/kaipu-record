@@ -11,10 +11,18 @@ export async function mapLimit<T, R>(
 ): Promise<R[]> {
   const out: R[] = [];
   let next = 0;
+  // Once one call fails, `Promise.all` has already rejected: no worker starts another item (in a
+  // synced folder that would be a download nobody is waiting for).
+  let failed = false;
   const worker = async (): Promise<void> => {
-    while (next < items.length) {
+    while (next < items.length && !failed) {
       const index = next++;
-      out[index] = await fn(items[index]!);
+      try {
+        out[index] = await fn(items[index]!);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));

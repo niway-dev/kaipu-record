@@ -152,7 +152,9 @@ async function commitImport(
   let placed: PlacedFile | "taken";
   try {
     // A synced workspace places by rename: a hard link in its folder renames the cloud item.
-    placed = vault.synced ? await placeByRename(staged, dest) : await placeNew(staged, dest);
+    placed = vault.synced
+      ? await placeByRename(staged, dest, { intoSynced: true })
+      : await placeNew(staged, dest);
   } catch (error) {
     await vault.releaseReservation(reservation).catch(() => {});
     throw error;

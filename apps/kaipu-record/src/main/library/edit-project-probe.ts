@@ -76,13 +76,18 @@ export type { WebcamState } from "./webcam-track-state";
  * sidecar recorded a webcam but the file is gone, "none" for a recording that never had one.
  * Read-only; never touches the video.
  */
-export async function probeWebcam(vaultDir: string, id: string): Promise<WebcamState> {
+export async function probeWebcam(
+  vaultDir: string,
+  id: string,
+  /** How the sidecar is read: a synced workspace passes its bounded reader (never a bare read). */
+  readText: (path: string) => Promise<string> = (path) => readFile(path, "utf-8"),
+): Promise<WebcamState> {
   const fileExists = await exists(join(vaultDir, ".kaipu", `${id}.webcam.mp4`));
   // The file alone makes it "present": the sidecar is only read when it is not there.
   if (fileExists) return webcamTrackState(true, undefined).state;
   let sidecarWebcam: unknown;
   try {
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", `${id}.json`), "utf-8"));
+    const sidecar = JSON.parse(await readText(join(vaultDir, ".kaipu", `${id}.json`)));
     sidecarWebcam = sidecar?.webcam;
   } catch {
     sidecarWebcam = undefined;

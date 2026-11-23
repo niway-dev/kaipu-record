@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fsp from "node:fs/promises";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
@@ -308,6 +308,7 @@ describe("LibraryVault.renameItem", () => {
     try {
       const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
       await seedFullItem("Take");
+      await rm(join(meta, "Take.cursor.json.tmp"));
       // Another device saves the old edit project while the rename is about to commit.
       atCommit.run = () => writeFile(join(meta, "Take.edit.json"), '{"scene":2,"newer":true}');
 
@@ -315,7 +316,7 @@ describe("LibraryVault.renameItem", () => {
 
       expect(result.file).toBe("renamed");
       expect(result.keptCompanions).toEqual(["Take.edit.json"]);
-      // The edit was never copied under the new name, and it was not deleted either.
+      // The newer edit was not carried over to the new name; the old file was kept.
       expect(await readFile(join(meta, "Take.edit.json"), "utf-8")).toBe(
         '{"scene":2,"newer":true}',
       );
@@ -329,11 +330,66 @@ describe("LibraryVault.renameItem", () => {
     }
   });
 
+  it("a synced rename keeps a companion that arrived after the copy and a sidecar that changed (Z2)", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      // Another device adds a webcam file (never copied: no stamp) and edits the old sidecar.
+      atCommit.run = async () => {
+        await writeFile(join(meta, "Take.webcam.mp4"), "webcam-from-elsewhere");
+        await writeFile(
+          join(meta, "Take.json"),
+          JSON.stringify({ sidecarVersion: 2, assetId: "asset-1", title: "Edited elsewhere" }),
+        );
+      };
+
+      const result = await renameById(synced, "Take", "Renamed");
+
+      expect(result.file).toBe("renamed");
+      expect(result.keptCompanions).toEqual(
+        // The interrupted-write leftover was never copied either: kept, not deleted unverified.
+        expect.arrayContaining(["Take.webcam.mp4", "Take.json", "Take.cursor.json.tmp"]),
+      );
+      expect(await readFile(join(meta, "Take.webcam.mp4"), "utf-8")).toBe("webcam-from-elsewhere");
+      expect(JSON.parse(await readFile(join(meta, "Take.json"), "utf-8")).title).toBe(
+        "Edited elsewhere",
+      );
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
+  it("a synced rename keeps an old companion rewritten with the same size, mtime and inode (Z5)", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      await rm(join(meta, "Take.cursor.json.tmp"));
+      const edit = join(meta, "Take.edit.json");
+      await utimes(edit, 1_700_000_000, 1_700_000_000);
+      // Same length ('{"scene":1}' to '{"scene":2}'), same mtime, same inode: only the bytes differ.
+      atCommit.run = async () => {
+        await writeFile(edit, '{"scene":2}');
+        await utimes(edit, 1_700_000_000, 1_700_000_000);
+      };
+
+      const result = await renameById(synced, "Take", "Renamed");
+
+      expect(result.file).toBe("renamed");
+      expect(result.keptCompanions).toEqual(["Take.edit.json"]);
+      expect(await readFile(edit, "utf-8")).toBe('{"scene":2}');
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
   it("a synced rename keeps an old asset added after the copy (NIW2-912)", async () => {
     const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
     try {
       const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
       await seedFullItem("Take");
+      await rm(join(meta, "Take.cursor.json.tmp"));
       atCommit.run = () => writeFile(join(meta, "Take.assets", "late.png"), "late");
 
       const result = await renameById(synced, "Take", "Renamed");

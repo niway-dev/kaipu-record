@@ -217,7 +217,9 @@ describe("sidecar, poster and cursor track writes", () => {
 
     const staged = stagedRenames().map((r) => r.to);
     expect(staged).toContain(join(folder, ".kaipu", "clip.jpg"));
+    expect(staged).toContain(join(folder, ".kaipu", "clip.cursor.json"));
     expect(staged).toContain(join(folder, ".kaipu", `${id}.json`));
+    expect(await readFile(join(folder, ".kaipu", "clip.cursor.json"), "utf-8")).toBe("{}");
     // Every rename that reached the folder started in the scratch folder.
     expect(hooks.renames.filter((r) => r.from.startsWith(folder))).toEqual([]);
     expect(await readdir(staging)).toEqual([]);

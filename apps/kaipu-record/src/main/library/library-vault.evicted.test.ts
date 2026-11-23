@@ -198,6 +198,8 @@ describe("LibraryVault — evicted files get no image URL", () => {
 
   it("hashes a file the provider holds locally, after asking about exactly that file", async () => {
     await seedVideo("clip");
+    // The cache lands in the item's sidecar, which a synced item has once it arrived.
+    await seedSidecar("clip");
     const probe = vi.fn(async () => new Set<string>());
     const synced = new LibraryVault(directory, "ws-1", undefined, probe);
     await expect(synced.ensureContentHash("clip")).resolves.toMatchObject({
@@ -272,10 +274,10 @@ describe("LibraryVault — evicted files get no image URL", () => {
       expect(await vault.readCursorTrack("clip")).toBe('{"version":1}');
     });
 
-    it("a plain workspace reports an unreadable track too", async () => {
+    it("a plain workspace has no provider to blame: an unreadable track reads as none, as before (round 11 #25)", async () => {
       await seedVideo("clip");
       await mkdir(trackFile());
-      await expect(new LibraryVault(directory, "ws-1").readCursorTrack("clip")).rejects.toThrow();
+      expect(await new LibraryVault(directory, "ws-1").readCursorTrack("clip")).toBeNull();
     });
   });
 
@@ -314,6 +316,51 @@ describe("LibraryVault — evicted files get no image URL", () => {
       expect(JSON.parse(await readFile(sidecarFile(), "utf-8"))).toMatchObject({
         assetId: "the-real-identity",
       });
+    });
+
+    it("an identity that arrives between two reads is returned, never overwritten (Z1)", async () => {
+      await seedVideo("clip");
+      let reads = 0;
+      const reader: VaultReader = {
+        readText: async (path) => {
+          if (path === sidecarFile()) {
+            reads += 1;
+            // Missing on the first two reads; the real sidecar lands right after the second.
+            if (reads <= 2) {
+              if (reads === 2) await seedSidecar("clip", "the-real-identity");
+              throw Object.assign(new Error("gone"), { code: "ENOENT" });
+            }
+          }
+          return readFile(path, "utf-8");
+        },
+      };
+      const vault = new LibraryVault(directory, "ws-1", reader, async () => new Set<string>());
+      expect(await vault.describe("clip")).toMatchObject({
+        assetId: "the-real-identity",
+        title: "Title clip",
+      });
+      expect(JSON.parse(await readFile(sidecarFile(), "utf-8"))).toMatchObject({
+        assetId: "the-real-identity",
+        title: "Title clip",
+      });
+    });
+
+    it("a readable sidecar without an identity is not given one in a synced workspace (Z1)", async () => {
+      await seedVideo("clip");
+      const legacy = JSON.stringify({ sidecarVersion: 1, title: "Legacy" });
+      await writeFile(sidecarFile(), legacy);
+      const vault = syncedVault();
+      expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
+      expect(await readFile(sidecarFile(), "utf-8")).toBe(legacy);
+    });
+
+    it("writeMeta never creates a sidecar in a synced workspace (Z1, round 11 #6)", async () => {
+      await seedVideo("clip");
+      await expect(syncedVault().writeMeta("clip", { editorOpenedAt: 1 })).rejects.toThrow();
+      await expect(access(sidecarFile())).rejects.toMatchObject({ code: "ENOENT" });
+      // A plain workspace still creates it (a legacy item).
+      await new LibraryVault(directory, "ws-2").writeMeta("clip", { editorOpenedAt: 1 });
+      await expect(access(sidecarFile())).resolves.toBeUndefined();
     });
 
     it("adoptMedia mints nothing in a synced workspace unless the user asked", async () => {

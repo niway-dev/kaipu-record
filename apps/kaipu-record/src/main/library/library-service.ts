@@ -296,7 +296,11 @@ export class LibraryService {
     // are, so the file is not hashed for them (a long recording takes seconds to hash).
     const editSession = cloud ? await hasEditSession(this.deps.vaultDir(), id) : false;
     const webcamTrack =
-      cloud && !editSession ? (await probeWebcam(this.deps.vaultDir(), id)) === "present" : false;
+      cloud && !editSession
+        ? // The sidecar is read through the vault: bounded, and never a download, in a synced one.
+          (await probeWebcam(this.deps.vaultDir(), id, (path) => vault.readTextBounded(path))) ===
+          "present"
+        : false;
     // A file still being written cannot be proven identical to the cloud copy —
     // refuse, do not reject: the policy below turns a null hash into "hash-unknown".
     const hashed =

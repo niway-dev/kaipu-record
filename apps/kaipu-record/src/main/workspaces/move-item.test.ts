@@ -14,8 +14,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
-import { setStagingResolver } from "../library/atomic-write";
+import { basename, join, sep } from "node:path";
+import { setStagingResolver, setSyncRootResolver } from "../library/atomic-write";
 import { sha256FileBase64 } from "../library/content-hash";
 import { DragLedger } from "../library/drag-ledger";
 import { ItemMovedError, withItemLock } from "../library/item-lock";
@@ -37,6 +37,8 @@ import {
 const seen = vi.hoisted(() => ({
   created: [] as string[],
   renames: [] as { from: string; to: string }[],
+  /** A `.mp4` renamed into this folder is refused across volumes (EXDEV), once. */
+  exdevInto: null as string | null,
 }));
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
@@ -57,6 +59,12 @@ vi.mock("node:fs/promises", async (importActual) => {
     },
     rename: async (from: string, to: string) => {
       seen.renames.push({ from: String(from), to: String(to) });
+      if (seen.exdevInto !== null && String(to) === join(seen.exdevInto, basename(String(to)))) {
+        if (String(to).endsWith(".mp4")) {
+          seen.exdevInto = null;
+          throw Object.assign(new Error("cross-device link not permitted"), { code: "EXDEV" });
+        }
+      }
       return actual.rename(from, to);
     },
   };
@@ -524,6 +532,24 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     expect(stagedIn).toHaveLength(1);
     expect(inFolderDuringCopy).toEqual([]);
     expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual([]);
+  });
+
+  it("a synced target's media refused across volumes is copied outside the folder, never into it (round 11 #13)", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    // The folder is found synced through its provider root, which the app's detection knows.
+    setSyncRootResolver(() => dst.directory);
+    seen.exdevInto = dst.directory;
+    try {
+      const outcome = await moveItem({ source: src, target, id: item.id }, deps());
+      expect(outcome).toMatchObject({ ok: true, id: item.id });
+      expect(await readFile(join(dst.directory, "Demo.mp4"))).toEqual(item.media);
+      // Never written under a name the provider sees: the media arrived by rename, whole.
+      expect(seen.created).not.toContain(join(dst.directory, "Demo.mp4"));
+    } finally {
+      setSyncRootResolver(() => null);
+      seen.exdevInto = null;
+    }
   });
 
   it("a source that changed after it was copied is kept, and the move is left for review", async () => {
@@ -1646,7 +1672,12 @@ describe("healing never deletes the only copy", () => {
     // The source is the only intact copy: it stays, whole, and the lookalike is not rolled forward.
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
     expect(await stat(join(src.directory, ".kaipu", "Demo.json"))).toBeTruthy();
-    expect(report.healed + report.quarantined.length).toBe(1);
+    // The move is rolled back, not forward: the entry is healed with nothing quarantined, the
+    // lookalike we placed is removed from the target (its journal and our record say it is ours),
+    // and the journal is closed.
+    expect(report).toEqual({ healed: 1, waiting: 0, quarantined: [] });
+    await expect(stat(target)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(journalDir)).toEqual([]);
     expect(await copiesOf(item.assetId)).toEqual([{ dir: src.directory, id: "Demo" }]);
   });
 

@@ -170,6 +170,18 @@ describe("probeWebcam", () => {
     expect(await probeWebcam(dir, "r")).toBe("present");
   });
 
+  it("reads the sidecar through the reader it is given (a synced workspace's bounded one)", async () => {
+    await sidecar("r", { webcam: { startOffsetMs: 0 } });
+    const read: string[] = [];
+    const reader = async (path: string): Promise<string> => {
+      read.push(path);
+      throw Object.assign(new Error("not downloaded"), { code: "EVICTED" });
+    };
+    // A refused read is "no webcam recorded", and nothing was read behind the reader's back.
+    expect(await probeWebcam(dir, "r", reader)).toBe("none");
+    expect(read).toEqual([join(dir, ".kaipu", "r.json")]);
+  });
+
   it("missing when the sidecar names a webcam but the file is gone", async () => {
     await sidecar("r", {
       webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },

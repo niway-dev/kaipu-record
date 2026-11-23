@@ -264,6 +264,53 @@ describe("VaultTagRepository", () => {
     await Promise.all(["a", "b", "c", "d"].map((name) => repo.create(name)));
     expect((await repo.list()).map((t) => t.name).sort()).toEqual(["a", "b", "c", "d"]);
   });
+  describe("in a synced workspace (round 11 #5)", () => {
+    const syncedRepo = (evicted: Set<string>, reads: string[] = []) => {
+      const synced = new LibraryVault(
+        directory,
+        "ws-1",
+        {
+          readText: async (path) => {
+            reads.push(path);
+            return readFile(path, "utf-8");
+          },
+        },
+        async () => evicted,
+      );
+      return new VaultTagRepository(
+        () => synced,
+        () => "d-test",
+        () => clock++,
+      );
+    };
+
+    it("an offloaded tags.json is not read: the registry is refused, nothing is written", async () => {
+      await mkdir(kaipu(), { recursive: true });
+      const path = join(kaipu(), "tags.json");
+      await writeFile(path, JSON.stringify({ version: 1, tags: [] }));
+      const reads: string[] = [];
+      const synced = syncedRepo(new Set([path]), reads);
+      await expect(synced.list()).rejects.toBeInstanceOf(TagRegistryError);
+      await expect(synced.create("New")).rejects.toBeInstanceOf(TagRegistryError);
+      expect(reads).toEqual([]);
+      expect(JSON.parse(await readFile(path, "utf-8"))).toEqual({ version: 1, tags: [] });
+    });
+
+    it("a tags.json that has not arrived is not replaced by an empty registry", async () => {
+      await writeItem("clip");
+      await mkdir(kaipu(), { recursive: true });
+      await writeFile(
+        join(kaipu(), "clip.json"),
+        JSON.stringify({ sidecarVersion: 2, assetId: "a", tags: ["legacy"] }),
+      );
+      expect(await syncedRepo(new Set()).list()).toEqual([]);
+      await expect(readFile(join(kaipu(), "tags.json"), "utf-8")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      // The Phase 1 tags stay where they are, untouched.
+      expect(await sidecar("clip")).toMatchObject({ tags: ["legacy"] });
+    });
+  });
 });
 
 describe("uuidv7", () => {

@@ -448,7 +448,9 @@ export const SYNCED_LIST_STALL_LIMIT = 4;
  * bound never trips it, and a thousand items would take `5 s x 1000 / concurrency`. Past this
  * budget no new read starts: the rest of the items are listed read-only ("unreadable"), and a
  * scan reports their records unreadable (fixable: false), the same placeholders a stall gives.
- * Reads already in flight still end by their own 5 s bound.
+ * The budget is checked when an item starts, not between the several bounded reads one item may
+ * chain (a sidecar with no identity reads it more than once), so a provider that answers slowly
+ * can overrun it by a few 5 s bounds; one that stalls trips the limit above instead.
  */
 export const SYNCED_READS_BUDGET_MS = 30_000;
 
@@ -1004,6 +1006,15 @@ export class LibraryVault {
           const created: string[] = [];
           const copies: CompanionCopy[] = [];
           try {
+            // The old sidecar was just written (step 1) with the same content: stamped like any
+            // companion, so a later edit of it by another device keeps it.
+            if (this.synced) {
+              copies.push({
+                from: from.sidecar,
+                to: to.sidecar,
+                stamp: await fileStamp(from.sidecar),
+              });
+            }
             await this.writeAtomic(to.sidecar, JSON.stringify(meta, null, 2));
             created.push(to.sidecar);
             const copied = [
@@ -1196,7 +1207,7 @@ export class LibraryVault {
         const placed = this.synced
           ? caseOnly
             ? await renameCaseOnlyByRename(from, to)
-            : await placeByRename(from, to)
+            : await placeByRename(from, to, { intoSynced: true })
           : caseOnly
             ? await renameCaseOnly(from, to)
             : await placeNoReplace(from, to, { stuck: "rollback" });
@@ -1282,7 +1293,7 @@ export class LibraryVault {
     const staged = join(folder, basename(uniqueTempPath(target, "part")));
     try {
       await copyFile(source, staged, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
-      const placed = await placeByRename(staged, target);
+      const placed = await placeByRename(staged, target, { intoSynced: true });
       if (placed === "taken") throw takenError(target);
     } catch (error) {
       await rm(staged, { force: true }).catch(() => {});
@@ -1310,23 +1321,32 @@ export class LibraryVault {
   }
 
   /**
-   * Deletes the old name's companions after a synced rename, but only a file that is still the
-   * one that was copied (same size, mtime and inode as when it was stamped). One that changed,
-   * or that appeared after the copy, is kept and returned (relative to the `.kaipu` folder): the
-   * edit it holds was never copied under the new name.
+   * Deletes the old name's companions after a synced rename, but only a file that has a stamp
+   * and is still the one that was copied (same size, mtime and inode as when it was stamped).
+   * Everything else is kept and returned (relative to the `.kaipu` folder): a file that changed,
+   * one that appeared after the copy (it has no stamp, and was never copied under the new name),
+   * and the interrupted-write leftover.
    */
   private async removeUnchangedCompanions(
     from: CompanionPaths,
     copies: CompanionCopy[],
   ): Promise<string[]> {
     const kept: string[] = [];
-    const stamps = new Map(copies.map((copy) => [copy.from, copy.stamp]));
+    const stamps = new Map(copies.map((copy) => [copy.from, copy]));
     const meta = this.metaDirectory();
     const removeIfUnchanged = async (path: string): Promise<void> => {
-      const stamp = stamps.get(path);
+      const copy = stamps.get(path);
       try {
-        if (stamp !== undefined && sameStamp(stamp, await fileStamp(path))) await rm(path);
-        else kept.push(relative(meta, path));
+        // The stamp is a cheap first check; the digest the copy was verified against is the
+        // proof, taken again from the file right before it goes (a rewrite in place can keep the
+        // size, mtime and inode).
+        if (
+          copy?.digest !== undefined &&
+          sameStamp(copy.stamp, await fileStamp(path)) &&
+          (await sha256FileBase64(path)) === copy.digest
+        ) {
+          await rm(path);
+        } else kept.push(relative(meta, path));
       } catch (error) {
         // Already gone: nothing to keep. Anything else could not be proven unchanged.
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") kept.push(relative(meta, path));
@@ -1334,9 +1354,9 @@ export class LibraryVault {
     };
     const { assetsDir, ...others } = from;
     for (const path of Object.values(others)) {
-      // Not copied (the sidecar, written from memory, and the interrupted-write leftover).
-      if (!stamps.has(path)) await this.removePaths([path]);
-      else await removeIfUnchanged(path);
+      if (stamps.has(path)) await removeIfUnchanged(path);
+      // Never copied: it arrived after the copy, or it is the interrupted-write leftover.
+      else if (await existsStrict(path).catch(() => true)) kept.push(relative(meta, path));
     }
     const files = await filesUnder(assetsDir).catch(() => [] as string[]);
     for (const file of files) await removeIfUnchanged(file);
@@ -1683,17 +1703,22 @@ export class LibraryVault {
     // Module-level lock keyed by path: a second caller (even from another
     // LibraryVault instance) waits, then re-reads and finds the first one's id.
     return withLock(sidecarPath, async () => {
-      const current = await this.writableSidecar(id);
+      let current = await this.writableSidecar(id);
+      // A synced folder can deliver the media before its sidecar, and the sidecar can arrive
+      // between two reads. Minting an identity then would write a second, different sidecar
+      // over the one that arrived: the item loses its title, tags and identity. So a synced
+      // vault never mints here: it reads the sidecar once more and uses the identity it has. A
+      // missing sidecar, or a readable one without an identity, leaves the item read-only for
+      // as long as it takes; the user can mint one on purpose through "Check and fix files".
+      if (this.synced && current.assetId === undefined) {
+        const again = await this.readRecord(id);
+        if (again.status !== "ok" || again.sidecar.assetId === undefined) {
+          throw new SidecarUnavailableError("unreadable", sidecarPath);
+        }
+        current = again.sidecar;
+      }
       if (current.assetId && current.localRemovedAt === undefined) {
         return current as Sidecar & { assetId: string };
-      }
-      // A synced folder can deliver the media before its sidecar. Minting an identity then
-      // would write a second, different sidecar next to the one about to arrive, and the
-      // provider keeps one of them (or both, as a conflicted copy): the item loses its title,
-      // tags and identity. So the file stays read-only until its sidecar arrives, however
-      // long that takes; the user can mint one on purpose through "Check and fix files".
-      if (current.assetId === undefined && (await this.sidecarIsMissingInSyncedVault(id))) {
-        throw new SidecarUnavailableError("unreadable", sidecarPath);
       }
       const next: Sidecar = {
         ...current,
@@ -1712,11 +1737,6 @@ export class LibraryVault {
       }
       return next as Sidecar & { assetId: string };
     });
-  }
-
-  /** True in a synced workspace when the item has no sidecar at all (it may still be arriving). */
-  private async sidecarIsMissingInSyncedVault(id: string): Promise<boolean> {
-    return this.synced && (await this.readRecord(id)).status === "missing";
   }
 
   /**
@@ -1742,6 +1762,13 @@ export class LibraryVault {
     if (read.status === "missing" && !(await this.hasMedia(id))) throw new ItemGoneError(id);
     if (read.status !== "ok" && read.status !== "missing") {
       throw new UnreadableRecordError(id, read.status, path);
+    }
+    // A synced folder may still be delivering the sidecar: a partial one written here would
+    // conflict with it, and would then read as a record with no identity. Every creator
+    // reserves its stub first (`reserve`, `reserveIncoming`, `adoptMedia`), so nothing legit
+    // gets here without a sidecar.
+    if (read.status === "missing" && this.synced) {
+      throw new UnreadableRecordError(id, "unreadable", path);
     }
     const current = read.status === "ok" ? read.sidecar : {};
     await mkdir(this.metaDirectory(), { recursive: true });
@@ -1890,16 +1917,22 @@ export class LibraryVault {
    * The raw track JSON, or null only when this recording has none (`ENOENT`). Read like every
    * other companion of a synced vault: an offloaded track is never downloaded by the read
    * (`EvictedFileError`) and a stalled provider gives up after `SYNCED_SIDECAR_READ_TIMEOUT_MS`
-   * (`ETIMEDOUT`). Those and every other failure (EIO, EACCES, a folder in its place) THROW
-   * instead of reading as "no track": a track that exists but cannot be read now is not a
-   * recording without one. The thrown error says which: `EvictedFileError` for an offloaded
-   * track, the original error otherwise. Nothing is remembered: the next call reads again.
+   * (`ETIMEDOUT`). In a synced vault those and every other failure (EIO, EACCES, a folder in
+   * its place) THROW instead of reading as "no track": a track that exists but cannot be read
+   * now is not a recording without one. The thrown error says which: `EvictedFileError` for an
+   * offloaded track, the original error otherwise. A plain vault reads any failure as none.
+   * Nothing is remembered: the next call reads again.
    */
   async readCursorTrack(id: string): Promise<string | null> {
     try {
       return await this.readTextBounded(this.cursorTrackPath(id));
     } catch (error) {
       if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") return null;
+      // Only a synced workspace has a provider that can hold the track back (offloaded, or a
+      // stalled read), so only there is "cannot read it" not the same as "there is none". A
+      // plain workspace keeps the behaviour from before synced folders: no usable track, no
+      // auto zooms, and the editor stays editable.
+      if (!this.synced) return null;
       throw error;
     }
   }
@@ -1955,7 +1988,9 @@ export class LibraryVault {
       } finally {
         await handle.close();
       }
-      const placed = this.synced ? await placeByRename(part, target) : await placeNew(part, target);
+      const placed = this.synced
+        ? await placeByRename(part, target, { intoSynced: true })
+        : await placeNew(part, target);
       if (placed === "taken") throw takenError(target);
       return placed;
     } catch (error) {
@@ -2146,6 +2181,8 @@ interface CompanionCopy {
   from: string;
   to: string;
   stamp: FileStamp;
+  /** sha256 the copy was verified against (set by `verifyCopies`): the proof before a delete. */
+  digest?: string;
 }
 
 async function fileStamp(path: string): Promise<FileStamp> {
@@ -2174,6 +2211,7 @@ async function verifyCopies(copies: CompanionCopy[]): Promise<void> {
       sha256FileBase64(copy.to),
     ]);
     if (source !== copied) throw mismatch(copy.from);
+    copy.digest = source;
     if (!sameStamp(copy.stamp, await fileStamp(copy.from))) throw mismatch(copy.from);
   }
 }

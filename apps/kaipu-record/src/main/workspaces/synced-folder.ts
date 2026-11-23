@@ -105,13 +105,27 @@ export async function withTimeout<T>(value: Promise<T>, ms: number, fallback: T)
 }
 
 /**
- * `/usr/bin/xattr -p <name> <file>`: exits 0 only when the attribute is there, 1 when it is not
- * (or the file is missing). A process killed at the timeout did not answer: null.
+ * What `/usr/bin/xattr -p` said: exit 0 means the attribute is there; "No such xattr" or "No such
+ * file" (exit 1) means it is not. Anything else, a process killed at the timeout or a failure such
+ * as an I/O error from a provider that is failing rather than hanging, did not answer: null, so
+ * it never reads as "not synced".
  */
+export function readXattrAnswer(
+  error: { killed?: boolean } | null,
+  stderr: string,
+): boolean | null {
+  if (!error) return true;
+  if (error.killed) return null;
+  return /No such (xattr|file)/i.test(stderr) ? false : null;
+}
+
 function hasXattrViaCli(file: string, name: string): Promise<boolean | null> {
   return new Promise((resolve) => {
-    execFile("/usr/bin/xattr", ["-p", name, file], { timeout: SYNC_DETECT_TIMEOUT_MS }, (error) =>
-      resolve(error?.killed ? null : !error),
+    execFile(
+      "/usr/bin/xattr",
+      ["-p", name, file],
+      { timeout: SYNC_DETECT_TIMEOUT_MS },
+      (error, _stdout, stderr) => resolve(readXattrAnswer(error, String(stderr))),
     );
   });
 }

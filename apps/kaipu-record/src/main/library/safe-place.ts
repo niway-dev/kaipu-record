@@ -501,7 +501,12 @@ async function copyAcrossDevices(
   const unchangedSince = sameStamp(stampBefore, stampAfter) ? stampBefore : null;
   let removal: SourceRemoval;
   try {
-    removal = unchangedSince ? await removeSource(from, sourceId, unchangedSince) : "unknown";
+    // The stamp is a cheap first check; the digest of what was copied is the proof, taken again
+    // from the file immediately before it is deleted (an in-place rewrite can keep the size,
+    // mtime and inode).
+    removal = unchangedSince
+      ? await removeSource(from, sourceId, unchangedSince, digest)
+      : "changed";
   } catch (error) {
     if (options.stuck !== "rollback") {
       await setAside(from, sourceId, to, copied.size);
@@ -509,6 +514,16 @@ async function copyAcrossDevices(
     }
     await removeIfSame(to, copied); // a rename that must be undone leaves the take in one place
     throw error;
+  }
+  if (removal === "changed") {
+    // The source is not what was copied: `to` holds a stale copy, and the source holds the newer
+    // bytes under its own name. The copy is taken back (it is ours and was verified) and the
+    // source stays where it was: nothing is reported as placed, and nothing is set aside.
+    await removeIfSame(to, copied);
+    throw Object.assign(
+      new Error(`"${from}" changed while it was being copied; it is kept where it was`),
+      { code: "EIO", path: from },
+    );
   }
   if (removal === "unknown") {
     if (options.stuck === "rollback") {
@@ -523,19 +538,25 @@ async function copyAcrossDevices(
   return copied;
 }
 
-/** "kept": another file holds the source's name; "unknown": the name could not be read. */
-type SourceRemoval = "removed" | "kept" | "unknown";
+/**
+ * "kept": another file holds the source's name; "unknown": the name could not be read;
+ * "changed": the source is not what was copied (its stamp or its bytes moved).
+ */
+type SourceRemoval = "removed" | "kept" | "unknown" | "changed";
 
 /**
  * Remove the placed source, only while its name still holds `identity` (captured from the
  * source's own handle) and, when `unchangedSince` is given, still looks the way it did when its
- * bytes were read (size, mtime, inode). A different file there, a changed one, or a name that
- * cannot be read, is kept and logged. Retries a failed unlink once; a second failure propagates.
+ * bytes were read (size, mtime, inode). When `digest` is given, the current bytes are hashed
+ * right before the delete and must equal it: the stamp is trusted for nothing. A different file
+ * there, a changed one, or a name that cannot be read, is kept and logged. Retries a failed
+ * unlink once; a second failure propagates.
  */
 async function removeSource(
   path: string,
   identity: FileIdentity,
   unchangedSince?: SourceStamp,
+  digest?: string,
 ): Promise<SourceRemoval> {
   for (let attempt = 0; ; attempt += 1) {
     let now: FileIdentity | null;
@@ -556,7 +577,18 @@ async function removeSource(
         const info = await lstat(path, { bigint: true });
         if (!sameStamp(stampOf(info), unchangedSince)) {
           console.error(`the placed source "${path}" changed since it was copied; kept`);
-          return "unknown";
+          return "changed";
+        }
+      } catch (error) {
+        console.error(`could not check the placed source "${path}"; kept`, error);
+        return "unknown";
+      }
+    }
+    if (digest !== undefined) {
+      try {
+        if ((await hashFile(path)) !== digest) {
+          console.error(`the placed source "${path}" holds other bytes than its copy; kept`);
+          return "changed";
         }
       } catch (error) {
         console.error(`could not check the placed source "${path}"; kept`, error);
@@ -791,11 +823,14 @@ export async function replaceConfirmed(
   const source = await open(from, "r");
   let sourceId: PlacedFile;
   let placed: PlacedFile | "taken";
+  // What the copy was read as: the source goes only if it still holds these bytes, and the
+  // destination holds them too.
+  const sourceHash = byRename ? createHash("sha256") : null;
   try {
     sourceId = identityOf(await source.stat({ bigint: true }));
     // A synced replacement never takes a hard link (see above): it is always a copy.
     placed = byRename
-      ? await copyFromHandle(source, temp)
+      ? await copyFromHandle(source, temp, sourceHash ?? undefined)
       : await duplicateAt(source, sourceId, from, temp);
   } finally {
     await source.close().catch(() => {});
@@ -807,13 +842,25 @@ export async function replaceConfirmed(
     await removeIfSame(temp, placed);
     throw error;
   }
+  const digest = sourceHash?.digest("hex");
+  let removal: SourceRemoval;
   try {
     await syncDir(dirname(to));
-    if ((await removeSource(from, sourceId)) === "removed") {
-      await syncDir(dirname(from)).catch(() => {});
+    // A copy is proven by content before the source goes (a hard link is the same file).
+    if (digest !== undefined && (await hashFile(to)) !== digest) removal = "changed";
+    else {
+      removal = await removeSource(from, sourceId, undefined, digest);
+      if (removal === "removed") await syncDir(dirname(from)).catch(() => {});
     }
   } catch {
     await setAside(from, sourceId, to, placed.size);
+    return;
+  }
+  if (removal === "changed") {
+    throw Object.assign(
+      new Error(`"${from}" and its copy at "${to}" differ; "${from}" is kept where it was`),
+      { code: "EIO", path: from },
+    );
   }
 }
 

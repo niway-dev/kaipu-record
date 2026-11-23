@@ -71,7 +71,7 @@ export function useLocalLibrary(): LocalLibrary {
 
   // `quiet`: a re-list the user did not ask for (the window regained focus). It still replaces
   // the list when it succeeds, but a failure is not an error toast: a provider that is offline
-  // would otherwise raise one on every focus.
+  // would otherwise raise one on every focus, and it does not turn the page into an error page.
   const runRefresh = useCallback((quiet: boolean): Promise<void> => {
     const seq = ++latest.current;
     const run = relist(seq);
@@ -93,7 +93,8 @@ export function useLocalLibrary(): LocalLibrary {
         // "No recordings yet" empty state, indistinguishable from real data loss.
         setVideos(result.items.map(toLibraryVideo));
         setCatalogVerifiedAt(result.catalogVerifiedAt);
-        setHasError(result.vaultError !== null);
+        // A quiet re-list can clear the page error (it read fine now) but never raise one.
+        if (!quiet || result.vaultError === null) setHasError(result.vaultError !== null);
         if (result.vaultError !== null && !quiet) {
           reportError(t("errorRead"), new Error(result.vaultError), {
             context: { phase: "library-list" },
@@ -103,8 +104,8 @@ export function useLocalLibrary(): LocalLibrary {
       } catch (error) {
         if (seq !== latest.current) return await latestRun.current;
         applied = true;
-        setHasError(true);
         if (!quiet) {
+          setHasError(true);
           reportError(t("errorRead"), error, {
             context: { phase: "library-list" },
             retry: () => void runRefresh(false),

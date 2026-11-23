@@ -321,7 +321,7 @@ describe("video-edit-session", () => {
         metaOffloaded,
       );
 
-    it("leaves the saved project, its assets and its meta as they were, and keeps no copy elsewhere", async () => {
+    it("leaves the saved project and its assets as they were", async () => {
       await expect(refused()).rejects.toBeInstanceOf(ExportStampUnreadableError);
 
       expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(

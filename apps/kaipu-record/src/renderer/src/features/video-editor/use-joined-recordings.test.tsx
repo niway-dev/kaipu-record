@@ -267,4 +267,25 @@ describe("useJoinedRecordings", () => {
     grant("b-file");
     await waitFor(() => expect(close).toHaveBeenCalledWith("b-file"));
   });
+
+  it("a hold is released once when the source leaves while its cursor track read is failing (round 11 #21)", async () => {
+    items = [item("b")];
+    holds = { b: "b-file" };
+    let fail: (error: Error) => void = () => {};
+    window.electronAPI.loadCursorTrack = vi.fn(
+      () => new Promise<string | null>((_resolve, reject) => (fail = reject)),
+    ) as never;
+    let sources = [source("s1", "b")];
+    const { rerender } = renderHook(() => useJoinedRecordings(sources));
+    await waitFor(() => expect(window.electronAPI.loadCursorTrack).toHaveBeenCalled());
+
+    // The join is undone while the track is being read: the hold is released now...
+    sources = [];
+    rerender();
+    expect(close).toHaveBeenCalledTimes(1);
+    // ...and the read that then fails must not release it a second time.
+    fail(new Error("EvictedFileError"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(close).toHaveBeenCalledTimes(1);
+  });
 });

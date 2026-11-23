@@ -816,7 +816,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
       // Into a synced folder: one rename, never a hard link (decision 15).
       const placed =
         target.scratch !== undefined
-          ? await placeByRename(staged, finalMedia(newId))
+          ? await placeByRename(staged, finalMedia(newId), { intoSynced: true })
           : await placeNew(staged, finalMedia(newId), { stuck: "rollback" });
       if (placed === "taken") throw new Error(`target media taken: ${finalMedia(newId)}`);
       placedAt = { path: finalMedia(newId), identity: placed };
@@ -1022,7 +1022,7 @@ async function transfer(
       await rm(options.stage, { force: true });
       throw Object.assign(new Error(`copy mismatch: ${to}`), { code: "EIO" });
     }
-    const placed = await placeByRename(options.stage, to);
+    const placed = await placeByRename(options.stage, to, { intoSynced: true });
     if (placed === "taken") throw Object.assign(new Error(`"${to}" exists`), { code: "EEXIST" });
     return;
   }
@@ -1406,7 +1406,7 @@ async function healEntry(
   if (recordIsOurs && (await mediaMatches(staged, journal, deps.fs))) {
     const placed =
       journal.target.scratch !== undefined
-        ? (await placeByRename(staged, targetMedia)) === "taken"
+        ? (await placeByRename(staged, targetMedia, { intoSynced: true })) === "taken"
           ? "taken"
           : "placed"
         : await placeNoReplace(staged, targetMedia, { stuck: "rollback" });

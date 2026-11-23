@@ -587,7 +587,7 @@ describe("useLocalLibrary", () => {
       now.mockRestore();
     });
 
-    it("keeps quiet when a re-list started by focus fails: no error toast per focus", async () => {
+    it("keeps quiet when a re-list started by focus fails: no error toast and no page error per focus (round 11 #23)", async () => {
       const list = vi
         .fn()
         .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: null })
@@ -599,9 +599,13 @@ describe("useLocalLibrary", () => {
       act(() => {
         window.dispatchEvent(new Event("focus"));
       });
-      await waitFor(() => expect(result.current.hasError).toBe(true));
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.isRefreshing).toBe(false));
 
       expect(reportError).not.toHaveBeenCalled();
+      // The page keeps showing the list it has: a failed unasked re-list is not "the library
+      // cannot be read".
+      expect(result.current.hasError).toBe(false);
       // The list on screen is kept, not blanked.
       expect(result.current.videos).toHaveLength(2);
     });

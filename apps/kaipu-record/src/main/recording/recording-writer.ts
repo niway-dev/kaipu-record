@@ -117,9 +117,17 @@ export class FinalizeMoveError extends Error {
  * when one is, whenever it arrived. A placed staging file that cannot be removed is set aside
  * or marked, so the sweep never recovers it as a second recording.
  */
-export async function placeTake(from: string, to: string, byRename = false): Promise<PlacedFile> {
-  // A synced folder never gets a second name for a file (decision 15).
-  const placed = byRename ? await placeByRename(from, to) : await placeNew(from, to);
+export async function placeTake(
+  from: string,
+  to: string,
+  byRename = false,
+  intoSynced = false,
+): Promise<PlacedFile> {
+  // A synced folder never gets a second name for a file (decision 15), and across volumes the
+  // copy is staged outside it (`intoSynced`).
+  const placed = byRename
+    ? await placeByRename(from, to, { intoSynced })
+    : await placeNew(from, to);
   if (placed === "taken") throw takenError(to);
   return placed;
 }
@@ -368,7 +376,13 @@ export class RecordingWriter {
 
     let placed: PlacedFile;
     try {
-      placed = await placeTake(session.tempPath, dest, session.byRename);
+      placed = await placeTake(
+        session.tempPath,
+        dest,
+        session.byRename,
+        // Only a placement by rename can reach a synced folder; a plain one never asks.
+        session.byRename === true && (await this.isSyncedFolder(dirname(dest))),
+      );
     } catch (cause) {
       // Release the reserved stem (its stub sidecar): never the media path, which may hold a
       // file that took it meanwhile.
@@ -452,7 +466,12 @@ export class RecordingWriter {
       await this.closeHandle(webcamSession);
       const dest = vault.webcamFilePath(id);
       await mkdir(dirname(dest), { recursive: true });
-      const file = await placeTake(webcamSession.tempPath, dest, webcamSession.byRename);
+      const file = await placeTake(
+        webcamSession.tempPath,
+        dest,
+        webcamSession.byRename,
+        webcamSession.byRename === true && (await this.isSyncedFolder(dirname(dest))),
+      );
       return { meta: webcam, path: dest, file, session: webcamSession };
     } catch (error) {
       console.error("webcam file could not be placed; the recording is saved without it", error);

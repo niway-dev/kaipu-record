@@ -247,6 +247,10 @@ import {
 } from "@renderer/features/video-editor/filmstrip-lanes";
 import { showToast } from "@renderer/ui/toast-store";
 import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
+import {
+  editProjectRefusal,
+  isUnreadableRecordError,
+} from "@renderer/features/library/vault-errors";
 import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
 import { ItemWorkspaceChip } from "@renderer/features/workspaces/move/item-workspace-chip";
 import { HeaderActions } from "@renderer/features/workspaces/header-slot";
@@ -553,6 +557,15 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // the layer is never stripped for want of metas the editor loads later.
             const joinedHasWebcam = await anyJoinedHasWebcam(session.scene.sources);
             if (cancelled) return;
+            // A slide or floating image whose file did not come back is dropped from what is
+            // shown (the worker cannot render a broken reference), but it is still in the
+            // saved project. Saving from this scene would erase it for good, so the editor
+            // opens read-only: the project on disk is never replaced by the trimmed one.
+            const missingAsset =
+              session.scene.items.some(
+                (item) => item.kind === "slide" && !loadedIds.has(item.assetId),
+              ) || (session.scene.media ?? []).some((item) => !loadedIds.has(item.assetId));
+            if (missingAsset) readOnly = true;
             const filteredScene: VideoScene = dropMediaWithoutAsset(
               {
                 // The sidecar decides whether the recording has a webcam, not the session.
@@ -571,8 +584,10 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             showToast({ message: t("restored") });
             open(filteredScene, session.hasZoomData);
           } else {
-            // Session file exists but is invalid (schema changed, corruption, etc.).
+            // Session file exists but is invalid (schema changed, corruption, etc.). It is
+            // still the user's project on disk: a blank scene must never be saved over it.
             showToast({ message: t("restoreError") });
+            readOnly = true;
             open(initialScene(source.durationSeconds, source.webcam ?? null), false);
           }
         } else {
@@ -802,6 +817,14 @@ function VideoEditor({
   const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef, {
     onRefused: () => setSaveRefused(true),
   });
+  // The export's own session save meets the same refusals autosave does (the project's files
+  // are only in the cloud, or cannot be read). Same answer: the editor goes read-only and the
+  // pending edit stays pending, so leaving still warns. True when `error` was such a refusal.
+  const preserveOnRefusal = useCallback((error: unknown): boolean => {
+    if (editProjectRefusal(error) === null && !isUnreadableRecordError(error)) return false;
+    setSaveRefused(true);
+    return true;
+  }, []);
   // A workspace switch writes the pending edit first, while this editor is still open and
   // its workspace still active (ADR 0032, decision 7); the leave guard below then sees it saved.
   const flushAutosave = autosave.flush;
@@ -1366,8 +1389,6 @@ function VideoEditor({
             // Still here: edited since the export started → that newer edit is what the
             // autosave writes, and it is rightly not exported.
             if (editFingerprint(sceneRef.current, cursorData !== null) !== fingerprint) return;
-            // This save supersedes whatever the autosave still had queued.
-            autosave.cancel();
           } else {
             // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
             // it). Stamp only if what is on disk is the edit that was exported.
@@ -1392,10 +1413,20 @@ function VideoEditor({
             // `true`: this scene is exactly what was just burned into the file, so the write
             // stamps it as exported.
             await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
-            if (mountedRef.current) controller.markClean();
+            if (mountedRef.current) {
+              // Only a save that landed supersedes what the autosave still had queued, and
+              // only while nothing newer was edited during it: that edit keeps its own write.
+              if (editFingerprint(sceneRef.current, cursorData !== null) === fingerprint) {
+                autosave.cancel();
+              }
+              controller.markClean();
+            }
           } catch (error) {
-            // Session save failure is non-fatal — the export already succeeded.
-            captureException(error, { context: "video-edit-session-save" });
+            // Session save failure is non-fatal — the export already succeeded. A failed save
+            // clears nothing: the pending edit stays pending.
+            if (!preserveOnRefusal(error)) {
+              captureException(error, { context: "video-edit-session-save" });
+            }
           }
         },
       });
@@ -1413,6 +1444,7 @@ function VideoEditor({
       cameraPath,
       cursorData,
       readOnlyRef,
+      preserveOnRefusal,
     ],
   );
 
@@ -1526,16 +1558,20 @@ function VideoEditor({
             });
             return;
           }
-          autosave.cancel();
           try {
             const sessionJson = serializeSession(scene);
             const assets = assetStoreRef.current
               .entries()
               .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
             await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
+            // Only a save that landed supersedes the autosave's queue, and only while nothing
+            // newer was edited during it.
+            if (sceneRef.current === scene) autosave.cancel();
             controller.markClean();
           } catch (error) {
-            captureException(error, { context: "video-edit-session-save" });
+            if (!preserveOnRefusal(error)) {
+              captureException(error, { context: "video-edit-session-save" });
+            }
           }
           showToast({
             message: t("gifSaved", { size: formatSize(recording.sizeBytes) }),
@@ -1560,6 +1596,7 @@ function VideoEditor({
       navigate,
       t,
       readOnlyRef,
+      preserveOnRefusal,
     ],
   );
 
@@ -2927,7 +2964,7 @@ function VideoEditor({
             onRedo={controller.redo}
             onCaptureFrame={() => void handleCaptureFrame()}
             // Until the first captures read lands: the duplicate check needs the real list.
-            captureDisabled={stillCapture.busy || !sourceCaptures.loaded}
+            captureDisabled={stillCapture.busy || !sourceCaptures.loaded || readOnly}
             onExport={handleExport}
             // Opened read-only, the scene on screen is not the user's project (or lacks its pointer
             // data): an export of it would be of something they did not edit.

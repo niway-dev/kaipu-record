@@ -3,6 +3,7 @@ import {
   detectSync,
   detectSyncedFolder,
   GOOGLE_DRIVE_ITEM_XATTR,
+  readXattrAnswer,
   syncProviderOfPath,
   syncRootOfPath,
   type SyncDetectDeps,
@@ -246,5 +247,23 @@ describe("detectSyncedFolder: a folder the user picked, not a workspace root", (
     expect(await detectSyncedFolder("/Volumes/Ext/Exports", deps)).toBe("cloud-provider");
     expect(asked.some((file) => !file.endsWith("identity.json"))).toBe(true);
     warn.mockRestore();
+  });
+});
+
+describe("readXattrAnswer: what /usr/bin/xattr's exit says (round 11 #15)", () => {
+  it("answers yes on exit 0, and no only for a missing attribute or file", () => {
+    expect(readXattrAnswer(null, "")).toBe(true);
+    expect(
+      readXattrAnswer({ killed: false }, "xattr: a.txt: No such xattr: com.google.drivefs.item-id"),
+    ).toBe(false);
+    expect(readXattrAnswer({ killed: false }, "xattr: No such file: /x/a.txt")).toBe(false);
+  });
+
+  it("does not answer when the process was killed or failed for any other reason (a provider erroring is not 'not synced')", () => {
+    expect(readXattrAnswer({ killed: true }, "")).toBeNull();
+    expect(
+      readXattrAnswer({ killed: false }, "xattr: [Errno 5] Input/output error: a.txt"),
+    ).toBeNull();
+    expect(readXattrAnswer({ killed: false }, "")).toBeNull();
   });
 });

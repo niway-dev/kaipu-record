@@ -118,6 +118,12 @@ export interface VolumeStagingDeps {
  * (the provider's mount is its own volume, or every ancestor is read-only): the caller fails with
  * EXDEV and keeps the original, because a partial file in the synced folder is worse than a
  * failed write.
+ *
+ * Known follow-up (round 11 #0, decided: no sweep in this change): a crash between the copy and
+ * the final rename leaves its unique-named staged file in this folder, possibly a whole take.
+ * Nothing sweeps it. It is harmless to the provider (it never sees the folder, and no name is
+ * ever reused), so the cleanup is deferred to a launch-time sweep of old entries beside the
+ * stranded-take sweep, rather than risk a sweep deleting a copy that is still running.
  */
 export async function volumeStagingDir(
   target: string,
@@ -164,13 +170,6 @@ async function locateVolumeStaging(
     if (dirname(at) === at) return null;
   }
 }
-
-/**
- * Known follow-up: a crash between the copy and the final rename leaves its unique-named staged
- * file in the volume staging folder. Nothing sweeps it. It is harmless (the provider never sees
- * that folder, and no name is ever reused), so the cleanup is deferred rather than risk a sweep
- * deleting a copy that is still running.
- */
 
 /**
  * The one atomic write of everything Kaipu keeps in a workspace folder: a unique temp file,

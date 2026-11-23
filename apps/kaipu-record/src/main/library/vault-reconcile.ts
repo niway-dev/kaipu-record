@@ -702,7 +702,9 @@ async function moveIntoRun(from: string, to: string, byRename: boolean): Promise
     return "placed";
   }
   // A synced workspace: a hard link in the provider's folder renames the cloud item (ADR 0069).
-  if (byRename) return (await placeByRename(from, to)) === "taken" ? "taken" : "placed";
+  if (byRename) {
+    return (await placeByRename(from, to, { intoSynced: true })) === "taken" ? "taken" : "placed";
+  }
   return placeNoReplace(from, to, { stuck: "rollback" });
 }
 

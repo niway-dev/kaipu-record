@@ -71,7 +71,7 @@ export function useJoinedRecordings(
     for (const id of gone) {
       const entry = started.current.get(id)!;
       entry.cancelled = true;
-      if (entry.heldId !== null) window.electronAPI.closeEditorSession(entry.heldId);
+      release(entry);
       started.current.delete(id);
     }
     if (gone.length > 0) {
@@ -125,7 +125,7 @@ export function useJoinedRecordings(
     return () => {
       for (const entry of map.values()) {
         entry.cancelled = true;
-        if (entry.heldId !== null) window.electronAPI.closeEditorSession(entry.heldId);
+        release(entry);
       }
       map.clear();
     };
@@ -135,6 +135,14 @@ export function useJoinedRecordings(
     () => list.map((source) => ({ source, ...(loaded.get(source.id) ?? LOADING) })),
     [list, loaded],
   );
+}
+
+/** Frees the entry's hold, once: whoever gets there first (a cancel, a failed read) clears it. */
+function release(entry: Started): void {
+  if (entry.heldId === null) return;
+  const heldId = entry.heldId;
+  entry.heldId = null;
+  window.electronAPI.closeEditorSession(heldId);
 }
 
 async function resolve(
@@ -162,8 +170,7 @@ async function resolve(
   } catch {
     // The track exists but cannot be read now: the clip is shown as not available, never as a
     // recording without pointer data.
-    window.electronAPI.closeEditorSession(heldId);
-    entry.heldId = null;
+    release(entry);
     entry.retry = true;
     return MISSING;
   }

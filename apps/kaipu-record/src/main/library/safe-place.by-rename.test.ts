@@ -1,5 +1,15 @@
 import { renameSync, writeFileSync, type PathLike } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,7 +97,7 @@ vi.mock("node:fs/promises", async (importActual) => {
 
 const { identityAt, placeByRename, renameCaseOnlyByRename, replaceConfirmed } =
   await import("./safe-place");
-const { setSyncRootResolver } = await import("./atomic-write");
+const { setStagingResolver, setSyncRootResolver } = await import("./atomic-write");
 
 describe("placeByRename (synced folders: no hard link, ever)", () => {
   let dir: string;
@@ -205,6 +215,45 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
         code: "ENOENT",
       });
     });
+
+    it.each([
+      // Z5: same size, same mtime, same inode: only the bytes tell.
+      ["rewritten in place with the same size, mtime and inode", "WHOLE FILE", true],
+      // #8: the size moved too: the stamp tells.
+      ["appended to", "whole file, and more", false],
+    ])(
+      "a source %s after the copy is kept, and the stale copy is not reported as placed (Z5, round 11 #8)",
+      async (_label, edited, restoreMtime) => {
+        await mkdir(join(dir, "synced"), { recursive: true });
+        await mkdir(join(dir, "scratch"), { recursive: true });
+        const source = join(dir, "scratch", "take.mp4");
+        await writeFile(source, "whole file");
+        await utimes(source, 1_700_000_000, 1_700_000_000);
+        const calls: Array<[string, string]> = [];
+        const refuse = refusingOnce(calls);
+        await expect(
+          placeByRename(source, join(dir, "synced", "Take.mp4"), {
+            deps: {
+              isSynced: syncedOf(dir),
+              syncRoot: () => join(dir, "synced"),
+              rename: async (from, to) => {
+                await refuse(from, to);
+                if (calls.length < 2) return;
+                // The copy has landed; now the source is edited in place.
+                await writeFile(source, edited);
+                if (restoreMtime) await utimes(source, 1_700_000_000, 1_700_000_000);
+              },
+            },
+          }),
+        ).rejects.toMatchObject({ code: "EIO" });
+        expect(await readFile(source, "utf-8")).toBe(edited);
+        await expect(stat(join(dir, "synced", "Take.mp4"))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        // Nothing was set aside or marked as placed: the source is still the one to recover.
+        expect(await readdir(join(dir, "scratch"))).toEqual(["take.mp4"]);
+      },
+    );
 
     it("with no folder outside the synced one that can stage it, fails and keeps the source (nothing partial is placed)", async () => {
       await mkdir(join(dir, "synced"), { recursive: true });
@@ -387,7 +436,7 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("new");
   });
 
-  it("across devices, a source edited in place after the copy is kept, not deleted (NIW2-912)", async () => {
+  it("across devices, a source edited in place after the copy is kept, and the stale copy is taken back (NIW2-912)", async () => {
     hooks.renameError = "EXDEV";
     await writeFile(join(dir, "take.part"), "bytes");
     // The same inode, new content: an identity check alone would pass and delete the edit.
@@ -395,18 +444,15 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
       path: dir,
       run: () => writeFileSync(join(dir, "take.part"), "bytes + edit"),
     };
-    await placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"));
-    expect(await readFile(join(dir, "Take.mp4"), "utf-8")).toBe("bytes");
-    // The edit survives under the source's name or set aside beside it, never gone.
-    const survivors = await Promise.all(
-      (await readdir(dir))
-        .filter((name) => name !== "Take.mp4")
-        .map((name) => readFile(join(dir, name), "utf-8").catch(() => "")),
-    );
-    expect(survivors).toContain("bytes + edit");
+    await expect(
+      placeByRename(join(dir, "take.part"), join(dir, "Take.mp4")),
+    ).rejects.toMatchObject({ code: "EIO" });
+    // The edit survives under the source's name; the stale copy is not left as if it were placed.
+    expect(await readdir(dir)).toEqual(["take.part"]);
+    expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("bytes + edit");
   });
 
-  it("across devices with stuck: rollback, a source edited in place after the copy keeps both files", async () => {
+  it("across devices with stuck: rollback, a source edited in place after the copy fails and keeps the source", async () => {
     hooks.renameError = "EXDEV";
     await writeFile(join(dir, "take.part"), "bytes");
     hooks.atOpenDir = {
@@ -417,7 +463,7 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
       placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"), { stuck: "rollback" }),
     ).rejects.toMatchObject({ code: "EIO" });
     expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("bytes + edit");
-    expect(await readFile(join(dir, "Take.mp4"), "utf-8")).toBe("bytes");
+    expect(await readdir(dir)).toEqual(["take.part"]);
   });
 
   it("across devices, a destination rewritten in place after the copy is not the copy: taken, source kept", async () => {
@@ -584,7 +630,27 @@ describe("replaceConfirmed across volumes into a synced folder (by rename; NIW2-
   });
   afterEach(async () => {
     setSyncRootResolver(() => null);
+    setStagingResolver(() => null);
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("a destination the app's detection knows is synced is staged outside the folder too, with intoSynced false (round 11 #17)", async () => {
+    setSyncRootResolver(() => join(dir, "synced"));
+    // isSyncedPath(to) is now true, for the synced folder only (the ancestors stay plain).
+    setStagingResolver((path) =>
+      path.startsWith(join(dir, "synced")) ? join(dir, "scratch-staging") : null,
+    );
+    hooks.exdevOnce = true;
+    await replaceConfirmed(
+      join(dir, "scratch", "take.mp4"),
+      join(dir, "synced", "Take.mp4"),
+      true,
+      false,
+    );
+    expect(await readFile(join(dir, "synced", "Take.mp4"), "utf-8")).toBe("new bytes");
+    expect(await readdir(join(dir, "synced"))).toEqual(["Take.mp4"]);
+    const final = (hooks.renames as Array<[string, string]>).at(-1)!;
+    expect(final[0].startsWith(join(dir, ".kaipu-staging"))).toBe(true);
   });
 
   it("with no known provider root it fails with EXDEV, keeps the source and leaves the target alone", async () => {
@@ -619,5 +685,22 @@ describe("replaceConfirmed across volumes into a synced folder (by rename; NIW2-
     expect(final![0].startsWith(join(dir, ".kaipu-staging"))).toBe(true);
     expect(final![1]).toBe(join(dir, "synced", "Take.mp4"));
     await expect(stat(join(dir, "scratch", "take.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps a source rewritten in place after the copy, with the same size, mtime and inode (Z5)", async () => {
+    setSyncRootResolver(() => join(dir, "synced"));
+    const source = join(dir, "scratch", "take.mp4");
+    await utimes(source, 1_700_000_000, 1_700_000_000);
+    hooks.exdevOnce = true;
+    hooks.afterRename = async (to) => {
+      if (to !== join(dir, "synced", "Take.mp4")) return;
+      await writeFile(source, "NEW BYTES");
+      await utimes(source, 1_700_000_000, 1_700_000_000);
+    };
+    await expect(
+      replaceConfirmed(source, join(dir, "synced", "Take.mp4"), true, true),
+    ).rejects.toMatchObject({ code: "EIO" });
+    expect(await readFile(source, "utf-8")).toBe("NEW BYTES");
+    expect(await readdir(join(dir, "scratch"))).toEqual(["take.mp4"]);
   });
 });

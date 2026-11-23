@@ -78,11 +78,18 @@ export class VaultTagRepository implements TagRepository {
     const path = this.registryPath();
     let raw: string;
     try {
-      raw = await readFile(path, "utf-8");
+      // Bounded in a synced workspace: an offloaded registry is refused (reading it would
+      // download it) and a stalled provider times out, instead of hanging the Library.
+      raw = await this.vault().readTextBounded(path);
     } catch (error) {
       // Only a missing file means "no registry yet". EIO/EACCES on a flaky drive
       // must not look like an empty registry, or the next write would erase it.
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return this.importLegacy();
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        // A synced folder may still be delivering another device's registry: importing here
+        // would write an empty one at its path. The workspace has no tags until it arrives (or
+        // until the user creates one on purpose).
+        return this.vault().synced ? [] : this.importLegacy();
+      }
       throw new TagRegistryError("unreadable", `tags: cannot read ${path}: ${String(error)}`);
     }
     let parsed: Partial<RegistryFile> | null;
