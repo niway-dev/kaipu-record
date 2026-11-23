@@ -7,6 +7,7 @@ import { IPC_CHANNELS } from "@shared/types/ipc";
 
 const state = vi.hoisted(() => ({
   dir: "",
+  evicted: new Set<string>(),
   handle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
 }));
 
@@ -25,7 +26,8 @@ vi.mock("electron", () => ({
 vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ locale: "en" }) }));
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
-  activeEvictionProbe: () => null,
+  activeEvictionProbe: () => (paths: string[]) =>
+    Promise.resolve(new Set(paths.filter((path) => state.evicted.has(path)))),
   activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({
@@ -74,6 +76,7 @@ describe("library IPC — openLocalRecording and localRecordingPath (NIW2-669)",
     await rm(state.dir, { recursive: true, force: true });
   });
   beforeEach(() => {
+    state.evicted.clear();
     vi.mocked(shell.openPath).mockClear();
     vi.mocked(shell.openPath).mockResolvedValue("");
   });
@@ -91,6 +94,15 @@ describe("library IPC — openLocalRecording and localRecordingPath (NIW2-669)",
     await expect(handler(IPC_CHANNELS.openLocalRecording)(EVENT, STAMP, "item-1")).rejects.toThrow(
       "No application knows how to open this file",
     );
+  });
+
+  it("openLocalRecording refuses an evicted file in a synced workspace: opening it would download it", async () => {
+    state.evicted.add(join(vault, "item-1.mp4"));
+
+    await expect(handler(IPC_CHANNELS.openLocalRecording)(EVENT, STAMP, "item-1")).rejects.toThrow(
+      "Not downloaded",
+    );
+    expect(shell.openPath).not.toHaveBeenCalled();
   });
 
   it("openLocalRecording refuses an unknown id without calling openPath", async () => {

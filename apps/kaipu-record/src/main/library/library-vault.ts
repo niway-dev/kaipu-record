@@ -40,7 +40,7 @@ import {
 } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
 import { legacyStampMatches, sameStat, stampFields, stampMatches } from "./hash-stamp";
-import type { EvictionProbe } from "./dataless";
+import { EvictedFileError, type EvictionProbe } from "./dataless";
 import { webcamTrackState } from "./webcam-track-state";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
@@ -180,6 +180,14 @@ export class FileChangedWhileHashingError extends Error {
   constructor(readonly id: string) {
     super(`File "${id}" changed while hashing`);
     this.name = "FileChangedWhileHashingError";
+  }
+}
+
+/** `removeLocalCopy` on a synced workspace's vault: it frees nothing there and never deletes. */
+export class SyncedLocalCopyError extends Error {
+  constructor(readonly id: string) {
+    super(`"${id}" is in a synced folder: its local copy is not deleted from here`);
+    this.name = "SyncedLocalCopyError";
   }
 }
 
@@ -463,13 +471,55 @@ export class LibraryVault {
    * `reader` is how sidecars are read (a test fails a read on demand).
    * `evictionProbe` is set for a synced workspace (spec, Synced folders): it says which files
    * the provider has offloaded, so `describe()` never hands out a URL that would download one.
+   * `stagingDir` is set for a synced workspace too: where this vault stages a file it writes
+   * (a GIF, a screenshot), so no `.part` ever appears inside the folder the provider syncs.
    */
   constructor(
     readonly directory: string,
     readonly workspaceId: string | null = null,
     private readonly reader: VaultReader = fsReader,
     private readonly evictionProbe: EvictionProbe | null = null,
+    private readonly stagingDir: string | null = null,
   ) {}
+
+  /**
+   * The workspace folder is synced by a provider (spec, Synced folders). A synced vault stages
+   * outside the folder, places by `rename` (never a hard link) and never reads an evicted file.
+   */
+  get synced(): boolean {
+    return this.evictionProbe !== null || this.stagingDir !== null;
+  }
+
+  /** Where a synced vault stages what it writes (its scratch folder), or null for `.kaipu/tmp`. */
+  get stagingDirectory(): string | null {
+    return this.stagingDir;
+  }
+
+  /** Which of `paths` the provider has offloaded; always empty for a vault that is not synced. */
+  async evictedAmong(paths: string[]): Promise<ReadonlySet<string>> {
+    return this.evictionProbe ? this.evictionProbe(paths) : new Set();
+  }
+
+  /**
+   * Throws `EvictedFileError` when any of `paths` is offloaded: the guard in front of every
+   * whole-file read, because reading an evicted file downloads it. A vault that is not synced
+   * never asks.
+   */
+  async assertLocal(paths: string[]): Promise<void> {
+    const offloaded = await this.evictedAmong(paths);
+    const first = paths.find((path) => offloaded.has(path));
+    if (first !== undefined) throw new EvictedFileError(first);
+  }
+
+  /**
+   * The bytes of a file in this vault, read whole (a clipboard copy, a saved screenshot's
+   * bytes). An offloaded file throws `EvictedFileError` instead of being read: the read
+   * would download it.
+   */
+  async readLocalFile(path: string): Promise<Buffer<ArrayBuffer>> {
+    await this.assertLocal([path]);
+    return readFile(path);
+  }
 
   /** The query a media URL this vault hands out carries: the caller's, plus the workspace. */
   private mediaParams(params: Record<string, string>): Record<string, string> {
@@ -1466,6 +1516,9 @@ export class LibraryVault {
       return { contentSha256: meta.contentSha256, sizeBytes: info.size };
     }
 
+    // Hashing reads every byte: an offloaded file would be downloaded to answer. A cache hit
+    // above read nothing, so it is still served.
+    await this.assertLocal([filePath]);
     for (let attempt = 1; attempt <= 3; attempt++) {
       const contentSha256 = await sha256FileBase64(filePath);
       // Re-stat after hashing: if the file changed underneath, don't cache a lie.
@@ -1676,6 +1729,10 @@ export class LibraryVault {
    * the same assetId. Not `remove()`: that one is the destructive delete.
    */
   async removeLocalCopy(id: string): Promise<void> {
+    // A synced workspace never deletes through this (spec decision 4): the file lives in the
+    // provider's folder, and deleting it there deletes it in the cloud and on every device.
+    // The service reveals the file in Finder instead; this is the guard behind it.
+    if (this.synced) throw new SyncedLocalCopyError(id);
     // Before deleting anything: the marker below cannot be written over an unreadable
     // sidecar, and the media must not go without it.
     await this.writableSidecar(id);

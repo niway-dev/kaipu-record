@@ -195,6 +195,50 @@ describe("LibraryService", () => {
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "not-found" });
   });
 
+  it("removeLocalCopy in a synced workspace reveals the file and deletes nothing (decision 4)", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId, { sizeBytes: 0 })];
+    const reveal = vi.fn();
+    const synced = new LibraryService({
+      vault: () => new LibraryVault(vaultDir, "ws", undefined, async () => new Set()),
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      now: () => clock,
+      reveal,
+    });
+    await synced.refreshCatalog();
+
+    expect(await synced.removeLocalCopy("a")).toEqual({ ok: true, revealed: true });
+
+    expect(reveal).toHaveBeenCalledWith(join(vaultDir, "a.mp4"));
+    await access(join(vaultDir, "a.mp4"));
+    // Still local: the sidecar does not claim a removal that did not happen.
+    expect((await synced.list()).items.map((i) => i.availability)).toEqual(["local-and-cloud"]);
+  });
+
+  it("removeLocalCopy in a synced workspace keeps the upload check: a different file is refused", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "different bytes");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId, { sizeBytes: 0 })];
+    const reveal = vi.fn();
+    const synced = new LibraryService({
+      vault: () => new LibraryVault(vaultDir, "ws", undefined, async () => new Set()),
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      now: () => clock,
+      reveal,
+    });
+    await synced.refreshCatalog();
+
+    expect(await synced.removeLocalCopy("a")).toEqual({ ok: false, reason: "different-bytes" });
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
   it("removeLocalCopy refuses an edit project or a webcam track before hashing the file", async () => {
     await writeFile(join(vaultDir, "a.mp4"), "");
     const rec = (await new LibraryVault(vaultDir).describe("a"))!;

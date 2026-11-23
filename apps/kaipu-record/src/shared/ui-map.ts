@@ -904,6 +904,9 @@ export const UI_MAP = {
       exportCard: { states: ["progress", "error", "ready"] },
       reconcileDialog: { states: ["scanning", "list", "fixing", "report"] },
       workspaceDialog: { states: ["new", "edit"] },
+      // Decision 4: what a delete or a move out of a synced workspace says it does.
+      moveSyncedDialog: { states: ["confirm"] },
+      deleteSyncedWarning: { states: ["shown"] },
       notFound: { states: ["default"] },
       routeError: { states: ["default"] },
       settingsNav: { states: ["default"] },

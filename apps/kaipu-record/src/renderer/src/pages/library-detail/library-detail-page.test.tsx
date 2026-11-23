@@ -488,6 +488,46 @@ describe("LibraryDetailPage", () => {
     );
   });
 
+  it("toasts where the file was shown, not a removal, when a synced workspace reveals it", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    window.electronAPI.removeLocalCopy = vi.fn(async () => ({
+      ok: true as const,
+      revealed: true as const,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /remove local download/i }));
+
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("Shown in Finder") }),
+      ),
+    );
+  });
+
+  it("does not offer Remove local download for a file the provider already offloaded", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        { ...exportedOnlyItem, local: { ...exportedOnlyItem.local!, evicted: "media" as const } },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    openMenu();
+    expect(screen.queryByRole("menuitem", { name: /remove local download/i })).toBeNull();
+  });
+
   it("re-lists after removeLocalCopy succeeds", async () => {
     const listMock = vi.fn(async () => ({
       items: [exportedOnlyItem],

@@ -148,6 +148,7 @@ export function registerLibraryVaultHandlers(deps: {
     cache: new CatalogCache(app.getPath("userData")),
     account: deps.auth.getCurrentAccount,
     fetchCatalog: (token) => fetchCloudCatalog({ serverUrl: deps.serverUrl }, token),
+    reveal: (path) => shell.showItemInFolder(path),
   });
 
   ipcMain.handle(
@@ -353,6 +354,8 @@ export function registerLibraryVaultHandlers(deps: {
   handleVault(IPC_CHANNELS.openLocalRecording, async (id: string) => {
     const file = await localRecordingFile(id);
     if (!file) throw new Error("open: no local recording for this id");
+    // An evicted file opens by downloading it; Kaipu never starts that itself (ADR 0069).
+    await currentVault().assertLocal([file]);
     const error = await shell.openPath(file);
     if (error) throw new Error(error);
   });
@@ -379,9 +382,14 @@ export function registerLibraryVaultHandlers(deps: {
         // download it), and the drag copy is a real copy in userData, never a hard link.
         const scratch = activeScratch();
         const probe = activeEvictionProbe();
-        if (probe && (await probe([file])).has(file)) return;
+        const poster = vault.thumbnailPath(id);
+        // The poster is read for the drag icon, so an offloaded one stops the drag too.
+        if (probe) {
+          const offloaded = await probe([file, poster]);
+          if (offloaded.has(file) || offloaded.has(poster)) return;
+        }
         // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
-        const icon = nativeImage.createFromPath(vault.thumbnailPath(id));
+        const icon = nativeImage.createFromPath(poster);
         if (icon.isEmpty()) return;
         const root = scratch ? join(scratch, "drag") : dragRoot(vault.directory);
         const dragFile =

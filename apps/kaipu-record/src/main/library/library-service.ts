@@ -45,6 +45,11 @@ export interface LibraryServiceDeps {
    * Absent: owns them (one workspace, or a caller that predates workspaces).
    */
   ownsLegacyCloud?: () => boolean;
+  /**
+   * Shows a file in Finder. "Remove local copy" in a synced workspace calls it instead of
+   * deleting (spec decision 4).
+   */
+  reveal?: (path: string) => void;
   now?: () => number;
   /** Maintenance mode; the process' instance unless a test injects one. */
   activity?: VaultActivity;
@@ -303,6 +308,14 @@ export class LibraryService {
       hasWebcamTrack: webcamTrack,
     });
     if (!decision.allowed) return { ok: false, reason: decision.reason };
+    if (vault.synced) {
+      // The upload check above passed, but the file lives in the provider's folder: deleting
+      // it there deletes it in the cloud and on every device, and `localRemovedAt` would claim
+      // a copy is gone that the provider still holds. Show it in Finder so the user frees the
+      // space with the provider's own command (spec decision 4).
+      this.deps.reveal?.(rec.filePath);
+      return { ok: true, revealed: true };
+    }
     await vault.removeLocalCopy(id);
     return { ok: true };
   }

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen } from "electron";
 import { createMainTranslator } from "@kaipu/i18n/main";
@@ -293,7 +293,8 @@ export function registerScreenshotHandlers(
   ipcMain.handle(
     IPC_CHANNELS.screenshotCopyById,
     scopedAdmitted("library", async (id: string) => {
-      const buf = await readFile(await screenshotFilePath(id));
+      // An offloaded shot (synced folder) is not read: that would download it (ADR 0069).
+      const buf = await currentVault().readLocalFile(await screenshotFilePath(id));
       clipboard.writeImage(nativeImage.createFromBuffer(buf));
     }),
   );
@@ -319,7 +320,7 @@ export function registerScreenshotHandlers(
     IPC_CHANNELS.screenshotReadBytes,
     scopedAdmitted("library", async (id: string): Promise<ArrayBuffer> => {
       if (typeof id !== "string" || !isPlainItemId(id)) throw new Error("read: invalid id");
-      const buf = await readFile(await screenshotFilePath(id));
+      const buf = await currentVault().readLocalFile(await screenshotFilePath(id));
       return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     }),
   );

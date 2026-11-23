@@ -305,6 +305,25 @@ describe("recognizeScreenshotText", () => {
   });
 });
 
+describe("recognizeScreenshotText in a synced workspace", () => {
+  it("never reads an evicted PNG to check the cache: the words come back, nothing is cached", async () => {
+    const id = await seedItem("Shot", "pixels");
+    const evicted = new Set([join(directory, `${id}.png`)]);
+    const synced = new LibraryVault(directory, undefined, undefined, async () => evicted);
+    const { recognizer, recognize } = fakeRecognizer();
+
+    const result = await recognizeScreenshotText(
+      { vault: synced, recognizer },
+      { id, assetId: "base", png: bytes("pixels") },
+    );
+
+    expect(result).toEqual({ status: "ready", words: [word("hello")] });
+    expect(recognize).toHaveBeenCalledTimes(1);
+    // The PNG on disk could not be compared without downloading it, so no cache was written.
+    await expect(readFile(cachePath(id), "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
 describe("saveTextCache", () => {
   const canvas = (assets: Record<string, string>) => ({
     docJson: "{}",

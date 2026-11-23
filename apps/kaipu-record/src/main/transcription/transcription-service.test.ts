@@ -1322,6 +1322,15 @@ describe("commit", () => {
     expect(h.runBatch).not.toHaveBeenCalled();
   });
 
+  it("refuses to begin on media a sync provider offloaded: its audio cannot be read without downloading it", async () => {
+    const h = makeHarness();
+    vi.mocked(h.deps.hashMedia).mockRejectedValue(
+      Object.assign(new Error("Not downloaded"), { code: "EVICTED" }),
+    );
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "invalid-item" });
+    expect(h.runBatch).not.toHaveBeenCalled();
+  });
+
   it("stores the hash taken at begin, so a file replaced during the job reads as stale", async () => {
     const h = makeHarness();
     const jobId = await startJob(h);

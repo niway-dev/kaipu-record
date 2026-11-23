@@ -242,6 +242,44 @@ describe("moving a recording that has exports", () => {
   });
 });
 
+describe("moving out of a synced workspace (decision 4, always on)", () => {
+  const SYNCED_WORK: WorkspaceView = { ...DEFAULT, sync: "google-drive" };
+
+  async function startMove(): Promise<void> {
+    setup(state({ workspaces: [SYNCED_WORK, PERSONAL] }));
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Personal/ }));
+  }
+
+  it("says the move deletes the file from the cloud on every device, and moves nothing on Cancel", async () => {
+    await startMove();
+    const body = await screen.findByText(/deleted from the cloud on every device/i);
+    expect(body.textContent).toContain("Work");
+    expect(body.textContent).not.toMatch(/google|onedrive|icloud/i);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText(/deleted from the cloud/i)).toBeNull());
+    expect(moveItems).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("Move anyway goes on to the usual questions and the move", async () => {
+    await startMove();
+    fireEvent.click(await screen.findByRole("button", { name: "Move anyway" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move only the recording" }));
+    await waitFor(() => expect(moveItems).toHaveBeenCalled());
+  });
+
+  it("a plain workspace asks nothing extra", async () => {
+    setup(state());
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Personal/ }));
+    await screen.findByRole("button", { name: "Move only the recording" });
+    expect(screen.queryByRole("button", { name: "Move anyway" })).toBeNull();
+  });
+});
+
 describe("the ⋯ menu from the keyboard (PR 479)", () => {
   it("moves focus into the menu on open and back to the button on Escape", async () => {
     setup(state());

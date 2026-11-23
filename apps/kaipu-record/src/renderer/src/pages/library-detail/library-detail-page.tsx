@@ -366,7 +366,11 @@ export function LibraryDetailPage(): React.JSX.Element {
   // and main's remove-local-copy policy is what refuses it with `edit-project`
   // (the page then toasts `removeLocalCopyBlockedEdit`).
   const canRemoveLocalCopy =
-    localId !== null && video.availability === "local-and-cloud" && video.comparison === "same";
+    localId !== null &&
+    video.availability === "local-and-cloud" &&
+    video.comparison === "same" &&
+    // An offloaded file has nothing left to remove: it is already "Not downloaded".
+    video.evicted !== "media";
 
   const doDelete = (): void => {
     if (!localId) return;
@@ -380,6 +384,9 @@ export function LibraryDetailPage(): React.JSX.Element {
     const result = await removeLocalCopy(localId);
     if (!result.ok) {
       showToast({ message: t(removeLocalCopyBlockedKey(result.reason)) });
+    } else if (result.revealed) {
+      // A synced workspace: nothing was deleted, the file was shown in Finder (decision 4).
+      showToast({ message: t("removeLocalCopyRevealed") });
     }
   };
 

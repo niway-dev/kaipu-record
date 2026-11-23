@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LibraryVault } from "./library-vault";
+import { EvictedFileError } from "./dataless";
+import { LibraryVault, SyncedLocalCopyError } from "./library-vault";
 
 /**
  * Synced folders (decision 15): rendering the Library must not download an evicted file. The
@@ -82,5 +83,42 @@ describe("LibraryVault — evicted files get no image URL", () => {
     const [item] = await vault.list();
     expect(item?.evicted).toBeUndefined();
     expect(item?.thumbnailUrl).toMatch(/^kaipu-media:\/\/thumb\//);
+  });
+
+  it("never hashes an evicted file: reading it would download it (decision 4)", async () => {
+    await seedVideo("clip");
+    const file = join(directory, "clip.mp4");
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set([file]));
+    await expect(vault.ensureContentHash("clip")).rejects.toBeInstanceOf(EvictedFileError);
+    // Nothing was stamped: a failed guard leaves no hash behind.
+    expect((await vault.sidecar("clip"))?.contentSha256).toBeUndefined();
+  });
+
+  it("hashes a file the provider holds locally, and a plain workspace never asks", async () => {
+    await seedVideo("clip");
+    const probe = vi.fn(async () => new Set<string>());
+    const synced = new LibraryVault(directory, "ws-1", undefined, probe);
+    await expect(synced.ensureContentHash("clip")).resolves.toMatchObject({
+      contentSha256: expect.any(String),
+    });
+    expect(probe).toHaveBeenCalled();
+  });
+
+  it("removeLocalCopy refuses in a synced vault: deleting there deletes the cloud copy", async () => {
+    await seedVideo("clip");
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set());
+    await expect(vault.removeLocalCopy("clip")).rejects.toBeInstanceOf(SyncedLocalCopyError);
+    await expect(access(join(directory, "clip.mp4"))).resolves.toBeUndefined();
+    expect((await vault.sidecar("clip"))?.localRemovedAt).toBeUndefined();
+  });
+
+  it("readLocalFile reads a local file whole and refuses an evicted one without reading it", async () => {
+    await seedShot("shot");
+    const file = join(directory, "shot.png");
+    const local = new LibraryVault(directory, "ws-1", undefined, async () => new Set());
+    expect((await local.readLocalFile(file)).byteLength).toBe(64);
+
+    const evicted = new LibraryVault(directory, "ws-1", undefined, async () => new Set([file]));
+    await expect(evicted.readLocalFile(file)).rejects.toMatchObject({ code: "EVICTED" });
   });
 });

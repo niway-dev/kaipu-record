@@ -9,6 +9,7 @@ import {
   ModalText,
   ModalTitle,
 } from "@kaipu/ui";
+import { uiArea } from "@renderer/lib/ui-area";
 import { useMoveUi } from "./move-store";
 
 /**
@@ -17,7 +18,28 @@ import { useMoveUi } from "./move-store";
  */
 export function MoveExportsDialogHost(): React.JSX.Element | null {
   const t = useTranslations("move");
-  const { prompt } = useMoveUi();
+  const { prompt, syncedPrompt } = useMoveUi();
+  if (syncedPrompt) {
+    return (
+      <ModalOverlay onCancel={() => syncedPrompt.answer(false)} labelledBy="move-synced-title">
+        <div {...uiArea("shell.moveSyncedDialog")}>
+          <ModalIcon tone="danger">
+            <FolderInput size={20} strokeWidth={1.8} />
+          </ModalIcon>
+          <ModalTitle id="move-synced-title">{t("syncedTitle")}</ModalTitle>
+          <ModalText>{t("syncedBody", { name: syncedPrompt.source })}</ModalText>
+          <ModalActions>
+            <ModalButton variant="ghost" onClick={() => syncedPrompt.answer(false)}>
+              {t("syncedCancel")}
+            </ModalButton>
+            <ModalButton variant="danger" onClick={() => syncedPrompt.answer(true)}>
+              {t("syncedConfirm")}
+            </ModalButton>
+          </ModalActions>
+        </div>
+      </ModalOverlay>
+    );
+  }
   if (!prompt) return null;
   const many = prompt.selected > 1;
   return (

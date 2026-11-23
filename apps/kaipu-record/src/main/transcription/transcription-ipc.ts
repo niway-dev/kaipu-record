@@ -17,6 +17,7 @@ import type {
   TranscriptReadResult,
 } from "@shared/types/transcription";
 import { sha256FileBase64 } from "../library/content-hash";
+import { EvictedFileError } from "../library/dataless";
 import { broadcast, broadcastLibraryChanged, currentVault, scopedAdmitted } from "../library";
 import { withItemLock } from "../library/item-lock";
 import { FileChangedWhileHashingError, META_DIR, isPlainItemId } from "../library/library-vault";
@@ -97,7 +98,9 @@ export async function hashMediaThroughCache(
   try {
     const hashed = await currentVault().ensureContentHash(item.id);
     if (hashed) return hashed.contentSha256;
-  } catch {
+  } catch (error) {
+    // An offloaded file is never hashed plainly either: that would download it (ADR 0069).
+    if (error instanceof EvictedFileError) throw error;
     // The cache could not answer (the file kept changing, or the sidecar cannot be written on a
     // read-only vault): hash plainly, as before the cache. A file that is gone fails with ENOENT.
     return sha256FileBase64(item.mediaPath);
@@ -224,7 +227,8 @@ async function checkFreshness(id: string): Promise<TranscriptFreshnessResult> {
     if (!hashed) return UNKNOWN;
     contentSha256 = hashed.contentSha256;
   } catch (error) {
-    if (!(error instanceof FileChangedWhileHashingError)) {
+    // An offloaded file is not hashed (it would download): the freshness stays unknown.
+    if (!(error instanceof FileChangedWhileHashingError || error instanceof EvictedFileError)) {
       console.warn(`[transcript-timing] check ${id} could not hash the media`, error);
     }
     return UNKNOWN;

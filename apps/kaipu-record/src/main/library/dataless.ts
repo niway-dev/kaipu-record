@@ -121,6 +121,19 @@ export async function datalessPaths(
   return evicted;
 }
 
+/**
+ * A whole-file read was refused because the provider offloaded the file: reading it would
+ * download it (spec decision 4, "no implicit reads"). The message is the neutral hint, never
+ * a provider name, so it is safe to show or log as it is.
+ */
+export class EvictedFileError extends Error {
+  readonly code = "EVICTED";
+  constructor(readonly path: string) {
+    super("Not downloaded: download it in Finder first");
+    this.name = "EvictedFileError";
+  }
+}
+
 /** Asks which of these paths are evicted. */
 export type EvictionProbe = (paths: string[]) => Promise<ReadonlySet<string>>;
 

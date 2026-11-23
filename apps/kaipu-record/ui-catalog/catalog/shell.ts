@@ -229,6 +229,14 @@ export const shell = catalog(
         "a transient state while the folder is read",
       ),
       "shell.reconcileDialog:fixing": nc("transient", "a transient state while files are renamed"),
+      "shell.moveSyncedDialog:confirm": nc(
+        "needsSetup",
+        "needs the active workspace to sit in a Google Drive, OneDrive or iCloud folder; the catalog's workspaces are plain folders",
+      ),
+      "shell.deleteSyncedWarning:shown": nc(
+        "needsSetup",
+        "needs the active workspace to sit in a Google Drive, OneDrive or iCloud folder; the catalog's workspaces are plain folders",
+      ),
       "shell.routeError:default": nc(
         "inducedFailure",
         "drawn only when a page throws while rendering",

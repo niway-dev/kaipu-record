@@ -16,7 +16,6 @@ import {
   screen,
   Tray,
 } from "electron";
-import { readFile } from "fs/promises";
 import { join } from "path";
 import { captureWhileRecordingEnabled } from "./screenshots/capture-while-recording";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
@@ -853,7 +852,11 @@ async function revealSavedScreenshot(id: string): Promise<void> {
 
 /** The preview card's Copy on a saved shot: its file as it is now. */
 function readSavedScreenshot(id: string): Promise<Buffer> {
-  return vaultActivity.run("library", async () => readFile(await currentVault().filePath(id)));
+  return vaultActivity.run("library", async () => {
+    const vault = currentVault();
+    // An offloaded shot (synced folder) is never read: that would download it (ADR 0069).
+    return vault.readLocalFile(await vault.filePath(id));
+  });
 }
 
 /** PNG bytes onto the clipboard; throws on bytes that are not an image. */

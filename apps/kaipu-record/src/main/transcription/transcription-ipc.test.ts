@@ -53,6 +53,7 @@ vi.mock("../workspaces", () => ({
 }));
 
 import { sha256FileBase64 } from "../library/content-hash";
+import { EvictedFileError } from "../library/dataless";
 import { LibraryVault } from "../library/library-vault";
 import { vaultActivity } from "../library/vault-activity";
 import type { Transcript } from "./transcript-file";
@@ -683,10 +684,46 @@ describe("with a real vault", () => {
       }
     });
 
+    it("refuses an evicted file instead of hashing it plainly: that would download it", async () => {
+      const item = await addMedia("job-evicted", "some recording");
+      const ensure = vi
+        .spyOn(LibraryVault.prototype, "ensureContentHash")
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      try {
+        hashSpy.mockClear();
+        await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "EVICTED" });
+        expect(hashSpy).not.toHaveBeenCalled();
+      } finally {
+        ensure.mockRestore();
+      }
+    });
+
     it("fails with ENOENT for a file that is gone, as the job expects", async () => {
       const item = await addMedia("job-gone");
       await rm(item.filePath);
       await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "ENOENT" });
+    });
+  });
+
+  describe("a synced workspace", () => {
+    it("leaves the freshness unknown for an evicted file, without hashing it", async () => {
+      const item = await addMedia("fresh-evicted", "some recording");
+      await writeFile(vault.companionPaths("fresh-evicted").transcript, "{}");
+      const ensure = vi
+        .spyOn(LibraryVault.prototype, "ensureContentHash")
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        hashSpy.mockClear();
+        await expect(checkFreshness("fresh-evicted")).resolves.toMatchObject({
+          autoRetranscribe: false,
+        });
+        expect(hashSpy).not.toHaveBeenCalled();
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        ensure.mockRestore();
+        warn.mockRestore();
+      }
     });
   });
 

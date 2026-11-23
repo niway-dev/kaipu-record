@@ -195,7 +195,8 @@ async function onDiskSha256(
     if (!missing(error)) return null;
   }
   try {
-    return sha256Hex(await readFile(await vault.filePath(id)));
+    // An offloaded PNG is not hashed (that would download it): no hash, so no cache is judged.
+    return sha256Hex(await vault.readLocalFile(await vault.filePath(id)));
   } catch {
     return null;
   }

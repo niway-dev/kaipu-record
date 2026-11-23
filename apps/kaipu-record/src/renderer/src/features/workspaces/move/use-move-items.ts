@@ -4,7 +4,7 @@ import type { MoveItemsResult, WorkspaceView } from "@shared/types/workspaces";
 import { showToast } from "@renderer/ui/toast-store";
 import { useOptionalWorkspaces } from "../workspaces-context";
 import { exportsToSuggest, orderForMove, resultMessage, type MovableItem } from "./move-flow";
-import { askAboutExports, setMoveProgress } from "./move-store";
+import { askAboutExports, askAboutSyncedMove, setMoveProgress } from "./move-store";
 
 export interface MoveRequest {
   /** The items to move, in the order on screen. */
@@ -54,6 +54,12 @@ export function useMoveItems(): MoveItemsFlow {
         );
       }
       if (!target) return null;
+
+      // 1b. A move out of a synced workspace deletes the file from the provider's folder, so
+      // from the cloud on every device (decision 4): ask first. Always on, whatever the flag.
+      if (active.sync !== null && !(await askAboutSyncedMove({ source: active.name }))) {
+        return null;
+      }
 
       // 2. The exports of the selected recordings (decision 15), from the loaded list.
       let items = [...request.items];
