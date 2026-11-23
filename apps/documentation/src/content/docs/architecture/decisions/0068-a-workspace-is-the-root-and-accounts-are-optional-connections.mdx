@@ -38,12 +38,16 @@ connections, as Obsidian does with a vault and Obsidian Sync.
    `folder1/kaipu-assets`. Kaipu records the provider, the synced root and the folder relative to
    that root. The root's label comes from its name where the provider encodes one: Google Drive's
    `~/Library/CloudStorage/GoogleDrive-<account>` names the account; OneDrive's
-   `OneDrive-Personal` or `OneDrive-<organization>` names the kind of account, not the address;
+   roots are expected to be `OneDrive-Personal` or `OneDrive-<organization>`, naming the kind of
+   account, not the address (unverified until layer 0);
    iCloud Drive has one root per macOS user and is labelled "iCloud Drive". The spec's layer 0
    records the real root names. The absolute path stays in the workspace registry, as ADR 0032
    has it.
-4. **One cloud folder per workspace.** A folder can live in one provider account only, so a
-   workspace cannot be synced by two accounts. Two accounts mean two workspaces, one in each.
+4. **One cloud folder per workspace.** A folder is owned by one provider account, so a workspace
+   is synced by that account. Two accounts mean two workspaces, one in each. A folder shared with a
+   second account (a shared folder or Shared drive) can appear at a second local path with the same
+   identity; Kaipu registers an identity once per Mac, and adding it again from another path
+   offers to switch to the workspace already registered, never a second entry.
 5. **A cloud-folder connection is per Mac.** It lives in the registry in userData, never in the
    folder: another Mac may open the same folder through a different path, or without the provider.
    The folder carries only its identity, as before.
@@ -57,8 +61,8 @@ connections, as Obsidian does with a vault and Obsidian Sync.
   customer would need an account to keep existing.
 - **Every workspace is bound to exactly one account.** Same problem for local workspaces, and it
   confuses two different accounts: the provider account that syncs the folder and a Kaipu account.
-- **One workspace synced by several provider accounts.** Not possible with a folder: the provider
-  that owns the folder is the one that syncs it. Copying between accounts would be a second copy
+- **One workspace synced by several provider accounts.** The provider that owns the folder is the
+  one that syncs it; a share shows the same folder to another account, it does not add a second sync. Copying between accounts would be a second copy
   of every file.
 
 ## Consequences
