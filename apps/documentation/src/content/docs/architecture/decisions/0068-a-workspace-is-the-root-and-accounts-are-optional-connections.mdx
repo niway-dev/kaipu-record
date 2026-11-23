@@ -38,8 +38,8 @@ connections, as Obsidian does with a vault and Obsidian Sync.
    `folder1/kaipu-assets`. Kaipu records the provider, the account, the synced root and the folder
    relative to that root. For Google Drive the account folder is
    `~/Library/CloudStorage/GoogleDrive-<account>`, whose name gives the account, and the synced
-   roots inside it are `My Drive` and each Shared drive (`Shared drives/<name>`, layout confirmed
-   by layer 0); the example's folder is relative to `My Drive`; OneDrive's
+   roots inside it are `My Drive` and each Shared drive (`Shared drives/<name>`, layout still
+   unconfirmed: layer 0 found no `Shared drives` entry for its account); the example's folder is relative to `My Drive`; OneDrive's
    roots are expected to be `OneDrive-Personal` or `OneDrive-<organization>`, naming the kind of
    account, not the address (unverified until layer 0);
    iCloud Drive has one root per macOS user and is labelled "iCloud Drive". The spec's layer 0
@@ -53,8 +53,8 @@ connections, as Obsidian does with a vault and Obsidian Sync.
    that rule still holds. Inside one, Kaipu never rewrites an identity silently, because the folder
    may be one that another account also sees: when both paths are the same provider item (the
    provider's item id on the folder matches; for Google Drive presumably the
-   `com.google.drivefs.item-id#S` attribute, unverified on folders and across accounts until
-   layer 0), Kaipu offers to switch to the workspace already registered; otherwise it asks whether
+   `com.google.drivefs.item-id#S` attribute, carried by a folder after its first sync, not in its first minutes, as layer 0 saw; still
+   unverified across accounts), Kaipu offers to switch to the workspace already registered; otherwise it asks whether
    this is the same workspace or a copy.
 5. **A cloud-folder connection is per Mac.** It lives in the registry in userData, never in the
    folder: another Mac may open the same folder through a different path, or without the provider.

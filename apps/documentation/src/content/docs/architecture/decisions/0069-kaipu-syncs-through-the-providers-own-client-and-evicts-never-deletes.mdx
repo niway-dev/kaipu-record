@@ -10,6 +10,7 @@ description: Kaipu never calls Google Drive, OneDrive or iCloud web APIs and nev
 | Field  | Value                                                                                                                                                                     |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status | Proposed, 2026-11-22. Design PR pending the owner's go. [NIW2-912](https://linear.app/niway/issue/NIW2-912).                                                              |
+| Spike  | Layer 0 ran on 2026-11-22 on Google Drive (Stream, one account); results in the spec's "Layer 0 spike, 2026-11-22".                                                       |
 | Spec   | [Synced workspaces — design](/specs/2026-11-22-synced-workspaces-design/)                                                                                                 |
 | Reuses | Decisions 15 and 16 of the [several workspaces spec](/specs/2026-10-29-several-workspaces-design/): synced folders allowed, no provider API. This ADR makes them durable. |
 
@@ -31,20 +32,31 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
 
 1. **No provider web API, no OAuth, no streaming, no provider share links.** Kaipu reads and writes
    files in the folder; the provider's client syncs them.
-2. **A download is a read through macOS.** Kaipu triggers it on the user's request by reading the
-   file (a plain read is the proven trigger; a coordinated read only if the spec's layer 0 shows it
-   adds something), shows progress as far as macOS exposes it (the spec's decision 7), and never
-   opens a file before it is fully local. Anything beyond a plain read that needs native code ships
-   as an explicitly built helper, never through an install script.
+2. **A download goes through macOS, never through a provider API. Amended pending owner OK.**
+   Kaipu triggers it on the user's request, shows progress as far as macOS exposes it (the spec's
+   decision 7), and never opens a file before it is fully local. Layer 0 proved two triggers on
+   Google Drive: a plain read (progress from the file's allocated size, about 10x slower on the
+   measured link) and `startDownloadingUbiquitousItem` (about 10x faster, no byte progress, a
+   Foundation call that needs a native helper). Which one Kaipu uses is an open decision for the
+   owner: [open question 1 of the spec](/specs/2026-11-22-synced-workspaces-design/) (a: plain read
+   only; b: helper with the fast call; c: helper with the fast call plus an `NSProgress` attempt,
+   recommended). This ADR originally said a plain read was the trigger and a helper only if needed.
+   Whatever is chosen, native code ships as a helper built in the repo and signed with the app,
+   never through an install script.
 3. **Freeing space is eviction, never deletion.** Deleting a file in a synced folder deletes it in
-   the cloud and on every device, so no code path for "Free up space" may call `unlink`. When macOS
-   does not let Kaipu evict another provider's file, Kaipu reveals it in Finder for the provider's
+   the cloud and on every device, so no code path for "Free up space" may call `unlink`. Layer 0 proved
+   that `FileManager.evictUbiquitousItem(at:)` evicts a Google Drive file and is refused while the
+   file is not uploaded; it is a Foundation call, so it runs in the native helper, and there is no
+   way to pin. When macOS does not let Kaipu evict another provider's file (unverified for OneDrive
+   and iCloud), Kaipu reveals it in Finder for the provider's
    own "Remove Download". The same rule covers Kaipu Cloud's existing "Remove local copy" in a synced
    workspace: it evicts (or reveals in Finder) and never calls `rm`. "Delete", and a move out of a
    synced workspace, still delete on purpose, and say so: the file goes from the cloud on every
    device.
-4. **Kaipu claims "uploaded" only when macOS says so.** Without that signal it shows only what it
-   can observe: on this Mac, or not downloaded.
+4. **Kaipu claims "uploaded" only when macOS says so.** Layer 0 proved that signal readable for
+   Google Drive (`isUploaded`, with no percentage; "not uploaded" means `isUploaded` is false,
+   because a queued file reports neither flag). Without it, for a provider not yet checked, Kaipu
+   shows only what it can observe: on this Mac, or not downloaded.
 5. **The safety rules for a synced folder are not optional:** no partial files in the folder, no
    hard links, no implicit reads of evicted media. They run whenever the folder is synced. The one
    exception is small `.kaipu/` files (identity, settings, sidecars, `tags.json`), which may be read
@@ -60,15 +72,19 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
   [cloud product spec](/specs/2026-09-09-cloud-product/) defines with consent and revocation.
 - **A local hidden copy plus the Drive copy.** Two copies of every 4 GB take. The design keeps
   one: the scratch file becomes the workspace file by `rename` on the same volume, as PR #483 built
-  it. The 2026-10-30 spike proved that a small file renamed into Google Drive is accepted and uploads; the
-  spec's layer 0 checks a 4 GB file, OneDrive and iCloud.
+  it. The 2026-10-30 spike proved that a small file renamed into Google Drive is accepted and uploads;
+  the 2026-11-22 layer 0 spike proved it for 4 GB (same inode, uploaded in 521 s). OneDrive and
+  iCloud were not installed and stay unchecked.
 
 ## Consequences
 
 - Kaipu depends on the provider client being installed and running; a disconnected client is a
   warning, not an error (local files stay usable, downloads stop).
-- Some signals may not exist for third parties (upload state, evict, pin). The spec's layer 0
-  finds out; each "no" removes a feature and keeps the safety.
+- Layer 0 found, for Google Drive: upload state and evict exist for a third party, pin does not,
+  and the fast download has no byte progress. Other providers are unchecked; each "no" removes a
+  feature and keeps the safety.
+- A disconnected client is invisible to `stat`. Kaipu learns of it from a pending upload's error or
+  an evicted read that fails fast, so with nothing pending it cannot tell.
 - Watching or editing a cloud-only original needs a download until proxy editing exists.
 
 ## Non-goals
