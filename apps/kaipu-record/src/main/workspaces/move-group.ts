@@ -71,7 +71,9 @@ export async function runMoveGroup(
  * timeouts in `availability-check.ts`, `sync-state.ts` and `synced-folder.ts`:
  *   - a synced folder: 5 s for the probe + 1 s for the `stat` fallback = 6 s;
  *   - a workspace first detected as plain, detected again: 5 s probe + 2 s `realpath` + 2 s xattr
- *     + 1 s identity `stat` + 5 s second probe + 1 s `stat` fallback = 16 s.
+ *     + 5 s second probe + 1 s `stat` fallback = 15 s. The identity `stat` (1 s) is not on this
+ *     path: it is asked only when the detection answers "not synced", and then there is no second
+ *     probe.
  */
 export function rememberingUnavailable(
   resolve: () => Promise<string | null>,

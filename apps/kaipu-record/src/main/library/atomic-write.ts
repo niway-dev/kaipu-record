@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, open, rename, rm, stat } from "node:fs/promises";
+import { access, mkdir, open, readdir, rename, rm, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
@@ -123,6 +123,15 @@ export async function volumeStagingDir(
   target: string,
   deps: VolumeStagingDeps = {},
 ): Promise<string | null> {
+  return locateVolumeStaging(target, deps, true);
+}
+
+/** `volumeStagingDir`, optionally without making the folder: null when it is not there. */
+async function locateVolumeStaging(
+  target: string,
+  deps: VolumeStagingDeps,
+  create: boolean,
+): Promise<string | null> {
   const isSynced = deps.isSynced ?? isSyncedPath;
   if (deps.assumeSynced !== true && !isSynced(target)) return null;
   const root = (deps.syncRoot ?? resolveSyncRoot)(target);
@@ -148,6 +157,7 @@ export async function volumeStagingDir(
         if (info.dev !== device) return null; // the provider's volume starts here: nothing above is on it
         await access(at, constants.W_OK);
         const staging = join(at, VOLUME_STAGING_DIR);
+        if (!create) return (await stat(staging)).isDirectory() ? staging : null;
         await mkdir(staging, { recursive: true });
         return staging;
       } catch {
@@ -156,6 +166,40 @@ export async function volumeStagingDir(
     }
     if (dirname(at) === at) return null;
   }
+}
+
+/** A leftover in the volume staging folder is swept once it is this old: no copy runs for a day. */
+export const STALE_STAGING_MS = 24 * 60 * 60 * 1000;
+
+/** The names this app gives a staged file: a unique temp (`atomicWriteFile`) or a `.part` copy. */
+const OWN_STAGED_NAME = /\.(?:tmp|part)$/;
+
+/**
+ * Removes what a crash left in the volume staging folder that serves `target`: files this app
+ * named (`OWN_STAGED_NAME`) that were last written more than `maxAgeMs` ago. A younger one may
+ * belong to a copy that is still running, and any other name is not ours to touch. The folder is
+ * only looked up, never made. Best effort; resolves how many files were removed.
+ */
+export async function sweepVolumeStaging(
+  target: string,
+  deps: VolumeStagingDeps & { now?: number; maxAgeMs?: number } = {},
+): Promise<number> {
+  const staging = await locateVolumeStaging(target, deps, false).catch(() => null);
+  if (staging === null) return 0;
+  const cutoff = (deps.now ?? Date.now()) - (deps.maxAgeMs ?? STALE_STAGING_MS);
+  let removed = 0;
+  for (const entry of await readdir(staging, { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isFile() || !OWN_STAGED_NAME.test(entry.name)) continue;
+    const path = join(staging, entry.name);
+    try {
+      if ((await stat(path)).mtimeMs >= cutoff) continue;
+      await rm(path, { force: true });
+      removed += 1;
+    } catch {
+      // Gone already, or not removable: the next launch tries again.
+    }
+  }
+  return removed;
 }
 
 /**

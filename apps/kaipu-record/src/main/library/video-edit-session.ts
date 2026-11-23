@@ -8,12 +8,18 @@
  * Registration: call `registerVideoEditSessionHandlers()` from main/library/index.ts
  * right after `registerLibraryVaultHandlers()` so all library IPC stays in one module.
  */
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
 import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
+import {
+  EDIT_PROJECT_CLOUD_ONLY_MARKER,
+  EDIT_PROJECT_UNAVAILABLE_MARKER,
+} from "@shared/types/library-storage";
 import { atomicWriteFile } from "./atomic-write";
-import { LibraryVault } from "./library-vault";
+import { EvictedFileError } from "./dataless";
+import { LibraryVault, SidecarUnavailableError } from "./library-vault";
+import { draftKey, readDraft, removeDraft, writeDraft } from "./session-drafts";
 import { vaultActivity } from "./vault-activity";
 import { vaultDirectory } from "./vault-location";
 import { activeWorkspace, workspaceGate } from "../workspaces";
@@ -94,19 +100,21 @@ const plainVault: SessionVault = () => new LibraryVault(vaultDirectory().path);
 /**
  * The export stamp already on disk: a number, null when nothing is known to be exported (no
  * meta sidecar, or one that is not valid JSON: the safe side, the badge then tells the user to
- * export), or "unreadable" when the file is there but cannot be read now (a provider offline or
- * stalled, an offloaded file, EIO). Unreadable is not "never exported", and it is not "unchanged"
- * either: a save that cannot tell refuses before it writes anything (`ExportStampUnreadableError`),
- * so the session, the assets and the meta never disagree.
+ * export), "evicted" when the provider has offloaded the file (reading it would download it, which
+ * Kaipu never starts), or "unreadable" when it is there but cannot be read now (a provider offline
+ * or stalled, EIO). Neither is "never exported", and neither is "unchanged": a save that cannot
+ * tell refuses before it writes anything (`ExportStampUnreadableError`), so the session, the
+ * assets and the meta never disagree.
  */
 async function readExportedSavedAt(
   id: string,
   vault: LibraryVault,
-): Promise<number | null | "unreadable"> {
+): Promise<number | null | "evicted" | "unreadable"> {
   let raw: string;
   try {
     raw = await vault.readTextBounded(sessionMetaPath(vaultDirectory().path, id));
   } catch (error) {
+    if (error instanceof EvictedFileError) return "evicted";
     return (error as NodeJS.ErrnoException | null)?.code === "ENOENT" ? null : "unreadable";
   }
   try {
@@ -122,12 +130,22 @@ async function readExportedSavedAt(
  * (offloaded by the provider, stalled, unreadable). Writing the session without carrying the stamp
  * forward would make the badge say "exported" for a scene that was edited afterwards, or "never
  * exported" for one that was; leaving the old meta beside a new session would misreport the assets.
- * The editor keeps its pending state and saves again once the file can be read.
+ * The editor keeps its pending state, and the edits are also kept as a draft on this computer
+ * (`session-drafts.ts`), so closing the window does not lose them.
+ *
+ * An offloaded file is not "downloading": retrying never fetches it (Kaipu does not start
+ * downloads), so the message says where the files are and what to do. Only a provider that
+ * does not answer is worth another try.
  */
 export class ExportStampUnreadableError extends Error {
-  constructor(readonly id: string) {
+  constructor(
+    readonly id: string,
+    readonly reason: "evicted" | "unreadable" = "unreadable",
+  ) {
     super(
-      `The edit project of "${id}" was not saved: its export record is not available right now (a synced folder may still be downloading it). Try again in a moment.`,
+      reason === "evicted"
+        ? `${EDIT_PROJECT_UNAVAILABLE_MARKER} ${EDIT_PROJECT_CLOUD_ONLY_MARKER}: the edit project of "${id}" was not saved into its folder because the project's files are only in the cloud. Your edits are kept on this computer; open the project again once its files have downloaded.`
+        : `${EDIT_PROJECT_UNAVAILABLE_MARKER}: the edit project of "${id}" was not saved into its folder because its export record cannot be read right now (the synced folder is not answering). Your edits are kept on this computer and are saved again on the next edit.`,
     );
     this.name = "ExportStampUnreadableError";
   }
@@ -151,7 +169,9 @@ export async function saveSession(
   // session beside an old meta reports the wrong assets, and an old "exported" stamp for a scene
   // edited since). An export's own save carries no previous stamp.
   const previous = exported ? null : await readExportedSavedAt(id, vault);
-  if (previous === "unreadable") throw new ExportStampUnreadableError(id);
+  if (previous === "unreadable" || previous === "evicted") {
+    throw new ExportStampUnreadableError(id, previous);
+  }
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
@@ -226,15 +246,95 @@ export function saveSessionLocked(
   id: string,
   payload: SavePayload,
   makeVault: SessionVault = plainVault,
+  draftsDir: string | null = null,
 ): Promise<void> {
   return withItemLock(workspaceId, id, async () => {
-    if (!(await makeVault().hasMedia(id))) {
+    const vault = makeVault();
+    if (!(await vault.hasMedia(id))) {
       throw new ItemMovedError(id);
     }
-    await saveSession(id, payload, makeVault);
+    try {
+      await saveSession(id, payload, () => vault);
+    } catch (error) {
+      // The save was refused or failed: the editor keeps its pending edits in memory, and closing
+      // its window would drop them. They are kept as a draft on this computer as well. A moved item
+      // has no project to keep, and a record that cannot be read makes the item read-only.
+      if (
+        draftsDir !== null &&
+        !(error instanceof ItemMovedError) &&
+        !(error instanceof SidecarUnavailableError)
+      ) {
+        await keepDraft(vault, workspaceId, id, payload, draftsDir);
+      }
+      throw error;
+    }
+    // Saved: the draft, if any, is superseded.
+    if (draftsDir !== null) {
+      await removeDraft(draftsDir, await draftKeyOf(vault, workspaceId, id)).catch(() => {});
+    }
   });
 }
 
+/** The item's draft key: its asset id from the record when that is readable, else its stem. */
+async function draftKeyOf(vault: LibraryVault, workspaceId: string, id: string): Promise<string> {
+  let assetId: string | null = null;
+  try {
+    // Strict and read-only: a malformed record is not quarantined by asking for a draft key.
+    const read = await vault.readRecordStrict(vault.sidecarPath(id));
+    if (read.status === "ok" && typeof read.sidecar.assetId === "string") {
+      assetId = read.sidecar.assetId || null;
+    }
+  } catch {
+    // Unreadable now: the stem still names the item inside this workspace.
+  }
+  return draftKey(workspaceId, id, assetId);
+}
+
+async function keepDraft(
+  vault: LibraryVault,
+  workspaceId: string,
+  id: string,
+  payload: SavePayload,
+  draftsDir: string,
+): Promise<void> {
+  try {
+    await writeDraft(draftsDir, await draftKeyOf(vault, workspaceId, id), payload);
+  } catch (draftError) {
+    // The original refusal is what the editor reports; it keeps its pending state either way.
+    console.error(`could not keep a draft of the edit project of "${id}"`, draftError);
+  }
+}
+
+/**
+ * `loadSession`, preferring the draft kept for this item when it is newer than the project on
+ * disk (a save was refused and the window closed). A draft that is not newer is removed: the
+ * project on disk has moved on.
+ */
+export async function loadSessionRestoringDraft(
+  workspaceId: string,
+  id: string,
+  makeVault: SessionVault,
+  draftsDir: string | null,
+): Promise<LoadResult | null> {
+  if (draftsDir === null) return loadSession(id);
+  const key = await draftKeyOf(makeVault(), workspaceId, id);
+  const draft = await readDraft(draftsDir, key);
+  if (draft === null) return loadSession(id);
+  const onDisk = await stat(sessionPath(id)).catch(() => null);
+  if (onDisk === null || draft.savedAt > onDisk.mtimeMs) {
+    return { sessionJson: draft.sessionJson, assets: draft.assets };
+  }
+  await removeDraft(draftsDir, key).catch(() => {});
+  return loadSession(id);
+}
+
+/**
+ * Opening the editor is an explicit request for this item (AC13: its edit project must be local
+ * before the editor opens), so this read may download the project and its assets from a synced
+ * folder, which is what the user asked for. It is not a background read: nothing draws the
+ * Library through it. The download cannot be cancelled from here; the cancellable download with
+ * progress lands in layer 4 of the synced-workspaces stack.
+ */
 export async function loadSession(id: string): Promise<LoadResult | null> {
   const sp = sessionPath(id);
   let sessionJson: string;
@@ -289,7 +389,10 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 
 // ── IPC registration ──────────────────────────────────────────────────────────
 
-export function registerVideoEditSessionHandlers(makeVault: SessionVault = plainVault): void {
+export function registerVideoEditSessionHandlers(
+  makeVault: SessionVault = plainVault,
+  draftsDir: string = join(app.getPath("userData"), "video-edit-drafts"),
+): void {
   // Item-scoped: stamped with the workspace (ADR 0032). A save that reaches main after a
   // switch is refused, so it can never write the session into the other workspace.
   // Entry points (maintenance mode, NIW2-561): a refused save keeps its pending state in
@@ -306,12 +409,22 @@ export function registerVideoEditSessionHandlers(makeVault: SessionVault = plain
     ) =>
       workspaceGate().run(stamp, () =>
         vaultActivity.run("editor", () =>
-          saveSessionLocked(activeWorkspace().id, id, { sessionJson, assets, exported }, makeVault),
+          saveSessionLocked(
+            activeWorkspace().id,
+            id,
+            { sessionJson, assets, exported },
+            makeVault,
+            draftsDir,
+          ),
         ),
       ),
   );
 
   ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, stamp: unknown, id: string) =>
-    workspaceGate().run(stamp, () => vaultActivity.run("editor", () => loadSession(id))),
+    workspaceGate().run(stamp, () =>
+      vaultActivity.run("editor", () =>
+        loadSessionRestoringDraft(activeWorkspace().id, id, makeVault, draftsDir),
+      ),
+    ),
   );
 }

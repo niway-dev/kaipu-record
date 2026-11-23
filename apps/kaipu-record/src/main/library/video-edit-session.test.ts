@@ -12,6 +12,7 @@ import {
   deleteVideoEditSession,
   ExportStampUnreadableError,
   loadSession,
+  loadSessionRestoringDraft,
   saveSession,
   saveSessionLocked,
 } from "./video-edit-session";
@@ -285,6 +286,111 @@ describe("video-edit-session", () => {
           ),
       );
       expect(asked.some((path) => path.endsWith("rec-1.edit.meta.json"))).toBe(true);
+    });
+  });
+
+  describe("a save that stays refused never loses the edits (NIW2-912 second review)", () => {
+    let drafts: string;
+    const metaOffloaded = () =>
+      new LibraryVault(
+        vaultDir,
+        "ws",
+        undefined,
+        async (paths) => new Set(paths.filter((path) => path.endsWith(".edit.meta.json"))),
+        join(vaultDir, "..", "scratch-tmp"),
+      );
+    const allLocal = () =>
+      new LibraryVault(
+        vaultDir,
+        "ws",
+        undefined,
+        async () => new Set(),
+        join(vaultDir, "..", "scratch-tmp"),
+      );
+
+    beforeEach(async () => {
+      drafts = await mkdtemp(join(tmpdir(), "kaipu-drafts-"));
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+      await writeFile(
+        join(vaultDir, ".kaipu", "rec-1.json"),
+        JSON.stringify({ sidecarVersion: 2, assetId: "asset-1" }),
+      );
+      // A project saved earlier, with its export record, which the provider then offloads.
+      await saveSession("rec-1", { sessionJson: '{"scene":"old"}', assets: [], exported: true });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    afterEach(async () => {
+      await rm(drafts, { recursive: true, force: true });
+    });
+
+    const refused = () =>
+      saveSessionLocked(
+        "ws",
+        "rec-1",
+        {
+          sessionJson: '{"scene":"edited"}',
+          assets: [{ assetId: "slide", bytes: bytesOf("png") }],
+        },
+        metaOffloaded,
+        drafts,
+      );
+
+    it("keeps the refused edits as a draft outside the vault, and the next open restores them", async () => {
+      await expect(refused()).rejects.toBeInstanceOf(ExportStampUnreadableError);
+
+      // Nothing new in the synced folder: the saved project is still the old one.
+      expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
+        '{"scene":"old"}',
+      );
+      expect((await readdir(drafts)).length).toBe(1);
+
+      const restored = await loadSessionRestoringDraft("ws", "rec-1", allLocal, drafts);
+      expect(restored?.sessionJson).toBe('{"scene":"edited"}');
+      expect(restored?.assets.map((a) => a.assetId)).toEqual(["slide"]);
+      expect(Buffer.from(restored!.assets[0]!.bytes).toString()).toBe("png");
+    });
+
+    it("a draft older than the saved project is ignored and removed", async () => {
+      await expect(refused()).rejects.toBeInstanceOf(ExportStampUnreadableError);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Another Mac (or a later save) wrote the project after the draft was made.
+      await writeFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), '{"scene":"newer"}');
+
+      const loaded = await loadSessionRestoringDraft("ws", "rec-1", allLocal, drafts);
+
+      expect(loaded?.sessionJson).toBe('{"scene":"newer"}');
+      expect(await readdir(drafts)).toEqual([]);
+    });
+
+    it("a successful save removes the draft", async () => {
+      await expect(refused()).rejects.toBeInstanceOf(ExportStampUnreadableError);
+      await saveSessionLocked(
+        "ws",
+        "rec-1",
+        { sessionJson: '{"scene":"saved"}', assets: [] },
+        allLocal,
+        drafts,
+      );
+      expect(await readdir(drafts)).toEqual([]);
+      const loaded = await loadSessionRestoringDraft("ws", "rec-1", allLocal, drafts);
+      expect(loaded?.sessionJson).toBe('{"scene":"saved"}');
+    });
+
+    it("a project that was never saved is restored from its draft too", async () => {
+      await rm(join(vaultDir, ".kaipu", "rec-1.edit.json"));
+      await expect(refused()).rejects.toBeInstanceOf(ExportStampUnreadableError);
+      const restored = await loadSessionRestoringDraft("ws", "rec-1", allLocal, drafts);
+      expect(restored?.sessionJson).toBe('{"scene":"edited"}');
+    });
+
+    it("tells an offloaded export record apart from a stalled one in the message", async () => {
+      const evicted = await refused().catch((error: unknown) => error as Error);
+      expect(evicted).toBeInstanceOf(ExportStampUnreadableError);
+      // Nothing is downloading it and retrying never will: say where the files are and what to do.
+      expect((evicted as Error).message).toMatch(/only in the cloud/);
+      expect((evicted as Error).message).toMatch(/kept on this computer/);
+      expect((evicted as Error).message).not.toMatch(/try again/i);
     });
   });
 

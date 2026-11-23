@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { constants } from "node:fs";
+import { crc32, inflateSync } from "node:zlib";
 import {
   copyFile,
   mkdir,
@@ -15,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   DRAG_COPY_MAX_AGE_MS,
+  DRAG_PLACEHOLDER_ICON_PNG,
   SyncedDragCopyError,
   cleanupDragCopies,
   cleanupLegacyDragCopies,
@@ -189,5 +191,41 @@ describe("drag copies", () => {
     await cleanupScratchDragCopies(userData);
     expect(await readdir(join(userData, "workspace-scratch", "ws-1"))).toEqual(["tmp"]);
     await rm(userData, { recursive: true, force: true });
+  });
+});
+
+describe("DRAG_PLACEHOLDER_ICON_PNG", () => {
+  /** The chunks of a PNG, each with its CRC checked: a truncated or hand-edited one throws. */
+  function chunksOf(png: Buffer): Array<{ type: string; data: Buffer }> {
+    expect(png.subarray(0, 8)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+    const chunks: Array<{ type: string; data: Buffer }> = [];
+    let at = 8;
+    while (at < png.length) {
+      const length = png.readUInt32BE(at);
+      const type = png.subarray(at + 4, at + 8).toString("latin1");
+      const data = png.subarray(at + 8, at + 8 + length);
+      const stored = png.readUInt32BE(at + 8 + length);
+      expect(crc32(png.subarray(at + 4, at + 8 + length)), `${type} CRC`).toBe(stored);
+      chunks.push({ type, data });
+      at += 12 + length;
+    }
+    expect(at).toBe(png.length);
+    return chunks;
+  }
+
+  it("is a whole PNG: signature, checksummed chunks, and pixels that inflate to 64 x 64 RGBA", () => {
+    const chunks = chunksOf(DRAG_PLACEHOLDER_ICON_PNG);
+    expect(chunks.map((chunk) => chunk.type)).toEqual(["IHDR", "IDAT", "IEND"]);
+    const header = chunks[0]!.data;
+    expect([header.readUInt32BE(0), header.readUInt32BE(4)]).toEqual([64, 64]);
+    expect([header[8], header[9]]).toEqual([8, 6]); // 8-bit RGBA
+    const pixels = inflateSync(chunks[1]!.data);
+    expect(pixels.length).toBe(64 * (1 + 64 * 4)); // one filter byte per row, then the pixels
+    // Translucent, never opaque and never invisible: macOS would draw nothing for a clear one.
+    const alpha = pixels[1 + 3]!;
+    expect(alpha).toBeGreaterThan(0);
+    expect(alpha).toBeLessThan(255);
   });
 });

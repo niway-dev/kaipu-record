@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
   access,
-  copyFile,
-  cp,
   link,
   lstat,
   mkdir,
@@ -764,26 +762,17 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
       if (!(await existsStrict(fromPaths[key]))) continue;
       await transfer(fromPaths[key], toPaths[key], {
         sameDevice: linkable,
-        verify: key === "webcam",
         fs,
         stage: stageCompanions === null ? null : join(stageCompanions, basename(toPaths[key])),
       });
     }
     if (await existsStrict(fromPaths.assetsDir)) {
-      if (stageCompanions === null) {
-        await cp(fromPaths.assetsDir, toPaths.assetsDir, {
-          recursive: true,
-          force: false,
-          errorOnExist: true,
-        });
-      } else {
-        await transferTree(
-          fromPaths.assetsDir,
-          toPaths.assetsDir,
-          join(stageCompanions, basename(toPaths.assetsDir)),
-          fs,
-        );
-      }
+      await transferTree(
+        fromPaths.assetsDir,
+        toPaths.assetsDir,
+        stageCompanions === null ? null : join(stageCompanions, basename(toPaths.assetsDir)),
+        fs,
+      );
     }
     await after("companions-copied");
 
@@ -908,16 +897,25 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     if (mediaPlaced) {
       // Past the commit: the target holds the item. Healing finishes the source side.
       console.error(`move of "${id}" failed after its commit; healing finishes it`, error);
-      // The item is in the target whatever happens next: a failing heal leaves the journal for
-      // the next run (startup, or before the next group) and must not turn this into "io".
-      await healEntry(journal, {
+      // The item is in the target whatever happens next, but the move is finished only when the
+      // heal finished it: a heal that waits (the source could not be removed, a file is still
+      // offloaded) or keeps the entry for review leaves the journal for a later run, and the
+      // outcome says the original stayed, as every other incomplete ending does.
+      const healed = await healEntry(journal, {
         journalDir: deps.journalDir,
         fs,
         resolve: async (w) => w.directory,
-      }).catch((healError: unknown) =>
-        console.error(`healing move ${journal.moveId} failed; it is retried later`, healError),
-      );
-      return { ok: true, id, newId: journal.targetId!, mode: committedMode };
+      }).catch((healError: unknown) => {
+        console.error(`healing move ${journal.moveId} failed; it is retried later`, healError);
+        return "waiting" as const;
+      });
+      return {
+        ok: true,
+        id,
+        newId: journal.targetId!,
+        mode: committedMode,
+        ...(healed === "healed" ? {} : { keptOriginal: "source-changed" as const }),
+      };
     }
     if (journal.targetId) {
       await rollBackTarget(
@@ -1005,24 +1003,22 @@ async function sourceTags(
 
 /**
  * Put `from` at `to`, never replacing a file there: a hard link on the same volume, else an
- * exclusive copy (verified by sha256 when asked, by size otherwise). With `stage` (a synced
- * target) the copy is made at `stage`, outside the synced folder, and renamed to `to` only once
- * it is whole and verified: the provider never sees half of a file under its final name.
+ * exclusive copy whose bytes are compared with the source's (sha256) before the source may go:
+ * a matching size proves nothing. With `stage` (a synced target) the copy is made at `stage`,
+ * outside the synced folder, and renamed to `to` only once it is whole and verified: the
+ * provider never sees half of a file under its final name.
  */
 async function transfer(
   from: string,
   to: string,
-  options: { sameDevice: boolean; verify: boolean; fs: MoverFs; stage?: string | null },
+  options: { sameDevice: boolean; fs: MoverFs; stage?: string | null },
 ): Promise<void> {
   if (options.stage) {
     await mkdir(dirname(options.stage), { recursive: true });
     const copied = await copyExclusive(from, options.stage);
     if (copied === "taken")
       throw Object.assign(new Error(`"${options.stage}" exists`), { code: "EEXIST" });
-    const good = options.verify
-      ? (await options.fs.sha256(from)) === (await options.fs.sha256(options.stage))
-      : (await stat(from)).size === (await stat(options.stage)).size;
-    if (!good) {
+    if ((await options.fs.sha256(from)) !== (await options.fs.sha256(options.stage))) {
       await rm(options.stage, { force: true });
       throw Object.assign(new Error(`copy mismatch: ${to}`), { code: "EIO" });
     }
@@ -1038,12 +1034,6 @@ async function transfer(
       if (!NO_HARD_LINK.has(codeOf(error) ?? "")) throw error;
     }
   }
-  if (!options.verify) {
-    await copyFile(from, to, constants.COPYFILE_EXCL);
-    const [a, b] = await Promise.all([stat(from), stat(to)]);
-    if (a.size !== b.size) throw Object.assign(new Error(`short copy: ${to}`), { code: "EIO" });
-    return;
-  }
   const copied = await copyExclusive(from, to);
   if (copied === "taken") throw Object.assign(new Error(`"${to}" exists`), { code: "EEXIST" });
   if ((await options.fs.sha256(from)) !== (await options.fs.sha256(to))) {
@@ -1053,27 +1043,32 @@ async function transfer(
 }
 
 /**
- * The assets folder into a synced target: every file is copied under `stageDir` (outside the
- * synced folder), then renamed to its final name one by one (`transfer` with a stage). Folders
- * are created empty in the target; no file there is ever partial, and none is replaced.
+ * The assets folder into the target: every file is copied (and its bytes verified) one by one
+ * (`transfer`). Into a synced target each goes through `stageDir`, outside the synced folder,
+ * and is renamed to its final name; folders are created empty in the target; no file there is
+ * ever partial, and none is replaced.
  */
 async function transferTree(
   from: string,
   to: string,
-  stageDir: string,
+  stageDir: string | null,
   fs: MoverFs,
 ): Promise<void> {
   await mkdir(to, { recursive: true });
   for (const entry of await readdir(from, { withFileTypes: true })) {
     const source = join(from, entry.name);
     if (entry.isDirectory()) {
-      await transferTree(source, join(to, entry.name), join(stageDir, entry.name), fs);
+      await transferTree(
+        source,
+        join(to, entry.name),
+        stageDir === null ? null : join(stageDir, entry.name),
+        fs,
+      );
     } else {
       await transfer(source, join(to, entry.name), {
         sameDevice: false,
-        verify: false,
         fs,
-        stage: join(stageDir, entry.name),
+        stage: stageDir === null ? null : join(stageDir, entry.name),
       });
     }
   }
@@ -1290,7 +1285,7 @@ async function healEntry(
     if ((await deps.fs.evicted(reads)).size > 0) return "waiting";
   }
   const targetStampBefore = await stampAt(targetMedia).catch(() => null);
-  const targetMatches = await mediaMatches(targetMedia, journal, deps.fs);
+  const targetMatches = await mediaMatches(targetMedia, journal, deps.fs, recordedSource);
   const targetStamp = await stampAt(targetMedia).catch(() => null);
   const targetPresent = (await statOrNull(targetMedia)) !== null;
   const targetRecord = await to.readRecordStrict(to.sidecarPath(targetId));
@@ -1458,17 +1453,31 @@ async function sourceCompanionsChanged(
     : null;
 }
 
-/** The file at `path` is the journal's media: same size, and the same mtime or sha256. */
-async function mediaMatches(path: string, journal: MoveJournal, fs: MoverFs): Promise<boolean> {
+/**
+ * The file at `path` is the journal's media. A copy is recognized by its bytes alone: the same
+ * size and mtime prove nothing (a provider, or a user, can leave a different file looking
+ * identical), so the recorded sha256 is always checked first-hand. A linked move records no
+ * hash: its target is the very file that was linked, so it is recognized by the source's
+ * recorded device + inode (a hard link cannot hold other bytes), size and mtime.
+ */
+async function mediaMatches(
+  path: string,
+  journal: MoveJournal,
+  fs: MoverFs,
+  linkedFrom?: FileStamp,
+): Promise<boolean> {
   const info = await statOrNull(path);
   if (!info || info.size !== journal.media.size) return false;
-  if (info.mtimeMs === journal.media.mtimeMs) return true;
-  if (!journal.media.sha256) return false;
-  try {
-    return (await fs.sha256(path)) === journal.media.sha256;
-  } catch {
-    return false;
+  if (journal.media.sha256) {
+    try {
+      return (await fs.sha256(path)) === journal.media.sha256;
+    } catch {
+      return false;
+    }
   }
+  if (linkedFrom === undefined) return false;
+  const stamp = await stampAt(path).catch(() => null);
+  return stamp !== null && sameStamp(stamp, linkedFrom);
 }
 
 /** Records carrying `assetId` with no media beside them: what an interrupted reservation left. */

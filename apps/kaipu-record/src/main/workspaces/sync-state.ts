@@ -209,7 +209,10 @@ export const SYNCED_PROBE_TIMEOUT_MS = 5_000;
 
 /**
  * Bound a probe of a synced workspace: a provider that does not answer must never hang the
- * switcher, a capture start or a move. `onTimeout` decides what an unanswered probe means.
+ * switcher, a capture start or a move. `onTimeout` decides what an unanswered probe means. A
+ * probe that REJECTS (an I/O error from the provider) counts as unanswered too, through the same
+ * `withTimeout`: the safe direction, because an unanswered workspace is never a move target, and
+ * the error is not thrown at a caller that could only show it as "this workspace is broken".
  */
 export function boundedProbe<T>(probe: Promise<T>, onTimeout: T, ms = SYNCED_PROBE_TIMEOUT_MS) {
   return withTimeout(probe, ms, onTimeout);

@@ -103,4 +103,22 @@ describe("checkAvailability", () => {
     await Promise.all([first, second]);
     expect(d.states.isUnverified("w")).toBe(true);
   });
+
+  it("a pending workspace that adopts its folder's id is verified under the adopted id (NIW2-912)", async () => {
+    // The first check stalls: "w" is unverified. The next one answers, and the registry has
+    // adopted the folder's own id by then. The answer belongs to the adopted id; leaving it
+    // unverified would keep a reachable workspace on the slow path all session.
+    const asked = vi
+      .fn<AvailabilityDeps["reg"]["availability"]>()
+      .mockImplementationOnce(never)
+      .mockResolvedValue({ availability: { state: "available" }, id: "adopted" });
+    const d = deps(DRIVE, { availability: asked });
+    const first = checkAvailability(d, "w");
+    await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS + 1);
+    await first;
+    expect(d.states.isUnverified("w")).toBe(true);
+    const result = await checkAvailability(d, "w");
+    expect(result.id).toBe("adopted");
+    expect(d.states.isUnverified("adopted")).toBe(false);
+  });
 });

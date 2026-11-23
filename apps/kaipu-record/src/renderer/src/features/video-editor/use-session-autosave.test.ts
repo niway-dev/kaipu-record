@@ -2,7 +2,14 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialScene, type VideoScene } from "./scene";
 import type { SlideAssetStore } from "./slide-assets";
+import { captureException } from "@renderer/features/analytics";
+import {
+  EDIT_PROJECT_CLOUD_ONLY_MARKER,
+  EDIT_PROJECT_UNAVAILABLE_MARKER,
+} from "@shared/types/library-storage";
 import { AUTOSAVE_DEBOUNCE_MS, useSessionAutosave } from "./use-session-autosave";
+
+vi.mock("@renderer/features/analytics", () => ({ captureException: vi.fn() }));
 
 const assetStoreRef = {
   current: { entries: () => [] } as unknown as SlideAssetStore,
@@ -11,6 +18,7 @@ const assetStoreRef = {
 let saved: { id: string; json: string }[] = [];
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.useFakeTimers();
   saved = [];
   window.electronAPI = {
@@ -26,9 +34,14 @@ afterEach(() => {
 
 const OPENED = initialScene(10);
 
-function render(scene: VideoScene = OPENED, interacting = false) {
+function render(
+  scene: VideoScene = OPENED,
+  interacting = false,
+  onKeptOnThisComputer?: (reason: "cloud-only" | "folder-busy") => void,
+) {
   return renderHook(
-    ({ scene: s, interacting: i }) => useSessionAutosave("rec-1", s, i, assetStoreRef),
+    ({ scene: s, interacting: i }) =>
+      useSessionAutosave("rec-1", s, i, assetStoreRef, { onKeptOnThisComputer }),
     { initialProps: { scene, interacting } },
   );
 }
@@ -295,5 +308,67 @@ describe("useSessionAutosave", () => {
     expect(saved).toHaveLength(1);
     expect(JSON.parse(saved[0].json).scene.zoomSensitivity).toBe(61);
     expect(result.current.pendingRef.current).toBe(false);
+  });
+
+  describe("a save the synced folder refuses (NIW2-912 second review)", () => {
+    const cloudOnly = new Error(
+      `${EDIT_PROJECT_UNAVAILABLE_MARKER} ${EDIT_PROJECT_CLOUD_ONLY_MARKER}: not saved`,
+    );
+    const folderBusy = new Error(`${EDIT_PROJECT_UNAVAILABLE_MARKER}: not saved`);
+
+    async function edit(rerender: ReturnType<typeof render>["rerender"], value: number) {
+      rerender({ scene: { ...OPENED, zoomSensitivity: value }, interacting: false });
+      await act(async () => {
+        vi.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS);
+        await Promise.resolve();
+      });
+    }
+
+    it("says once that the edits are kept on this computer, and is no fault to report", async () => {
+      window.electronAPI.saveVideoEditSession = vi.fn().mockRejectedValue(cloudOnly);
+      const kept = vi.fn();
+      const { result, rerender } = render(OPENED, false, kept);
+      await edit(rerender, 61);
+      await edit(rerender, 62);
+      await edit(rerender, 63);
+      expect(result.current.state).toBe("failed");
+      expect(result.current.pendingRef.current).toBe(true);
+      expect(kept).toHaveBeenCalledTimes(1);
+      expect(kept).toHaveBeenCalledWith("cloud-only");
+      expect(captureException).not.toHaveBeenCalled();
+    });
+
+    it("tells a folder that does not answer apart from an offloaded file", async () => {
+      window.electronAPI.saveVideoEditSession = vi.fn().mockRejectedValue(folderBusy);
+      const kept = vi.fn();
+      const { rerender } = render(OPENED, false, kept);
+      await edit(rerender, 61);
+      expect(kept).toHaveBeenCalledWith("folder-busy");
+    });
+
+    it("says it again after a save went through and a later one is refused", async () => {
+      const save = vi
+        .fn()
+        .mockRejectedValueOnce(cloudOnly)
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(cloudOnly);
+      window.electronAPI.saveVideoEditSession =
+        save as typeof window.electronAPI.saveVideoEditSession;
+      const kept = vi.fn();
+      const { rerender } = render(OPENED, false, kept);
+      await edit(rerender, 61);
+      await edit(rerender, 62);
+      await edit(rerender, 63);
+      expect(kept).toHaveBeenCalledTimes(2);
+    });
+
+    it("an ordinary failure is still reported", async () => {
+      window.electronAPI.saveVideoEditSession = vi.fn().mockRejectedValue(new Error("disk"));
+      const kept = vi.fn();
+      const { rerender } = render(OPENED, false, kept);
+      await edit(rerender, 61);
+      expect(kept).not.toHaveBeenCalled();
+      expect(captureException).toHaveBeenCalledTimes(1);
+    });
   });
 });

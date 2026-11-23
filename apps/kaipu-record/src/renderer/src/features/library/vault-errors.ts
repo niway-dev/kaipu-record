@@ -1,6 +1,11 @@
 import type { Translator } from "@kaipu/i18n";
 import { showToast } from "@renderer/ui/toast-store";
-import { UNREADABLE_RECORD_MARKER, VAULT_MAINTENANCE_MARKER } from "@shared/types/library-storage";
+import {
+  EDIT_PROJECT_CLOUD_ONLY_MARKER,
+  EDIT_PROJECT_UNAVAILABLE_MARKER,
+  UNREADABLE_RECORD_MARKER,
+  VAULT_MAINTENANCE_MARKER,
+} from "@shared/types/library-storage";
 
 /**
  * True for an operation main refused because "Check and fix files" is running
@@ -14,6 +19,18 @@ export function isMaintenanceError(error: unknown): boolean {
 /** True for a write main refused because the item's record cannot be read (F9). */
 export function isUnreadableRecordError(error: unknown): boolean {
   return error instanceof Error && error.message.includes(UNREADABLE_RECORD_MARKER);
+}
+
+/**
+ * Why main did not save the edit project into its synced folder, or null for any other error.
+ * The edits are kept on this computer meanwhile: "cloud-only" when the project's files are
+ * offloaded (retrying never downloads them), "folder-busy" when the provider does not answer.
+ */
+export function editProjectRefusal(error: unknown): "cloud-only" | "folder-busy" | null {
+  if (!(error instanceof Error) || !error.message.includes(EDIT_PROJECT_UNAVAILABLE_MARKER)) {
+    return null;
+  }
+  return error.message.includes(EDIT_PROJECT_CLOUD_ONLY_MARKER) ? "cloud-only" : "folder-busy";
 }
 
 /**

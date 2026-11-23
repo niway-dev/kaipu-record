@@ -1527,6 +1527,18 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     expect(screen.getByRole("button", { name: "Reveal in Finder" })).toBeVisible();
   });
 
+  it("a GIF whose poster alone is offloaded can still be dragged; one whose media is offloaded cannot", async () => {
+    list({ ...gifItem, local: { ...gifItem.local!, evicted: "thumbnail" as const } });
+    renderWithState("/library/gif-1");
+    await waitForLoaded();
+    expect(document.querySelector("img[draggable='true']")).not.toBeNull();
+    cleanup();
+    list({ ...gifItem, local: { ...gifItem.local!, evicted: "media" as const } });
+    renderWithState("/library/gif-1");
+    await waitForLoaded();
+    expect(document.querySelector("img[draggable='true']")).toBeNull();
+  });
+
   it("the ••• menu of a recording: Copy path, Remove local download, Delete…; no Copy image", async () => {
     list(exportedOnlyItem);
     renderDetail("asset-b");

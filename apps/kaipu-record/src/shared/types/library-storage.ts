@@ -161,3 +161,14 @@ export const UNREADABLE_RECORD_MARKER = "vault-unreadable-record";
  * when `library:maintenance-ended` arrives.
  */
 export const VAULT_MAINTENANCE_MARKER = "vault-maintenance";
+
+/**
+ * Marker in the message of the error a video edit save is refused with when the project's export
+ * record cannot be read now (a synced folder: the file is only in the cloud, or the provider does
+ * not answer). Nothing was written into the folder; the edits are kept as a draft on this Mac. The
+ * editor says so once, instead of a failure it cannot fix by retrying.
+ */
+export const EDIT_PROJECT_UNAVAILABLE_MARKER = "vault-edit-project-unavailable";
+
+/** Added to that message when the project's files are offloaded: retrying never downloads them. */
+export const EDIT_PROJECT_CLOUD_ONLY_MARKER = "vault-edit-project-cloud-only";

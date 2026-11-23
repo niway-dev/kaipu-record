@@ -38,14 +38,15 @@ export async function readJoinedLibrary(
   return out;
 }
 
-/** The recording's cursor track, or null: a missing or malformed one is just "no pointer data". */
-export async function loadCursorTrackBestEffort(id: string): Promise<CursorTrack | null> {
-  try {
-    const json = await window.electronAPI.loadCursorTrack(id);
-    return json ? parseCursorTrack(json) : null;
-  } catch {
-    return null;
-  }
+/**
+ * The recording's cursor track, or null: a missing or malformed one is just "no pointer data".
+ * A track that exists but cannot be read now (offloaded by a synced folder's provider, or a
+ * provider that does not answer) is not "no pointer data": it REJECTS, so a join or a joined
+ * clip is never built silently without the pointer data the recording has.
+ */
+export async function loadCursorTrackOrNull(id: string): Promise<CursorTrack | null> {
+  const json = await window.electronAPI.loadCursorTrack(id);
+  return json ? parseCursorTrack(json) : null;
 }
 
 /**

@@ -88,7 +88,6 @@ interface Seeded {
   webcam: Buffer;
 }
 
-/** A recording with every file an item owns today, and two tags. */
 /** The `quarantined` reason of the one move journal left on disk (it fails when there is not one). */
 async function journalReasonOnDisk(): Promise<string | undefined> {
   const journals = await readdir(journalDir);
@@ -97,6 +96,7 @@ async function journalReasonOnDisk(): Promise<string | undefined> {
     .quarantined;
 }
 
+/** A recording with every file an item owns today, and two tags. */
 async function seedItem(dir: string, id = "Demo", options: { tags?: string[] } = {}) {
   const vault = new LibraryVault(dir);
   const repo = new VaultTagRepository(
@@ -1031,6 +1031,38 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     ).toBe(true);
   });
 
+  for (const synced of [false, true]) {
+    for (const file of [
+      [".kaipu", "Demo.edit.json"],
+      [".kaipu", "Demo.assets", "slide.png"],
+    ]) {
+      it(`Y1: a small ${file.at(-1)} copied ${synced ? "into a synced target " : ""}is checked by its bytes before the source goes, not by its size`, async () => {
+        const item = await seedItem(src.directory);
+        const target = synced ? syncedTarget() : dst;
+        const finalPath = join(dst.directory, ...file);
+        const scratch = join(root, "scratch", "dst");
+        // The copy of this one file comes back with other bytes of the same size.
+        const outcome = moveItem(
+          { source: src, target, id: item.id },
+          deps({
+            fs: {
+              link: exdev,
+              sha256: async (path) =>
+                path === finalPath || (path.startsWith(scratch) && path.endsWith(file.at(-1)!))
+                  ? "other-bytes"
+                  : sha256FileBase64(path),
+            },
+          }),
+        );
+        expect(await outcome).toEqual({ ok: false, id: "Demo", reason: "io" });
+        // Nothing was deleted from the source.
+        expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+        expect(await readFile(join(src.directory, ...file), "utf-8").catch(() => "")).not.toBe("");
+        expect(await filesOf(dst.directory, "Demo")).toEqual([]);
+      });
+    }
+  }
+
   it("C6: the move reads the source through a vault that asks the provider, before its own preflight", async () => {
     const item = await seedItem(src.directory);
     const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
@@ -1089,6 +1121,55 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     expect(report.healed).toBe(0);
     expect(report.quarantined).toHaveLength(1);
     expect(await readFile(path)).toEqual(theirs);
+  });
+});
+
+describe("a failure after the commit never reports a finished move that is not (NIW2-912 second review)", () => {
+  it.skipIf(!enforcesPermissions)(
+    "Y2: when healing cannot take the source away, the outcome says the original stayed and the journal is kept",
+    async () => {
+      const item = await seedItem(src.directory);
+      const outcome = await moveItem(
+        { source: src, target: dst, id: item.id },
+        deps({
+          fs: { link: exdev },
+          hooks: {
+            after: async (step) => {
+              if (step !== "committed") return;
+              // The target holds the item; the source folder now refuses deletions, and the
+              // move itself fails: the heal that runs in its catch cannot finish either.
+              await chmod(src.directory, 0o500);
+              throw new Error("boom after the commit");
+            },
+          },
+        }),
+      );
+      await chmod(src.directory, 0o700);
+
+      expect(outcome).toMatchObject({ ok: true, id: "Demo", keptOriginal: "source-changed" });
+      expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+      expect(await readFile(join(dst.directory, "Demo.mp4"))).toEqual(item.media);
+      expect(await readdir(journalDir)).toHaveLength(1);
+    },
+  );
+
+  it("Y2: control: when healing finishes the move, the outcome is a plain success", async () => {
+    const item = await seedItem(src.directory);
+    const outcome = await moveItem(
+      { source: src, target: dst, id: item.id },
+      deps({
+        fs: { link: exdev },
+        hooks: {
+          after: (step) => {
+            if (step === "committed") throw new Error("boom after the commit");
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, id: "Demo" });
+    expect(outcome).not.toHaveProperty("keptOriginal");
+    expect(await filesOf(src.directory, "Demo")).toEqual([]);
+    expect(await readdir(journalDir)).toEqual([]);
   });
 });
 
@@ -1522,6 +1603,25 @@ describe("healing never deletes the only copy", () => {
     expect(await filesOf(src.directory, "Demo")).toEqual([]);
   });
 
+  it("Y1: a target with the journal's size and mtime but other bytes is never taken for the copy", async () => {
+    const item = await seedItem(src.directory);
+    const when = new Date(1_700_000_000_000);
+    await utimes(join(src.directory, "Demo.mp4"), when, when);
+    await crashAt("media-placed");
+    // Same size, same mtime: only a content check can tell it from the verified copy.
+    const target = join(dst.directory, "Demo.mp4");
+    await writeFile(target, randomBytes(item.media.length));
+    await utimes(target, when, when);
+
+    const report = await heal();
+
+    // The source is the only intact copy: it stays, whole, and the lookalike is not rolled forward.
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    expect(await stat(join(src.directory, ".kaipu", "Demo.json"))).toBeTruthy();
+    expect(report.healed + report.quarantined.length).toBe(1);
+    expect(await copiesOf(item.assetId)).toEqual([{ dir: src.directory, id: "Demo" }]);
+  });
+
   it("waits while a workspace is not connected", async () => {
     await seedItem(src.directory);
     await crashAt("media-placed");
@@ -1668,7 +1768,7 @@ describe("review findings on a move (PR 479)", () => {
   });
 
   it.skipIf(!enforcesPermissions)(
-    "reports a move whose post-commit healing throws as done, with the real mode",
+    "reports a move whose post-commit healing throws as incomplete (the original stays), with the real mode",
     async () => {
       const item = await seedItem(src.directory);
       const outcome = await moveItem(
@@ -1685,7 +1785,13 @@ describe("review findings on a move (PR 479)", () => {
         }),
       );
       await chmod(journalDir, 0o700);
-      expect(outcome).toEqual({ ok: true, id: "Demo", newId: "Demo", mode: "linked" });
+      expect(outcome).toEqual({
+        ok: true,
+        id: "Demo",
+        newId: "Demo",
+        mode: "linked",
+        keptOriginal: "source-changed",
+      });
       // The journal is left for the next healing run, which finishes the source side.
       expect((await heal()).healed).toBe(1);
       expect(await copiesOf(item.assetId)).toEqual([{ dir: dst.directory, id: "Demo" }]);

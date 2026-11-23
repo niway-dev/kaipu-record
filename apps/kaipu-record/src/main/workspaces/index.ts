@@ -123,7 +123,10 @@ export async function initWorkspaces(): Promise<void> {
     onPreferencesWritten: forgetCachedPreferences,
   });
   gate = new WorkspaceGate(registry.active().id);
-  // Re-detected on every launch (a folder may have been moved into Drive since).
+  // Re-detected on every launch (a folder may have been moved into Drive since). Side by side,
+  // and launch waits for the slowest: a folder the path rule does not name costs `realpath`
+  // (2 s) and the identity xattr (2 s), and a plain answer without its identity file one more
+  // second to look for it, so 5 s at most, however many workspaces there are.
   await Promise.all(registry.entries().map((entry) => syncStates.refresh(entry)));
   await initWorkspaceSettings(registry);
   // The preload reads the stamp once, synchronously, before the page's scripts run, so it
@@ -362,14 +365,19 @@ export function activeStagingDir(): string | null {
   return syncStates.of(active) === null ? null : scratchTmp(app.getPath("userData"), active.id);
 }
 
+/** The workspace registered at this folder, or undefined (the one lookup behind both stagings). */
+function entryAt(vaultDir: string): WorkspaceEntry | undefined {
+  return requireRegistry()
+    .entries()
+    .find((candidate) => candidate.path === vaultDir);
+}
+
 /**
  * The scratch staging folder of the workspace registered at `vaultDir`, synced or not (the
  * stranded-take sweep reads it whenever it exists), or null for a folder no workspace holds.
  */
 export function scratchStagingFor(vaultDir: string): string | null {
-  const entry = requireRegistry()
-    .entries()
-    .find((candidate) => candidate.path === vaultDir);
+  const entry = entryAt(vaultDir);
   return entry ? scratchTmp(app.getPath("userData"), entry.id) : null;
 }
 
@@ -378,9 +386,7 @@ export function scratchStagingFor(vaultDir: string): string | null {
  * synced workspace that lives there, or null to stage in `.kaipu/tmp/`.
  */
 export function syncedStagingFor(vaultDir: string): string | null {
-  const entry = requireRegistry()
-    .entries()
-    .find((candidate) => candidate.path === vaultDir);
+  const entry = entryAt(vaultDir);
   if (!entry || syncStates.of(entry) === null) return null;
   return scratchTmp(app.getPath("userData"), entry.id);
 }

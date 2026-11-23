@@ -309,20 +309,24 @@ describe("recognizeScreenshotText in a synced workspace", () => {
   it("never reads an evicted text cache: it is a miss and the file is left as it was", async () => {
     const id = await seedItem("Shot", "pixels");
     const text = cachePath(id);
-    await writeFile(
-      text,
-      JSON.stringify({
-        schemaVersion: 1,
-        assets: { base: { sha256: sha(Buffer.from("pixels")), words: [word("cached")] } },
-      }),
-    );
+    const cached = JSON.stringify({
+      schemaVersion: 1,
+      assets: { base: { sha256: sha(Buffer.from("pixels")), words: [word("cached")] } },
+    });
+    await writeFile(text, cached);
+    // A reader that WOULD deliver a valid cache: if the code read the evicted file it would get
+    // a hit, so an empty answer proves the file was not read (a failing reader would look like a
+    // miss either way and prove nothing).
+    const readText = vi.fn(async () => cached);
     const synced = new LibraryVault(
       directory,
       undefined,
-      { readText: () => Promise.reject(new Error("a read downloads it")) },
+      { readText },
       async (paths) => new Set(paths.filter((path) => path === text)),
     );
     expect(await readTextCache(synced, id)).toEqual({});
+    expect(readText).not.toHaveBeenCalledWith(text);
+    expect(readText).not.toHaveBeenCalled();
   });
 
   it("never reads an evicted PNG to check the cache: the words come back, nothing is cached", async () => {

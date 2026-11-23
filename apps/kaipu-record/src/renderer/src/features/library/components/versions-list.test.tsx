@@ -235,6 +235,13 @@ describe("VersionsList", () => {
     expect(within(region).queryByRole("button", { name: /^Drag YouTube 1440p/ })).toBeNull();
   });
 
+  it("still offers the drag when only the copy's poster is offloaded: the file itself is local", () => {
+    const posterOffloaded = { ...yt, evicted: "thumbnail" as const };
+    const region = renderList(master, [master, posterOffloaded]);
+    const drag = within(region).getByRole("button", { name: /^Drag YouTube 1440p/ });
+    expect(drag).toHaveAttribute("draggable", "true");
+  });
+
   it("names an Email copy by its stored destination, not by its Balanced preset", () => {
     const email = video({
       id: "em",

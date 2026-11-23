@@ -16,7 +16,7 @@ export function GifViewer({
   canDrag = true,
 }: {
   id: string;
-  /** False while the provider has offloaded the poster: main refuses that drag, so none starts. */
+  /** False while the provider has offloaded the GIF itself: main refuses that drag, so none starts. */
   canDrag?: boolean;
 }): React.JSX.Element {
   const t = useTranslations("library");

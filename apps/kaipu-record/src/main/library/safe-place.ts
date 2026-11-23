@@ -65,6 +65,10 @@ export function takenError(path: string): NodeJS.ErrnoException {
   return Object.assign(new Error(`"${path}" already exists`), { code: "EEXIST", path });
 }
 
+function vanishedError(path: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`"${path}" vanished right after placing`), { code: "EIO" });
+}
+
 /** A placement found a file at its destination (it never replaces one). */
 export function isFileExists(error: unknown): boolean {
   return codeOf(error) === "EEXIST";
@@ -343,10 +347,13 @@ export async function placeByRename(
   to: string,
   options: PlaceOptions = {},
 ): Promise<PlacedFile | "taken"> {
+  // Read BEFORE the rename: a rename moves what is at `from`, so this is the file placed. Reading
+  // `to` afterwards would turn a name that is gone a moment later (a provider, the user) into a
+  // failure for a rename that happened, and the caller would roll back a finished placement.
+  const before = await identityAt(from);
   if (options.expect) {
     // The same check `placeNew` makes on its handle, read at the name: a rename moves what is there.
-    const now = await identityAt(from);
-    if (!now || !sameFile(now, options.expect)) throw notTheFile(from);
+    if (!before || !sameFile(before, options.expect)) throw notTheFile(from);
   }
   if (await isOccupied(to)) return "taken";
   try {
@@ -356,10 +363,9 @@ export async function placeByRename(
     return copyAcrossDevices(from, to, options);
   }
   await syncDir(dirname(to)).catch(() => {});
-  const placed = await identityAt(to);
-  if (!placed)
-    throw Object.assign(new Error(`"${to}" vanished right after placing`), { code: "EIO" });
-  return placed;
+  // Nothing at `from` means the rename itself would have failed (ENOENT): not reachable here
+  // except through an injected rename, which never lands without a source.
+  return before ?? (await identityAt(to)) ?? Promise.reject(vanishedError(to));
 }
 
 /**
@@ -614,16 +620,30 @@ export async function renameCaseOnlyByRename(from: string, to: string): Promise<
   const temp = siblingTemp(from, "case");
   const first = await placeByRename(from, temp, { expect: source });
   if (first === "taken") return "taken";
+  // A plain `rename` onto `to` would replace a different file that took the name while this one
+  // was set aside. `placeByRename` never does: "taken" puts the file back and is reported.
+  let second: Placement;
   try {
-    await rename(temp, to);
+    second = (await placeByRename(temp, to)) === "taken" ? "taken" : "placed";
   } catch (error) {
-    await rename(temp, from).catch(() => {
-      console.error(`case-only rename: the file could not return to its name; it is at "${temp}"`);
-    });
+    await moveBackByRename(temp, from);
     throw error;
   }
-  await syncDir(dirname(to)).catch(() => {});
-  return "placed";
+  if (second === "placed") return "placed";
+  await moveBackByRename(temp, from);
+  return "taken";
+}
+
+/** `moveBack` for a synced folder: the same rule (never replace, never remove), by rename. */
+async function moveBackByRename(temp: string, from: string): Promise<void> {
+  const back = await placeByRename(temp, from).catch(() => "failed" as const);
+  if (back === "taken" || back === "failed") {
+    console.error(`case-only rename: the file could not return to its name; it is at "${temp}"`);
+    throw Object.assign(new Error(`The file could not return to its name; it is at "${temp}"`), {
+      code: "EIO",
+      path: temp,
+    });
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isTagColor,
@@ -103,7 +103,10 @@ export class VaultTagRepository implements TagRepository {
   private async quarantine(path: string): Promise<void> {
     if (this.quarantined.has(path)) return;
     this.quarantined.add(path);
-    await copyFile(path, `${path}.corrupt-${this.now()}`).catch(() => undefined);
+    // Through the vault: a synced workspace stages the copy outside its folder, then renames it.
+    await readFile(path)
+      .then((bytes) => this.vault().writeAtomic(`${path}.corrupt-${this.now()}`, bytes))
+      .catch(() => undefined);
   }
 
   private async write(tags: Tag[]): Promise<void> {

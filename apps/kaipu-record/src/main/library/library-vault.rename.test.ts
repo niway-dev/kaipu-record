@@ -60,6 +60,11 @@ const renameFailure = vi.hoisted(() => ({
   arrival: null as null | { path: string; content: string },
 }));
 
+/** Where every `copyFile` and `cp` of this file wrote, in order. */
+const copyTargets = vi.hoisted(() => [] as string[]);
+/** A source path whose `copyFile` fails halfway: some bytes land at the target, then EIO. */
+const copyFailure = vi.hoisted(() => ({ source: null as string | null }));
+
 /** Paths whose existence probe (`access`) fails with EACCES: they can be neither confirmed nor ruled out. */
 const uncheckable = vi.hoisted(() => new Set<string>());
 
@@ -72,6 +77,18 @@ vi.mock("node:fs/promises", async (importOriginal) => {
         throw Object.assign(new Error("EACCES: mocked"), { code: "EACCES" });
       }
       return actual.access(path, mode);
+    }),
+    copyFile: vi.fn(async (from: string, to: string, mode?: number) => {
+      copyTargets.push(String(to));
+      if (copyFailure.source === String(from)) {
+        await actual.writeFile(to, "half");
+        throw Object.assign(new Error("EIO: mocked"), { code: "EIO" });
+      }
+      return actual.copyFile(from, to, mode);
+    }),
+    cp: vi.fn(async (from: string, to: string, options?: Parameters<typeof actual.cp>[2]) => {
+      copyTargets.push(String(to));
+      return actual.cp(from, to, options);
     }),
     link: vi.fn(async (from: string, to: string) => {
       const isMediaMove = /\.(mp4|webm|png|gif)$/.test(String(from));
@@ -126,6 +143,8 @@ describe("LibraryVault.renameItem", () => {
     renameFailure.pendingUnlink = null;
     renameFailure.arrival = null;
     uncheckable.clear();
+    copyTargets.length = 0;
+    copyFailure.source = null;
   });
 
   afterEach(async () => {
@@ -217,6 +236,72 @@ describe("LibraryVault.renameItem", () => {
     });
     // The list shows one item, under the new id.
     expect((await vault.list()).map((r) => r.id)).toEqual([newId]);
+  });
+
+  it("a synced workspace keeps the copy of a corrupt sidecar by staging it outside the folder (NIW2-912)", async () => {
+    // The quarantine copy is written under a final name too, so it follows the same rule: no
+    // direct copy into the synced folder.
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-quarantine-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      await writeFile(join(meta, "Take.json"), "{not json");
+
+      await synced.describe("Take");
+
+      expect(copyTargets.filter((target) => target.startsWith(directory))).toEqual([]);
+      const copies = (await readdir(meta)).filter((name) => name.startsWith("Take.json.corrupt-"));
+      expect(copies).toHaveLength(1);
+      expect(await readFile(join(meta, copies[0]!), "utf-8")).toBe("{not json");
+      expect(await readdir(staging)).toEqual([]);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
+  it("a synced workspace stages every companion outside the folder and renames it in whole (NIW2-912)", async () => {
+    // The provider uploads whatever it sees under a final name, half-written or not: a copy
+    // written straight into the folder is uploaded as a truncated file. Every copy lands in the
+    // staging folder first and arrives by rename.
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      await writeFile(join(meta, "Take.webcam.mp4"), "webcam");
+      await mkdir(join(meta, "Take.assets", "nested"), { recursive: true });
+      await writeFile(join(meta, "Take.assets", "nested", "deep.png"), "deep");
+
+      const result = await renameById(synced, "Take", "Renamed");
+
+      expect(result.file).toBe("renamed");
+      expect(copyTargets.length).toBeGreaterThan(0);
+      expect(copyTargets.filter((target) => target.startsWith(directory))).toEqual([]);
+      expect(await readFile(join(meta, "Renamed.webcam.mp4"), "utf-8")).toBe("webcam");
+      expect(await readFile(join(meta, "Renamed.assets", "slide-1.png"), "utf-8")).toBe("slide");
+      expect(await readFile(join(meta, "Renamed.assets", "nested", "deep.png"), "utf-8")).toBe(
+        "deep",
+      );
+      expect(await readdir(staging)).toEqual([]);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
+  it("a synced rename whose copy fails halfway leaves no partial file in the folder or the staging folder", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      await writeFile(join(meta, "Take.webcam.mp4"), "webcam");
+      copyFailure.source = join(meta, "Take.webcam.mp4");
+      const result = await renameById(synced, "Take", "Renamed");
+      expect(result).toMatchObject({ file: "kept-old-name", reason: "io" });
+      expect(await readdir(staging)).toEqual([]);
+      expect((await readdir(meta)).filter((name) => name.startsWith("Renamed"))).toEqual([]);
+      expect(await readdir(directory)).toEqual([".kaipu", "Take.mp4"]);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
   });
 
   it("is 'unchanged' and leaves the file alone when the stem does not change", async () => {

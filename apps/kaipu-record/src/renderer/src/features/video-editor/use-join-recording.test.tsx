@@ -106,7 +106,7 @@ describe("useJoinRecording", () => {
     expect(result.current.controller.canUndo).toBe(false);
   });
 
-  it("is missing when acquiring throws, and joins without zooms when the track cannot be read", async () => {
+  it("is missing when acquiring throws, and when the track exists but cannot be read", async () => {
     const { result } = setup();
     acquire.mockRejectedValueOnce(new Error("ambiguous"));
     let first: string | undefined;
@@ -122,9 +122,9 @@ describe("useJoinRecording", () => {
     await act(async () => {
       second = await result.current.join(B, 20);
     });
-    expect(second).toBe("joined");
-    expect(result.current.controller.scene.zoomSegments).toEqual([]);
-    expect(result.current.controller.scene.sources).toHaveLength(1);
+    // The track exists but cannot be read: nothing is joined without its pointer data.
+    expect(second).toBe("missing");
+    expect(result.current.controller.scene.sources).toBeUndefined();
   });
 
   it("does not join while a drag owns the scene", async () => {

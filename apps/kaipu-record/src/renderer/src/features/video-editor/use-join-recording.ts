@@ -3,7 +3,7 @@ import type { RecordingCapture } from "@shared/recording-capture";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { composeJoin } from "./compose-join";
 import { frameCursorTrack } from "./cursor/axis-cursor-track";
-import { loadCursorTrackBestEffort } from "./joined-library";
+import { loadCursorTrackOrNull } from "./joined-library";
 import type { VideoScene } from "./scene";
 import { useLatest } from "./use-latest";
 import { useSerializedCommit, type SerializedCommit } from "./use-serialized-commit";
@@ -73,7 +73,11 @@ export function useJoinRecording(
       if (heldId === null) return "missing";
       let track;
       try {
-        track = await loadCursorTrackBestEffort(heldId);
+        track = await loadCursorTrackOrNull(heldId);
+      } catch {
+        // The track exists but cannot be read now: joining without it would silently drop the
+        // recording's pointer data (no auto zooms), so nothing is joined.
+        return "missing";
       } finally {
         window.electronAPI.closeEditorSession(heldId);
       }

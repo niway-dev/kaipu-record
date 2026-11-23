@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CursorTrack } from "@shared/cursor-track";
 import type { RecordingCapture } from "@shared/recording-capture";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
-import { loadCursorTrackBestEffort, readJoinedLibrary } from "./joined-library";
+import { loadCursorTrackOrNull, readJoinedLibrary } from "./joined-library";
 import type { SceneSource } from "./scene";
 
 /** A recording joined into the sequence (ADR 0058), with the media data the editor reads. */
@@ -146,6 +146,15 @@ async function resolve(
     return MISSING;
   }
   entry.heldId = heldId;
-  const cursorTrack = await loadCursorTrackBestEffort(heldId);
+  let cursorTrack: CursorTrack | null;
+  try {
+    cursorTrack = await loadCursorTrackOrNull(heldId);
+  } catch {
+    // The track exists but cannot be read now: the clip is shown as not available, never as a
+    // recording without pointer data.
+    window.electronAPI.closeEditorSession(heldId);
+    entry.heldId = null;
+    return MISSING;
+  }
   return { status: "ready", id: heldId, cursorTrack, webcam: item.webcam, capture: item.capture };
 }

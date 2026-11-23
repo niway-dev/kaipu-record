@@ -784,7 +784,9 @@ export function LibraryDetailPage(): React.JSX.Element {
                 }
               />
             ) : isGif ? (
-              localId && <GifViewer key={video.assetId} id={localId} canDrag={!video.evicted} />
+              // An offloaded GIF shows the not-downloaded panel above, so here the GIF is local
+              // and only its poster can be offloaded: that never blocks the drag.
+              localId && <GifViewer key={video.assetId} id={localId} canDrag />
             ) : (
               localId && (
                 <div {...uiArea("libraryDetail.preview")} className={styles.player}>

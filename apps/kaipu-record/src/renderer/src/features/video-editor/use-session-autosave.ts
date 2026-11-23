@@ -25,7 +25,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { captureException } from "@renderer/features/analytics";
-import { isMaintenanceError } from "@renderer/features/library/vault-errors";
+import { editProjectRefusal, isMaintenanceError } from "@renderer/features/library/vault-errors";
 import type { VideoScene } from "./scene";
 import { serializeSession } from "./session";
 import type { SlideAssetStore } from "./slide-assets";
@@ -52,6 +52,14 @@ export function useSessionAutosave(
   scene: VideoScene,
   interacting: boolean,
   assetStoreRef: React.MutableRefObject<SlideAssetStore>,
+  options: {
+    /**
+     * Called once per run of refusals (until a save goes through) when a synced folder refused
+     * the save and main kept the edits as a draft on this computer: the user is told where
+     * their edits are, instead of a "Couldn't save" that retrying cannot fix.
+     */
+    onKeptOnThisComputer?: (reason: "cloud-only" | "folder-busy") => void;
+  } = {},
 ): SessionAutosave {
   const openedWith = useRef(scene);
   const sceneRef = useRef(scene);
@@ -63,6 +71,9 @@ export function useSessionAutosave(
   // one in flight). Only the latest write may set the chip or clear the flag.
   const writeGenRef = useRef(0);
   const [state, setState] = useState<SaveState>("idle");
+  const keptRef = useRef(options.onKeptOnThisComputer);
+  keptRef.current = options.onKeptOnThisComputer;
+  const keptToldRef = useRef(false);
 
   const write = useCallback(async (): Promise<void> => {
     const snapshot = sceneRef.current;
@@ -75,6 +86,7 @@ export function useSessionAutosave(
       await window.electronAPI.saveVideoEditSession(sourceId, serializeSession(snapshot), assets);
       // A newer write is in flight or already landed: it owns the chip and the flag.
       if (gen !== writeGenRef.current) return;
+      keptToldRef.current = false;
       // An edit may have landed while the write was in flight; it owns the flag now, and
       // nothing is in flight any more, so the chip goes quiet until that edit's write.
       if (sceneRef.current === snapshot) {
@@ -87,7 +99,15 @@ export function useSessionAutosave(
       // Non-fatal: keep `pendingRef` true so the discard dialog still warns on the way
       // out, and let the next edit retry. A refusal during "Check and fix files" is not
       // a fault: it is retried when maintenance ends (below).
-      if (!isMaintenanceError(error)) {
+      const refusal = editProjectRefusal(error);
+      if (refusal !== null) {
+        // Not a fault: the folder cannot answer now, and main kept the edits as a draft on this
+        // computer. Said once, not on every edit.
+        if (!keptToldRef.current) {
+          keptToldRef.current = true;
+          keptRef.current?.(refusal);
+        }
+      } else if (!isMaintenanceError(error)) {
         captureException(error, { context: "video-edit-session-autosave" });
       }
       if (gen === writeGenRef.current) setState("failed");

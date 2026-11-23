@@ -29,7 +29,7 @@ import {
   type StoredExportPresetId,
 } from "@shared/types/export-preset";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
-import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
+import { atomicWriteFile, uniqueTempPath, volumeStagingDir, withLock } from "./atomic-write";
 import {
   type PlacedFile,
   placeByRename,
@@ -368,6 +368,15 @@ function errorCode(error: unknown): string | undefined {
 // directory (e.g. a fresh instance per IPC call) instead of re-minting on every read.
 const readOnlyIdentityMemo = new Map<string, string>();
 
+/**
+ * When a synced item's media was first seen without a sidecar, keyed by the sidecar's path: the
+ * wait `sidecarStillSyncing` gives the provider before the item is taken for a legacy one.
+ */
+const sidecarFirstMissing = new Map<string, number>();
+
+/** How long a synced item may lack a sidecar before it is given an identity (see above). */
+export const SYNCED_SIDECAR_GRACE_MS = 2 * 60 * 1000;
+
 // Sidecars already copied aside this session (`quarantine`), by absolute path, so a list
 // that re-reads a corrupt sidecar every few seconds keeps one copy, not hundreds. A clean
 // read clears the path, so a sidecar that is repaired and later corrupted again gets a new copy.
@@ -433,6 +442,11 @@ export const SYNCED_LIST_CONCURRENCY = 8;
  * Sidecar reads that may time out in one synced listing before the rest of the items are listed
  * without a read (read-only, "unreadable"). With the concurrency cap, a provider that has
  * stopped answering would otherwise cost the whole folder `5 s x items / concurrency`.
+ *
+ * The limit counts timeouts, and reads already in flight cannot be recalled: the
+ * `SYNCED_LIST_CONCURRENCY` reads that start together wait their 5 s together, so a provider that
+ * stopped answering costs one 5 s wave (up to `SYNCED_LIST_CONCURRENCY - 1` more timeouts than the
+ * limit). When the stall begins only after the first wave, the listing takes two waves, 10 s.
  */
 export const SYNCED_LIST_STALL_LIMIT = 4;
 
@@ -990,24 +1004,23 @@ export class LibraryVault {
               // rename stops (the title is saved) rather than start that download.
               await this.assertLocal([from[key]]);
               // A clone where the volume has them: the webcam file is as large as a take.
-              await copyFile(
-                from[key],
-                to[key],
-                constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
-              );
+              await this.copyCompanion(from[key], to[key]);
               created.push(to[key]);
             }
             if (await existsStrict(from.assetsDir)) {
               if (this.synced) {
-                const names = await readdir(from.assetsDir);
-                await this.assertLocal(names.map((name) => join(from.assetsDir, name)));
+                await this.assertLocal(await filesUnder(from.assetsDir));
               }
               created.push(to.assetsDir);
-              await cp(from.assetsDir, to.assetsDir, {
-                recursive: true,
-                force: false,
-                errorOnExist: true,
-              });
+              if (this.synced) {
+                await this.copyCompanionTree(from.assetsDir, to.assetsDir);
+              } else {
+                await cp(from.assetsDir, to.assetsDir, {
+                  recursive: true,
+                  force: false,
+                  errorOnExist: true,
+                });
+              }
             }
           } catch (error) {
             await this.removePaths(created);
@@ -1207,6 +1220,47 @@ export class LibraryVault {
     }
     await rm(from.cursorTrackTemp, { force: true }).catch(() => {});
     return null;
+  }
+
+  /**
+   * Copies one companion to `target`, never replacing a file there. In a synced folder the copy
+   * is never written under a name the provider can see: a half-written file there is uploaded
+   * as it stands. It is staged outside the folder (the scratch folder, or a hidden folder on the
+   * destination's volume) and arrives by rename, whole. A clone where the volume has them: the
+   * webcam file is as large as a take.
+   */
+  private async copyCompanion(source: string, target: string): Promise<void> {
+    if (!this.synced) {
+      await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+      return;
+    }
+    const folder = this.stagingDir ?? (await volumeStagingDir(target, { assumeSynced: true }));
+    if (folder === null) {
+      throw Object.assign(new Error(`no folder outside the provider to stage "${target}"`), {
+        code: "EXDEV",
+      });
+    }
+    await mkdir(folder, { recursive: true });
+    const staged = join(folder, basename(uniqueTempPath(target, "part")));
+    try {
+      await copyFile(source, staged, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+      const placed = await placeByRename(staged, target);
+      if (placed === "taken") throw takenError(target);
+    } catch (error) {
+      await rm(staged, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  /** `copyCompanion` for a folder: the folder is made empty, each file arrives whole by rename. */
+  private async copyCompanionTree(source: string, target: string): Promise<void> {
+    await mkdir(target);
+    for (const entry of await readdir(source, { withFileTypes: true })) {
+      const from = join(source, entry.name);
+      const to = join(target, entry.name);
+      if (entry.isDirectory()) await this.copyCompanionTree(from, to);
+      else await this.copyCompanion(from, to);
+    }
   }
 
   private async removePaths(paths: string[]): Promise<void> {
@@ -1517,11 +1571,17 @@ export class LibraryVault {
     return parsed as Sidecar;
   }
 
-  /** Keep a copy of a corrupt sidecar, once per path per session. Never touches the original. */
+  /**
+   * Keep a copy of a corrupt sidecar, once per path per session. Never touches the original.
+   * The copy is a file under a final name, so it arrives through `writeAtomic` (staged outside a
+   * synced folder, then renamed): the provider never uploads a half-written copy.
+   */
   private async quarantine(path: string): Promise<void> {
     if (quarantinedSidecars.has(path)) return;
     quarantinedSidecars.add(path);
-    await copyFile(path, `${path}.corrupt-${Date.now()}`).catch(() => undefined);
+    await readFile(path)
+      .then((bytes) => this.writeAtomic(`${path}.corrupt-${Date.now()}`, bytes))
+      .catch(() => undefined);
   }
 
   /**
@@ -1547,7 +1607,11 @@ export class LibraryVault {
     return withLock(sidecarPath, async () => {
       const current = await this.writableSidecar(id);
       if (current.assetId && current.localRemovedAt === undefined) {
+        sidecarFirstMissing.delete(sidecarPath);
         return current as Sidecar & { assetId: string };
+      }
+      if (current.assetId === undefined && (await this.sidecarStillSyncing(id, sidecarPath))) {
+        throw new SidecarUnavailableError("unreadable", sidecarPath);
       }
       const next: Sidecar = {
         ...current,
@@ -1558,6 +1622,7 @@ export class LibraryVault {
       try {
         await this.writeMetaLocked(id, next);
         readOnlyIdentityMemo.delete(sidecarPath);
+        sidecarFirstMissing.delete(sidecarPath);
       } catch (error) {
         // Renamed or removed while we read it: there is no item to give an identity to.
         if (error instanceof ItemGoneError || error instanceof UnreadableRecordError) throw error;
@@ -1566,6 +1631,23 @@ export class LibraryVault {
       }
       return next as Sidecar & { assetId: string };
     });
+  }
+
+  /**
+   * A synced folder can deliver the media before its sidecar: the two files sync independently.
+   * Minting an identity then would write a second, different sidecar next to the one that is
+   * about to arrive, and the provider keeps one of them (or both, as a conflicted copy), losing the
+   * item's title, tags and identity. So a media file with no sidecar is read-only for a grace
+   * period from the first time this session saw it so, and only a sidecar that still has not
+   * come is taken for a legacy item and given an identity. True while that wait is on.
+   */
+  private async sidecarStillSyncing(id: string, sidecarPath: string): Promise<boolean> {
+    if (!this.synced) return false;
+    if ((await this.readRecord(id)).status !== "missing") return false;
+    const now = Date.now();
+    const first = sidecarFirstMissing.get(sidecarPath) ?? now;
+    sidecarFirstMissing.set(sidecarPath, first);
+    return now - first < SYNCED_SIDECAR_GRACE_MS;
   }
 
   /**
@@ -1980,4 +2062,15 @@ export function humanizeId(id: string): string {
  */
 export function isPlainItemId(id: string): boolean {
   return id.length > 0 && !id.startsWith(".") && !/[\\/]/.test(id) && basename(id) === id;
+}
+
+/** Every file below `folder`, at any depth. */
+async function filesUnder(folder: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(folder, { withFileTypes: true })) {
+    const path = join(folder, entry.name);
+    if (entry.isDirectory()) found.push(...(await filesUnder(path)));
+    else found.push(path);
+  }
+  return found;
 }

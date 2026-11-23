@@ -26,6 +26,11 @@ type Checked = { availability: Availability; id: string };
  * synced folder whose mount is up but stalled, and an unbounded wait there is the hang this
  * check exists to prevent.
  *
+ * "Bounded" is per step, not for the whole call. A synced workspace costs one probe (5 s) plus a
+ * 1 s `stat` when it did not answer. A workspace first detected as plain, and detected again,
+ * runs two probes with the detection between them: 5 s + 2 s `realpath` + 2 s xattr + 5 s + 1 s
+ * `stat`, 15 s at most. A probe that rejects counts as unanswered, like one that times out.
+ *
  * Checks of one workspace run side by side (the switcher, a capture, a move). Only the newest
  * one may change the unverified flag: an older check that finishes late must not undo, or
  * redo, what a newer one learned.
@@ -70,8 +75,11 @@ export async function checkAvailability(
   }
   if (answered === undefined) answered = await boundedProbe(reg.availability(id), null, probeMs);
   if (answered) {
+    // Asked before the rekey: moving the state to an adopted id supersedes the requested id's
+    // checks (including this one), and the answer still belongs to the id it was given for.
+    const newest = current();
     syncStates.rekey(id, answered.id); // the entry may have adopted its folder's id
-    if (current()) syncStates.answered(answered.id);
+    if (newest) syncStates.answered(answered.id);
     return answered;
   }
   const folder = entry?.path;

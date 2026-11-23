@@ -182,6 +182,47 @@ describe("detectSyncedFolder: a folder the user picked, not a workspace root", (
     expect(await detectSyncedFolder(`${drive}/Exports`, deps)).toBe("google-drive");
   });
 
+  it("the identity file's 'no' ends nothing: the climb still asks about the folder and each ancestor", async () => {
+    const drive = "/Volumes/Ext/GoogleDrive/My Drive";
+    const asked: string[] = [];
+    const deps = answering((file) => {
+      asked.push(file);
+      return file === drive;
+    });
+    expect(await detectSyncedFolder(`${drive}/Exports/2026`, deps)).toBe("google-drive");
+    expect(asked).toEqual([
+      `${drive}/Exports/2026/.kaipu/workspace/identity.json`, // asked by `detectSync`: false
+      `${drive}/Exports/2026`,
+      `${drive}/Exports`,
+      drive,
+    ]);
+  });
+
+  it("asks about at most MAX_ANCESTORS_ASKED folders, then calls the rest plain", async () => {
+    const asked: string[] = [];
+    const deps = answering((file) => {
+      asked.push(file);
+      return false;
+    });
+    const deep = `/Volumes/Ext/${Array.from({ length: 30 }, (_, i) => `d${i}`).join("/")}`;
+    expect(await detectSyncedFolder(deep, deps)).toBeNull();
+    // One identity question from `detectSync`, then the climb: 12 folders, however deep it is.
+    expect(asked).toHaveLength(1 + 12);
+  });
+
+  it("a climb that runs out of budget reads as synced, though every step answered no", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Each answer is a "no", but each takes 40 ms, and the climb's budget is 2 x 50 ms.
+    const slow: SyncDetectDeps = {
+      home: HOME,
+      realpath: async (path) => path,
+      hasXattr: () => new Promise((resolve) => setTimeout(() => resolve(false), 40)),
+      timeoutMs: 50,
+    };
+    expect(await detectSyncedFolder("/Volumes/Ext/a/b/c/d/e/f", slow)).toBe("cloud-provider");
+    warn.mockRestore();
+  });
+
   it("a folder no ancestor tags is plain", async () => {
     expect(
       await detectSyncedFolder(

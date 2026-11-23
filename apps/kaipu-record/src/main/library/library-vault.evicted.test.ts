@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EvictedFileError } from "./dataless";
 import {
   LibraryVault,
+  SYNCED_SIDECAR_GRACE_MS,
   SYNCED_SIDECAR_READ_TIMEOUT_MS,
   SyncedLocalCopyError,
   type VaultReader,
@@ -28,6 +29,13 @@ describe("LibraryVault — evicted files get no image URL", () => {
   async function seedVideo(id: string): Promise<void> {
     await writeFile(join(directory, `${id}.mp4`), Buffer.alloc(64));
     await writeFile(join(directory, ".kaipu", `${id}.jpg`), Buffer.alloc(8));
+  }
+  /** The record a synced item has once its sidecar arrived. */
+  async function seedSidecar(id: string, assetId = `asset-${id}`): Promise<void> {
+    await writeFile(
+      join(directory, ".kaipu", `${id}.json`),
+      JSON.stringify({ sidecarVersion: 2, assetId, title: `Title ${id}` }),
+    );
   }
   async function seedShot(id: string): Promise<void> {
     await writeFile(join(directory, `${id}.png`), Buffer.alloc(64));
@@ -62,6 +70,7 @@ describe("LibraryVault — evicted files get no image URL", () => {
     await seedVideo("a");
     await seedVideo("b");
     await seedShot("c");
+    for (const id of ["a", "b", "c"]) await seedSidecar(id);
     const probe = vi.fn(async () => new Set<string>([join(directory, "b.mp4")]));
     const vault = new LibraryVault(directory, "ws-1", undefined, probe);
     const items = await vault.list();
@@ -217,5 +226,44 @@ describe("LibraryVault — evicted files get no image URL", () => {
 
     const evicted = new LibraryVault(directory, "ws-1", undefined, async () => new Set([file]));
     await expect(evicted.readLocalFile(file)).rejects.toMatchObject({ code: "EVICTED" });
+  });
+  describe("a media file whose sidecar has not synced down yet (NIW2-912)", () => {
+    beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+    afterEach(() => vi.useRealTimers());
+    const sidecarFile = () => join(directory, ".kaipu", "clip.json");
+
+    it("is listed read-only and given no identity until the grace period has passed", async () => {
+      await seedVideo("clip");
+      const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+      expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
+      await expect(access(sidecarFile())).rejects.toMatchObject({ code: "ENOENT" });
+
+      vi.setSystemTime(Date.now() + SYNCED_SIDECAR_GRACE_MS + 1);
+      const grown = await vault.describe("clip");
+      expect(grown?.metadataIssue).toBeUndefined();
+      await expect(access(sidecarFile())).resolves.toBeUndefined();
+    });
+
+    it("keeps the sidecar that arrives meanwhile: nothing was minted over it", async () => {
+      await seedVideo("clip");
+      const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+      expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
+
+      await seedSidecar("clip", "the-real-identity");
+      expect(await vault.describe("clip")).toMatchObject({
+        assetId: "the-real-identity",
+        title: "Title clip",
+      });
+      expect(JSON.parse(await readFile(sidecarFile(), "utf-8"))).toMatchObject({
+        assetId: "the-real-identity",
+      });
+    });
+
+    it("a plain workspace gives a legacy item its identity at once", async () => {
+      await seedVideo("clip");
+      const vault = new LibraryVault(directory, "ws-1");
+      expect((await vault.describe("clip"))?.metadataIssue).toBeUndefined();
+      await expect(access(sidecarFile())).resolves.toBeUndefined();
+    });
   });
 });

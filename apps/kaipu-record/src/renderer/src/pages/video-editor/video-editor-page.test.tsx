@@ -475,6 +475,44 @@ describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
   });
 });
 
+describe("VideoEditorLoader — a cursor track that cannot be read now (NIW2-912, AC13)", () => {
+  // The test replaces three bridge calls; the rest of the file expects the shared fakes back.
+  const originals = {
+    acquire: window.electronAPI.acquireEditorSession,
+    track: window.electronAPI.loadCursorTrack,
+    session: window.electronAPI.loadVideoEditSession,
+  };
+  afterEach(() => {
+    window.electronAPI.acquireEditorSession = originals.acquire;
+    window.electronAPI.loadCursorTrack = originals.track;
+    window.electronAPI.loadVideoEditSession = originals.session;
+  });
+
+  it("does not open as a recording without pointer data: it says the track is not downloaded", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => {
+      throw new Error("Error invoking remote method: EvictedFileError: Not downloaded");
+    });
+    const loadSession = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    render(
+      <RouterProvider
+        router={createMemoryRouter([
+          { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+          { path: "/library", element: <div>library-page</div> },
+        ])}
+      />,
+    );
+    expect(await screen.findByText(/pointer data is only in the cloud/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer in your library/i)).toBeNull();
+    // Nothing was opened, so nothing can be saved over the project from a scene without the track.
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(document.querySelector("footer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /back to library/i }));
+    expect(await screen.findByText("library-page")).toBeInTheDocument();
+  });
+});
+
 describe("VideoEditorPage — actions in the title bar (NIW2-619)", () => {
   it("renders undo, redo, capture frame, the status and Export into the title bar, not the side column", async () => {
     renderEditor();

@@ -173,7 +173,9 @@ const MAX_ANCESTORS_ASKED = 12;
  * syncs, and a custom mount is tagged all the way up to its root; the tag on a directory is
  * unverified, which is why the identity file is asked about too). One budget covers the whole
  * climb: when it runs out, or a step does not answer, the folder counts as synced, the same
- * "unknown means synced" rule as `detectSync`. Never throws.
+ * "unknown means synced" rule as `detectSync`. The budget is two timeouts (4 s) and starts after
+ * `detectSync` has answered, which has its own two (`realpath` and the identity xattr), so the
+ * whole call is 8 s at most. Never throws.
  */
 export async function detectSyncedFolder(
   path: string,

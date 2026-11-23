@@ -246,7 +246,8 @@ export type MoveRefusal =
 /**
  * An item that did arrive in the target but whose original (or part of it) was kept: the source
  * changed after it was copied (its media, its edit project or any small file), or the target copy
- * could not be confirmed as the one the move placed right before the source would have gone.
+ * could not be confirmed as the one the move placed right before the source would have gone, or
+ * the move failed after its commit and recovery could not yet finish removing the source.
  * Removing it could have discarded newer data, so it stays. The kept part can be the media, or,
  * when the source media was already removed, only the record and the companions that changed
  * after the copy: then the source lists a record with no media. The user should check both.

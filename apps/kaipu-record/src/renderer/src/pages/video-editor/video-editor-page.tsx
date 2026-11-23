@@ -462,7 +462,11 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   // The editor counts as opened once its session is read and it can render, not before.
   useEditorOpened("video", resolved !== null);
   // Why nothing was loaded: the item is gone, or two files claim its identity.
-  const [unavailable, setUnavailable] = useState<"gone" | "ambiguous" | null>(null);
+  // Or the recording's pointer track exists but cannot be read now (it is only in the cloud, or the
+  // provider does not answer): the editor does not open as a recording without pointer data.
+  const [unavailable, setUnavailable] = useState<"gone" | "ambiguous" | "cursor-track" | null>(
+    null,
+  );
   const navigate = useNavigate();
   const tLibrary = useTranslations("library");
 
@@ -496,16 +500,24 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
         return;
       }
       const editorSource: VideoEditorSource = { ...source, id: heldId };
-      // The cursor track is best-effort and independent of the session: a missing or
-      // malformed track just means no auto zooms (the editor behaves as before v2).
+      // A missing or malformed cursor track just means no auto zooms (the editor behaves as
+      // before v2). One that EXISTS but cannot be read now (offloaded by a synced folder's
+      // provider, or a stalled provider) is not a recording without one: opening on that would
+      // show no pointer data, with no sign it exists, and a project saved from it would no
+      // longer match the track. The cursor track must be local before the editor opens (AC13).
       let cursorTrack: CursorTrack | null = null;
+      let cursorUnreadable = false;
       try {
         const trackJson = await window.electronAPI.loadCursorTrack(editorSource.id);
         cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
       } catch {
-        cursorTrack = null;
+        cursorUnreadable = true;
       }
       if (cancelled) return;
+      if (cursorUnreadable) {
+        setUnavailable("cursor-track");
+        return;
+      }
       // Initial detection happens HERE, before useVideoScene exists, so it is part of the
       // initial scene — not a commit — and merely opening the editor is not an edit.
       const open = (scene: VideoScene, hasZoomData: boolean): void => {
@@ -581,7 +593,13 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   if (unavailable) {
     return (
       <div className={styles.unavailable} role="alert">
-        <p>{unavailable === "ambiguous" ? tLibrary("itemAmbiguous") : t("sourceUnavailable")}</p>
+        <p>
+          {unavailable === "ambiguous"
+            ? tLibrary("itemAmbiguous")
+            : unavailable === "cursor-track"
+              ? t("cursorTrackNotLocal")
+              : t("sourceUnavailable")}
+        </p>
         <Button variant="ghost" onClick={() => navigate(ROUTES.library)}>
           {tLibrary("backToLibrary")}
         </Button>
@@ -775,7 +793,12 @@ function VideoEditor({
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
   // in-app navigation.
-  const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef, {
+    onKeptOnThisComputer: (reason) =>
+      showToast({
+        message: t(reason === "cloud-only" ? "editsKeptCloudOnly" : "editsKeptFolderBusy"),
+      }),
+  });
   // A workspace switch writes the pending edit first, while this editor is still open and
   // its workspace still active (ADR 0032, decision 7); the leave guard below then sees it saved.
   const flushAutosave = autosave.flush;

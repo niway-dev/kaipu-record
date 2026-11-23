@@ -639,7 +639,7 @@ describe("fixVault — an orphan bundle with a file that did not move", () => {
 });
 
 describe("fixVault on a synced workspace: every scan reads through the workspace's vault (AC13)", () => {
-  it("gives up on a record the provider never delivers in all four scans, instead of reading it plainly", async () => {
+  it("gives up on a record the provider never delivers in each scan that reads records, instead of reading it plainly", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       directory = await makeVault({
@@ -674,9 +674,10 @@ describe("fixVault on a synced workspace: every scan reads through the workspace
         await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
       }
       const report = await fixing;
-      expect(report.counts["unreadable-record"]).toBeGreaterThanOrEqual(1);
+      expect(report.counts["unreadable-record"]).toBe(2);
       // A plain read would have delivered it: the record was never read except through the vault.
-      expect(asked.filter((path) => path.endsWith("Clip.json")).length).toBeGreaterThanOrEqual(2);
+      // Exactly the three scans that read records ask for it, once each.
+      expect(asked.filter((path) => path.endsWith("Clip.json"))).toHaveLength(3);
     } finally {
       vi.useRealTimers();
     }
