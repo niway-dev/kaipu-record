@@ -19,7 +19,7 @@ import type { BigIntStats } from "node:fs";
 import { link, lstat, open, readFile, rename, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { atomicWriteFile, syncDir } from "./atomic-write";
+import { atomicWriteFile, isSyncedPath, syncDir, volumeStagingDir } from "./atomic-write";
 
 /** "taken": a file already exists at the destination; nothing was replaced or moved. */
 export type Placement = "placed" | "taken";
@@ -209,10 +209,19 @@ async function copyFromHandle(source: FileHandle, to: string): Promise<PlacedFil
   }
 }
 
+/** What `placeByRename` goes through that a test replaces (a rename the volumes refuse). */
+export interface PlaceDeps {
+  /** The rename that moves a file into place; a test makes it throw EXDEV. */
+  rename?: typeof rename;
+  /** Whether a path is inside a synced folder; defaults to the app's detection. */
+  isSynced?: (path: string) => boolean;
+}
+
 export interface PlaceOptions {
   stuck?: StuckSource;
   /** The file `from` must hold; any other file there fails the placement (ESTALE), untouched. */
   expect?: FileIdentity;
+  deps?: PlaceDeps;
 }
 
 /**
@@ -293,6 +302,17 @@ export async function placeNew(
   return placed;
 }
 
+/** Whether anything is at `path`; an unreadable name propagates (never guess it is free). */
+async function isOccupied(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (codeOf(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
 /**
  * Synced folders (spec, decision 15): put `from` at `to` with a plain `rename`, never a hard
  * link. A hard link to a file inside a Google Drive folder renames the cloud item to the other
@@ -306,7 +326,9 @@ export async function placeNew(
  * window is the instant between them, and the caller must have reserved the name first: a
  * rename writes the new stem's sidecar before it moves the media, a move or an import reserves
  * the stem (a stub sidecar holds it), and a staged write picks a stem it just found free.
- * A rename refused across devices falls back to an exclusive copy, then removes the source.
+ * A rename refused across devices falls back to a copy, then removes the source. Into a synced
+ * folder that copy is staged on the destination's volume outside the synced root and renamed in
+ * (`copyAcrossDevices`): the provider never sees a half-written file under any name.
  */
 export async function placeByRename(
   from: string,
@@ -318,16 +340,9 @@ export async function placeByRename(
     const now = await identityAt(from);
     if (!now || !sameFile(now, options.expect)) throw notTheFile(from);
   }
-  const occupied = await lstat(to).then(
-    () => true,
-    (error: unknown) => {
-      if (codeOf(error) === "ENOENT") return false;
-      throw error;
-    },
-  );
-  if (occupied) return "taken";
+  if (await isOccupied(to)) return "taken";
   try {
-    await rename(from, to);
+    await (options.deps?.rename ?? rename)(from, to);
   } catch (error) {
     if (codeOf(error) !== "EXDEV") throw error;
     return copyAcrossDevices(from, to, options);
@@ -340,27 +355,61 @@ export async function placeByRename(
 }
 
 /**
- * `placeByRename`'s fallback when the volumes differ: an exclusive copy, then the source goes
- * the way `placeNew` sends a staging file: removed only while its name still holds the file
- * that was copied (identity read from the handle the copy read), else set aside or marked
- * placed, so the stranded sweep cannot recover the same take a second time.
+ * `placeByRename`'s fallback when the volumes differ: a copy, then the source goes the way
+ * `placeNew` sends a staging file: removed only while its name still holds the file that was
+ * copied (identity read from the handle the copy read), else set aside or marked placed, so the
+ * stranded sweep cannot recover the same take a second time.
+ *
+ * Where the destination is in a synced folder the copy is never written under a name the provider
+ * can see: it goes to `volumeStagingDir` (hidden, on the destination's volume, outside the synced
+ * root) and is renamed into place once whole. When no such folder exists the placement fails with
+ * EXDEV before a byte is written: the source stays and nothing partial is placed. A destination
+ * the detection does not call synced keeps the exclusive copy straight into it.
  */
 async function copyAcrossDevices(
   from: string,
   to: string,
   options: PlaceOptions,
 ): Promise<PlacedFile | "taken"> {
+  const isSynced = options.deps?.isSynced ?? isSyncedPath;
+  let stageDir: string | null = null;
+  if (isSynced(to)) {
+    stageDir = await volumeStagingDir(to, { isSynced });
+    if (stageDir === null) {
+      throw Object.assign(
+        new Error(
+          `"${to}" is in a synced folder on another volume and no folder outside it on that volume can stage the copy; "${from}" is kept`,
+        ),
+        { code: "EXDEV", path: from },
+      );
+    }
+  }
+  const staged =
+    stageDir === null ? null : join(stageDir, `${basename(to)}.${randomUUID().slice(0, 8)}.part`);
   const source = await open(from, "r");
   let sourceId: PlacedFile;
   let copied: PlacedFile | "taken";
   try {
     sourceId = identityOf(await source.stat({ bigint: true }));
     if (options.expect && !sameFile(sourceId, options.expect)) throw notTheFile(from);
-    copied = await copyFromHandle(source, to);
+    copied = await copyFromHandle(source, staged ?? to);
   } finally {
     await source.close().catch(() => {});
   }
   if (copied === "taken") return "taken";
+  if (staged !== null) {
+    // The staged copy is whole: one same-volume rename puts it under its final name.
+    try {
+      if (await isOccupied(to)) {
+        await removeIfSame(staged, copied);
+        return "taken";
+      }
+      await (options.deps?.rename ?? rename)(staged, to);
+    } catch (error) {
+      await removeIfSame(staged, copied);
+      throw error;
+    }
+  }
   await syncDir(dirname(to)).catch(() => {});
   // The copy sits under its final name in a folder a provider writes into: the source may go
   // only while `to` still holds the bytes just copied (as `placeNew` checks), else it keeps them.
@@ -608,13 +657,30 @@ export async function replaceConfirmed(from: string, to: string, byRename = fals
       if (codeOf(error) !== "EXDEV") throw error;
     }
   }
-  const temp = siblingTemp(to, "replace");
+  let temp = siblingTemp(to, "replace");
+  if (byRename && isSyncedPath(to)) {
+    // Across volumes the temporary file must not sit beside `to`: the provider would upload it
+    // half written. It is staged on the destination's volume outside the synced root instead.
+    const stageDir = await volumeStagingDir(to);
+    if (stageDir === null) {
+      throw Object.assign(
+        new Error(
+          `"${to}" is in a synced folder on another volume and no folder outside it on that volume can stage the copy; "${from}" is kept`,
+        ),
+        { code: "EXDEV", path: from },
+      );
+    }
+    temp = join(stageDir, `${basename(to)}.replace-${randomUUID().slice(0, 8)}`);
+  }
   const source = await open(from, "r");
   let sourceId: PlacedFile;
   let placed: PlacedFile | "taken";
   try {
     sourceId = identityOf(await source.stat({ bigint: true }));
-    placed = await duplicateAt(source, sourceId, from, temp);
+    // A synced replacement never takes a hard link (see above): it is always a copy.
+    placed = byRename
+      ? await copyFromHandle(source, temp)
+      : await duplicateAt(source, sourceId, from, temp);
   } finally {
     await source.close().catch(() => {});
   }

@@ -86,14 +86,29 @@ export interface LoadResult {
   assets: { assetId: string; bytes: ArrayBuffer }[];
 }
 
+/** The vault a session save reads through: the active workspace's (bounded when it is synced). */
+export type SessionVault = () => LibraryVault;
+
+const plainVault: SessionVault = () => new LibraryVault(vaultDirectory().path);
+
 /**
- * The export stamp already on disk, or null when there is no readable meta sidecar.
- * Best effort by design: a missing or corrupt sidecar means "nothing is known to be
- * exported", which is the safe side — the badge then tells the user to export.
+ * The export stamp already on disk: a number, null when nothing is known to be exported (no
+ * meta sidecar, or one that is not valid JSON: the safe side, the badge then tells the user to
+ * export), or "unreadable" when the file is there but cannot be read now (a provider offline or
+ * stalled, an offloaded file, EIO). Unreadable is not "never exported": the caller keeps the
+ * meta file it could not read instead of writing a new one over the stamp.
  */
-async function readExportedSavedAt(id: string): Promise<number | null> {
+async function readExportedSavedAt(
+  id: string,
+  vault: LibraryVault,
+): Promise<number | null | "unreadable"> {
+  let raw: string;
   try {
-    const raw = await readFile(sessionMetaPath(vaultDirectory().path, id), "utf-8");
+    raw = await vault.readTextBounded(sessionMetaPath(vaultDirectory().path, id));
+  } catch (error) {
+    return (error as NodeJS.ErrnoException | null)?.code === "ENOENT" ? null : "unreadable";
+  }
+  try {
     const meta = JSON.parse(raw) as Partial<SessionMeta>;
     return typeof meta.exportedSavedAt === "number" ? meta.exportedSavedAt : null;
   } catch {
@@ -103,10 +118,16 @@ async function readExportedSavedAt(id: string): Promise<number | null> {
 
 // Exported (not just used via the IPC handlers below) so unit tests can exercise the
 // atomic-write/prune/delete behaviour directly against a temp vault dir.
-export async function saveSession(id: string, payload: SavePayload): Promise<void> {
+export async function saveSession(
+  id: string,
+  payload: SavePayload,
+  makeVault: SessionVault = plainVault,
+): Promise<void> {
   const { sessionJson, assets, exported = false } = payload;
-  // Before any write: an item whose record cannot be read is read-only (F9).
-  await new LibraryVault(vaultDirectory().path).assertWritableRecord(id);
+  const vault = makeVault();
+  // Before any write: an item whose record cannot be read is read-only (F9). Through the
+  // workspace's own vault, so a synced folder's read is bounded and never downloads a file.
+  await vault.assertWritableRecord(id);
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
@@ -146,7 +167,7 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
   // effort: if the source is missing at save time (should not happen from the
   // editor), write nothing — the probe treats a missing meta file as
   // "missing-dependencies".
-  const sourcePath = await new LibraryVault(vaultDirectory().path).filePath(id);
+  const sourcePath = await vault.filePath(id);
   let source: { size: number; mtimeMs: number } | null = null;
   try {
     source = await stat(sourcePath);
@@ -158,12 +179,16 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
     // make every edit after an export look like it had never been exported at all,
     // collapsing the two states the badge exists to tell apart.
     const savedAt = Date.now();
+    const previous = exported ? null : await readExportedSavedAt(id, vault);
+    // The previous stamp could not be read: writing a meta now would drop it and show the item
+    // as never exported. The existing meta stays as it is (the probe reads its own mtime check).
+    if (previous === "unreadable") return;
     const meta: SessionMeta = {
       sourceSizeBytes: source.size,
       sourceMtimeMs: source.mtimeMs,
       assetIds: [...keptIds],
       savedAt,
-      exportedSavedAt: exported ? savedAt : await readExportedSavedAt(id),
+      exportedSavedAt: exported ? savedAt : previous,
     };
     const mp = sessionMetaPath(vaultDirectory().path, id);
     await atomicWriteFile(mp, JSON.stringify(meta));
@@ -180,12 +205,13 @@ export function saveSessionLocked(
   workspaceId: string,
   id: string,
   payload: SavePayload,
+  makeVault: SessionVault = plainVault,
 ): Promise<void> {
   return withItemLock(workspaceId, id, async () => {
-    if (!(await new LibraryVault(vaultDirectory().path).hasMedia(id))) {
+    if (!(await makeVault().hasMedia(id))) {
       throw new ItemMovedError(id);
     }
-    await saveSession(id, payload);
+    await saveSession(id, payload, makeVault);
   });
 }
 
@@ -243,7 +269,7 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 
 // ── IPC registration ──────────────────────────────────────────────────────────
 
-export function registerVideoEditSessionHandlers(): void {
+export function registerVideoEditSessionHandlers(makeVault: SessionVault = plainVault): void {
   // Item-scoped: stamped with the workspace (ADR 0032). A save that reaches main after a
   // switch is refused, so it can never write the session into the other workspace.
   // Entry points (maintenance mode, NIW2-561): a refused save keeps its pending state in
@@ -260,7 +286,7 @@ export function registerVideoEditSessionHandlers(): void {
     ) =>
       workspaceGate().run(stamp, () =>
         vaultActivity.run("editor", () =>
-          saveSessionLocked(activeWorkspace().id, id, { sessionJson, assets, exported }),
+          saveSessionLocked(activeWorkspace().id, id, { sessionJson, assets, exported }, makeVault),
         ),
       ),
   );

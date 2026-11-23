@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   utimes,
@@ -45,6 +46,14 @@ vi.mock("node:fs/promises", async (importActual) => {
     open: async (path: string, flags?: string, ...rest: unknown[]) => {
       if (typeof flags === "string" && writing.test(flags)) seen.created.push(String(path));
       return (actual.open as (...args: unknown[]) => Promise<unknown>)(path, flags, ...rest);
+    },
+    copyFile: async (from: string, to: string, ...rest: unknown[]) => {
+      seen.created.push(String(to));
+      return (actual.copyFile as (...args: unknown[]) => Promise<void>)(from, to, ...rest);
+    },
+    cp: async (from: string, to: string, ...rest: unknown[]) => {
+      seen.created.push(String(to));
+      return (actual.cp as (...args: unknown[]) => Promise<void>)(from, to, ...rest);
     },
     rename: async (from: string, to: string) => {
       seen.renames.push({ from: String(from), to: String(to) });
@@ -701,9 +710,13 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
             if (path !== finalPath) return sha256FileBase64(path);
             // The placed file is replaced by another one (a provider rewrote it, or someone put
             // one there) before the check that fails; the rollback must not remove that file.
+            // The new file is made beside the old one and renamed over it: it gets its own inode
+            // while the old one still exists, whatever the file system does with freed inodes.
             calls += 1;
-            await rm(finalPath);
-            await writeFile(finalPath, "someone else's file");
+            const placed = (await stat(finalPath, { bigint: true })).ino;
+            await writeFile(`${finalPath}.theirs`, "someone else's file");
+            await rename(`${finalPath}.theirs`, finalPath);
+            expect((await stat(finalPath, { bigint: true })).ino).not.toBe(placed);
             return "corrupt";
           },
         },
@@ -715,7 +728,7 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
   });
 
-  it("healing asks once per workspace, and not at all for the target of an entry whose source is away", async () => {
+  it("healing asks once per workspace, however many entries share it", async () => {
     const crash = deps({
       hooks: {
         after: (at) => {
@@ -818,6 +831,243 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     expect(await copiesOf(item.assetId)).toEqual([{ dir: dst.directory, id: "Demo" }]);
     expect(await readFile(join(dst.directory, "Demo.mp4"))).toEqual(item.media);
     expect(await readdir(join(root, "scratch", "dst", "tmp")).catch(() => [])).toEqual([]);
+  });
+});
+
+describe("moveItem — the source goes only while it is what was copied (NIW2-912 review)", () => {
+  const syncedTarget = (): MoveSide => ({ ...dst, scratch: join(root, "scratch", "dst") });
+  const fixedTime = new Date(1_700_000_000_000);
+
+  /** Another file at `path`, made beside it and renamed over it: a new inode, as a provider does. */
+  async function replaceWith(path: string, bytes: Buffer, mtime?: Date): Promise<void> {
+    await writeFile(`${path}.theirs`, bytes);
+    if (mtime) await utimes(`${path}.theirs`, mtime, mtime);
+    await rename(`${path}.theirs`, path);
+  }
+
+  const journalReason = async (): Promise<string | undefined> => {
+    const journals = await readdir(journalDir);
+    expect(journals).toHaveLength(1);
+    return (JSON.parse(await readFile(join(journalDir, journals[0]!), "utf-8")) as MoveJournal)
+      .quarantined;
+  };
+
+  it("C1: a source replaced by another file of the same size and mtime is kept (identity before size and mtime)", async () => {
+    const item = await seedItem(src.directory);
+    const path = join(src.directory, "Demo.mp4");
+    await utimes(path, fixedTime, fixedTime);
+    const theirs = randomBytes(item.media.length);
+    const outcome = await moveItem(
+      { source: src, target: syncedTarget(), id: item.id },
+      deps({
+        hooks: {
+          after: async (step) => {
+            if (step === "committed") await replaceWith(path, theirs, fixedTime);
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+    expect(await readFile(path)).toEqual(theirs);
+    expect(await journalReason()).toBe("source media changed after the move committed");
+  });
+
+  it("C2: a target copy replaced after it was verified keeps the source (the delete re-checks the target)", async () => {
+    const item = await seedItem(src.directory);
+    const target = syncedTarget();
+    const finalPath = join(dst.directory, "Demo.mp4");
+    const foreign = randomBytes(item.media.length);
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        hooks: {
+          // Between the verification and the delete: freshness writes, the journal, the hook.
+          after: async (step) => {
+            if (step === "committed") await replaceWith(finalPath, foreign);
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    expect(await readFile(finalPath)).toEqual(foreign); // never touched by the move
+    expect(await journalReason()).toBe(
+      "source or target media changed just before the source was removed",
+    );
+  });
+
+  it("C2: a source replaced right after its bytes were compared is kept (the delete re-checks the source)", async () => {
+    const item = await seedItem(src.directory);
+    const path = join(src.directory, "Demo.mp4");
+    let committed = false;
+    const theirs = randomBytes(item.media.length);
+    const outcome = await moveItem(
+      { source: src, target: syncedTarget(), id: item.id },
+      deps({
+        fs: {
+          sha256: async (file) => {
+            const hash = await sha256FileBase64(file);
+            // A provider swaps the file just after the comparison read the old one.
+            if (committed && file === path) {
+              committed = false;
+              await replaceWith(path, theirs);
+            }
+            return hash;
+          },
+        },
+        hooks: {
+          after: async (step) => {
+            if (step === "committed") {
+              committed = true;
+              const later = new Date(Date.now() + 60_000);
+              await utimes(path, later, later); // only the mtime moved: the bytes get compared
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+    expect(await readFile(path)).toEqual(theirs);
+  });
+
+  it("C3: a companion changed after the copy keeps the whole source, media included", async () => {
+    const item = await seedItem(src.directory);
+    const transcript = join(src.directory, ".kaipu", "Demo.transcript.json");
+    const outcome = await moveItem(
+      { source: src, target: syncedTarget(), id: item.id },
+      deps({
+        hooks: {
+          after: async (step) => {
+            if (step === "committed") await writeFile(transcript, '{"segments":["new"]}');
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    expect(await readFile(transcript, "utf-8")).toBe('{"segments":["new"]}');
+    expect(await filesOf(src.directory, "Demo")).toContain("Demo.webcam.mp4");
+    expect(await journalReason()).toBe(
+      "source file Demo.transcript.json changed after the move committed",
+    );
+  });
+
+  it("C3: an asset changed, and an asset added, after the copy keep the source", async () => {
+    for (const change of ["changed", "added"] as const) {
+      await rm(root, { recursive: true, force: true });
+      await mkdir(src.directory, { recursive: true });
+      await mkdir(dst.directory, { recursive: true });
+      const item = await seedItem(src.directory);
+      const assets = join(src.directory, ".kaipu", "Demo.assets");
+      const outcome = await moveItem(
+        { source: src, target: syncedTarget(), id: item.id },
+        deps({
+          hooks: {
+            after: async (step) => {
+              if (step !== "committed") return;
+              if (change === "changed") await writeFile(join(assets, "slide.png"), "new png!!!");
+              else await writeFile(join(assets, "late.png"), "late");
+            },
+          },
+        }),
+      );
+      expect(outcome, change).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+      expect(await readFile(join(src.directory, "Demo.mp4")), change).toEqual(item.media);
+      expect((await readdir(assets)).sort(), change).toContain(
+        change === "changed" ? "slide.png" : "late.png",
+      );
+    }
+  });
+
+  it("C4: into a synced target the webcam track and the assets are staged outside it and renamed in", async () => {
+    const item = await seedItem(src.directory);
+    const target = syncedTarget();
+    const scratch = join(root, "scratch", "dst");
+    seen.created = [];
+    seen.renames = [];
+    const outcome = await moveItem({ source: src, target, id: item.id }, deps());
+    expect(outcome).toMatchObject({ ok: true });
+    const finals = [
+      join(dst.directory, ".kaipu", "Demo.webcam.mp4"),
+      join(dst.directory, ".kaipu", "Demo.assets", "slide.png"),
+    ];
+    // Nothing was created under a final name in the target: only a rename from the scratch put it.
+    for (const final of finals) {
+      expect(seen.created, final).not.toContain(final);
+      expect(
+        seen.renames.filter((r) => r.to === final && r.from.startsWith(scratch)),
+        final,
+      ).toHaveLength(1);
+    }
+    expect(await readFile(finals[0]!)).toEqual(item.webcam);
+    expect(await readFile(finals[1]!, "utf-8")).toBe("png");
+  });
+
+  it("C4: control: into a plain target the webcam track is written under its own name", async () => {
+    const item = await seedItem(src.directory);
+    seen.created = [];
+    await moveItem({ source: src, target: dst, id: item.id }, deps({ fs: { link: exdev } }));
+    expect(seen.created).toContain(join(dst.directory, ".kaipu", "Demo.webcam.mp4"));
+  });
+
+  it("C6: the move reads the source through a vault that asks the provider, before its own preflight", async () => {
+    const item = await seedItem(src.directory);
+    const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
+    const asked: string[][] = [];
+    await moveItem(
+      { source, target: syncedTarget(), id: item.id },
+      deps({
+        fs: {
+          evicted: async (paths) => {
+            asked.push(paths);
+            return new Set();
+          },
+        },
+      }),
+    );
+    // `describe` asks about the media alone (a poster at most); the preflight asks about every
+    // companion. The first ask is the describe: it already went through the probe.
+    expect(asked[0]!.some((path) => path.endsWith("Demo.edit.json"))).toBe(false);
+    expect(asked[0]!.some((path) => path.endsWith("Demo.mp4"))).toBe(true);
+    expect(asked.some((paths) => paths.some((path) => path.endsWith("Demo.edit.json")))).toBe(true);
+  });
+
+  it("heal: a source replaced after the checks, before the delete, is kept and surfaced", async () => {
+    const item = await seedItem(src.directory);
+    const path = join(src.directory, "Demo.mp4");
+    await utimes(path, fixedTime, fixedTime);
+    await expect(
+      moveItem(
+        { source: src, target: dst, id: item.id },
+        deps({
+          fs: { link: exdev },
+          hooks: {
+            after: (at) => {
+              if (at === "media-placed") throw new SimulatedCrash(at);
+            },
+          },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(SimulatedCrash);
+    const theirs = randomBytes(item.media.length);
+    let swapped = false;
+    const report = await heal({
+      fs: {
+        sha256: async (file) => {
+          const hash = await sha256FileBase64(file);
+          // The target copy is hashed after the source was looked at: the swap lands in between.
+          if (!swapped && file.startsWith(dst.directory)) {
+            swapped = true;
+            await replaceWith(path, theirs, fixedTime);
+          }
+          return hash;
+        },
+      },
+    });
+    expect(swapped).toBe(true);
+    expect(report.healed).toBe(0);
+    expect(report.quarantined).toHaveLength(1);
+    expect(await readFile(path)).toEqual(theirs);
   });
 });
 

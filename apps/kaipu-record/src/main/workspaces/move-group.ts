@@ -66,9 +66,12 @@ export async function runMoveGroup(
 /**
  * `resolve` for one group: once it answers null (the target is not connected, or a stalled
  * provider did not answer in time) the rest of the group gets null at once. Each answer costs up
- * to the availability bound (about 6 s for a synced folder, up to about 11 s when a workspace
- * first detected as plain is detected again), so asking again per item would hold the switch
- * lock for N times that for a target that is not coming back during the run.
+ * to the availability bound of `checkAvailability`, so asking again per item would hold the switch
+ * lock for N times that for a target that is not coming back during the run. The bound, from the
+ * timeouts in `availability-check.ts`, `sync-state.ts` and `synced-folder.ts`:
+ *   - a synced folder: 5 s for the probe + 1 s for the `stat` fallback = 6 s;
+ *   - a workspace first detected as plain, detected again: 5 s probe + 2 s `realpath` + 2 s xattr
+ *     + 1 s identity `stat` + 5 s second probe + 1 s `stat` fallback = 16 s.
  */
 export function rememberingUnavailable(
   resolve: () => Promise<string | null>,

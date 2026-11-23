@@ -66,6 +66,10 @@ describe("checkAvailability", () => {
     const d = deps(`${HOME}/Movies/K`, {
       availability: () => new Promise((r) => (resolve = r)),
     });
+    // Detected at launch: plain, with `identity.json` there to be asked about (the stub says so),
+    // so the answer is final and no provisional flag asks for another detection.
+    await d.states.refresh({ id: "w", path: `${HOME}/Movies/K` });
+    expect(d.states.needsRecheck("w")).toBe(false);
     const result = checkAvailability(d, "w");
     await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS * 3);
     resolve(AVAILABLE);

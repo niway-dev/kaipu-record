@@ -5,15 +5,16 @@ import {
   copyFile,
   cp,
   link,
+  lstat,
   mkdir,
   readFile,
   readdir,
   rm,
+  rmdir,
   stat,
   statfs,
-  unlink,
 } from "node:fs/promises";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { nextTagColor, type TagColor } from "@kaipu/domain/constants";
 import type { MoveKeptOriginal, MoveRefusal } from "@shared/types/workspaces";
 import { atomicWriteFile } from "../library/atomic-write";
@@ -25,7 +26,6 @@ import {
   isPlainItemId,
   LibraryVault,
   META_DIR,
-  readSidecarStrict,
   type CompanionPaths,
   type Sidecar,
 } from "../library/library-vault";
@@ -36,6 +36,7 @@ import {
   placeNew,
   placeNoReplace,
   removeIfSame,
+  sameFile,
   type FileIdentity,
 } from "../library/safe-place";
 import { TagRegistryError, VaultTagRepository } from "../library/tag-repository";
@@ -225,6 +226,190 @@ async function statOrNull(path: string): Promise<StatLike | null> {
   }
 }
 
+// ── What the move compares before it deletes ──────────────────────────────────────
+
+/**
+ * What a file looked like when the move read it: which file it is (device + inode, bigints so a
+ * Windows file id does not lose digits), its size and its mtime to the nanosecond. A provider that
+ * replaces a file with another of the same size and mtime still changes the inode, so identity is
+ * compared first and never overruled by an equal size and mtime.
+ */
+interface FileStamp {
+  dev: bigint;
+  ino: bigint;
+  size: bigint;
+  mtimeNs: bigint;
+}
+
+/** The stamp of `path` (a link is its own file, never followed), or null when nothing is there. */
+async function stampAt(path: string): Promise<FileStamp | null> {
+  try {
+    const info = await lstat(path, { bigint: true });
+    return { dev: info.dev, ino: info.ino, size: info.size, mtimeNs: info.mtimeNs };
+  } catch (error) {
+    const code = codeOf(error);
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw error;
+  }
+}
+
+function sameStamp(a: FileStamp | null, b: FileStamp | null): boolean {
+  if (a === null || b === null) return a === b;
+  return sameFile(a, b) && a.size === b.size && a.mtimeNs === b.mtimeNs;
+}
+
+/** Every file the source's item owns, as the move found it before it copied a byte. */
+interface CompanionSnapshot {
+  /** Each companion path (and each file under the assets folder); null where nothing was there. */
+  files: Map<string, FileStamp | null>;
+  /** The assets folder and its sub-folders, deepest first: removed only while empty. */
+  dirs: string[];
+  /** The record: removed last, so a move that stops halfway leaves the item's identity in place. */
+  sidecar: string;
+}
+
+async function snapshotCompanions(paths: CompanionPaths): Promise<CompanionSnapshot> {
+  const files = new Map<string, FileStamp | null>();
+  const dirs: string[] = [];
+  const walk = async (dir: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      const code = codeOf(error);
+      if (code === "ENOENT" || code === "ENOTDIR") return;
+      throw error;
+    }
+    dirs.unshift(dir);
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) await walk(path);
+      else files.set(path, await stampAt(path));
+    }
+  };
+  for (const [key, path] of Object.entries(paths)) {
+    if (key === "assetsDir") await walk(path);
+    else files.set(path, await stampAt(path));
+  }
+  // Deepest first: a folder is only ever removed after the ones inside it.
+  dirs.sort((a, b) => b.length - a.length);
+  return { files, dirs, sidecar: paths.sidecar };
+}
+
+/** The target media the source may be deleted against: the copy the move placed and verified. */
+interface Destination {
+  path: string;
+  stamp: FileStamp;
+}
+
+/**
+ * The destination as it is now, when it is the file `expected` names; null when nothing is there,
+ * another file is, or it cannot be read. Never throws: a caller that has just created a link must
+ * reach its own bookkeeping whatever the file system says (null keeps the source later).
+ */
+async function destinationOf(path: string, expected: FileIdentity): Promise<Destination | null> {
+  try {
+    const stamp = await stampAt(path);
+    if (stamp === null || !sameFile(stamp, expected)) return null;
+    return { path, stamp };
+  } catch {
+    return null;
+  }
+}
+
+function sameDestination(a: Destination | null, b: Destination | null): boolean {
+  return a !== null && b !== null && sameStamp(a.stamp, b.stamp);
+}
+
+/**
+ * Remove `path` only while it is still the file `expected` describes (null: nothing was there,
+ * so anything now present is new) and the destination is still the verified copy. Both are read
+ * in one step and the `rm` follows with no other await in between: the checks cannot go stale
+ * behind a freshness write, a journal write or a read of another file.
+ *
+ * Irreducible window: Node has no compare-and-delete, so a provider that swaps `path` in the
+ * instant between the stat and the unlink is not seen (the same residual window as `removeSource`
+ * in `safe-place.ts`). Everything before that instant keeps the file. A stat that fails keeps it.
+ */
+async function removeGuarded(
+  path: string,
+  expected: FileStamp | null,
+  destination: Destination,
+): Promise<"removed" | "kept"> {
+  let now: FileStamp | null;
+  let there: FileStamp | null;
+  try {
+    [now, there] = await Promise.all([stampAt(path), stampAt(destination.path)]);
+  } catch (error) {
+    console.error(`move: could not check "${path}" before removing it; kept`, error);
+    return "kept";
+  }
+  if (!sameStamp(there, destination.stamp)) return "kept";
+  if (now === null) return "removed"; // already gone: nothing is left to protect
+  if (!sameStamp(now, expected)) return "kept";
+  await rm(path, { force: true });
+  return "removed";
+}
+
+/**
+ * The first file that is not what the snapshot saw (changed, replaced, added or removed since,
+ * or unreadable now), as a short name, or null when every one is the same. It decides before
+ * anything is deleted, so one changed file keeps the whole source.
+ */
+async function snapshotChangedFile(
+  snapshot: CompanionSnapshot,
+  paths: CompanionPaths,
+): Promise<string | null> {
+  let now: CompanionSnapshot;
+  try {
+    now = await snapshotCompanions(paths);
+  } catch {
+    return "files";
+  }
+  for (const [path, expected] of snapshot.files) {
+    if (!now.files.has(path) || !sameStamp(now.files.get(path)!, expected)) {
+      return `file ${basename(path)}`;
+    }
+  }
+  for (const path of now.files.keys()) {
+    if (!snapshot.files.has(path)) return `file ${basename(path)}`;
+  }
+  return null;
+}
+
+/**
+ * Remove the source's small files, each one only while it is still what the snapshot saw and the
+ * destination is still the verified copy (`removeGuarded`). Stops at the first file that changed
+ * and names it; the record goes last. Resolves null when everything went.
+ */
+async function removeCompanionsGuarded(
+  snapshot: CompanionSnapshot,
+  destination: Destination,
+): Promise<string | null> {
+  const ordered = [...snapshot.files.entries()].sort(
+    ([a], [b]) => Number(a === snapshot.sidecar) - Number(b === snapshot.sidecar),
+  );
+  for (const [path, expected] of ordered) {
+    try {
+      if ((await removeGuarded(path, expected, destination)) === "kept") {
+        return `file ${basename(path)}`;
+      }
+    } catch (error) {
+      console.error(`move: could not remove "${path}"`, error);
+    }
+  }
+  for (const dir of snapshot.dirs) {
+    try {
+      await rmdir(dir);
+    } catch (error) {
+      const code = codeOf(error);
+      if (code === "ENOTEMPTY" || code === "EEXIST") return `folder ${basename(dir)}`;
+      if (code !== "ENOENT") console.error(`move: could not remove "${dir}"`, error);
+    }
+  }
+  return null;
+}
+
 function journalPath(dir: string, moveId: string): string {
   return join(dir, `${moveId}.json`);
 }
@@ -238,6 +423,24 @@ function stagingDir(targetDir: string, moveId: string, scratch?: string): string
   return scratch
     ? join(scratch, "tmp", `move-${moveId}`)
     : join(targetDir, META_DIR, "tmp", `move-${moveId}`);
+}
+
+/**
+ * A vault on one side of a move, built the way the library builds the active workspace's vault:
+ * a synced side (`scratch` set) gets the eviction probe and its staging folder, so its sidecar
+ * reads are bounded, its writes stage outside the folder and `describe` never hands out an
+ * offloaded file. Without it `synced` is false and `describe`, `list` and the strict sidecar read
+ * would read the folder's files whole, evicted or not, before the move's own eviction check.
+ */
+function vaultOf(side: MoveSide, directory: string, fs: MoverFs): LibraryVault {
+  if (side.scratch === undefined) return new LibraryVault(directory, side.workspaceId);
+  return new LibraryVault(
+    directory,
+    side.workspaceId,
+    undefined,
+    (paths) => fs.evicted(paths),
+    join(side.scratch, "tmp"),
+  );
 }
 
 /** `link` errors that mean "no hard link here": the file is copied instead. */
@@ -273,8 +476,8 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     await deps.hooks?.after?.(step);
   };
   const refuse = (reason: MoveRefusal): MoveOutcome => ({ ok: false, id, reason });
-  const from = new LibraryVault(source.directory, source.workspaceId);
-  const to = new LibraryVault(target.directory, target.workspaceId);
+  const from = vaultOf(source, source.directory, fs);
+  const to = vaultOf(target, target.directory, fs);
 
   // ── 1. Preconditions, inside the item lock: nothing is written before they all pass.
   let targetInfo;
@@ -292,7 +495,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     return refuse("not-found");
   }
   if (item.metadataIssue) return refuse("metadata-issue");
-  const read = await readSidecarStrict(from.sidecarPath(id));
+  const read = await from.readRecordStrict(from.sidecarPath(id));
   if (read.status !== "ok" || !read.sidecar.assetId) return refuse("metadata-issue");
   const record = read.sidecar;
   const assetId = record.assetId!;
@@ -327,6 +530,8 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     if (offloaded.size > 0) return refuse("evicted");
   }
   const mediaInfo = await stat(media);
+  const mediaStamp = await stampAt(media);
+  if (mediaStamp === null) return refuse("not-found");
   const sameDevice = (await stat(source.directory)).dev === targetInfo.dev;
   // A synced side always copies: never a second name for a file a provider syncs.
   const synced = source.scratch !== undefined || target.scratch !== undefined;
@@ -355,6 +560,10 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
   // The drag folders of this item go before the move starts (decision 11).
   await deps.dragLedger?.clear(source.workspaceId, id);
+
+  // What the source's small files are now, before the first byte is copied: the delete step
+  // compares against it, so a change during the copy is a change too.
+  const companionSnapshot = await snapshotCompanions(from.companionPaths(id));
 
   // The media's identity, for healing. A copy always hashes; a link keeps size and mtime.
   const cached =
@@ -399,7 +608,11 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     await writeJournal(deps.journalDir, journal);
     await after("target-reserved");
 
-    // ── 4. The small files and the webcam track.
+    // ── 4. The small files and the webcam track. Into a synced target each one is copied to the
+    // scratch folder first and renamed in (the webcam track can be hundreds of MB: a provider
+    // would otherwise upload it as it grows, under its final name).
+    const staging = stagingDir(target.directory, journal.moveId, target.scratch);
+    const stageCompanions = target.scratch !== undefined ? join(staging, "companions") : null;
     const fromPaths = from.companionPaths(id);
     const toPaths = to.companionPaths(newId);
     for (const key of COMPANION_FILES) {
@@ -408,24 +621,36 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
         sameDevice: linkable,
         verify: key === "webcam",
         fs,
+        stage: stageCompanions === null ? null : join(stageCompanions, basename(toPaths[key])),
       });
     }
     if (await existsStrict(fromPaths.assetsDir)) {
-      await cp(fromPaths.assetsDir, toPaths.assetsDir, {
-        recursive: true,
-        force: false,
-        errorOnExist: true,
-      });
+      if (stageCompanions === null) {
+        await cp(fromPaths.assetsDir, toPaths.assetsDir, {
+          recursive: true,
+          force: false,
+          errorOnExist: true,
+        });
+      } else {
+        await transferTree(
+          fromPaths.assetsDir,
+          toPaths.assetsDir,
+          join(stageCompanions, basename(toPaths.assetsDir)),
+          fs,
+        );
+      }
     }
     await after("companions-copied");
 
     // ── 5. The media. This is the commit.
     let mode: "linked" | "copied" = "copied";
-    const staging = stagingDir(target.directory, journal.moveId, target.scratch);
+    // The target media as the move verified it: what the source is deleted against.
+    let destination: Destination | null = null;
     if (linkable) {
       try {
         await fs.link(media, finalMedia(newId));
         mode = "linked";
+        destination = await destinationOf(finalMedia(newId), mediaStamp);
       } catch (error) {
         if (!NO_HARD_LINK.has(codeOf(error) ?? "")) throw error;
       }
@@ -462,11 +687,21 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
       if (placed === "taken") throw new Error(`target media taken: ${finalMedia(newId)}`);
       placedAt = { path: finalMedia(newId), identity: placed };
       // With a synced side, the bytes are checked again where they now live, before the
-      // source may go: a provider may have touched the file in between.
-      if (synced && (await fs.sha256(finalMedia(newId))) !== journal.media.sha256) {
-        await rollBackTarget(to, newId, assetId, staging, placedAt);
-        await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
-        return refuse("checksum-mismatch");
+      // source may go: a provider may have touched the file in between. The file is stamped
+      // before and after the read, and both must be the file this move placed: a provider that
+      // rewrote it while it was read has not been verified.
+      if (synced) {
+        const beforeRead = await destinationOf(finalMedia(newId), placed);
+        const hash = await fs.sha256(finalMedia(newId));
+        const afterRead = await destinationOf(finalMedia(newId), placed);
+        if (hash !== journal.media.sha256 || !sameDestination(beforeRead, afterRead)) {
+          await rollBackTarget(to, newId, assetId, staging, placedAt);
+          await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
+          return refuse("checksum-mismatch");
+        }
+        destination = afterRead;
+      } else {
+        destination = await destinationOf(finalMedia(newId), placed);
       }
     }
     mediaPlaced = true;
@@ -487,29 +722,36 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     // for review, the same way healing keeps the source (`healEntry`), and the outcome says so.
     // The small files go with the media, so they get the same check the healing path makes: the
     // record is still this item's, and the edit project is the one that was copied.
-    const reason = (await sourceChangedSinceCopy(
-      media,
-      mediaInfo,
-      journal,
-      source.scratch !== undefined,
-      fs,
-    ))
-      ? "source media changed after the move committed"
-      : await sourceCompanionsChanged(from, to, id, newId, journal.assetId);
-    if (reason) {
+    const keepOriginal = async (reason: string): Promise<MoveOutcome> => {
       await writeJournal(deps.journalDir, { ...journal, quarantined: reason });
       console.error(`move ${journal.moveId} of "${id}" kept for review: ${reason}`);
       await rm(staging, { recursive: true, force: true }).catch(() => {});
       return { ok: true, id, newId, mode, keptOriginal: "source-changed" };
+    };
+    // The slow checks first (they read, and may hash): they decide, but they do not delete.
+    const sourceNow = await checkSourceMedia(media, mediaStamp, journal, synced, fs);
+    if (sourceNow.changed) return keepOriginal("source media changed after the move committed");
+    const companionsReason = await sourceCompanionsChanged(from, to, id, newId, journal.assetId);
+    if (companionsReason) return keepOriginal(companionsReason);
+    const changedFile = await snapshotChangedFile(companionSnapshot, from.companionPaths(id));
+    if (changedFile) return keepOriginal(`source ${changedFile} changed after the move committed`);
+    if (destination === null) {
+      return keepOriginal("the target media could not be verified as the copy that was placed");
     }
-    await rm(media, { force: true });
+    // The deleting checks are made again, immediately before each removal, with nothing else
+    // awaited in between (`removeGuarded`): the destination is still the verified copy, and the
+    // source is still the file that was copied. A mismatch keeps both.
+    if ((await removeGuarded(media, sourceNow.stamp, destination)) === "kept") {
+      return keepOriginal("source or target media changed just before the source was removed");
+    }
     // A hard link shares the inode, and removing the source name moves its ctime: the hash
     // stamp is written only now, or the first transcript open would hash the file again.
     await stampMovedMedia(to, newId, journal).catch((error: unknown) =>
       console.error("move: could not stamp the moved item's media", error),
     );
     await after("source-media-deleted");
-    await removeCompanions(from.companionPaths(id));
+    const changed = await removeCompanionsGuarded(companionSnapshot, destination);
+    if (changed) return keepOriginal(`source ${changed} changed after the move committed`);
     await after("source-companions-deleted");
 
     // ── 7. Done.
@@ -547,30 +789,38 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 }
 
 /**
- * Whether the source is no longer the file that was copied. Size and mtime are the cheap test;
- * Google Drive and OneDrive often touch only the mtime, so a file with the same size and the same
- * identity (inode) is hashed and compared with the copy's hash before it counts as changed. An
- * evicted source is never hashed (reading it would download it): it counts as changed.
+ * Whether the source is no longer the file that was copied, and the stamp the delete step then
+ * holds it to. Identity (device + inode) is compared first and nothing overrules it: a provider
+ * that replaces the file with another of the same size and mtime is still a different file. A
+ * different size is a change. With the same file and size but a new mtime (Google Drive and
+ * OneDrive often touch only that) the bytes are hashed and compared with the copy's hash. An
+ * evicted source is never hashed (reading it would download it): it counts as changed, and so
+ * does one whose identity or bytes cannot be read.
  */
-async function sourceChangedSinceCopy(
+async function checkSourceMedia(
   media: string,
-  copied: { size: number; mtimeMs: number; ino: number },
+  copied: FileStamp,
   journal: MoveJournal,
   synced: boolean,
   fs: MoverFs,
-): Promise<boolean> {
-  const current = await statOrNull(media);
-  if (!current) return false; // already gone: nothing is left to protect
-  if (current.size === journal.media.size && current.mtimeMs === journal.media.mtimeMs) {
-    return false;
-  }
-  if (current.size !== journal.media.size || current.ino !== copied.ino) return true;
-  if (journal.media.sha256 === null) return true;
-  if (synced && (await fs.evicted([media])).size > 0) return true;
+): Promise<{ changed: boolean; stamp: FileStamp | null }> {
+  let current: FileStamp | null;
   try {
-    return (await fs.sha256(media)) !== journal.media.sha256;
+    current = await stampAt(media);
   } catch {
-    return true; // unreadable: keep the original
+    return { changed: true, stamp: null }; // uncertain identity counts as changed
+  }
+  if (current === null) return { changed: false, stamp: null }; // already gone: nothing to protect
+  if (!sameFile(current, copied) || current.size !== copied.size) {
+    return { changed: true, stamp: current };
+  }
+  if (current.mtimeNs === copied.mtimeNs) return { changed: false, stamp: current };
+  if (journal.media.sha256 === null) return { changed: true, stamp: current };
+  if (synced && (await fs.evicted([media])).size > 0) return { changed: true, stamp: current };
+  try {
+    return { changed: (await fs.sha256(media)) !== journal.media.sha256, stamp: current };
+  } catch {
+    return { changed: true, stamp: current }; // unreadable: keep the original
   }
 }
 
@@ -610,13 +860,31 @@ async function sourceTags(
 
 /**
  * Put `from` at `to`, never replacing a file there: a hard link on the same volume, else an
- * exclusive copy (verified by sha256 when asked, by size otherwise).
+ * exclusive copy (verified by sha256 when asked, by size otherwise). With `stage` (a synced
+ * target) the copy is made at `stage`, outside the synced folder, and renamed to `to` only once
+ * it is whole and verified: the provider never sees half of a file under its final name.
  */
 async function transfer(
   from: string,
   to: string,
-  options: { sameDevice: boolean; verify: boolean; fs: MoverFs },
+  options: { sameDevice: boolean; verify: boolean; fs: MoverFs; stage?: string | null },
 ): Promise<void> {
+  if (options.stage) {
+    await mkdir(dirname(options.stage), { recursive: true });
+    const copied = await copyExclusive(from, options.stage);
+    if (copied === "taken")
+      throw Object.assign(new Error(`"${options.stage}" exists`), { code: "EEXIST" });
+    const good = options.verify
+      ? (await options.fs.sha256(from)) === (await options.fs.sha256(options.stage))
+      : (await stat(from)).size === (await stat(options.stage)).size;
+    if (!good) {
+      await rm(options.stage, { force: true });
+      throw Object.assign(new Error(`copy mismatch: ${to}`), { code: "EIO" });
+    }
+    const placed = await placeByRename(options.stage, to);
+    if (placed === "taken") throw Object.assign(new Error(`"${to}" exists`), { code: "EEXIST" });
+    return;
+  }
   if (options.sameDevice) {
     try {
       await options.fs.link(from, to);
@@ -636,6 +904,33 @@ async function transfer(
   if ((await options.fs.sha256(from)) !== (await options.fs.sha256(to))) {
     await rm(to, { force: true });
     throw Object.assign(new Error(`checksum mismatch: ${to}`), { code: "EIO" });
+  }
+}
+
+/**
+ * The assets folder into a synced target: every file is copied under `stageDir` (outside the
+ * synced folder), then renamed to its final name one by one (`transfer` with a stage). Folders
+ * are created empty in the target; no file there is ever partial, and none is replaced.
+ */
+async function transferTree(
+  from: string,
+  to: string,
+  stageDir: string,
+  fs: MoverFs,
+): Promise<void> {
+  await mkdir(to, { recursive: true });
+  for (const entry of await readdir(from, { withFileTypes: true })) {
+    const source = join(from, entry.name);
+    if (entry.isDirectory()) {
+      await transferTree(source, join(to, entry.name), join(stageDir, entry.name), fs);
+    } else {
+      await transfer(source, join(to, entry.name), {
+        sameDevice: false,
+        verify: false,
+        fs,
+        stage: join(stageDir, entry.name),
+      });
+    }
   }
 }
 
@@ -660,7 +955,7 @@ async function rollBackTarget(
   media: string | { path: string; identity: FileIdentity } | null,
 ): Promise<void> {
   await rm(staging, { recursive: true, force: true }).catch(() => {});
-  const read = await readSidecarStrict(to.sidecarPath(newId));
+  const read = await to.readRecordStrict(to.sidecarPath(newId));
   if (read.status === "ok" && read.sidecar.assetId !== assetId) return;
   if (read.status !== "ok" && read.status !== "missing") return;
   if (typeof media === "string") await rm(media, { force: true });
@@ -792,8 +1087,8 @@ async function healEntry(
   if (sourceDir === null) return "waiting";
   const targetDir = await deps.resolve(journal.target);
   if (targetDir === null) return "waiting";
-  const from = new LibraryVault(sourceDir);
-  const to = new LibraryVault(targetDir);
+  const from = vaultOf(journal.source, sourceDir, deps.fs);
+  const to = vaultOf(journal.target, targetDir, deps.fs);
   const staging = stagingDir(targetDir, journal.moveId, journal.target.scratch);
   const done = async (): Promise<"healed"> => {
     await rm(staging, { recursive: true, force: true }).catch(() => {});
@@ -809,6 +1104,8 @@ async function healEntry(
 
   const sourceMedia = join(sourceDir, `${journal.sourceId}${journal.ext}`);
   const sourceStat = await statOrNull(sourceMedia);
+  // The identity the checks below are made against: the delete is held to it (`removeGuarded`).
+  const sourceStamp = await stampAt(sourceMedia).catch(() => null);
   const sourcePresent = sourceStat !== null;
   const sourceMatches =
     sourceStat !== null &&
@@ -838,17 +1135,23 @@ async function healEntry(
     ];
     if ((await deps.fs.evicted(reads)).size > 0) return "waiting";
   }
+  const targetStampBefore = await stampAt(targetMedia).catch(() => null);
   const targetMatches = await mediaMatches(targetMedia, journal, deps.fs);
+  const targetStamp = await stampAt(targetMedia).catch(() => null);
   const targetPresent = (await statOrNull(targetMedia)) !== null;
-  const targetRecord = await readSidecarStrict(to.sidecarPath(targetId));
+  const targetRecord = await to.readRecordStrict(to.sidecarPath(targetId));
   const recordIsOurs =
     targetRecord.status === "missing" ||
     (targetRecord.status === "ok" && targetRecord.sidecar.assetId === journal.assetId);
 
   if (targetPresent && targetMatches && recordIsOurs) {
+    // The target file must be the same file before and after it was read: a provider that
+    // rewrote it meanwhile has not been verified, and the source may not go against it.
+    if (targetStamp === null || !sameStamp(targetStampBefore, targetStamp)) return "waiting";
+    const destination: Destination = { path: targetMedia, stamp: targetStamp };
     // Committed, whatever the phase says: roll forward.
     if (targetRecord.status === "missing") {
-      const read = await readSidecarStrict(from.sidecarPath(journal.sourceId));
+      const read = await from.readRecordStrict(from.sidecarPath(journal.sourceId));
       if (read.status !== "ok")
         return quarantine("target record missing and source record unreadable");
       await atomicWriteFile(to.sidecarPath(targetId), JSON.stringify(read.sidecar, null, 2));
@@ -860,32 +1163,38 @@ async function healEntry(
     // The source goes only while it is still the item this journal moved. Its stem may be
     // someone else's by now (a new recording, a rename), and while the target was unplugged
     // the user may have kept editing the item here: those edits are not ours to delete.
-    const sourceRecord = await readSidecarStrict(from.sidecarPath(journal.sourceId));
+    const sourceRecord = await from.readRecordStrict(from.sidecarPath(journal.sourceId));
     if (sourceRecord.status !== "ok" && sourceRecord.status !== "missing") {
       return quarantine("source record unreadable");
     }
     const sourceIsOurs =
       sourceRecord.status === "missing" || sourceRecord.sidecar.assetId === journal.assetId;
     if (sourceIsOurs) {
+      // What the small files are now, before the edit project is compared: they go only while
+      // each is still what this snapshot saw.
+      const companionSnapshot = await snapshotCompanions(from.companionPaths(journal.sourceId));
       if (sourcePresent) {
         if (!sourceMatches) return quarantine("source media changed after the move committed");
         if (await editProjectChanged(from, to, journal.sourceId, targetId)) {
           return quarantine("source edit project changed after the move committed");
         }
+        // The checks above read, hashed and awaited: the delete re-checks the source and the
+        // target together, with nothing awaited between that check and the `rm`.
         try {
-          await unlink(sourceMedia);
-        } catch (error) {
-          if (codeOf(error) !== "ENOENT") {
-            // Still there (open elsewhere, read-only): the record stays with it and the
-            // journal stays for a later run, so the file is never listed under a new identity.
-            console.error(`move ${journal.moveId}: cannot remove "${sourceMedia}"`, error);
-            return "waiting";
+          if ((await removeGuarded(sourceMedia, sourceStamp, destination)) === "kept") {
+            return quarantine("source or target media changed just before the source was removed");
           }
+        } catch (error) {
+          // Still there (open elsewhere, read-only): the record stays with it and the
+          // journal stays for a later run, so the file is never listed under a new identity.
+          console.error(`move ${journal.moveId}: cannot remove "${sourceMedia}"`, error);
+          return "waiting";
         }
-        // The unlink moved the shared inode's ctime (a linked move): stamp again.
+        // The removal moved the shared inode's ctime (a linked move): stamp again.
         await stampMovedMedia(to, targetId, journal).catch(() => {});
       }
-      await removeCompanions(from.companionPaths(journal.sourceId));
+      const changed = await removeCompanionsGuarded(companionSnapshot, destination);
+      if (changed) return quarantine(`source ${changed} changed after the move committed`);
     }
     return done();
   }
@@ -938,9 +1247,11 @@ async function editProjectChanged(
   const sourcePath = from.companionPaths(sourceId).editSession;
   if (!(await existsStrict(sourcePath).catch(() => true))) return false;
   try {
+    // Through each vault's guard: an offloaded project is never read (that would download it);
+    // it counts as changed, so the source keeps its copy.
     const [mine, theirs] = await Promise.all([
-      readFile(sourcePath),
-      readFile(to.companionPaths(targetId).editSession),
+      from.readLocalFile(sourcePath),
+      to.readLocalFile(to.companionPaths(targetId).editSession),
     ]);
     return !mine.equals(theirs);
   } catch {
@@ -960,7 +1271,7 @@ async function sourceCompanionsChanged(
   targetId: string,
   assetId: string,
 ): Promise<string | null> {
-  const record = await readSidecarStrict(from.sidecarPath(sourceId));
+  const record = await from.readRecordStrict(from.sidecarPath(sourceId));
   if (record.status === "ok" && record.sidecar.assetId !== assetId) {
     return "source record changed after the move committed";
   }
@@ -998,7 +1309,7 @@ async function removeOrphanRecords(to: LibraryVault, assetId: string): Promise<v
     // A transcript is a companion, not a record: it can never be an interrupted reservation.
     if (name.endsWith(".transcript.json")) continue;
     const stem = name.slice(0, -".json".length);
-    const read = await readSidecarStrict(to.sidecarPath(stem));
+    const read = await to.readRecordStrict(to.sidecarPath(stem));
     if (read.status !== "ok" || read.sidecar.assetId !== assetId) continue;
     if (await to.hasMedia(stem)) continue;
     await removeCompanions(to.companionPaths(stem));

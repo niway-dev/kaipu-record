@@ -126,6 +126,62 @@ describe("SyncStates, workspaces whose check did not answer", () => {
   });
 });
 
+describe("SyncStates, overlapping detections of one workspace (NIW2-912)", () => {
+  const HOME = "/Users/x";
+  const oldPath = `${HOME}/Documents/Old`;
+  const newPath = `${HOME}/Documents/New`;
+
+  /** A detector whose answers the test releases one at a time, in any order. */
+  function stalled() {
+    const waiting: { path: string; answer(value: "google-drive" | null): void }[] = [];
+    const detect = (path: string) =>
+      new Promise<"google-drive" | null>((resolve) =>
+        waiting.push({ path, answer: (value) => resolve(value) }),
+      );
+    return { detect, waiting };
+  }
+
+  it("an older detection that lands after a newer one does not put the old path back", async () => {
+    const { detect, waiting } = stalled();
+    const states = new SyncStates(detect, HOME, async () => true);
+    const first = states.refresh({ id: "w", path: oldPath }); // the launch detection, slow
+    const second = states.refresh({ id: "w", path: newPath }); // the relocation's, newer
+    waiting[1]!.answer("google-drive"); // the newer one answers first
+    await second;
+    waiting[0]!.answer(null); // the stale one lands last
+    await first;
+
+    // The relocated folder keeps what the newer detection found (the path rule cannot say it).
+    expect(states.of({ id: "w", path: newPath })).toBe("google-drive");
+  });
+
+  it("a detection that lands after forget does not bring the workspace back", async () => {
+    const { detect, waiting } = stalled();
+    const states = new SyncStates(detect, HOME, async () => false);
+    const pending = states.refresh({ id: "w", path: oldPath });
+    states.forget("w");
+    waiting[0]!.answer(null);
+    await pending;
+
+    expect(states.needsRecheck("w")).toBe(false);
+    expect(states.of({ id: "w", path: oldPath })).toBeNull();
+  });
+
+  it("a detection that lands after rekey leaves the old id gone", async () => {
+    const { detect, waiting } = stalled();
+    const states = new SyncStates(detect, HOME, async () => false);
+    const entry = { id: "pending", path: oldPath };
+    const inFlight = states.refresh(entry);
+    entry.id = "adopted"; // the registry mutates a pending entry in place
+    states.rekey("pending", "adopted");
+    waiting[0]!.answer(null);
+    await inFlight;
+
+    expect(states.needsRecheck("pending")).toBe(false);
+    expect(states.needsRecheck("adopted")).toBe(false);
+  });
+});
+
 describe("scratch folders", () => {
   it("live in userData, per workspace, outside the workspace folder", () => {
     expect(scratchTmp("/ud", "ws-1")).toBe("/ud/workspace-scratch/ws-1/tmp");

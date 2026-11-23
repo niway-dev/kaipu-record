@@ -576,6 +576,17 @@ export class LibraryVault {
     return readFile(path);
   }
 
+  /**
+   * The text of a small file in this vault (an edit-project meta, a sidecar-like record), read
+   * the way a synced vault reads every sidecar: an offloaded file throws `EvictedFileError`
+   * without being read, and a read that stalls gives up after `SYNCED_SIDECAR_READ_TIMEOUT_MS`
+   * (`ETIMEDOUT`). A vault that is not synced just reads it.
+   */
+  async readTextBounded(path: string): Promise<string> {
+    await this.assertLocal([path]);
+    return this.readSidecarText(path);
+  }
+
   /** The query a media URL this vault hands out carries: the caller's, plus the workspace. */
   private mediaParams(params: Record<string, string>): Record<string, string> {
     return this.workspaceId ? { ...params, w: this.workspaceId } : params;

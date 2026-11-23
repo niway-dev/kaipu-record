@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename as renameFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { VaultTagRepository } from "./tag-repository";
@@ -125,6 +133,57 @@ describe("atomicWriteFile", () => {
 
     expect(hooks.created).toHaveLength(1);
     expect(hooks.created[0]).toMatch(/elsewhere\.json\..*\.tmp$/);
+  });
+
+  describe("when the rename out of the scratch folder is refused across volumes (EXDEV; NIW2-912)", () => {
+    /** Refuses the first rename (the scratch to synced move), as another volume would. */
+    const refusingOnce = () => {
+      const calls: { from: string; to: string }[] = [];
+      const rename = async (from: string, to: string): Promise<void> => {
+        calls.push({ from, to });
+        if (calls.length === 1) {
+          throw Object.assign(new Error("cross-device link not permitted"), { code: "EXDEV" });
+        }
+        await renameFile(from, to);
+      };
+      return { calls, rename: rename as unknown as typeof renameFile };
+    };
+
+    it("rewrites the file through a hidden folder on the destination volume, never a temp in the synced folder", async () => {
+      syncFolder();
+      record();
+      const { calls, rename } = refusingOnce();
+      await atomicWriteFile(join(folder, ".kaipu", "a.json"), '{"whole":true}', "tmp", staging, {
+        rename,
+        isSynced: (path) => path === folder || inside(path),
+      });
+
+      expect(leaks()).toEqual([]);
+      expect(calls).toHaveLength(2);
+      expect(calls[1]!.from.startsWith(join(root, ".kaipu-staging"))).toBe(true);
+      expect(await readFile(join(folder, ".kaipu", "a.json"), "utf-8")).toBe('{"whole":true}');
+      expect(await readdir(staging)).toEqual([]);
+      expect(await readdir(join(root, ".kaipu-staging"))).toEqual([]);
+      expect(await readdir(join(folder, ".kaipu"))).toEqual(["a.json"]);
+    });
+
+    it("with no folder outside the synced one that can stage it, fails and leaves the previous file untouched", async () => {
+      syncFolder();
+      await writeFile(join(folder, ".kaipu", "a.json"), "previous");
+      record();
+      const { rename } = refusingOnce();
+      await expect(
+        atomicWriteFile(join(folder, ".kaipu", "a.json"), "new", "tmp", staging, {
+          rename,
+          isSynced: () => true,
+        }),
+      ).rejects.toMatchObject({ code: "EXDEV" });
+
+      expect(leaks()).toEqual([]);
+      expect(await readFile(join(folder, ".kaipu", "a.json"), "utf-8")).toBe("previous");
+      expect(await readdir(join(folder, ".kaipu"))).toEqual(["a.json"]);
+      expect(await readdir(staging)).toEqual([]);
+    });
   });
 
   it("null names no staging at all, whatever the resolver says", async () => {

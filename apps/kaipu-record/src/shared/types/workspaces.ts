@@ -245,7 +245,9 @@ export type MoveRefusal =
 
 /**
  * An item that did arrive in the target but whose original was kept: the source changed after it
- * was copied, so removing it could have discarded newer data. The user should check both.
+ * was copied (its media, its edit project or any small file), or the target copy could not be
+ * confirmed as the one the move placed right before the source would have gone. Removing the
+ * original could have discarded newer data, so both stay. The user should check both.
  */
 export type MoveKeptOriginal = "source-changed";
 

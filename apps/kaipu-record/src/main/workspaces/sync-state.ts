@@ -27,18 +27,34 @@ export class SyncStates {
   /** The newest availability check of each workspace (see `beginCheck`). */
   private readonly checks = new Map<string, number>();
 
+  /** The newest detection of each workspace (see `refresh`). */
+  private readonly refreshes = new Map<string, number>();
+
   constructor(
     private readonly detect: (path: string) => Promise<SyncProvider | null> = detectSync,
     private readonly home: string = homedir(),
     private readonly hasIdentity: (path: string) => Promise<boolean> = identityIsThere,
   ) {}
 
+  /**
+   * Detect `entry` again. The detection awaits the provider (seconds when it stalls), so two
+   * refreshes of one workspace can overlap, and the workspace can be removed or re-keyed while
+   * one runs. Only the newest refresh of an id may write what it learned: an older one that lands
+   * late would put the old path back (and lose a detection the path rule cannot reproduce), and
+   * one that lands after `forget` or `rekey` would bring back an id that no longer exists.
+   * `entry` is read once, up front: the registry mutates a pending entry's id in place.
+   */
   async refresh(entry: { id: string; path: string }): Promise<SyncProvider | null> {
-    const sync = await this.detect(entry.path);
-    this.known.set(entry.id, { path: entry.path, sync });
-    this.unanswered.delete(entry.id); // a new detection (launch, relocation) starts afresh
-    if (sync === null && !(await this.hasIdentity(entry.path))) this.provisional.add(entry.id);
-    else this.provisional.delete(entry.id);
+    const { id, path } = entry;
+    const generation = (this.refreshes.get(id) ?? 0) + 1;
+    this.refreshes.set(id, generation);
+    const sync = await this.detect(path);
+    const hasIdentity = sync === null ? await this.hasIdentity(path) : true;
+    if (this.refreshes.get(id) !== generation) return sync; // superseded: leave the newer answer alone
+    this.known.set(id, { path, sync });
+    this.unanswered.delete(id); // a new detection (launch, relocation) starts afresh
+    if (sync === null && !hasIdentity) this.provisional.add(id);
+    else this.provisional.delete(id);
     return sync;
   }
 
@@ -97,6 +113,7 @@ export class SyncStates {
   /** The workspace was removed from the registry. */
   forget(id: string): void {
     this.checks.delete(id);
+    this.refreshes.delete(id);
     this.known.delete(id);
     this.provisional.delete(id);
     this.unanswered.delete(id);

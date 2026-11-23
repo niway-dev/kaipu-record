@@ -15,6 +15,7 @@ import {
   saveSessionLocked,
 } from "./video-edit-session";
 import { ItemMovedError, withItemLock } from "./item-lock";
+import { LibraryVault } from "./library-vault";
 
 function bytesOf(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer as ArrayBuffer;
@@ -178,6 +179,81 @@ describe("video-edit-session", () => {
       assetIds: ["a1"],
     });
     expect(typeof meta.savedAt).toBe("number");
+  });
+
+  describe("in a synced folder (NIW2-912)", () => {
+    const metaPath = (): string => join(vaultDir, ".kaipu", "rec-1.edit.meta.json");
+    /** The active workspace's vault, as `currentVault` builds it: a probe says what is offloaded. */
+    const syncedVault = (offloaded: (path: string) => boolean) => () =>
+      new LibraryVault(
+        vaultDir,
+        "ws",
+        undefined,
+        async (paths) => new Set(paths.filter(offloaded)),
+        join(vaultDir, "..", "scratch-tmp"),
+      );
+
+    it("an export stamp that cannot be read now is kept: the save does not write a meta over it", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [], exported: true });
+      const before = await readFile(metaPath(), "utf-8");
+      expect(JSON.parse(before).exportedSavedAt).toEqual(expect.any(Number));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      // The provider has offloaded the meta file: reading it would download it (or stall).
+      await saveSession(
+        "rec-1",
+        { sessionJson: '{"edited":true}', assets: [] },
+        syncedVault((path) => path.endsWith(".edit.meta.json")),
+      );
+
+      expect(await readFile(metaPath(), "utf-8")).toBe(before); // the stamp survives
+      expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
+        '{"edited":true}',
+      );
+    });
+
+    it("a readable export stamp is carried forward as before", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [], exported: true });
+      const stamp = JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt;
+      await saveSession(
+        "rec-1",
+        { sessionJson: "{}", assets: [] },
+        syncedVault(() => false),
+      );
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBe(stamp);
+    });
+
+    it("a meta that is missing or not JSON still means nothing is known to be exported", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [] });
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBeNull();
+      await writeFile(metaPath(), "{ not json");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [] });
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBeNull();
+    });
+
+    it("every read of a save goes through the workspace's vault, so the provider is asked before the stamp is read", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      const asked: string[] = [];
+      await saveSession(
+        "rec-1",
+        { sessionJson: "{}", assets: [] },
+        () =>
+          new LibraryVault(
+            vaultDir,
+            "ws",
+            undefined,
+            async (paths) => {
+              asked.push(...paths);
+              return new Set();
+            },
+            join(vaultDir, "..", "scratch-tmp"),
+          ),
+      );
+      expect(asked.some((path) => path.endsWith("rec-1.edit.meta.json"))).toBe(true);
+    });
   });
 
   it("deleteVideoEditSession also removes edit.meta.json", async () => {

@@ -1,5 +1,5 @@
-import { renameSync, writeFileSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { renameSync, writeFileSync, type PathLike } from "node:fs";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -116,6 +116,85 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     expect(hooks.links).toBe(0);
     expect(await readFile(join(dir, "Take.mp4"), "utf-8")).toBe("bytes");
     await expect(stat(join(dir, "take.part"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  describe("into a synced folder on another volume (EXDEV; NIW2-912)", () => {
+    const syncedOf = (root: string) => (path: string) =>
+      path === join(root, "synced") || path.startsWith(join(root, "synced") + "/");
+    /** A rename that is refused across volumes once (the scratch to synced move), then works. */
+    const refusingOnce =
+      (calls: Array<[string, string]>) => async (fromPath: PathLike, toPath: PathLike) => {
+        const [from, to] = [String(fromPath), String(toPath)];
+        calls.push([from, to]);
+        if (calls.length === 1) {
+          throw Object.assign(new Error("cross-device link not permitted"), { code: "EXDEV" });
+        }
+        renameSync(from, to);
+      };
+
+    it("stages the copy on the destination's volume outside the folder; the folder sees only the rename", async () => {
+      await mkdir(join(dir, "synced"), { recursive: true });
+      await mkdir(join(dir, "scratch"), { recursive: true });
+      await writeFile(join(dir, "scratch", "take.mp4"), "whole file");
+      const calls: Array<[string, string]> = [];
+      const seenInFolder: string[][] = [];
+      const rename = refusingOnce(calls);
+      const placed = await placeByRename(
+        join(dir, "scratch", "take.mp4"),
+        join(dir, "synced", "Take.mp4"),
+        {
+          deps: {
+            isSynced: syncedOf(dir),
+            rename: async (from, to) => {
+              // The moment the folder is touched: it holds nothing yet, and the staged file is whole.
+              if (calls.length >= 1) {
+                seenInFolder.push(await readdir(join(dir, "synced")));
+                expect(await readFile(String(from), "utf-8")).toBe("whole file");
+              }
+              await rename(from, to);
+            },
+          },
+        },
+      );
+      expect(placed).not.toBe("taken");
+      expect(seenInFolder).toEqual([[]]);
+      expect(calls[1]![0].startsWith(join(dir, ".kaipu-staging"))).toBe(true);
+      expect(calls[1]![1]).toBe(join(dir, "synced", "Take.mp4"));
+      expect(await readdir(join(dir, "synced"))).toEqual(["Take.mp4"]);
+      expect(await readFile(join(dir, "synced", "Take.mp4"), "utf-8")).toBe("whole file");
+      expect(await readdir(join(dir, ".kaipu-staging"))).toEqual([]);
+      await expect(stat(join(dir, "scratch", "take.mp4"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    });
+
+    it("with no folder outside the synced one that can stage it, fails and keeps the source (nothing partial is placed)", async () => {
+      await mkdir(join(dir, "synced"), { recursive: true });
+      await mkdir(join(dir, "scratch"), { recursive: true });
+      await writeFile(join(dir, "scratch", "take.mp4"), "whole file");
+      const calls: Array<[string, string]> = [];
+      // The detection claims every ancestor: no folder can be told apart from the synced one.
+      await expect(
+        placeByRename(join(dir, "scratch", "take.mp4"), join(dir, "synced", "Take.mp4"), {
+          deps: { isSynced: () => true, rename: refusingOnce(calls) },
+        }),
+      ).rejects.toMatchObject({ code: "EXDEV" });
+      expect(calls).toHaveLength(1);
+      expect(await readdir(join(dir, "synced"))).toEqual([]);
+      expect(await readFile(join(dir, "scratch", "take.mp4"), "utf-8")).toBe("whole file");
+    });
+
+    it("control: a destination the detection does not call synced keeps the direct exclusive copy", async () => {
+      await mkdir(join(dir, "plain"), { recursive: true });
+      await writeFile(join(dir, "take.mp4"), "whole file");
+      const calls: Array<[string, string]> = [];
+      await placeByRename(join(dir, "take.mp4"), join(dir, "plain", "Take.mp4"), {
+        deps: { isSynced: () => false, rename: refusingOnce(calls) },
+      });
+      expect(calls).toHaveLength(1);
+      expect(await readFile(join(dir, "plain", "Take.mp4"), "utf-8")).toBe("whole file");
+      await expect(stat(join(dir, ".kaipu-staging"))).rejects.toMatchObject({ code: "ENOENT" });
+    });
   });
 
   it("across devices, a source that cannot be removed is set aside so a sweep cannot recover it again", async () => {

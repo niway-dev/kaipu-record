@@ -471,7 +471,7 @@ export function registerLibraryVaultHandlers(deps: {
   );
 
   // Video-editor session persistence (save on export, load on editor mount).
-  registerVideoEditSessionHandlers();
+  registerVideoEditSessionHandlers(currentVault);
 }
 
 /** An imported item's id: `imported-2026-10-31-13-51-00`, the stamp of when it came in. */
