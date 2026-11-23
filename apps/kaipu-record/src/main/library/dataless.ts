@@ -103,18 +103,21 @@ export async function datalessPaths(
     const answer = await within(deps.runStat(batch), left(), { stdout: "", failed: true });
     if (answer === TIMED_OUT) return giveUp(start);
     const flags = parseStatFlags(answer.stdout);
-    if (flags.size > 0) {
-      // stat answered: its flags are the truth, and a path it did not print is missing.
-      for (const [path, value] of flags) {
-        if ((value & SF_DATALESS) !== 0) evicted.add(path);
-      }
-      continue;
+    for (const [path, value] of flags) {
+      if ((value & SF_DATALESS) !== 0) evicted.add(path);
     }
-    // stat gave nothing at all (not there, killed by its timeout): the block count is a guess.
-    for (let index = 0; index < batch.length; index++) {
-      const path = batch[index]!;
+    // A path stat printed has its answer. One it did not print is missing only when stat says
+    // so by finishing; a run that failed (a missing file also makes stat exit non-zero, so that
+    // alone proves nothing) or was killed may have stopped before it, and a path left unchecked
+    // would read as local. Those are asked one by one: the block count is a guess, but not a blind one.
+    const unanswered = answer.failed ? batch.filter((path) => !flags.has(path)) : [];
+    for (let index = 0; index < unanswered.length; index++) {
+      const path = unanswered[index]!;
       const info = left() <= 0 ? TIMED_OUT : await within(deps.lstat(path), left(), null);
-      if (info === TIMED_OUT) return giveUp(start + index);
+      if (info === TIMED_OUT) {
+        for (const rest of unanswered.slice(index)) evicted.add(rest);
+        return giveUp(start + batch.length);
+      }
       if (info && info.blocks === 0 && info.size > 0) evicted.add(path);
     }
   }

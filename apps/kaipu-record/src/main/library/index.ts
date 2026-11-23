@@ -42,6 +42,7 @@ import {
   ownsLegacyCloud,
   workspaceGate,
 } from "../workspaces";
+import { scratchDrag } from "../workspaces/sync-state";
 import { registerVideoEditSessionHandlers } from "./video-edit-session";
 import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
 import { skipPaths } from "./vault-reconcile";
@@ -378,7 +379,7 @@ export function registerLibraryVaultHandlers(deps: {
   // NIW2-218: when the renderer sends the item's title, the dragged file carries it instead of
   // the vault id. The vault keeps its id name; the friendly file is a hard link (no extra
   // space) in `<vault>/.kaipu/drag/` (same volume), pruned when older than an hour and wiped
-  // on quit.
+  // on quit. A synced workspace gets a real copy in its scratch folder instead (decision 15).
   ipcMain.on(IPC_CHANNELS.startFileDrag, (event, stamp: unknown, id: string, name?: unknown) => {
     void workspaceGate()
       .run(stamp, async () => {
@@ -398,7 +399,9 @@ export function registerLibraryVaultHandlers(deps: {
         // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
         const icon = nativeImage.createFromPath(poster);
         if (icon.isEmpty()) return;
-        const root = scratch ? join(scratch, "drag") : dragRoot(vault.directory);
+        const root = scratch
+          ? scratchDrag(app.getPath("userData"), activeWorkspace().id)
+          : dragRoot(vault.directory);
         const dragFile =
           typeof name === "string" && name.length > 0
             ? await createDragCopy(

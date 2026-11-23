@@ -37,8 +37,11 @@ export function syncProviderOfPath(path: string, home: string = homedir()): Sync
 export interface SyncDetectDeps {
   home: string;
   realpath(path: string): Promise<string>;
-  /** Whether `file` carries the xattr `name`. Reading an xattr never downloads the file. */
-  hasXattr(file: string, name: string): Promise<boolean>;
+  /**
+   * Whether `file` carries the xattr `name`; null when the read did not answer (it timed out).
+   * Reading an xattr never downloads the file.
+   */
+  hasXattr(file: string, name: string): Promise<boolean | null>;
   timeoutMs: number;
 }
 
@@ -55,11 +58,14 @@ export async function withTimeout<T>(value: Promise<T>, ms: number, fallback: T)
   }
 }
 
-/** `/usr/bin/xattr -p <name> <file>`: exits 0 only when the attribute is there. */
-function hasXattrViaCli(file: string, name: string): Promise<boolean> {
+/**
+ * `/usr/bin/xattr -p <name> <file>`: exits 0 only when the attribute is there, 1 when it is not
+ * (or the file is missing). A process killed at the timeout did not answer: null.
+ */
+function hasXattrViaCli(file: string, name: string): Promise<boolean | null> {
   return new Promise((resolve) => {
     execFile("/usr/bin/xattr", ["-p", name, file], { timeout: SYNC_DETECT_TIMEOUT_MS }, (error) =>
-      resolve(!error),
+      resolve(error?.killed ? null : !error),
     );
   });
 }
@@ -71,22 +77,43 @@ export const defaultSyncDetectDeps: SyncDetectDeps = {
   timeoutMs: SYNC_DETECT_TIMEOUT_MS,
 };
 
-/** Detect the provider of a workspace folder. Never throws; an unanswered step reads as "no". */
+/**
+ * Detect the provider of a workspace folder. Never throws.
+ *
+ * A step that does not answer (the provider is stalled, which is when a Drive folder is least
+ * likely to be recognized) never reads as "not synced": that answer keeps hard links and `.part`
+ * files inside the folder, and it is kept until the next launch. It reads as the generic synced
+ * folder instead, so the safety rules run (decision 5) and the cost of a wrong guess is a copy
+ * where a link would have done. A step that answers "no" is an answer.
+ */
 export async function detectSync(
   path: string,
   deps: SyncDetectDeps = defaultSyncDetectDeps,
 ): Promise<SyncProvider | null> {
   if (process.platform !== "darwin" && deps === defaultSyncDetectDeps) return null;
-  const resolved = await withTimeout(deps.realpath(path), deps.timeoutMs, path);
-  const byPath = syncProviderOfPath(resolved, deps.home) ?? syncProviderOfPath(path, deps.home);
+  // `withTimeout` only stops waiting: a `realpath` that hangs keeps running in the thread pool.
+  const resolved = await withTimeout<string | typeof NO_ANSWER>(
+    deps.realpath(path).catch(() => path), // a path that cannot be resolved is the answer
+    deps.timeoutMs,
+    NO_ANSWER,
+  );
+  const known = resolved === NO_ANSWER ? path : resolved;
+  const byPath = syncProviderOfPath(known, deps.home) ?? syncProviderOfPath(path, deps.home);
   if (byPath) return byPath;
   // The safety net for a folder the path rule misses (`~/Documents` under iCloud "Desktop &
   // Documents" is unverified; Drive mounted elsewhere). Only Kaipu's own small file is asked.
   const identity = join(path, ".kaipu", "workspace", "identity.json");
-  const tagged = await withTimeout(
+  const tagged = await withTimeout<boolean | null>(
     deps.hasXattr(identity, GOOGLE_DRIVE_ITEM_XATTR),
     deps.timeoutMs,
-    false,
+    null,
   );
-  return tagged ? "google-drive" : null;
+  if (tagged) return "google-drive";
+  if (tagged === null || resolved === NO_ANSWER) {
+    console.warn(`[workspaces] could not tell whether "${path}" is synced; treating it as synced`);
+    return "cloud-provider";
+  }
+  return null;
 }
+
+const NO_ANSWER = Symbol("no answer");

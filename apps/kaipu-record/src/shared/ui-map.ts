@@ -189,7 +189,10 @@ export const UI_MAP = {
       postRecordingCard: { states: ["fresh"], gatedBy: [{ setting: "showRecordingSavedCard" }] },
       savedNotice: { states: ["shown"] },
       // imageHover: the pointer over a screenshot shows the copy button in its corner.
-      preview: { states: ["video", "image", "imageHover", "gif", "unavailable"] },
+      // notDownloaded: the provider offloaded the file (synced workspace), so nothing plays.
+      preview: {
+        states: ["video", "image", "imageHover", "gif", "unavailable", "notDownloaded"],
+      },
       actions: { states: ["recording", "screenshot", "gif", "cloudOnly"] },
       // The Transcribe action beside Edit video (NIW2-818), icon and word, behind the
       // `transcription` flag; the states are the same looks as on a Library card.

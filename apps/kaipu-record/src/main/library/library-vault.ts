@@ -1714,7 +1714,7 @@ export class LibraryVault {
   ): Promise<NewMedia | void> {
     await mkdir(this.directory, { recursive: true });
     const target = join(this.directory, `${id}.png`);
-    if (options.replace) return atomicWriteFile(target, png, "part");
+    if (options.replace) return atomicWriteFile(target, png, "part", this.stagingDir);
     return { path: target, file: await this.placeNewFile(target, png) };
   }
 

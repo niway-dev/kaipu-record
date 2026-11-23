@@ -98,6 +98,19 @@ function renderSwitcher(): void {
   );
 }
 
+/**
+ * The hint's "Got it" button, once the Escape listener behind it is attached. The provider sets
+ * its state from a resolved promise, outside `act`, so React runs the effect that adds the
+ * listener on a later task; `findBy` can resolve first and an Escape pressed straight away
+ * reaches no listener (seen as "expected 2 calls, got 1", about 1 run in 100). Flushing the
+ * pending effects makes the order the one a user sees.
+ */
+const hintReady = async (): Promise<HTMLElement> => {
+  const button = await screen.findByRole("button", { name: "Got it" });
+  await act(async () => {});
+  return button;
+};
+
 const openMenu = async (): Promise<void> => {
   fireEvent.click(await screen.findByRole("button", { name: /^Workspace:/ }));
 };
@@ -165,6 +178,7 @@ describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
     expect(
       await screen.findByText("New: workspaces — keep work and personal captures apart"),
     ).toBeInTheDocument();
+    await hintReady();
     fireEvent.click(screen.getByRole("button", { name: "Got it" }));
     expect(bridge.dismissHint).toHaveBeenCalledOnce();
     fireEvent.keyDown(screen.getByRole("button", { name: "Got it" }), { key: "Escape" });
@@ -174,7 +188,7 @@ describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
   it("Escape pressed elsewhere does not dismiss the hint for good", async () => {
     setup(state({ hintDismissed: false }));
     renderSwitcher();
-    await screen.findByText(/New: workspaces/);
+    await hintReady();
     const elsewhere = document.createElement("input");
     document.body.append(elsewhere);
 
@@ -188,7 +202,7 @@ describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
   it("an Escape something else already handled does not dismiss the hint either", async () => {
     setup(state({ hintDismissed: false }));
     renderSwitcher();
-    const gotIt = await screen.findByRole("button", { name: "Got it" });
+    const gotIt = await hintReady();
 
     const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     event.preventDefault();

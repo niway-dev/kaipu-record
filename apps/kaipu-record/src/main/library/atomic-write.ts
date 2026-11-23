@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { open, rename, rm } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, open, rename, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 /**
  * Per-key async mutex, module scope: it spans every `LibraryVault` instance
@@ -53,15 +53,22 @@ export async function syncDir(directory: string): Promise<void> {
 
 /**
  * Write to a unique temp file, fsync, rename over `target`, then flush the folder (best effort).
- * A failure removes the temp file.
+ * A failure removes the temp file. With `stagingDir` (a synced workspace) the temp file lives
+ * there, outside the folder the provider uploads, and only the final rename reaches it. A
+ * rename the volumes refuse (EXDEV) falls back to a temp file beside `target`: a replace has no
+ * other atomic form, and a save that fails is worse than a `.part` the provider briefly sees.
  */
 export async function atomicWriteFile(
   target: string,
   data: string | Uint8Array,
   suffix = "tmp",
+  stagingDir: string | null = null,
 ): Promise<void> {
-  const temp = uniqueTempPath(target, suffix);
+  const temp = stagingDir
+    ? join(stagingDir, basename(uniqueTempPath(target, suffix)))
+    : uniqueTempPath(target, suffix);
   try {
+    if (stagingDir) await mkdir(stagingDir, { recursive: true });
     const handle = await open(temp, "w");
     try {
       await handle.writeFile(data);
@@ -72,6 +79,9 @@ export async function atomicWriteFile(
     await rename(temp, target);
   } catch (error) {
     await rm(temp, { force: true }).catch(() => {});
+    if (stagingDir && (error as NodeJS.ErrnoException | null)?.code === "EXDEV") {
+      return atomicWriteFile(target, data, suffix);
+    }
     throw error;
   }
   await syncDir(dirname(target)).catch(() => {});

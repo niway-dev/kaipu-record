@@ -700,6 +700,24 @@ describe("with a real vault", () => {
       }
     });
 
+    it("refuses an evicted file when the cache failed before its own check (a read-only vault)", async () => {
+      const item = await addMedia("job-ro-evicted", "some recording");
+      const ensure = vi
+        .spyOn(LibraryVault.prototype, "ensureContentHash")
+        .mockRejectedValue(new Error("EROFS: read-only file system"));
+      const assertLocal = vi
+        .spyOn(LibraryVault.prototype, "assertLocal")
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      try {
+        hashSpy.mockClear();
+        await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "EVICTED" });
+        expect(hashSpy).not.toHaveBeenCalled();
+      } finally {
+        ensure.mockRestore();
+        assertLocal.mockRestore();
+      }
+    });
+
     it("fails with ENOENT for a file that is gone, as the job expects", async () => {
       const item = await addMedia("job-gone");
       await rm(item.filePath);

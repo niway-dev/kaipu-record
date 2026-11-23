@@ -512,6 +512,25 @@ describe("LibraryDetailPage", () => {
     );
   });
 
+  it("says 'Not downloaded' in place of the player for a file the provider offloaded", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        { ...exportedOnlyItem, local: { ...exportedOnlyItem.local!, evicted: "media" as const } },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByRole("heading", { name: "Not downloaded" })).toBeTruthy();
+    expect(screen.getByText(/download it in Finder to open it here/i)).toBeTruthy();
+    // No <video> is mounted: it would ask for the file and fail into "Video unavailable".
+    expect(document.querySelector("video")).toBeNull();
+    expect(screen.queryByText(/video unavailable/i)).toBeNull();
+  });
+
   it("does not offer Remove local download for a file the provider already offloaded", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [

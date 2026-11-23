@@ -14,6 +14,7 @@ import {
 } from "@shared/webcam-track";
 import { LibraryVault, type Reservation } from "../library/library-vault";
 import {
+  type FileIdentity,
   isFileExists,
   type PlacedFile,
   placeByRename,
@@ -113,6 +114,23 @@ export async function placeTake(from: string, to: string, byRename = false): Pro
   const placed = byRename ? await placeByRename(from, to) : await placeNew(from, to);
   if (placed === "taken") throw takenError(to);
   return placed;
+}
+
+/**
+ * Put a placed take back at its staging path without replacing a file there, and only while
+ * `from` still holds `expect`. A synced folder never gets a second name (decision 15): the take
+ * goes back by rename, not by the link `placeNoReplace` makes. Whichever way, a vault copy that
+ * cannot be removed undoes the move, so the take stays in the vault, not in two places.
+ */
+async function moveBack(
+  from: string,
+  to: string,
+  expect: FileIdentity,
+  byRename: boolean,
+): Promise<"placed" | "taken"> {
+  const options = { stuck: "rollback", expect } as const;
+  if (!byRename) return placeNoReplace(from, to, options);
+  return (await placeByRename(from, to, options)) === "taken" ? "taken" : "placed";
 }
 
 /**
@@ -485,20 +503,24 @@ export class RecordingWriter {
     try {
       // Back to its own staging name, never a replacing move. A vault copy that cannot be
       // removed undoes it: the take stays in the vault rather than in two places.
-      const back = await placeNoReplace(media.path, session.tempPath, {
-        stuck: "rollback",
-        expect: media.file,
-      });
+      const back = await moveBack(
+        media.path,
+        session.tempPath,
+        media.file,
+        session.byRename ?? false,
+      );
       if (back === "taken") return false;
     } catch {
       return false;
     }
     if (webcam) {
       // Best-effort: a webcam that cannot come back is deleted, the screen alone is salvageable.
-      const moved = await placeNoReplace(webcam.path, webcam.session.tempPath, {
-        stuck: "rollback",
-        expect: webcam.file,
-      }).then(
+      const moved = await moveBack(
+        webcam.path,
+        webcam.session.tempPath,
+        webcam.file,
+        webcam.session.byRename ?? false,
+      ).then(
         (back) => back === "placed",
         () => false,
       );

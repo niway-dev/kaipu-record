@@ -10,6 +10,11 @@ import { detectSync, syncProviderOfPath, withTimeout } from "./synced-folder";
  */
 export class SyncStates {
   private readonly known = new Map<string, { path: string; sync: SyncProvider | null }>();
+  /**
+   * Synced workspaces whose last availability check did not answer in time: available under
+   * their registered id (an evicted `identity.json` is downloading), but not a move target.
+   */
+  private readonly unanswered = new Set<string>();
 
   constructor(
     private readonly detect: (path: string) => Promise<SyncProvider | null> = detectSync,
@@ -19,7 +24,28 @@ export class SyncStates {
   async refresh(entry: { id: string; path: string }): Promise<SyncProvider | null> {
     const sync = await this.detect(entry.path);
     this.known.set(entry.id, { path: entry.path, sync });
+    this.unanswered.delete(entry.id); // a new detection (launch, relocation) starts afresh
     return sync;
+  }
+
+  /** The workspace's check did not answer in time (`answered(id)` when a later one does). */
+  markUnverified(id: string): void {
+    this.unanswered.add(id);
+  }
+
+  /** The workspace's check answered, or it is not synced (nothing to wait for). */
+  answered(id: string): void {
+    this.unanswered.delete(id);
+  }
+
+  isUnverified(id: string): boolean {
+    return this.unanswered.has(id);
+  }
+
+  /** The workspace was removed from the registry. */
+  forget(id: string): void {
+    this.known.delete(id);
+    this.unanswered.delete(id);
   }
 
   /** The provider of a workspace; a path that changed since the last detection uses the path rule. */
@@ -30,9 +56,14 @@ export class SyncStates {
   }
 }
 
+/** Parent of every synced workspace's scratch folder, in userData. */
+export function scratchParent(userData: string): string {
+  return join(userData, "workspace-scratch");
+}
+
 /** `userData/workspace-scratch/<workspaceId>`: a synced workspace's working files, outside it. */
 export function scratchRoot(userData: string, workspaceId: string): string {
-  return join(userData, "workspace-scratch", workspaceId);
+  return join(scratchParent(userData), workspaceId);
 }
 
 /** Recording and move staging of a synced workspace (instead of `.kaipu/tmp/`). */
@@ -40,9 +71,12 @@ export function scratchTmp(userData: string, workspaceId: string): string {
   return join(scratchRoot(userData, workspaceId), "tmp");
 }
 
+/** The folder of a scratch root that holds drag copies. */
+export const SCRATCH_DRAG_DIR = "drag";
+
 /** Drag copies of a synced workspace (instead of `.kaipu/drag/`). */
 export function scratchDrag(userData: string, workspaceId: string): string {
-  return join(scratchRoot(userData, workspaceId), "drag");
+  return join(scratchRoot(userData, workspaceId), SCRATCH_DRAG_DIR);
 }
 
 /** How long the availability check of a synced workspace may take (spec, Availability). */

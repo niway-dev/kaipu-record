@@ -94,14 +94,24 @@ describe("LibraryVault — evicted files get no image URL", () => {
     expect((await vault.sidecar("clip"))?.contentSha256).toBeUndefined();
   });
 
-  it("hashes a file the provider holds locally, and a plain workspace never asks", async () => {
+  it("hashes a file the provider holds locally, after asking about exactly that file", async () => {
     await seedVideo("clip");
     const probe = vi.fn(async () => new Set<string>());
     const synced = new LibraryVault(directory, "ws-1", undefined, probe);
     await expect(synced.ensureContentHash("clip")).resolves.toMatchObject({
       contentSha256: expect.any(String),
     });
-    expect(probe).toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledWith([join(directory, "clip.mp4")]);
+  });
+
+  it("a plain workspace hashes without asking: it has no probe, and assertLocal passes", async () => {
+    await seedVideo("clip");
+    const plain = new LibraryVault(directory, "ws-1");
+    await expect(plain.assertLocal([join(directory, "clip.mp4")])).resolves.toBeUndefined();
+    expect(await plain.evictedAmong([join(directory, "clip.mp4")])).toEqual(new Set());
+    await expect(plain.ensureContentHash("clip")).resolves.toMatchObject({
+      contentSha256: expect.any(String),
+    });
   });
 
   it("removeLocalCopy refuses in a synced vault: deleting there deletes the cloud copy", async () => {

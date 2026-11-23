@@ -330,6 +330,30 @@ div.stage > div:not(.player) {
   min-height: 0;
 }
 
+/* A file the provider offloaded: the stage shows why there is no picture (decision 15). */
+.notDownloaded {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.notDownloadedTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.notDownloadedHint {
+  margin: 0;
+  max-width: 36ch;
+  font-size: var(--font-size-sm);
+}
+
 .fileName {
   flex-shrink: 0;
   margin: 0;

@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,7 @@ vi.mock("node:fs/promises", async (importActual) => {
 });
 
 const { RecordingWriter } = await import("./recording-writer");
+const { LibraryVault } = await import("../library/library-vault");
 const { recoverStrandedRecordings } = await import("./stranded-recordings");
 
 describe("RecordingWriter — a synced workspace", () => {
@@ -32,6 +33,7 @@ describe("RecordingWriter — a synced workspace", () => {
     hooks.links = [];
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await rm(root, { recursive: true, force: true });
   });
 
@@ -112,5 +114,20 @@ describe("RecordingWriter — a synced workspace", () => {
     });
     expect(result.recovered).toHaveLength(1);
     expect(hooks.links).toEqual([]);
+  });
+
+  it("a failed sidecar write takes the take back out of the folder by rename, never a link", async () => {
+    const w = writer();
+    const { tempPath } = await w.create("s1");
+    await w.write("s1", new TextEncoder().encode("bytes").buffer, 0);
+    vi.spyOn(LibraryVault.prototype, "writeMeta").mockImplementationOnce(async () => {
+      throw new Error("disk full");
+    });
+    await expect(
+      w.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toThrow();
+    expect(hooks.links).toEqual([]);
+    expect(await readFile(tempPath, "utf-8")).toBe("bytes");
+    await expect(stat(join(vaultDir, "T.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

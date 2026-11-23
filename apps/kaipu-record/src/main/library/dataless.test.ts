@@ -67,6 +67,22 @@ describe("datalessPaths (SF_DATALESS via /usr/bin/stat, one call per batch)", ()
     expect([...result]).toEqual(["/w/a.mp4"]);
   });
 
+  it("a path a failed stat did not print is asked again, never assumed local", async () => {
+    const lstat = vi.fn(async (path: string) => {
+      if (path === "/w/gone.jpg") throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return { size: 500, blocks: 0 }; // unprinted and offloaded: stat stopped before it
+    });
+    const result = await datalessPaths(
+      ["/w/a.mp4", "/w/b.mp4", "/w/gone.jpg"],
+      deps({
+        runStat: async () => ({ stdout: `${LOCAL_FLAGS} /w/a.mp4\n`, failed: true }),
+        lstat,
+      }),
+    );
+    expect([...result]).toEqual(["/w/b.mp4"]);
+    expect(lstat).not.toHaveBeenCalledWith("/w/a.mp4"); // stat answered for it
+  });
+
   it("only when the stat call itself gives nothing, falls back to blocks === 0 && size > 0", async () => {
     const result = await datalessPaths(
       ["/w/a.mp4", "/w/empty.mp4", "/w/local.mp4"],

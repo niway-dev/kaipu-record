@@ -105,6 +105,8 @@ export async function hashMediaThroughCache(
     if (error instanceof EvictedFileError) throw error;
     // The cache could not answer (the file kept changing, or the sidecar cannot be written on a
     // read-only vault): hash plainly, as before the cache. A file that is gone fails with ENOENT.
+    // The cache may have failed before its own evicted check, so the plain hash asks again.
+    await currentVault().assertLocal([item.mediaPath]);
     return sha256FileBase64(item.mediaPath);
   }
   throw Object.assign(new Error(`transcription: media of "${item.id}" is gone`), {

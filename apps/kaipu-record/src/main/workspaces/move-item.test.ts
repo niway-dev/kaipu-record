@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
 import {
+  appendFile,
   chmod,
   mkdir,
   mkdtemp,
@@ -374,6 +375,35 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     expect(await filesOf(src.directory, "Demo")).toEqual(before);
   });
 
+  it("refuses when only a companion or an asset is evicted, before anything is written", async () => {
+    for (const [index, suffix] of [".jpg", ".transcript.json", ".assets/slide.png"].entries()) {
+      const item = await seedItem(src.directory, `Clip${index}`, {
+        tags: index === 0 ? undefined : [],
+      });
+      await writeFile(join(src.directory, ".kaipu", `${item.id}.transcript.json`), "{}");
+      await writeFile(join(src.directory, ".kaipu", `${item.id}.assets`, "slide.png"), "png");
+      const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
+      const read: string[] = [];
+      const outcome = await moveItem(
+        { source, target: dst, id: item.id },
+        deps({
+          fs: {
+            evicted: async (paths) =>
+              new Set(paths.filter((p) => p.endsWith(`${item.id}${suffix}`))),
+            sha256: async (path) => {
+              read.push(path);
+              return sha256FileBase64(path);
+            },
+          },
+        }),
+      );
+      expect(outcome).toEqual({ ok: false, id: item.id, reason: "evicted" });
+      expect(read).toEqual([]);
+      expect(await readdir(journalDir).catch(() => [])).toEqual([]); // no journal was written
+      expect(await filesOf(dst.directory, item.id)).toEqual([]);
+    }
+  });
+
   it("stages a synced target's copy in its scratch folder, never inside the synced folder", async () => {
     const item = await seedItem(src.directory);
     const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
@@ -395,6 +425,29 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     );
     expect(stagedIn).toHaveLength(1);
     expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual([]);
+  });
+
+  it("a source that changed after it was copied is kept, and the move is left for review", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        hooks: {
+          // A provider brings a newer version of the source in after the copy was verified.
+          after: async (step) => {
+            if (step === "committed") await appendFile(join(src.directory, "Demo.mp4"), "newer");
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, id: "Demo" });
+    expect((await stat(join(src.directory, "Demo.mp4"))).size).toBe(item.media.length + 5);
+    const journals = await readdir(journalDir);
+    expect(journals).toHaveLength(1);
+    expect(JSON.parse(await readFile(join(journalDir, journals[0]!), "utf-8"))).toMatchObject({
+      quarantined: "source media changed after the move committed",
+    });
   });
 
   it("a mismatch at the final path rolls the target back and leaves the source intact", async () => {

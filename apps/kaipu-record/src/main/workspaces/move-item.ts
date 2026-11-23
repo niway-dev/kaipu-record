@@ -287,7 +287,17 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
   // The renderer refuses an evicted item too, but its list may be older than the eviction: main
   // checks again before the hash or the copy reads the file (decision 15).
   if (source.scratch !== undefined) {
-    const offloaded = await fs.evicted([media, from.webcamFilePath(id)]);
+    // Every file the move reads: the media and each companion that exists (a missing path is
+    // never evicted), and what is inside the assets folder. Copying any of them downloads it.
+    const companions = from.companionPaths(id);
+    const reads = [media, ...COMPANION_FILES.map((key) => companions[key])];
+    try {
+      const names = await readdir(companions.assetsDir);
+      reads.push(...names.map((name) => join(companions.assetsDir, name)));
+    } catch (error) {
+      if (codeOf(error) !== "ENOENT") return refuse("evicted"); // unreadable: never copy blind
+    }
+    const offloaded = await fs.evicted(reads);
     if (offloaded.size > 0) return refuse("evicted");
   }
   const mediaInfo = await stat(media);
@@ -436,6 +446,16 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     journal.phase = "committed";
     await writeJournal(deps.journalDir, journal);
     await after("committed");
+    // The copy of a synced file can take long, and the provider may bring a newer version of the
+    // source in meanwhile: only the file that was copied goes. Otherwise the journal is left
+    // for healing, which keeps the source for review the same way (`healEntry`).
+    const current = await statOrNull(media);
+    if (
+      current &&
+      (current.size !== journal.media.size || current.mtimeMs !== journal.media.mtimeMs)
+    ) {
+      throw new Error(`source media "${media}" changed after it was copied`);
+    }
     await rm(media, { force: true });
     // A hard link shares the inode, and removing the source name moves its ctime: the hash
     // stamp is written only now, or the first transcript open would hash the file again.

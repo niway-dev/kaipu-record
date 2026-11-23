@@ -305,7 +305,16 @@ export async function placeNew(
  * sidecar holds the stem), which is narrower than, and stated alongside, the threat model above.
  * A rename refused across devices falls back to an exclusive copy, then removes the source.
  */
-export async function placeByRename(from: string, to: string): Promise<PlacedFile | "taken"> {
+export async function placeByRename(
+  from: string,
+  to: string,
+  options: PlaceOptions = {},
+): Promise<PlacedFile | "taken"> {
+  if (options.expect) {
+    // The same check `placeNew` makes on its handle, read at the name: a rename moves what is there.
+    const now = await identityAt(from);
+    if (!now || !sameFile(now, options.expect)) throw notTheFile(from);
+  }
   const occupied = await lstat(to).then(
     () => true,
     (error: unknown) => {
@@ -318,17 +327,60 @@ export async function placeByRename(from: string, to: string): Promise<PlacedFil
     await rename(from, to);
   } catch (error) {
     if (codeOf(error) !== "EXDEV") throw error;
-    const copied = await copyExclusive(from, to);
-    if (copied === "taken") return "taken";
-    await syncDir(dirname(to)).catch(() => {});
-    await unlink(from).catch(() => {});
-    return copied;
+    return copyAcrossDevices(from, to, options);
   }
   await syncDir(dirname(to)).catch(() => {});
   const placed = await identityAt(to);
   if (!placed)
     throw Object.assign(new Error(`"${to}" vanished right after placing`), { code: "EIO" });
   return placed;
+}
+
+/**
+ * `placeByRename`'s fallback when the volumes differ: an exclusive copy, then the source goes
+ * the way `placeNew` sends a staging file: removed only while its name still holds the file
+ * that was copied (identity read from the handle the copy read), else set aside or marked
+ * placed, so the stranded sweep cannot recover the same take a second time.
+ */
+async function copyAcrossDevices(
+  from: string,
+  to: string,
+  options: PlaceOptions,
+): Promise<PlacedFile | "taken"> {
+  const source = await open(from, "r");
+  let sourceId: PlacedFile;
+  let copied: PlacedFile | "taken";
+  try {
+    sourceId = identityOf(await source.stat({ bigint: true }));
+    if (options.expect && !sameFile(sourceId, options.expect)) throw notTheFile(from);
+    copied = await copyFromHandle(source, to);
+  } finally {
+    await source.close().catch(() => {});
+  }
+  if (copied === "taken") return "taken";
+  let removal: SourceRemoval;
+  try {
+    await syncDir(dirname(to)).catch(() => {});
+    removal = await removeSource(from, sourceId);
+  } catch (error) {
+    if (options.stuck !== "rollback") {
+      await setAside(from, sourceId, to, copied.size);
+      return copied;
+    }
+    await removeIfSame(to, copied); // a rename that must be undone leaves the take in one place
+    throw error;
+  }
+  if (removal === "unknown") {
+    if (options.stuck === "rollback") {
+      // The copy is the only sure copy of the bytes while the source cannot be read: both stay.
+      throw Object.assign(new Error(`Could not check "${from}" before removing it`), {
+        code: "EIO",
+        path: from,
+      });
+    }
+    await setAside(from, sourceId, to, copied.size);
+  } else if (removal === "removed") await syncDir(dirname(from)).catch(() => {});
+  return copied;
 }
 
 /** "kept": another file holds the source's name; "unknown": the name could not be read. */

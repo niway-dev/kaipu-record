@@ -23,6 +23,27 @@ describe("SyncStates", () => {
   });
 });
 
+describe("SyncStates, workspaces whose check did not answer", () => {
+  const HOME = "/Users/x";
+  const entry = { id: "w", path: `${HOME}/Movies/K` };
+
+  it("stays unverified until a check answers, a new detection runs or the workspace goes", async () => {
+    const states = new SyncStates(async () => "google-drive", HOME);
+    states.markUnverified("w");
+    expect(states.isUnverified("w")).toBe(true);
+    states.answered("w");
+    expect(states.isUnverified("w")).toBe(false);
+
+    states.markUnverified("w");
+    await states.refresh(entry); // relocated: the old verdict is no longer about this folder
+    expect(states.isUnverified("w")).toBe(false);
+
+    states.markUnverified("w");
+    states.forget("w");
+    expect(states.isUnverified("w")).toBe(false);
+  });
+});
+
 describe("scratch folders", () => {
   it("live in userData, per workspace, outside the workspace folder", () => {
     expect(scratchTmp("/ud", "ws-1")).toBe("/ud/workspace-scratch/ws-1/tmp");

@@ -85,11 +85,11 @@ describe("detectSync", () => {
     expect(result).toBe("google-drive");
   });
 
-  it("an xattr read that hangs or fails reads as not synced, within the timeout", async () => {
+  it("an xattr read that hangs or fails reads as the generic synced folder, within the timeout", async () => {
     const started = Date.now();
     expect(
       await detectSync(`${HOME}/Movies/K`, deps({ hasXattr: () => new Promise(() => {}) })),
-    ).toBeNull();
+    ).toBe("cloud-provider");
     expect(Date.now() - started).toBeLessThan(1000);
     expect(
       await detectSync(
@@ -97,6 +97,26 @@ describe("detectSync", () => {
         deps({
           hasXattr: async () => {
             throw new Error("boom");
+          },
+        }),
+      ),
+    ).toBe("cloud-provider");
+  });
+
+  it("a realpath that hangs on a folder the path rule misses is not proof of a plain folder", async () => {
+    expect(
+      await detectSync(`${HOME}/Movies/K`, deps({ realpath: () => new Promise(() => {}) })),
+    ).toBe("cloud-provider");
+  });
+
+  it("answers that say no are final: no attribute, a path that cannot be resolved", async () => {
+    expect(await detectSync(`${HOME}/Movies/K`, deps({ hasXattr: async () => false }))).toBeNull();
+    expect(
+      await detectSync(
+        `${HOME}/Movies/K`,
+        deps({
+          realpath: async () => {
+            throw Object.assign(new Error("gone"), { code: "ENOENT" });
           },
         }),
       ),

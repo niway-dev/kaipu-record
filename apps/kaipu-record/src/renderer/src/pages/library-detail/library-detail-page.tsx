@@ -5,6 +5,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CloudDownload,
   Film,
   FileX2,
   FolderOpen,
@@ -748,7 +749,16 @@ export function LibraryDetailPage(): React.JSX.Element {
           )}
 
           <div className={styles.stage}>
-            {isScreenshot ? (
+            {video.evicted === "media" ? (
+              // Synced folders (decision 15): the provider offloaded the file, and the media route
+              // refuses it (409) because reading it would download it. Say so, neutrally, instead
+              // of letting the player fail into a generic "unavailable".
+              <div {...uiArea("libraryDetail.preview")} className={styles.notDownloaded}>
+                <CloudDownload size={32} strokeWidth={1.5} aria-hidden />
+                <h2 className={styles.notDownloadedTitle}>{t("evictedLabel")}</h2>
+                <p className={styles.notDownloadedHint}>{t("evictedHint")}</p>
+              </div>
+            ) : isScreenshot ? (
               <ScreenshotViewer
                 key={video.assetId}
                 src={video.thumbnailUrl}

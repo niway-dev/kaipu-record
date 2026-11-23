@@ -59,11 +59,6 @@ const PREPARE_TIMEOUT_MS = 120_000;
 let registry: WorkspaceRegistry | null = null;
 /** Which provider syncs each workspace's folder (spec, Synced folders). */
 const syncStates = new SyncStates();
-/**
- * Synced workspaces whose last availability check did not answer in time: available under
- * their registered id (an evicted `identity.json` is downloading), but not a move target.
- */
-const unverified = new Set<string>();
 let gate: WorkspaceGate | null = null;
 let workspaceSettings: WorkspaceSettings | null = null;
 
@@ -169,10 +164,13 @@ export async function refreshActiveWorkspaceSettings(): Promise<void> {
 async function availabilityOf(id: string): Promise<{ availability: Availability; id: string }> {
   const reg = requireRegistry();
   const entry = reg.get(id);
-  if (!entry || syncStates.of(entry) === null) return reg.availability(id);
+  if (!entry || syncStates.of(entry) === null) {
+    syncStates.answered(id); // relocated to a plain folder: nothing is left to verify
+    return reg.availability(id);
+  }
   const answered = await boundedProbe(reg.availability(id), null);
   if (answered) {
-    unverified.delete(id);
+    syncStates.answered(id);
     return answered;
   }
   const seen = await boundedProbe(
@@ -181,7 +179,7 @@ async function availabilityOf(id: string): Promise<{ availability: Availability;
     1_000,
   );
   if (!seen) return { availability: { state: "unavailable", reason: "missing" }, id };
-  unverified.add(id);
+  syncStates.markUnverified(id);
   return { availability: { state: "available" }, id };
 }
 
@@ -196,7 +194,7 @@ async function resolveMoveSide(side: MoveSide): Promise<string | null> {
   const { availability, id } = await availabilityOf(side.workspaceId);
   if (availability.state !== "available") return null;
   // An identity still downloading cannot prove the folder is this workspace: no move yet.
-  if (unverified.has(id)) return null;
+  if (syncStates.isUnverified(id)) return null;
   return reg.get(id)?.path ?? null;
 }
 
@@ -402,45 +400,58 @@ export async function requireCaptureWorkspace(): Promise<WorkspaceEntry> {
   return reg.active();
 }
 
-/** Every workspace whose folder is reachable, for the startup and quit sweeps. */
+/**
+ * Every workspace whose folder is reachable, for the startup and quit sweeps. Checked side by
+ * side: each unresponsive synced workspace costs its own bound, not one after another.
+ */
 export async function availableWorkspacePaths(): Promise<string[]> {
   const reg = requireRegistry();
-  const paths: string[] = [];
   // A copy: a probe may update an entry (a pending one adopting its folder's id).
-  for (const entry of reg.entries().slice()) {
-    const { availability } = await availabilityOf(entry.id);
-    if (availability.state === "available") paths.push(entry.path);
-  }
-  return paths;
+  const checked = await Promise.all(
+    reg.entries().map(async (entry) => ({
+      path: entry.path,
+      available: (await availabilityOf(entry.id)).availability.state === "available",
+    })),
+  );
+  return checked.filter((entry) => entry.available).map((entry) => entry.path);
 }
 
 async function listState(): Promise<WorkspacesState> {
   const reg = requireRegistry();
-  const views: WorkspaceView[] = [];
-  for (const entry of reg.entries().slice()) {
-    const { availability, id } = await availabilityOf(entry.id);
-    // A pending active entry that adopted its folder's id: windows must take the new stamp.
-    if (workspaceGate().adopt(entry.id, id, reg.active().id)) void broadcastState();
-    // A synced folder's count is bounded too: `readdir` never downloads, but a stuck
-    // provider must not hang the switcher.
-    const count =
-      availability.state === "available"
-        ? await boundedProbe(
-            new LibraryVault(entry.path).countMedia().catch(() => null),
-            null,
-          )
-        : null;
-    // Which volume the folder is on: "Move to" says whether a move copies or is instant.
-    const device =
-      availability.state === "available"
-        ? await stat(entry.path).then(
-            (info) => String(info.dev),
-            () => null,
-          )
-        : null;
-    const current = reg.get(id) ?? entry;
-    views.push(toWorkspaceView(current, availability, count, device, syncStates.of(current)));
-  }
+  // Side by side, so the switcher waits for the slowest workspace, not for the sum of them.
+  const views: WorkspaceView[] = await Promise.all(
+    reg
+      .entries()
+      .slice()
+      .map(async (entry): Promise<WorkspaceView> => {
+        const { availability, id } = await availabilityOf(entry.id);
+        // A pending active entry that adopted its folder's id: windows must take the new stamp.
+        if (workspaceGate().adopt(entry.id, id, reg.active().id)) void broadcastState();
+        // A synced folder's count and device are bounded too: `readdir` and `stat` never
+        // download, but a stuck provider must not hang the switcher.
+        const count =
+          availability.state === "available"
+            ? await boundedProbe(
+                new LibraryVault(entry.path).countMedia().catch(() => null),
+                null,
+              )
+            : null;
+        // Which volume the folder is on: "Move to" says whether a move copies or is instant.
+        const device =
+          availability.state === "available"
+            ? await boundedProbe(
+                stat(entry.path).then(
+                  (info) => String(info.dev),
+                  () => null,
+                ),
+                null,
+                1_000,
+              )
+            : null;
+        const current = reg.get(id) ?? entry;
+        return toWorkspaceView(current, availability, count, device, syncStates.of(current));
+      }),
+  );
   const { activeId, hintDismissedAt } = reg.state;
   return {
     activeId,
@@ -772,6 +783,7 @@ export function registerWorkspaceHandlers(deps: WorkspaceHost): void {
       if (typeof id !== "string") return { ok: false, reason: "unknown" };
       const result = await requireRegistry().remove(id);
       if (result.ok) {
+        syncStates.forget(id);
         refreshTitles();
         await broadcastState();
       }

@@ -95,6 +95,26 @@ describe("screenshot writer", () => {
     expect(stagedRenames()).toHaveLength(1);
     expect(await readFile(join(folder, "shot.png"), "utf-8")).toBe("png");
   });
+
+  it("replacing the PNG stages in the scratch folder too: no .part is ever inside the folder", async () => {
+    await writeFile(join(folder, "shot.png"), "old");
+    const vault = synced();
+    await vault.writeImage("shot", Buffer.from("new"), { replace: true });
+
+    expect(stagedRenames()).toHaveLength(1);
+    expect(stagedRenames()[0]!.to).toBe(join(folder, "shot.png"));
+    expect(hooks.renames.filter((r) => r.from.startsWith(folder))).toEqual([]);
+    expect(await readFile(join(folder, "shot.png"), "utf-8")).toBe("new");
+    expect(await readdir(staging)).toEqual([]);
+  });
+
+  it("control: a plain folder replaces through a temp file beside the PNG", async () => {
+    await writeFile(join(folder, "shot.png"), "old");
+    await new LibraryVault(folder, "ws-plain").writeImage("shot", Buffer.from("new"), {
+      replace: true,
+    });
+    expect(hooks.renames.filter((r) => r.from.startsWith(folder))).toHaveLength(1);
+  });
 });
 
 describe("video import", () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { copyFile, link, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { scratchDrag, scratchParent } from "../workspaces/sync-state";
 
 /** Hidden vault folder that already holds sidecars and thumbnails; drag copies live inside it. */
 const META_DIR = ".kaipu";
@@ -22,7 +23,7 @@ export async function cleanupDragCopies(vaultDir: string): Promise<void> {
 
 /** Remove every synced workspace's drag copies, `userData/workspace-scratch/<id>/drag`. */
 export async function cleanupScratchDragCopies(userData: string): Promise<void> {
-  const root = join(userData, "workspace-scratch");
+  const root = scratchParent(userData);
   let ids: string[];
   try {
     ids = await readdir(root);
@@ -30,7 +31,9 @@ export async function cleanupScratchDragCopies(userData: string): Promise<void> 
     return;
   }
   await Promise.all(
-    ids.map((id) => rm(join(root, id, "drag"), { recursive: true, force: true }).catch(() => {})),
+    ids.map((id) =>
+      rm(scratchDrag(userData, id), { recursive: true, force: true }).catch(() => {}),
+    ),
   );
 }
 
@@ -74,13 +77,6 @@ export interface DragCopyFs {
   copyFile: (source: string, target: string) => Promise<void>;
 }
 
-/**
- * Create `<vault>/.kaipu/drag/<uuid>/<fileName>` for the vault file and return the path to drag.
- * A hard link costs no disk space. If the link crosses devices (EXDEV) the vault file itself is
- * returned (no copy, the drag starts at once, under its id name); any other link failure (exFAT,
- * FAT) falls back to a copy. Earlier drag folders are only pruned when older than
- * `DRAG_COPY_MAX_AGE_MS`.
- */
 export interface DragCopyOptions {
   /** Where the per-drag folders go; default `<vault>/.kaipu/drag`. */
   root?: string;
@@ -93,6 +89,14 @@ export interface DragCopyOptions {
   synced?: boolean;
 }
 
+/**
+ * Create `<vault>/.kaipu/drag/<uuid>/<fileName>` for the vault file and return the path to drag.
+ * A hard link costs no disk space. If the link crosses devices (EXDEV) the vault file itself is
+ * returned (no copy, the drag starts at once, under its id name); any other link failure (exFAT,
+ * FAT) falls back to a copy. In a synced workspace (`options.synced`) it is always a real copy
+ * in `options.root`, outside the folder, and never a link. Earlier drag folders are only pruned
+ * when older than `DRAG_COPY_MAX_AGE_MS`.
+ */
 export async function createDragCopy(
   vaultDir: string,
   vaultFile: string,
