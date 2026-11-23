@@ -1674,6 +1674,10 @@ export const editorImage = catalog(
   },
   {
     notCapturable: {
+      "editorImage.reopenNotice:evicted": nc(
+        "needsSetup",
+        "needs a canvas document a sync provider offloaded (SF_DATALESS); the seeded vault is not synced",
+      ),
       "editorImage.textHideHint:pending": nc(
         "needsSetup",
         "only the image-text-slow profile holds recognition, and it does not force image-canvas, which the hint needs; a canvas variant of that profile would show it (not built). The hint reads “Recognizing text…” until recognition settles",

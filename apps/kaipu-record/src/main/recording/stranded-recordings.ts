@@ -117,7 +117,10 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
         });
         const { id } = reservation;
         try {
-          await placeTake(path, await vault.filePath(id), byRename, vault.synced);
+          // A take placed by rename exists because its workspace was synced when it was recorded,
+          // so across volumes the copy is staged outside the folder even when this launch's
+          // detection missed it (this sweep's own vault has no probe, so it cannot say).
+          await placeTake(path, await vault.filePath(id), byRename, byRename);
         } catch (error) {
           // Release the reserved stem (its stub sidecar), never the media path: a file that
           // took it meanwhile is not this take's.
@@ -131,7 +134,7 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
           const webcamDest = vault.webcamFilePath(id);
           await mkdir(dirname(webcamDest), { recursive: true });
           // Best-effort: the screen file is the take. A webcam left behind is lone next time.
-          await placeTake(webcamPath, webcamDest, byRename, vault.synced).catch((error) =>
+          await placeTake(webcamPath, webcamDest, byRename, byRename).catch((error) =>
             console.error("recovering a webcam part failed", error),
           );
         }

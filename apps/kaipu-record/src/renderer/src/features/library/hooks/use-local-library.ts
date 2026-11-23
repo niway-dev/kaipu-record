@@ -88,6 +88,9 @@ export function useLocalLibrary(): LocalLibrary {
         const result = await window.electronAPI.listLibraryItems();
         if (seq !== latest.current) return await latestRun.current; // superseded: wait for the newer list
         applied = true;
+        // A quiet re-list that hit a vault error read no local items: keep what is on screen
+        // (and keep the focus listener attached) instead of replacing it with a partial list.
+        if (quiet && result.vaultError !== null) return;
         // Do NOT blank the list to [] on a vault error — cloud items from the
         // cached catalog are still real data, and blanking would render as the
         // "No recordings yet" empty state, indistinguishable from real data loss.

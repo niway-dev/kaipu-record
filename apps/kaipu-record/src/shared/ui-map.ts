@@ -408,8 +408,9 @@ export const UI_MAP = {
       toolbar: { states: ["default", "saving", "saved"] },
       // The banner over a read-only editor (NIW2-912): a synced project whose files are only in the
       // cloud or could not be read, or whose save was refused. `shown` is the banner with the
-      // tools, inspector and timeline disabled.
-      readOnlyBanner: { states: ["shown"] },
+      // tools, inspector and timeline disabled. `damaged`: the saved edit does not parse or misses an
+      // asset, so the banner says the project is damaged instead of "only in the cloud".
+      readOnlyBanner: { states: ["shown", "damaged"] },
       // The Transcribe action in the top bar (NIW2-818), icon and word, behind the
       // `transcription` flag; the states are the same looks as on a Library card.
       transcribe: {
@@ -630,8 +631,12 @@ export const UI_MAP = {
       // `unavailable` when it cannot run on this computer. Never an error dialog.
       textNotice: { states: ["reading", "unavailable"], gatedBy: [{ flag: "image-text" }] },
       // The pill on the stage when a saved shot is reopened in canvas mode: `editable` says
-      // the document loaded (fades), `flat` that it could not be read (stays until dismissed).
-      reopenNotice: { states: ["editable", "flat"], gatedBy: [{ flag: "image-canvas" }] },
+      // the document loaded (fades), `flat` that it could not be read (stays until dismissed),
+      // `evicted` that a sync provider has not downloaded it (stays until dismissed).
+      reopenNotice: {
+        states: ["editable", "flat", "evicted"],
+        gatedBy: [{ flag: "image-canvas" }],
+      },
       // The redact tool's text targets (NIW2-706, canvas mode): the image while its lines are
       // click targets (a line outlined under the pointer, then hidden), and the Tool tab's hint.
       textHide: {

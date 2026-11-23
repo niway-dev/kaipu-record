@@ -36,8 +36,13 @@ import { healMoves, moveItem, type MoveSide } from "./move-item";
 import { uuidv7 } from "../library/tag-repository";
 import { defaultVaultDirectory, forgetCachedPreferences } from "../library/vault-location";
 import { StaleWorkspaceError, WorkspaceGate } from "./gate";
-import { checkAvailability } from "./availability-check";
-import { WorkspaceRegistry, type Availability, type WorkspaceEntry } from "./registry";
+import {
+  checkAvailability,
+  isUnverifiedCheck,
+  verifiedFolder,
+  type Checked,
+} from "./availability-check";
+import { WorkspaceRegistry, type WorkspaceEntry } from "./registry";
 import { probeDataless, type EvictionProbe } from "../library/dataless";
 import { setStagingResolver, setSyncRootResolver } from "../library/atomic-write";
 import { syncRootOfPath } from "./synced-folder";
@@ -183,7 +188,7 @@ export async function refreshActiveWorkspaceSettings(): Promise<void> {
 }
 
 /** The availability check of one workspace, bounded for a synced one (see `checkAvailability`). */
-function availabilityOf(requestedId: string): Promise<{ availability: Availability; id: string }> {
+function availabilityOf(requestedId: string): Promise<Checked> {
   return checkAvailability(
     {
       reg: requireRegistry(),
@@ -202,11 +207,9 @@ function movesJournalDir(): string {
 async function resolveMoveSide(side: MoveSide): Promise<string | null> {
   const reg = requireRegistry();
   if (!reg.get(side.workspaceId)) return null;
-  const { availability, id } = await availabilityOf(side.workspaceId);
-  if (availability.state !== "available") return null;
-  // An identity still downloading cannot prove the folder is this workspace: no move yet.
-  if (syncStates.isUnverified(id)) return null;
-  return reg.get(id)?.path ?? null;
+  // An identity still downloading cannot prove the folder is this workspace: no move yet. The
+  // check's own result says so; the shared flag may belong to a newer check still waiting.
+  return verifiedFolder(reg, syncStates, await availabilityOf(side.workspaceId));
 }
 
 /** A workspace as one side of a move: a synced one stages in its scratch folder (decision 15). */
@@ -445,7 +448,8 @@ async function listState(): Promise<WorkspacesState> {
       .slice()
       .map(async (entry): Promise<WorkspaceView> => {
         const startedAt = Date.now();
-        const { availability, id } = await availabilityOf(entry.id);
+        const checked = await availabilityOf(entry.id);
+        const { availability, id } = checked;
         // A pending active entry that adopted its folder's id: windows must take the new stamp.
         if (workspaceGate().adopt(entry.id, id, reg.active().id)) void broadcastState();
         // Count and drive are bounded for a synced folder (`readdir` and `stat` never download,
@@ -455,7 +459,7 @@ async function listState(): Promise<WorkspacesState> {
         const { count, device } = await probeWorkspaceFacts(
           {
             synced: syncStates.of(entry) !== null,
-            skip: availability.state !== "available" || syncStates.isUnverified(id),
+            skip: availability.state !== "available" || isUnverifiedCheck(checked, syncStates),
             remainingMs: SYNCED_PROBE_TIMEOUT_MS - (Date.now() - startedAt),
           },
           {

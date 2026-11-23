@@ -57,6 +57,7 @@ import {
 import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
 import { CaptureTitleInput } from "@renderer/features/screenshots/capture-title-input";
 import {
+  isEvictedReadError,
   readWithRetry,
   savedAtOf,
   whyNoDocument,
@@ -295,6 +296,9 @@ async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
       savedAt: await savedAtOf(id),
     };
   } catch (error) {
+    // Offloaded by a sync provider: expected, not a fault. Nothing to report, and the document
+    // may be intact, so no save may replace it.
+    if (isEvictedReadError(error)) return { status: "unreadable", keepStored: true, evicted: true };
     // The editable layers could not be loaded (the read failed, not a missing or invalid
     // document), so they are not on screen: record it.
     captureException(error, { phase: "read-canvas" });

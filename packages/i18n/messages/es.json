@@ -1678,6 +1678,7 @@
     "saveStateSaved": "Guardado",
     "saveStateFailed": "No se pudo guardar. Haz clic para reintentar.",
     "readOnlyBanner": "Este proyecto es de solo lectura. Sus archivos están solo en la nube o no se pudieron leer. Abre el proyecto otra vez cuando sus archivos se hayan descargado para editarlo.",
+    "readOnlyBannerDamaged": "Este proyecto es de solo lectura. Una parte de su edición guardada no se pudo cargar y guardar la reemplazaría. Tu grabación no se ve afectada. Abre el proyecto de nuevo para reintentar; si sigue pasando, la edición guardada puede estar dañada.",
     "readOnlyBannerUnsaved": "Tus cambios recientes no se pudieron guardar y el proyecto ahora es de solo lectura. Sus archivos están solo en la nube o no se pudieron leer. Los cambios existen solo en esta ventana y se pierden si se cierra. Abre el proyecto otra vez cuando sus archivos se hayan descargado para editarlo.",
     "restoreError": "No se pudo restaurar la edición anterior",
     "sourceUnavailable": "Esta grabación ya no está en tu biblioteca, así que no se puede editar.",
@@ -3759,6 +3760,7 @@
     "location_onedrive": "OneDrive",
     "location_icloud": "iCloud Drive",
     "location_cloud-provider": "Un proveedor en la nube",
-    "syncedBy": "Sincronizado por {provider}"
+    "syncedBy": "Sincronizado por {provider}",
+    "syncedFolder": "Carpeta sincronizada"
   }
 }

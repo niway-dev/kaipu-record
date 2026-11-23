@@ -47,6 +47,32 @@ describe("SyncStates, a pending workspace adopts its folder's id", () => {
     expect(states.isUnverified("pending")).toBe(false);
   });
 
+  it("a detection still running when the id is adopted lands under the adopted id", async () => {
+    let answer: (provider: "google-drive") => void = () => {};
+    const states = new SyncStates(
+      () => new Promise((resolve) => (answer = resolve)),
+      HOME,
+      async () => true,
+    );
+    const running = states.refresh({ id: "pending", path });
+    states.rekey("pending", "adopted"); // the switcher's check adopted the folder's own id
+    answer("google-drive");
+    await running;
+
+    // The detection is not lost: the path rule alone would call this folder plain.
+    expect(states.of({ id: "adopted", path })).toBe("google-drive");
+    expect(states.of({ id: "pending", path })).toBeNull();
+  });
+
+  it("a detection that finished before the id was adopted is not carried a second time", async () => {
+    const states = new SyncStates(async () => "google-drive", HOME);
+    await states.refresh({ id: "pending", path });
+    states.rekey("pending", "adopted");
+    states.forget("adopted");
+    // A removed workspace stays removed: nothing of the old run comes back.
+    expect(states.of({ id: "adopted", path })).toBeNull();
+  });
+
   it("carries a provisional plain answer, so the adopted workspace is still detected again", async () => {
     const states = new SyncStates(
       async () => null,
@@ -208,7 +234,7 @@ describe("SyncStates, overlapping detections of one workspace (NIW2-912)", () =>
     expect(states.isCurrentCheck("w", old)).toBe(false);
   });
 
-  it("a detection that lands after rekey leaves the old id gone", async () => {
+  it("a detection that lands after rekey leaves the old id gone and goes to the adopted one", async () => {
     const { detect, waiting } = stalled();
     const states = new SyncStates(detect, HOME, async () => false);
     const entry = { id: "pending", path: oldPath };
@@ -219,7 +245,8 @@ describe("SyncStates, overlapping detections of one workspace (NIW2-912)", () =>
     await inFlight;
 
     expect(states.needsRecheck("pending")).toBe(false);
-    expect(states.needsRecheck("adopted")).toBe(false);
+    // The detection belongs to the adopted id now: its provisional "plain" is asked again.
+    expect(states.needsRecheck("adopted")).toBe(true);
   });
 });
 

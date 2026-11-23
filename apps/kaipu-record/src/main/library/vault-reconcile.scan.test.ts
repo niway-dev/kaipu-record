@@ -468,7 +468,44 @@ describe("scanVault: a record without an identity (NIW2-912)", () => {
       fixable: true,
       path: "Demo.mp4",
       title: "Demo",
+      // The dialog leaves exactly the findings that mint an identity unticked by default.
+      mints: true,
     });
+  });
+
+  const misaligned = {
+    "Old name.mp4": "video",
+    ".kaipu/Old name.json": noIdentity("Sprint: part 1/2"),
+    "recording-2026-10-30-00-57-30.mp4": "video",
+    ".kaipu/recording-2026-10-30-00-57-30.json": noIdentity("Recording — 10/29/2026, 7:57:30 PM"),
+    "screenshot-2026-10-15T21-37-10-853Z.png": "png",
+    ".kaipu/screenshot-2026-10-15T21-37-10-853Z.json": noIdentity(),
+  };
+
+  it("a synced workspace marks every finding on a record without an identity as minting one", async () => {
+    directory = await makeVault(misaligned);
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings.map((f) => f.kind).sort()).toEqual([
+      "name-mismatch",
+      "stale-auto-title",
+      "untitled-legacy",
+    ]);
+    expect(findings.map((f) => f.mints)).toEqual([true, true, true]);
+  });
+
+  it("a plain workspace never marks them: its own read mints later, not the fix", async () => {
+    directory = await makeVault(misaligned);
+    const { findings } = await scanVault({
+      directory,
+      vault: new LibraryVault(directory, "ws-1"),
+      cloud: "unknown",
+    });
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.map((f) => f.mints)).toEqual(findings.map(() => undefined));
   });
 
   it("a synced workspace lists an untitled, aligned record the same way", async () => {
@@ -484,7 +521,7 @@ describe("scanVault: a record without an identity (NIW2-912)", () => {
     expect(findings.map((f) => [f.kind, f.fixable])).toEqual([["missing-identity", true]]);
   });
 
-  it("a plain workspace gets its identity on first read, so the same record is not a finding", async () => {
+  it("a plain workspace lists no missing-identity: its own read mints one later, the scan never does", async () => {
     directory = await makeVault({
       "Demo.mp4": "video",
       ".kaipu/Demo.json": noIdentity("Demo"),

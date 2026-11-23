@@ -264,7 +264,7 @@ describe("VaultTagRepository", () => {
     await Promise.all(["a", "b", "c", "d"].map((name) => repo.create(name)));
     expect((await repo.list()).map((t) => t.name).sort()).toEqual(["a", "b", "c", "d"]);
   });
-  describe("in a synced workspace (round 11 #5)", () => {
+  describe("in a synced workspace", () => {
     const syncedRepo = (evicted: Set<string>, reads: string[] = []) => {
       const synced = new LibraryVault(
         directory,
@@ -296,7 +296,7 @@ describe("VaultTagRepository", () => {
       expect(JSON.parse(await readFile(path, "utf-8"))).toEqual({ version: 1, tags: [] });
     });
 
-    it("a tags.json delivered between the read and the write is not replaced (round 1)", async () => {
+    it("a tags.json delivered between the read and the write is not replaced", async () => {
       await mkdir(kaipu(), { recursive: true });
       const path = join(kaipu(), "tags.json");
       const theirs = JSON.stringify({ version: 1, tags: [] });

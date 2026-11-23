@@ -298,14 +298,14 @@ describe("Settings → Workspaces → Change folder…", () => {
 });
 
 describe("Settings → Workspaces: a synced folder (decisions 13 and 15)", () => {
-  const renderSynced = (): void => {
+  const renderSynced = (sync: string = "google-drive"): void => {
     window.electronAPI = {
       ...realApi,
       workspaces: {
         ...realApi.workspaces,
         list: async () => ({
           ...STATE,
-          workspaces: [view("ws-a", "Alpha"), { ...view("ws-b", "Bravo"), sync: "google-drive" }],
+          workspaces: [view("ws-a", "Alpha"), { ...view("ws-b", "Bravo"), sync: sync as never }],
         }),
       },
     };
@@ -321,6 +321,12 @@ describe("Settings → Workspaces: a synced folder (decisions 13 and 15)", () =>
     renderSynced();
     expect(await screen.findByText(/\/Users\/me\/Bravo · Synced by Google Drive/)).toBeTruthy();
     expect(screen.queryByText(/\/Users\/me\/Alpha.*Synced/)).toBeNull();
+  });
+
+  it("an unknown provider reads as a synced folder, not as 'Synced by A cloud provider'", async () => {
+    syncedFlag.on = true;
+    renderSynced("cloud-provider");
+    expect(await screen.findByText(/\/Users\/me\/Bravo · Synced folder$/)).toBeTruthy();
   });
 
   it("with synced-workspaces off, names no provider anywhere", async () => {

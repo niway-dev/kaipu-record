@@ -1447,6 +1447,10 @@ export const editorVideo = catalog(
         "needsSetup",
         "needs a project whose files a sync provider offloaded (SF_DATALESS) or cannot be read; the seeded vault is not synced",
       ),
+      "editorVideo.readOnlyBanner:damaged": nc(
+        "needsSetup",
+        "needs a project whose saved edit does not parse or misses a slide or image asset; the catalog seeds only valid edits",
+      ),
       "editorVideo.toolbar:saving": nc(
         "transient",
         "held for ~800 ms after an edit, until the autosave writes; a shot would race it",

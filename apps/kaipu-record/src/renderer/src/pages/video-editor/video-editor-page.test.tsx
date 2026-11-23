@@ -522,6 +522,39 @@ describe("VideoEditorLoader — a project that cannot be read opens read-only (N
     expect(save).not.toHaveBeenCalled();
   });
 
+  it("a read-only editor ignores the edit shortcuts: no tool is armed", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => {
+      throw new Error("Error invoking remote method: EvictedFileError: Not downloaded");
+    });
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => null);
+
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByText(BANNER);
+
+    fireEvent.keyDown(window, { key: "r" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.getByRole("button", { name: "Box" }).className).not.toMatch(/toolActive/);
+  });
+
+  it("a saved edit that does not parse says it cannot be loaded, not that files are in the cloud", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: "{ this is not a project",
+      assets: [],
+    }));
+
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(await screen.findByText(/saved edit could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByText(/only in the cloud/i)).toBeNull();
+  });
+
   it("a project that cannot be read opens read-only on a blank scene, never as a new project", async () => {
     window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
     window.electronAPI.loadCursorTrack = vi.fn(async () => null);

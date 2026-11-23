@@ -14,7 +14,39 @@ export interface AvailabilityDeps {
   probeMs?: number;
 }
 
-type Checked = { availability: Availability; id: string };
+export type Checked = {
+  availability: Availability;
+  id: string;
+  /**
+   * This very check got no answer from the provider: the folder is there, but whether it is
+   * this workspace is not known. Carried in the result, not only in the shared flag, because
+   * a newer check of the same workspace owns the flag and may not have timed out yet.
+   */
+  unverified?: true;
+};
+
+/**
+ * Whether this check's answer could not be verified: its own result says so, or the shared flag
+ * (a later reader, or an earlier check) does. The result comes first because a newer check of the
+ * same workspace owns the flag and may not have timed out yet.
+ */
+export function isUnverifiedCheck(checked: Checked, syncStates: SyncStates): boolean {
+  return checked.unverified === true || syncStates.isUnverified(checked.id);
+}
+
+/**
+ * The folder a move may use, or null: the workspace is not available, or its check got no
+ * answer (an identity still downloading cannot prove the folder is this workspace).
+ */
+export function verifiedFolder(
+  reg: Pick<AvailabilityDeps["reg"], "get">,
+  syncStates: SyncStates,
+  checked: Checked,
+): string | null {
+  if (checked.availability.state !== "available") return null;
+  if (isUnverifiedCheck(checked, syncStates)) return null;
+  return reg.get(checked.id)?.path ?? null;
+}
 
 /**
  * The availability check, bounded for a synced workspace: a provider that does not answer
@@ -33,7 +65,7 @@ type Checked = { availability: Availability; id: string };
  *
  * Checks of one workspace run side by side (the switcher, a capture, a move). Only the newest
  * one may change the unverified flag: an older check that finishes late must not undo, or
- * redo, what a newer one learned.
+ * redo, what a newer one learned. Its own result still says `unverified` when it got no answer.
  */
 export async function checkAvailability(
   deps: AvailabilityDeps,
@@ -96,5 +128,7 @@ export async function checkAvailability(
     folder === undefined ? false : await boundedProbe(deps.isDirectory(folder), false, 1_000);
   if (!seen) return { availability: { state: "unavailable", reason: "missing" }, id };
   if (current()) syncStates.markUnverified(id);
-  return { availability: { state: "available" }, id };
+  // Even a check that was superseded must tell its own caller: the shared flag is the newest
+  // check's, and that one may still be waiting for its probe.
+  return { availability: { state: "available" }, id, unverified: true };
 }

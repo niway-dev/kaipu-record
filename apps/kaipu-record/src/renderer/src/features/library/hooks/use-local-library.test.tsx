@@ -587,7 +587,7 @@ describe("useLocalLibrary", () => {
       now.mockRestore();
     });
 
-    it("keeps quiet when a re-list started by focus fails: no error toast and no page error per focus (round 11 #23)", async () => {
+    it("keeps quiet when a re-list started by focus fails: no error toast and no page error per focus", async () => {
       const list = vi
         .fn()
         .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: null })
@@ -608,6 +608,28 @@ describe("useLocalLibrary", () => {
       expect(result.current.hasError).toBe(false);
       // The list on screen is kept, not blanked.
       expect(result.current.videos).toHaveLength(2);
+    });
+
+    it("keeps the list on screen when a re-list started by focus reports a vault error", async () => {
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: 5 })
+        .mockResolvedValue({ items: [], vaultError: "provider stalled", catalogVerifiedAt: null });
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.isRefreshing).toBe(false));
+
+      expect(result.current.videos).toHaveLength(2);
+      expect(result.current.videos[0]?.evicted).toBe("media");
+      expect(result.current.catalogVerifiedAt).toBe(5);
+      expect(result.current.hasError).toBe(false);
+      expect(reportError).not.toHaveBeenCalled();
     });
 
     it("listens to focus only while something is not downloaded", async () => {

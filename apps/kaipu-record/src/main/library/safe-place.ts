@@ -889,9 +889,19 @@ export async function replaceConfirmed(
     await setAside(from, sourceId, to, placed.size);
     return;
   }
+  if (removal === "unknown") {
+    // The take is already saved at `to`, and a source that could not be verified keeps a name
+    // the stranded sweep matches: set it aside so a later sweep cannot recover it a second time.
+    await setAside(from, sourceId, to, placed.size);
+    return;
+  }
   if (removal === "changed") {
+    // The rename above already replaced `to`: it holds the bytes that were copied, which are
+    // older than what `from` holds now. Say so; the old file at `to` is gone.
     throw Object.assign(
-      new Error(`"${from}" and its copy at "${to}" differ; "${from}" is kept where it was`),
+      new Error(
+        `"${from}" and its copy at "${to}" differ; "${to}" was already replaced by that copy and "${from}" is kept where it was`,
+      ),
       { code: "EIO", path: from },
     );
   }

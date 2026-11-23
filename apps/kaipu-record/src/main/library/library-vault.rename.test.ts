@@ -370,6 +370,40 @@ describe("LibraryVault.renameItem", () => {
     }
   });
 
+  it("a synced rename back to a stem holding kept companions never deletes them (NIW2-912)", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      await rm(join(meta, "Take.cursor.json.tmp"));
+      // Another device edits the old edit project and the old sidecar: both are kept.
+      atCommit.run = async () => {
+        await writeFile(join(meta, "Take.edit.json"), '{"scene":2,"newer":true}');
+        await writeFile(
+          join(meta, "Take.json"),
+          JSON.stringify({ sidecarVersion: 2, assetId: "asset-1", title: "Edited elsewhere" }),
+        );
+      };
+      const first = await renameById(synced, "Take", "Renamed");
+      expect(first.keptCompanions).toEqual(expect.arrayContaining(["Take.edit.json", "Take.json"]));
+      atCommit.run = null;
+
+      // Renaming back would reuse "Take" as a leftover and clear the files that were kept.
+      const back = await renameById(synced, "Renamed", "Take");
+
+      expect(back.file).toBe("renamed");
+      expect(back.recording.id).toBe("Take (2)");
+      expect(await readFile(join(meta, "Take.edit.json"), "utf-8")).toBe(
+        '{"scene":2,"newer":true}',
+      );
+      expect(JSON.parse(await readFile(join(meta, "Take.json"), "utf-8")).title).toBe(
+        "Edited elsewhere",
+      );
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
   it("a synced rename keeps an old companion rewritten with the same size, mtime and inode (Z5)", async () => {
     const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
     try {

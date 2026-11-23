@@ -1,5 +1,6 @@
 import { renameSync, writeFileSync, type PathLike } from "node:fs";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -230,12 +231,12 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     });
 
     it.each([
-      // Z5: same size, same mtime, same inode: only the bytes tell.
+      // Same size, same mtime, same inode: only the bytes tell.
       ["rewritten in place with the same size, mtime and inode", "WHOLE FILE", true],
       // #8: the size moved too: the stamp tells.
       ["appended to", "whole file, and more", false],
     ])(
-      "a source %s after the copy is kept, and the stale copy is not reported as placed (Z5, round 11 #8)",
+      "a source %s after the copy is kept, and the stale copy is not reported as placed",
       async (_label, edited, restoreMtime) => {
         await mkdir(join(dir, "synced"), { recursive: true });
         await mkdir(join(dir, "scratch"), { recursive: true });
@@ -268,7 +269,7 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
       },
     );
 
-    it("a source rewritten after the copy keeps its newer bytes, and the copy the provider gave a new inode is still taken back (round 1)", async () => {
+    it("a source rewritten after the copy keeps its newer bytes, and the copy the provider gave a new inode is still taken back", async () => {
       await mkdir(join(dir, "synced"), { recursive: true });
       await mkdir(join(dir, "scratch"), { recursive: true });
       const source = join(dir, "scratch", "take.mp4");
@@ -301,7 +302,7 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
       expect(await readdir(join(dir, "synced"))).toEqual([]);
     });
 
-    it("a file the provider delivers while the stale copy is being hashed is not deleted (review round 1)", async () => {
+    it("a file the provider delivers while the stale copy is being hashed is not deleted", async () => {
       await mkdir(join(dir, "synced"), { recursive: true });
       await mkdir(join(dir, "scratch"), { recursive: true });
       const source = join(dir, "scratch", "take.mp4");
@@ -724,7 +725,7 @@ describe("replaceConfirmed across volumes into a synced folder (by rename; NIW2-
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("a destination the app's detection knows is synced is staged outside the folder too, with intoSynced false (round 11 #17)", async () => {
+  it("a destination the app's detection knows is synced is staged outside the folder too, with intoSynced false", async () => {
     setSyncRootResolver(() => join(dir, "synced"));
     // isSyncedPath(to) is now true, for the synced folder only (the ancestors stay plain).
     setStagingResolver((path) =>
@@ -777,7 +778,25 @@ describe("replaceConfirmed across volumes into a synced folder (by rename; NIW2-
     await expect(stat(join(dir, "scratch", "take.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("keeps a source rewritten in place after the copy, with the same size, mtime and inode (Z5)", async () => {
+  it("sets the source aside when it cannot be verified after the copy, so a sweep never recovers the take twice", async () => {
+    setSyncRootResolver(() => join(dir, "synced"));
+    const source = join(dir, "scratch", "take.mp4");
+    hooks.exdevOnce = true;
+    // The source becomes unreadable right after the copy landed: hashing it fails.
+    hooks.afterRename = async (to) => {
+      if (to === join(dir, "synced", "Take.mp4")) await chmod(source, 0o000);
+    };
+    try {
+      await replaceConfirmed(source, join(dir, "synced", "Take.mp4"), true, true);
+    } finally {
+      await chmod(source, 0o644).catch(() => {});
+    }
+    expect(await readFile(join(dir, "synced", "Take.mp4"), "utf-8")).toBe("new bytes");
+    // The scratch file no longer holds a name the stranded sweep matches.
+    expect(await readdir(join(dir, "scratch"))).not.toContain("take.mp4");
+  });
+
+  it("keeps a source rewritten in place after the copy, with the same size, mtime and inode", async () => {
     setSyncRootResolver(() => join(dir, "synced"));
     const source = join(dir, "scratch", "take.mp4");
     await utimes(source, 1_700_000_000, 1_700_000_000);

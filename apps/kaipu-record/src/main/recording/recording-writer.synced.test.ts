@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Synced folders (decision 15): a take of a synced workspace writes no `.part` inside the
 // folder, and is placed without a hard link. `link` is counted, never needed.
-const hooks = vi.hoisted(() => ({ links: [] as string[] }));
+const hooks = vi.hoisted(() => ({
+  links: [] as string[],
+  /** A rename into this folder is refused as a cross-volume move (EXDEV). */
+  exdevInto: null as string | null,
+}));
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
   return {
@@ -13,6 +17,16 @@ vi.mock("node:fs/promises", async (importActual) => {
     link: async (from: string, to: string) => {
       hooks.links.push(to);
       return actual.link(from, to);
+    },
+    rename: async (from: string, to: string) => {
+      if (
+        hooks.exdevInto !== null &&
+        String(to).startsWith(hooks.exdevInto) &&
+        String(to).endsWith(".mp4")
+      ) {
+        throw Object.assign(new Error("cross-device link not permitted"), { code: "EXDEV" });
+      }
+      return actual.rename(from, to);
     },
   };
 });
@@ -31,6 +45,7 @@ describe("RecordingWriter — a synced workspace", () => {
     scratch = join(root, "userData", "workspace-scratch", "ws-1", "tmp");
     await (await import("node:fs/promises")).mkdir(vaultDir, { recursive: true });
     hooks.links = [];
+    hooks.exdevInto = null;
   });
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -180,6 +195,29 @@ describe("RecordingWriter — a synced workspace", () => {
     });
     expect(result.recovered).toHaveLength(1);
     expect(hooks.links).toEqual([]);
+  });
+
+  it("a scratch take across volumes is never copied beside its target when no folder outside the provider can stage it", async () => {
+    // A folder the path rule does not call synced: this launch's detection missed it, and no
+    // provider root is known. The take in the scratch folder exists only because the workspace
+    // was synced when it was recorded.
+    const missed = join(root, "Elsewhere", "Kaipu");
+    await mkdir(missed, { recursive: true });
+    const tempPath = join(scratch, "kaipu-rec-s1.mp4.part");
+    await mkdir(scratch, { recursive: true });
+    await writeFile(tempPath, "bytes");
+    hooks.exdevInto = missed;
+    const result = await recoverStrandedRecordings({
+      vaultDir: missed,
+      extraStagingDirs: [scratch],
+      placeByRename: false,
+      title: "Recovered",
+      now: () => Date.now() + 10 * 60_000,
+    });
+    expect(result.recovered).toEqual([]);
+    expect(result.failed).toEqual([tempPath]);
+    expect(await readFile(tempPath, "utf-8")).toBe("bytes");
+    expect((await readdir(missed)).filter((name) => name.endsWith(".mp4"))).toEqual([]);
   });
 
   it("a failed sidecar write takes the take back out of the folder by rename, never a link", async () => {

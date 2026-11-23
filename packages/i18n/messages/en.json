@@ -1678,6 +1678,7 @@
     "saveStateSaved": "Saved",
     "saveStateFailed": "Couldn't save. Click to retry.",
     "readOnlyBanner": "This project is read-only. Its files are only in the cloud or could not be read. Open the project again once its files have downloaded to edit it.",
+    "readOnlyBannerDamaged": "This project is read-only. Part of its saved edit could not be loaded, and saving would replace it. Your recording is not affected. Open the project again to retry; if it keeps happening, the saved edit may be damaged.",
     "readOnlyBannerUnsaved": "Your recent changes could not be saved, and the project is now read-only. Its files are only in the cloud or could not be read. The changes exist only in this window and are lost if it closes. Open the project again once its files have downloaded to edit it.",
     "restoreError": "Couldn't restore the previous edit",
     "sourceUnavailable": "This recording is no longer in your library, so it cannot be edited.",
@@ -3759,6 +3760,7 @@
     "location_onedrive": "OneDrive",
     "location_icloud": "iCloud Drive",
     "location_cloud-provider": "A cloud provider",
-    "syncedBy": "Synced by {provider}"
+    "syncedBy": "Synced by {provider}",
+    "syncedFolder": "Synced folder"
   }
 }

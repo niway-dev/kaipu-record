@@ -92,6 +92,46 @@ describe("probeEditing", () => {
     expect(await probeEditing(dir, local("corrupt"))).toBe("missing-dependencies");
   });
 
+  it("reads .edit.meta.json through the reader it is given (a synced workspace's bounded one)", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    await writeFile(join(dir, ".kaipu", "r.edit.json"), "{}");
+    await writeFile(sessionMetaPath(dir, "r"), "{}");
+    const read: string[] = [];
+    const info = await stat(join(dir, "r.mp4"));
+    const reader = async (path: string): Promise<string> => {
+      read.push(path);
+      return JSON.stringify({
+        sourceSizeBytes: info.size,
+        sourceMtimeMs: info.mtimeMs,
+        assetIds: [],
+        savedAt: 7,
+      });
+    };
+    expect(await probeEditing(dir, local("r"), reader)).toBe("project-available");
+    expect((await probeEditSession(dir, "r", reader)).savedAt).toBe(7);
+    expect(read).toEqual([sessionMetaPath(dir, "r"), sessionMetaPath(dir, "r")]);
+  });
+
+  it("an offloaded or stalled .edit.meta.json is unknown, not missing-dependencies", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    await writeFile(join(dir, ".kaipu", "r.edit.json"), "{}");
+    await writeFile(sessionMetaPath(dir, "r"), "{}");
+    for (const code of ["EVICTED", "ETIMEDOUT"]) {
+      const refuse = async (): Promise<string> => {
+        throw Object.assign(new Error("not readable now"), { code });
+      };
+      // Unknown counts as fine: the same answer as a session saved before the meta existed.
+      expect(await probeEditing(dir, local("r"), refuse)).toBe("project-available");
+      expect(await probeEditSession(dir, "r", refuse)).toEqual({
+        savedAt: null,
+        exportedSavedAt: null,
+      });
+    }
+    // A file that was read and is corrupt is still a real problem.
+    const corrupt = async (): Promise<string> => "{not json";
+    expect(await probeEditing(dir, local("r"), corrupt)).toBe("missing-dependencies");
+  });
+
   it("probeEditSession returns the session's savedAt, or null without a session", async () => {
     await writeFile(join(dir, "r.mp4"), "v");
     expect(await probeEditSession(dir, "r")).toEqual({ savedAt: null, exportedSavedAt: null });

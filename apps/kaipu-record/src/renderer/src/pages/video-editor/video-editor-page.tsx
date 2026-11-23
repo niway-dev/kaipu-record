@@ -469,6 +469,12 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
      * so an unreadable project is never overwritten by a fresh one.
      */
     readOnly: boolean;
+    /**
+     * Read-only because the saved edit loaded but is not usable (it does not parse, or an image
+     * it needs is gone), not because its files are unreachable. Waiting for a download cannot
+     * fix that, so the banner says something different.
+     */
+    damaged: boolean;
   } | null>(null);
   // The editor counts as opened once its session is read and it can render, not before.
   useEditorOpened("video", resolved !== null);
@@ -514,6 +520,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
       // longer match the track. The editor opens read-only instead, so nothing is saved from it.
       let cursorTrack: CursorTrack | null = null;
       let readOnly = false;
+      let damaged = false;
       try {
         const trackJson = await window.electronAPI.loadCursorTrack(editorSource.id);
         cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
@@ -530,6 +537,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
           scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
           cursorTrack,
           readOnly,
+          damaged,
         });
       };
       try {
@@ -565,7 +573,10 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
               session.scene.items.some(
                 (item) => item.kind === "slide" && !loadedIds.has(item.assetId),
               ) || (session.scene.media ?? []).some((item) => !loadedIds.has(item.assetId));
-            if (missingAsset) readOnly = true;
+            if (missingAsset) {
+              readOnly = true;
+              damaged = true;
+            }
             const filteredScene: VideoScene = dropMediaWithoutAsset(
               {
                 // The sidecar decides whether the recording has a webcam, not the session.
@@ -588,6 +599,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // still the user's project on disk: a blank scene must never be saved over it.
             showToast({ message: t("restoreError") });
             readOnly = true;
+            damaged = true;
             open(initialScene(source.durationSeconds, source.webcam ?? null), false);
           }
         } else {
@@ -633,6 +645,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
         resolvedScene={resolved.scene}
         cursorTrack={resolved.cursorTrack}
         readOnlyAtOpen={resolved.readOnly}
+        damagedAtOpen={resolved.damaged}
         assetStoreRef={assetStoreRef}
       />
     </>
@@ -644,6 +657,7 @@ function VideoEditor({
   resolvedScene,
   cursorTrack,
   readOnlyAtOpen,
+  damagedAtOpen,
   assetStoreRef,
 }: {
   source: VideoEditorSource;
@@ -652,6 +666,8 @@ function VideoEditor({
   cursorTrack: CursorTrack | null;
   /** The loader could not read the project (or its pointer track): nothing here is saved. */
   readOnlyAtOpen: boolean;
+  /** The read-only open is because the saved edit is unusable, not because files are missing. */
+  damagedAtOpen: boolean;
   assetStoreRef: React.MutableRefObject<SlideAssetStore>;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
@@ -2393,6 +2409,10 @@ function VideoEditor({
         playback.toggle();
         return;
       }
+      // Read-only: nothing below may run. Every edit shortcut would hit the frozen scene, drop
+      // its commit, and still select or arm something that does not exist. Escape (clearing the
+      // selection) and the playback keys above stay.
+      if (readOnlyRef.current && e.key !== "Escape") return;
       const isMod = e.metaKey || e.ctrlKey;
       if (isMod && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -2675,7 +2695,15 @@ function VideoEditor({
           role="status"
         >
           <Lock size={14} strokeWidth={2} aria-hidden="true" />
-          <p>{t(saveRefused ? "readOnlyBannerUnsaved" : "readOnlyBanner")}</p>
+          <p>
+            {t(
+              saveRefused
+                ? "readOnlyBannerUnsaved"
+                : damagedAtOpen
+                  ? "readOnlyBannerDamaged"
+                  : "readOnlyBanner",
+            )}
+          </p>
         </div>
       )}
       <div className={styles.workspace}>

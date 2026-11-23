@@ -191,9 +191,12 @@ export class LibraryService {
     const editing: Record<string, EditingState> = {};
     const editSession: Record<string, EditSessionState> = {};
     const transcribed: Record<string, number> = {};
+    // The edit meta is read through the vault: bounded, and never a download, in a synced one.
+    const vault = this.deps.vault();
+    const readMeta = (path: string) => vault.readTextBounded(path);
     for (const rec of local ?? []) {
-      editing[rec.id] = await probeEditing(this.deps.vaultDir(), rec);
-      editSession[rec.id] = await probeEditSession(this.deps.vaultDir(), rec.id);
+      editing[rec.id] = await probeEditing(this.deps.vaultDir(), rec, readMeta);
+      editSession[rec.id] = await probeEditSession(this.deps.vaultDir(), rec.id, readMeta);
       const transcribedAt = await probeTranscribedAt(this.deps.vaultDir(), rec.id);
       if (transcribedAt !== null) transcribed[rec.id] = transcribedAt;
     }

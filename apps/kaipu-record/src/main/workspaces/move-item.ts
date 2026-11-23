@@ -841,7 +841,10 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
         const hash = await fs.sha256(finalMedia(newId));
         const afterRead = await destinationAt(finalMedia(newId));
         if (hash !== journal.media.sha256 || !sameDestination(beforeRead, afterRead)) {
-          await rollBackTarget(to, newId, assetId, staging, placedAt);
+          await rollBackTarget(to, newId, assetId, staging, placedAt, {
+            sha256: journal.media.sha256,
+            hash: fs.sha256,
+          });
           await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
           return refuse("checksum-mismatch");
         }
@@ -936,6 +939,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
         assetId,
         stagingDir(target.directory, journal.moveId, target.scratch),
         placedAt,
+        { sha256: journal.media.sha256, hash: fs.sha256 },
       );
     }
     await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
@@ -1116,14 +1120,43 @@ async function rollBackTarget(
   assetId: string,
   staging: string,
   media: string | { path: string; identity: FileIdentity } | null,
+  /**
+   * The bytes the placed media holds (the journal's hash), for a name a provider re-inoded:
+   * `removeIfSame` leaves such a file, which would stay under its final name for the target to
+   * adopt as a new item while the source still holds the original.
+   */
+  proof?: { sha256: string | null; hash: (path: string) => Promise<string> },
 ): Promise<void> {
   await rm(staging, { recursive: true, force: true }).catch(() => {});
   const read = await to.readRecordStrict(to.sidecarPath(newId));
   if (read.status === "ok" && read.sidecar.assetId !== assetId) return;
   if (read.status !== "ok" && read.status !== "missing") return;
   if (typeof media === "string") await rm(media, { force: true });
-  else if (media) await removeIfSame(media.path, media.identity);
+  else if (media && !(await removeIfSame(media.path, media.identity)) && proof) {
+    await removeIfBytesMatch(media.path, proof);
+  }
   await removeCompanions(to.companionPaths(newId));
+}
+
+/**
+ * Removes `path` only when it holds exactly the bytes `proof.sha256` names, read from one file
+ * that is still the same one when the read ends (a hash of a large file takes seconds, and the
+ * provider may deliver another file under the name meanwhile). Another file's bytes, an
+ * unreadable name or a move that never recorded a hash leave it in place: never guess.
+ */
+async function removeIfBytesMatch(
+  path: string,
+  proof: { sha256: string | null; hash: (path: string) => Promise<string> },
+): Promise<void> {
+  if (proof.sha256 === null) return;
+  try {
+    const before = await stampAt(path);
+    if (before === null || (await proof.hash(path)) !== proof.sha256) return;
+    if (!sameStamp(before, await stampAt(path))) return;
+    await rm(path);
+  } catch {
+    // Left in place.
+  }
 }
 
 /**

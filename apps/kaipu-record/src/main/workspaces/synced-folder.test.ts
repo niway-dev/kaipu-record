@@ -250,7 +250,7 @@ describe("detectSyncedFolder: a folder the user picked, not a workspace root", (
   });
 });
 
-describe("readXattrAnswer: what /usr/bin/xattr's exit says (round 11 #15)", () => {
+describe("readXattrAnswer: what /usr/bin/xattr's exit says", () => {
   it("answers yes on exit 0, and no only for a missing attribute or file", () => {
     expect(readXattrAnswer(null, "")).toBe(true);
     expect(

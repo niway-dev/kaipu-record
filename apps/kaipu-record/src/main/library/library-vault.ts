@@ -1002,7 +1002,9 @@ export class LibraryVault {
             id,
             oldMedia,
             meta.assetId!,
-            options.allowLeftover ?? true,
+            // A synced vault never clears a leftover: it may hold what an earlier rename kept
+            // because another device changed it, and a delete there reaches every device.
+            (options.allowLeftover ?? true) && !this.synced,
           );
         } catch {
           // A candidate that could not be checked (EIO, EACCES): never treated as free.

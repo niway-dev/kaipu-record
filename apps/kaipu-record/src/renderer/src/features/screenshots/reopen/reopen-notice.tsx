@@ -26,7 +26,9 @@ export type ReopenNoticeProps =
   /** I1: the saved document loaded. Fades after ~4 s, or on the first edit. */
   | { kind: "editable"; savedAt: number | null; edited: boolean }
   /** I2: a document existed but could not be read. Stays until dismissed. */
-  | { kind: "flat" };
+  | { kind: "flat" }
+  /** I3: the document is offloaded by a sync provider. Stays until dismissed. */
+  | { kind: "evicted" };
 
 /**
  * The pill at the top-centre of the stage when a saved screenshot is reopened in canvas
@@ -34,7 +36,8 @@ export type ReopenNoticeProps =
  * flat image opened because the earlier drawings could not be read.
  */
 export function ReopenNotice(props: ReopenNoticeProps): React.JSX.Element | null {
-  return props.kind === "editable" ? <EditableNotice {...props} /> : <FlatNotice />;
+  if (props.kind === "editable") return <EditableNotice {...props} />;
+  return props.kind === "evicted" ? <FlatNotice evicted /> : <FlatNotice />;
 }
 
 /**
@@ -51,7 +54,7 @@ export function ReopenNoticeSlot({
   if (reopen?.status === "loaded") {
     return <EditableNotice savedAt={reopen.savedAt} edited={edited} />;
   }
-  if (reopen?.status === "unreadable") return <FlatNotice />;
+  if (reopen?.status === "unreadable") return <FlatNotice evicted={reopen.evicted === true} />;
   return null;
 }
 
@@ -100,8 +103,9 @@ function EditableNotice({
   );
 }
 
-function FlatNotice(): React.JSX.Element | null {
+function FlatNotice({ evicted = false }: { evicted?: boolean }): React.JSX.Element | null {
   const t = useTranslations("screenshots");
+  const library = useTranslations("library");
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
   return (
@@ -109,7 +113,7 @@ function FlatNotice(): React.JSX.Element | null {
       <span className={`${styles.icon} ${styles.info}`} aria-hidden="true">
         <Info size={13} />
       </span>
-      <span>{t("reopenFlat")}</span>
+      <span>{evicted ? library("evictedHint") : t("reopenFlat")}</span>
       <button
         type="button"
         className={styles.dismiss}

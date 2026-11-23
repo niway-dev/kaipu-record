@@ -219,6 +219,39 @@ describe("LibraryService", () => {
     expect((await synced.list()).items.map((i) => i.availability)).toEqual(["local-and-cloud"]);
   });
 
+  it("list() in a synced workspace reads each edit meta through the bounded reader, and an offloaded one is not downloaded", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+    await writeFile(join(vaultDir, ".kaipu", "a.edit.json"), "{}");
+    const metaPath = join(vaultDir, ".kaipu", "a.edit.meta.json");
+    await writeFile(metaPath, JSON.stringify({ savedAt: 123 }));
+    // The provider has offloaded the meta file: only the bounded reader knows that.
+    const vault = new LibraryVault(
+      vaultDir,
+      "ws",
+      undefined,
+      async (paths) => new Set(paths.filter((p) => p === metaPath)),
+    );
+    const readTextBounded = vi.spyOn(vault, "readTextBounded");
+    const synced = new LibraryService({
+      vault: () => vault,
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      now: () => clock,
+    });
+
+    const { items } = await synced.list();
+
+    // Both probes (editing and edit-session) go through the vault's bounded reader.
+    expect(readTextBounded.mock.calls.filter(([p]) => p === metaPath)).toHaveLength(2);
+    // Unknown, not damaged: an offloaded meta is neither "missing-dependencies" nor a bare read.
+    expect(items[0]?.editing).toBe("project-available");
+    expect(items[0]?.editExportedSavedAt ?? null).toBeNull();
+    expect(items[0]?.editSavedAt ?? null).toBeNull();
+  });
+
   it("removeLocalCopy in a synced workspace keeps the upload check: a different file is refused", async () => {
     await writeFile(join(vaultDir, "a.mp4"), "different bytes");
     const rec = (await new LibraryVault(vaultDir).describe("a"))!;

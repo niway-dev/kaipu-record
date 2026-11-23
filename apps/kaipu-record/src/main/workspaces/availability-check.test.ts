@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkAvailability, type AvailabilityDeps } from "./availability-check";
+import { checkAvailability, verifiedFolder, type AvailabilityDeps } from "./availability-check";
 import { SYNCED_PROBE_TIMEOUT_MS, SyncStates } from "./sync-state";
 
 const HOME = "/Users/x";
@@ -41,7 +41,11 @@ describe("checkAvailability", () => {
     const d = deps(DRIVE, { availability: never });
     const result = checkAvailability(d, "w");
     await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS + 1);
-    expect(await result).toEqual({ availability: { state: "available" }, id: "w" });
+    expect(await result).toEqual({
+      availability: { state: "available" },
+      id: "w",
+      unverified: true,
+    });
     expect(d.states.isUnverified("w")).toBe(true);
   });
 
@@ -57,7 +61,11 @@ describe("checkAvailability", () => {
     const d = deps(`${HOME}/Documents/K`, { states, availability: never });
     const result = checkAvailability(d, "w");
     await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS + 1);
-    expect(await result).toEqual({ availability: { state: "available" }, id: "w" });
+    expect(await result).toEqual({
+      availability: { state: "available" },
+      id: "w",
+      unverified: true,
+    });
     expect(states.isUnverified("w")).toBe(true);
   });
 
@@ -116,6 +124,7 @@ describe("checkAvailability", () => {
       expect(await checkAvailability(d, "w")).toEqual({
         availability: { state: "available" },
         id: "w",
+        unverified: true,
       });
       expect(states.isUnverified("w")).toBe(true);
     });
@@ -131,7 +140,11 @@ describe("checkAvailability", () => {
       const result = checkAvailability(d, "w");
       await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS + 1);
 
-      expect(await result).toEqual({ availability: { state: "available" }, id: "adopted" });
+      expect(await result).toEqual({
+        availability: { state: "available" },
+        id: "adopted",
+        unverified: true,
+      });
       // A move must not treat it as verified: its provider never answered the second probe.
       expect(states.isUnverified("adopted")).toBe(true);
     });
@@ -167,8 +180,25 @@ describe("checkAvailability", () => {
     await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS + 1); // A is now in its `stat` step
     expect(await checkAvailability(d, "w")).toEqual(AVAILABLE); // B answers
     release(true);
-    expect(await a).toEqual({ availability: { state: "available" }, id: "w" });
+    // A got no answer, and says so to its own caller; B's answer is still the shared flag's.
+    expect(await a).toEqual({ availability: { state: "available" }, id: "w", unverified: true });
     expect(d.states.isUnverified("w")).toBe(false); // A's late result left B's answer alone
+  });
+
+  it("a superseded check that got no answer still reports unverified while the newer one waits", async () => {
+    const asked = vi
+      .fn<AvailabilityDeps["reg"]["availability"]>()
+      .mockImplementationOnce(never) // check A (a move): the provider is stalled
+      .mockImplementationOnce(() => new Promise((r) => setTimeout(() => r(AVAILABLE), 20_000))); // B starts later and is still waiting
+    const d = deps(DRIVE, { availability: asked });
+    const a = checkAvailability(d, "w");
+    await vi.advanceTimersByTimeAsync(1_000);
+    const b = checkAvailability(d, "w");
+    await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS - 1_000 + 1); // A times out, B has not
+    expect(await a).toMatchObject({ availability: { state: "available" }, unverified: true });
+    expect(d.states.isUnverified("w")).toBe(false); // the shared flag cannot be read as "unverified" yet
+    await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS);
+    await b;
   });
 
   it("the newest check still marks an unanswered workspace unverified", async () => {
@@ -196,5 +226,43 @@ describe("checkAvailability", () => {
     const result = await checkAvailability(d, "w");
     expect(result.id).toBe("adopted");
     expect(d.states.isUnverified("adopted")).toBe(false);
+  });
+});
+
+describe("verifiedFolder (what a move reads from its own check)", () => {
+  it("refuses a move after its own check got no answer, even though a newer check owns the shared flag", async () => {
+    const asked = vi
+      .fn<AvailabilityDeps["reg"]["availability"]>()
+      .mockImplementationOnce(never) // the move's check: the provider is stalled
+      .mockImplementationOnce(() => new Promise((r) => setTimeout(() => r(AVAILABLE), 20_000))); // the switcher's check is still waiting
+    const d = deps(DRIVE, { availability: asked });
+    const move = checkAvailability(d, "w");
+    await vi.advanceTimersByTimeAsync(1_000);
+    const switcher = checkAvailability(d, "w");
+    await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS - 1_000 + 1);
+    const checked = await move;
+
+    // The shared flag is not set yet: only the check's own result knows it got no answer.
+    expect(d.states.isUnverified("w")).toBe(false);
+    expect(verifiedFolder(d.reg, d.states, checked)).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS);
+    await switcher;
+  });
+
+  it("hands the folder over for an answered check", async () => {
+    const d = deps(DRIVE, { availability: async () => AVAILABLE });
+    const checked = await checkAvailability(d, "w");
+    expect(verifiedFolder(d.reg, d.states, checked)).toBe(DRIVE);
+  });
+
+  it("is null for a folder that is not available", () => {
+    const d = deps(DRIVE, { availability: async () => AVAILABLE });
+    expect(
+      verifiedFolder(d.reg, d.states, {
+        availability: { state: "unavailable", reason: "missing" },
+        id: "w",
+      }),
+    ).toBeNull();
   });
 });

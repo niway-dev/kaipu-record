@@ -99,12 +99,24 @@ interface Seeded {
   webcam: Buffer;
 }
 
-/** The `quarantined` reason of the one move journal left on disk (it fails when there is not one). */
+/** The one move journal left on disk, with its file name (it fails when there is not one). */
+async function journalOnDisk(): Promise<{ name: string; journal: MoveJournal }> {
+  const names = await readdir(journalDir);
+  expect(names).toHaveLength(1);
+  const raw = await readFile(join(journalDir, names[0]!), "utf-8");
+  return { name: names[0]!, journal: JSON.parse(raw) as MoveJournal };
+}
+
+/** The `quarantined` reason of the one move journal left on disk. */
 async function journalReasonOnDisk(): Promise<string | undefined> {
-  const journals = await readdir(journalDir);
-  expect(journals).toHaveLength(1);
-  return (JSON.parse(await readFile(join(journalDir, journals[0]!), "utf-8")) as MoveJournal)
-    .quarantined;
+  return (await journalOnDisk()).journal.quarantined;
+}
+
+/** Another file at `path`, made beside it and renamed over it: a new inode, as a provider does. */
+async function replaceWith(path: string, bytes: Buffer, mtime?: Date): Promise<void> {
+  await writeFile(`${path}.theirs`, bytes);
+  if (mtime) await utimes(`${path}.theirs`, mtime, mtime);
+  await rename(`${path}.theirs`, path);
 }
 
 /** A recording with every file an item owns today, and two tags. */
@@ -550,6 +562,12 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
       expect(await readFile(join(dst.directory, "Demo.mp4"))).toEqual(item.media);
       // Never written under a name the provider sees: the media arrived by rename, whole.
       expect(seen.created).not.toContain(join(dst.directory, "Demo.mp4"));
+      // The refusal really happened (the hook clears itself when it throws), so the media took
+      // the cross-volume path: a staged copy outside the folder, then one rename into it.
+      expect(seen.exdevInto).toBeNull();
+      const staged = seen.created.filter((path) => path.endsWith(".part"));
+      expect(staged).not.toEqual([]);
+      expect(staged.some((path) => path.startsWith(dst.directory))).toBe(false);
     } finally {
       setSyncRootResolver(() => null);
       seen.exdevInto = null;
@@ -796,8 +814,38 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
       }),
     );
     expect(outcome).toEqual({ ok: false, id: "Demo", reason: "checksum-mismatch" });
-    expect(calls).toBe(1);
+    // The re-verify, then the rollback's own content check of the name it did not recognize.
+    expect(calls).toBe(2);
     expect(await readFile(finalPath, "utf-8")).toBe("someone else's file");
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+  });
+
+  it("a rollback removes the placed media a provider re-inoded, when its bytes are the ones that were copied", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const finalPath = join(dst.directory, "Demo.mp4");
+    let calls = 0;
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        fs: {
+          sha256: async (path) => {
+            if (path !== finalPath) return sha256FileBase64(path);
+            calls += 1;
+            if (calls === 1) {
+              // The provider gives the placed file a new inode right after the rename, with the
+              // same bytes: the re-verify sees two different files and the move rolls back.
+              await writeFile(`${finalPath}.again`, item.media);
+              await rename(`${finalPath}.again`, finalPath);
+            }
+            return sha256FileBase64(path);
+          },
+        },
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, id: "Demo", reason: "checksum-mismatch" });
+    // No stray media is left under the final name for the target to adopt as a new item.
+    expect(await filesOf(dst.directory, "Demo")).toEqual([]);
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
   });
 
@@ -911,15 +959,6 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
   const syncedTarget = (): MoveSide => ({ ...dst, scratch: join(root, "scratch", "dst") });
   const fixedTime = new Date(1_700_000_000_000);
 
-  /** Another file at `path`, made beside it and renamed over it: a new inode, as a provider does. */
-  async function replaceWith(path: string, bytes: Buffer, mtime?: Date): Promise<void> {
-    await writeFile(`${path}.theirs`, bytes);
-    if (mtime) await utimes(`${path}.theirs`, mtime, mtime);
-    await rename(`${path}.theirs`, path);
-  }
-
-  const journalReason = journalReasonOnDisk;
-
   it("a provider that gives the placed file a new inode right after the rename does not fail the move: the bytes are what is verified", async () => {
     const item = await seedItem(src.directory);
     const finalPath = join(dst.directory, "Demo.mp4");
@@ -953,7 +992,7 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     );
     expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
     expect(await readFile(path)).toEqual(theirs);
-    expect(await journalReason()).toBe("source media changed after the move committed");
+    expect(await journalReasonOnDisk()).toBe("source media changed after the move committed");
   });
 
   it("C2: a target copy replaced after it was verified keeps the source (the delete re-checks the target)", async () => {
@@ -975,7 +1014,7 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
     expect(await readFile(finalPath)).toEqual(foreign); // never touched by the move
-    expect(await journalReason()).toBe(
+    expect(await journalReasonOnDisk()).toBe(
       "source or target media changed just before the source was removed",
     );
   });
@@ -1031,7 +1070,7 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
     expect(await readFile(transcript, "utf-8")).toBe('{"segments":["new"]}');
     expect(await filesOf(src.directory, "Demo")).toContain("Demo.webcam.mp4");
-    expect(await journalReason()).toBe(
+    expect(await journalReasonOnDisk()).toBe(
       "source file Demo.transcript.json changed after the move committed",
     );
   });
@@ -1251,12 +1290,6 @@ describe("healing deletes the source only against what the journal recorded (NIW
   const fixedTime = new Date(1_700_000_000_000);
   const forceCopy = { link: exdev };
 
-  async function replaceWith(path: string, bytes: Buffer, mtime?: Date): Promise<void> {
-    await writeFile(`${path}.theirs`, bytes);
-    if (mtime) await utimes(`${path}.theirs`, mtime, mtime);
-    await rename(`${path}.theirs`, path);
-  }
-
   /** A copy that crashed right after the media was placed, so the source is still whole. */
   async function crashAfterCopy(): Promise<Seeded> {
     const item = await seedItem(src.directory);
@@ -1276,13 +1309,6 @@ describe("healing deletes the source only against what the journal recorded (NIW
     ).rejects.toBeInstanceOf(SimulatedCrash);
     return item;
   }
-
-  const journalOnDisk = async (): Promise<{ name: string; journal: MoveJournal }> => {
-    const names = await readdir(journalDir);
-    expect(names).toHaveLength(1);
-    const raw = await readFile(join(journalDir, names[0]!), "utf-8");
-    return { name: names[0]!, journal: JSON.parse(raw) as MoveJournal };
-  };
 
   it("X1: a source replaced between the crash and the recovery, with the same size and mtime, is kept", async () => {
     const item = await crashAfterCopy();
@@ -1327,6 +1353,55 @@ describe("healing deletes the source only against what the journal recorded (NIW
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
     expect(await stat(join(src.directory, ".kaipu", "Demo.json"))).toBeTruthy();
     expect(await stat(join(src.directory, ".kaipu", "Demo.webcam.mp4"))).toBeTruthy();
+  });
+
+  describe("a journal is a file on disk: nothing it says may point a delete elsewhere", () => {
+    const tamper: [string, (journal: MoveJournal) => void][] = [
+      [
+        "a companion path that climbs out of the source folder",
+        (journal) => {
+          journal.companions!.files.push(["../outside.txt", null]);
+        },
+      ],
+      [
+        "an absolute companion path",
+        (journal) => {
+          journal.companions!.files.push([join(root, "outside.txt"), null]);
+        },
+      ],
+      [
+        "a companion stamp whose fields are not strings",
+        (journal) => {
+          journal.companions!.files[0] = [
+            journal.companions!.files[0]![0],
+            { dev: 1, ino: 2, size: 3, mtimeNs: 4 } as never,
+          ];
+        },
+      ],
+      [
+        "a malformed source stamp",
+        (journal) => {
+          journal.sourceStamp = { dev: "x", ino: "1", size: "1", mtimeNs: "1" };
+        },
+      ],
+    ];
+
+    it.each(tamper)("%s keeps the whole source and quarantines the move", async (_name, edit) => {
+      const item = await crashAfterCopy();
+      const outside = join(root, "outside.txt");
+      await writeFile(outside, "not part of any item");
+      const { name, journal } = await journalOnDisk();
+      edit(journal);
+      await writeFile(join(journalDir, name), JSON.stringify(journal));
+
+      const report = await heal();
+
+      expect(report.healed).toBe(0);
+      expect(report.quarantined).toHaveLength(1);
+      expect(await readFile(outside, "utf-8")).toBe("not part of any item");
+      expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+      expect(await stat(join(src.directory, ".kaipu", "Demo.json"))).toBeTruthy();
+    });
   });
 
   it("X2: a companion changed after the crash is not the baseline: the whole source is kept", async () => {

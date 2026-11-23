@@ -308,7 +308,9 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
                     status,
                     // Behind `synced-workspaces` (decision 13): the provider is named, never configured.
                     providerNamed && workspace.sync
-                      ? tCloud("syncedBy", { provider: tCloud(`location_${workspace.sync}`) })
+                      ? workspace.sync === "cloud-provider"
+                        ? tCloud("syncedFolder")
+                        : tCloud("syncedBy", { provider: tCloud(`location_${workspace.sync}`) })
                       : null,
                   ]
                     .filter(Boolean)

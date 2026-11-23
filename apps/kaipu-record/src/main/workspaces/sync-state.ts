@@ -37,6 +37,12 @@ export class SyncStates {
   /** The newest detection of each workspace (see `refresh`). */
   private readonly refreshes = new Map<string, number>();
 
+  /**
+   * The id each detection that is still running will write under: its own, unless the workspace
+   * adopted another one meanwhile (see `rekey`). Entries live only while the detection runs.
+   */
+  private readonly running = new Map<number, string>();
+
   constructor(
     private readonly detect: (path: string) => Promise<SyncProvider | null> = detectSync,
     private readonly home: string = homedir(),
@@ -55,14 +61,22 @@ export class SyncStates {
     const { id, path } = entry;
     const generation = ++this.clock;
     this.refreshes.set(id, generation);
-    const sync = await this.detect(path);
-    const hasIdentity = sync === null ? await this.hasIdentity(path) : true;
-    if (this.refreshes.get(id) !== generation) return sync; // superseded: leave the newer answer alone
-    this.known.set(id, { path, sync });
-    this.unanswered.delete(id); // a new detection (launch, relocation) starts afresh
-    if (sync === null && !hasIdentity) this.provisional.add(id);
-    else this.provisional.delete(id);
-    return sync;
+    this.running.set(generation, id);
+    try {
+      const sync = await this.detect(path);
+      const hasIdentity = sync === null ? await this.hasIdentity(path) : true;
+      // The id the workspace has now: a pending one may have adopted its folder's own id while
+      // the provider was slow, and the detection belongs to it (`rekey` moved it over).
+      const current = this.running.get(generation) ?? id;
+      if (this.refreshes.get(current) !== generation) return sync; // superseded: leave the newer answer alone
+      this.known.set(current, { path, sync });
+      this.unanswered.delete(current); // a new detection (launch, relocation) starts afresh
+      if (sync === null && !hasIdentity) this.provisional.add(current);
+      else this.provisional.delete(current);
+      return sync;
+    } finally {
+      this.running.delete(generation);
+    }
   }
 
   /**
@@ -114,6 +128,13 @@ export class SyncStates {
     if (hit) this.known.set(to, hit);
     if (this.provisional.has(from)) this.provisional.add(to);
     if (this.unanswered.has(from)) this.unanswered.add(to);
+    // A detection of `from` that is still running now belongs to `to`: it would otherwise find
+    // `from` forgotten below and drop what it learned, which a path rule cannot reproduce.
+    const running = this.refreshes.get(from);
+    if (running !== undefined && this.running.get(running) === from) {
+      this.running.set(running, to);
+      if ((this.refreshes.get(to) ?? 0) < running) this.refreshes.set(to, running);
+    }
     this.forget(from);
   }
 
