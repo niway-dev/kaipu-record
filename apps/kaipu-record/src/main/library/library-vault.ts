@@ -493,12 +493,15 @@ export class LibraryVault {
   }
 
   /**
-   * Sidecars, posters and cursor tracks: written through a temp file, then renamed over the
+   * Every file this vault keeps beside or under its folder (sidecars, posters, cursor tracks,
+   * tags, canvas documents, text caches): written through a temp file, then renamed over the
    * target. A synced vault keeps that temp file in its scratch folder, so the provider never
-   * uploads and deletes it (an EXDEV rename falls back to a file beside the target).
+   * uploads and deletes it (an EXDEV rename falls back to a file beside the target). A vault
+   * built without a staging folder asks `atomicWriteFile`, which looks the folder up from the
+   * path, so one built for a synced workspace by mistake still stages outside it.
    */
-  private writeAtomic(target: string, data: string | Uint8Array): Promise<void> {
-    return atomicWriteFile(target, data, "tmp", this.stagingDir);
+  writeAtomic(target: string, data: string | Uint8Array): Promise<void> {
+    return atomicWriteFile(target, data, "tmp", this.stagingDir ?? undefined);
   }
 
   /** Where a synced vault stages what it writes (its scratch folder), or null for `.kaipu/tmp`. */
@@ -1763,7 +1766,7 @@ export class LibraryVault {
   ): Promise<NewMedia | void> {
     await mkdir(this.directory, { recursive: true });
     const target = join(this.directory, `${id}.png`);
-    if (options.replace) return atomicWriteFile(target, png, "part", this.stagingDir);
+    if (options.replace) return atomicWriteFile(target, png, "part", this.stagingDir ?? undefined);
     return { path: target, file: await this.placeNewFile(target, png) };
   }
 

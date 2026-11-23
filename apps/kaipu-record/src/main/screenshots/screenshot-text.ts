@@ -12,7 +12,7 @@ import type {
   TextRecognitionRequest,
   TextRecognitionResult,
 } from "@shared/types/text-recognition";
-import { atomicWriteFile, withLock } from "../library/atomic-write";
+import { withLock } from "../library/atomic-write";
 import { withItemLock } from "../library/item-lock";
 import { isPlainItemId, type LibraryVault } from "../library/library-vault";
 
@@ -104,7 +104,7 @@ async function writeAssets(
     await rm(path, { force: true });
     return;
   }
-  await atomicWriteFile(path, json);
+  await vault.writeAtomic(path, json);
 }
 
 /**

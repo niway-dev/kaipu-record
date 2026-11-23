@@ -13,7 +13,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
+import { setStagingResolver } from "../library/atomic-write";
 import { sha256FileBase64 } from "../library/content-hash";
 import { DragLedger } from "../library/drag-ledger";
 import { ItemMovedError, withItemLock } from "../library/item-lock";
@@ -30,6 +31,27 @@ import {
   type MoveSide,
   type MoveStep,
 } from "./move-item";
+
+/** Records the files created and the renames made, to see what a synced folder is shown. */
+const seen = vi.hoisted(() => ({
+  created: [] as string[],
+  renames: [] as { from: string; to: string }[],
+}));
+vi.mock("node:fs/promises", async (importActual) => {
+  const actual = await importActual<typeof import("node:fs/promises")>();
+  const writing = /^(w|wx|a|ax|r\+|w\+)$/;
+  return {
+    ...actual,
+    open: async (path: string, flags?: string, ...rest: unknown[]) => {
+      if (typeof flags === "string" && writing.test(flags)) seen.created.push(String(path));
+      return (actual.open as (...args: unknown[]) => Promise<unknown>)(path, flags, ...rest);
+    },
+    rename: async (from: string, to: string) => {
+      seen.renames.push({ from: String(from), to: String(to) });
+      return actual.rename(from, to);
+    },
+  };
+});
 
 let root: string;
 let src: MoveSide;
@@ -693,6 +715,56 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     expect(await copiesOf(item.assetId)).toEqual([{ dir: dst.directory, id: "Demo" }]);
     expect(await readFile(join(dst.directory, "Demo.mp4"))).toEqual(item.media);
     expect(await readdir(join(root, "scratch", "dst", "tmp")).catch(() => [])).toEqual([]);
+  });
+});
+
+describe("moveItem — a synced target never sees a temp file (NIW2-912)", () => {
+  const isTemp = (path: string): boolean => /\.(tmp|part)$/.test(path);
+  const insideTarget = (path: string): boolean => path.startsWith(dst.directory + sep);
+  const tempsInTarget = (): string[] => [
+    ...seen.created.filter((path) => insideTarget(path) && isTemp(path)),
+    ...seen.renames
+      .filter((r) => insideTarget(r.from) && insideTarget(r.to) && isTemp(r.from))
+      .map((r) => r.from),
+  ];
+
+  afterEach(() => setStagingResolver(() => null));
+
+  it("the target's tag registry, sidecar and freshness stamp are staged in its scratch folder", async () => {
+    const item = await seedItem(src.directory);
+    const scratch = join(root, "scratch", "dst");
+    const target: MoveSide = { ...dst, scratch };
+    setStagingResolver((path) => (insideTarget(path) ? join(scratch, "tmp") : null));
+    seen.created = [];
+    seen.renames = [];
+
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({ fs: { link: exdev } }),
+    );
+
+    expect(outcome).toMatchObject({ ok: true, mode: "copied" });
+    expect(tempsInTarget()).toEqual([]);
+    expect(
+      seen.renames.filter((r) => r.from.startsWith(join(scratch, "tmp")) && insideTarget(r.to))
+        .length,
+    ).toBeGreaterThanOrEqual(3);
+    const stamped = JSON.parse(
+      await readFile(join(dst.directory, ".kaipu", "Demo.edit.meta.json"), "utf-8"),
+    );
+    const now = await stat(join(dst.directory, "Demo.mp4"));
+    expect(stamped).toMatchObject({ sourceSizeBytes: now.size, sourceMtimeMs: now.mtimeMs });
+    expect(await readdir(join(dst.directory, ".kaipu"))).toContain("tags.json");
+  });
+
+  it("control: without staging, the same move writes its temp files beside the target's", async () => {
+    const item = await seedItem(src.directory);
+    seen.created = [];
+    seen.renames = [];
+
+    await moveItem({ source: src, target: dst, id: item.id }, deps({ fs: { link: exdev } }));
+
+    expect(tempsInTarget().length).toBeGreaterThan(0);
   });
 });
 

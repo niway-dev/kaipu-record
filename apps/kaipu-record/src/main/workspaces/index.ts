@@ -38,12 +38,14 @@ import { defaultVaultDirectory, forgetCachedPreferences } from "../library/vault
 import { StaleWorkspaceError, WorkspaceGate } from "./gate";
 import { WorkspaceRegistry, type Availability, type WorkspaceEntry } from "./registry";
 import { probeDataless, type EvictionProbe } from "../library/dataless";
+import { setStagingResolver } from "../library/atomic-write";
 import {
   boundedProbe,
   probeWorkspaceFacts,
   scratchRoot,
   scratchTmp,
   SYNCED_PROBE_TIMEOUT_MS,
+  stagingDirForPath,
   SyncStates,
 } from "./sync-state";
 import { MachineSettingsStore } from "./settings-overrides";
@@ -99,6 +101,17 @@ export function workspaceGate(): WorkspaceGate {
 }
 
 export async function initWorkspaces(): Promise<void> {
+  // Before the registry opens: even its first write (a default workspace's identity.json) must
+  // stage outside a synced folder. Every atomic write under a workspace asks this for its temp
+  // folder, so a writer that holds only a path cannot put a temp file inside the folder.
+  setStagingResolver((target) =>
+    stagingDirForPath(
+      target,
+      registry?.entries() ?? [],
+      (entry) => syncStates.of(entry) !== null,
+      app.getPath("userData"),
+    ),
+  );
   registry = await WorkspaceRegistry.open({
     preferencesFile: join(app.getPath("userData"), "preferences.json"),
     defaultDirectory: defaultVaultDirectory(),

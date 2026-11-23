@@ -4,7 +4,6 @@
  * which formats and how many bytes reach the user's disk. Like PDF exports, the file goes where
  * the user says, outside the vault.
  */
-import { open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { createMainTranslator } from "@kaipu/i18n/main";
@@ -16,6 +15,7 @@ import {
   type SaveTextFileRequest,
   type SaveTextFileResult,
 } from "@shared/types/save-text-file";
+import { atomicWriteFile } from "./library/atomic-write";
 import { getAppSettings } from "./infrastructure/settings-store";
 import { exportFileName } from "./screenshots/export-file-name";
 
@@ -45,24 +45,6 @@ export function parseSaveTextRequest(value: unknown): SaveTextFileRequest {
   return { suggestedName, extension: extension as SaveTextExtension, text };
 }
 
-/** Writes a sibling temp file, flushes it, renames it over `path`; the temp is removed on failure. */
-async function writeTextAtomic(path: string, text: string): Promise<void> {
-  const temp = `${path}.${process.pid}.tmp`;
-  try {
-    const handle = await open(temp, "w");
-    try {
-      await handle.writeFile(text, "utf8");
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    await rename(temp, path);
-  } catch (error) {
-    await rm(temp, { force: true }).catch(() => {});
-    throw error;
-  }
-}
-
 export function registerSaveTextFileIpc(): void {
   ipcMain.handle(
     IPC_CHANNELS.saveTextFile,
@@ -88,7 +70,7 @@ export function registerSaveTextFileIpc(): void {
         : await dialog.showSaveDialog(options);
       if (result.canceled || !result.filePath) return { status: "cancelled" };
       try {
-        await writeTextAtomic(result.filePath, request.text);
+        await atomicWriteFile(result.filePath, request.text);
       } catch (error) {
         console.error("save-text: write failed", error);
         return { status: "failed" };

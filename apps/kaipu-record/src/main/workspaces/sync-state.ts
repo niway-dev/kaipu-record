@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { SyncProvider } from "@shared/types/workspaces";
 import { detectSync, syncProviderOfPath, withTimeout } from "./synced-folder";
 
@@ -113,6 +113,40 @@ export function scratchRoot(userData: string, workspaceId: string): string {
 /** Recording and move staging of a synced workspace (instead of `.kaipu/tmp/`). */
 export function scratchTmp(userData: string, workspaceId: string): string {
   return join(scratchRoot(userData, workspaceId), "tmp");
+}
+
+/**
+ * The scratch id for a folder no registered workspace holds yet but the path rule already
+ * places inside a cloud provider (a workspace being created or relocated writes its
+ * `identity.json` before the registry has the entry). Workspace ids are UUIDs, so it cannot clash.
+ */
+export const UNREGISTERED_SCRATCH_ID = "unregistered";
+
+/**
+ * Where an atomic write to `target` stages its temp file (see `atomicWriteFile`): the scratch
+ * folder of the synced workspace whose folder holds `target`, null when that workspace is plain
+ * or the path is not in any workspace (userData, Downloads), so those keep their current
+ * behavior exactly. A path in no registered workspace but inside a provider's folder stages in
+ * the shared unregistered scratch. The innermost registered workspace wins.
+ */
+export function stagingDirForPath(
+  target: string,
+  entries: readonly { id: string; path: string }[],
+  isSynced: (entry: { id: string; path: string }) => boolean,
+  userData: string,
+  home: string = homedir(),
+): string | null {
+  const absolute = resolve(target);
+  let owner: { id: string; path: string } | null = null;
+  for (const entry of entries) {
+    const root = resolve(entry.path);
+    const inside = absolute === root || absolute.startsWith(root.endsWith(sep) ? root : root + sep);
+    if (inside && (!owner || root.length > resolve(owner.path).length)) owner = entry;
+  }
+  if (owner) return isSynced(owner) ? scratchTmp(userData, owner.id) : null;
+  return syncProviderOfPath(absolute, home) === null
+    ? null
+    : scratchTmp(userData, UNREGISTERED_SCRATCH_ID);
 }
 
 /** The folder of a scratch root that holds drag copies. */

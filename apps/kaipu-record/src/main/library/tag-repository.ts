@@ -13,7 +13,6 @@ import {
   type TagColor,
 } from "@kaipu/domain/constants";
 import type { TagSummary } from "@shared/types";
-import { atomicWriteFile } from "./atomic-write";
 import { SidecarUnavailableError, type LibraryVault, type Sidecar } from "./library-vault";
 
 /**
@@ -111,7 +110,7 @@ export class VaultTagRepository implements TagRepository {
     const target = this.registryPath();
     await mkdir(join(this.vault().directory, ".kaipu"), { recursive: true });
     const file: RegistryFile = { version: 1, tags };
-    await atomicWriteFile(target, JSON.stringify(file, null, 2));
+    await this.vault().writeAtomic(target, JSON.stringify(file, null, 2));
   }
 
   /**

@@ -52,23 +52,45 @@ export async function syncDir(directory: string): Promise<void> {
 }
 
 /**
- * Write to a unique temp file, fsync, rename over `target`, then flush the folder (best effort).
- * A failure removes the temp file. With `stagingDir` (a synced workspace) the temp file lives
- * there, outside the folder the provider uploads, and only the final rename reaches it. A
- * rename the volumes refuse (EXDEV) falls back to a temp file beside `target`: a replace has no
- * other atomic form, and a save that fails is worse than a `.part` the provider briefly sees.
+ * Where a write to `target` stages its temp file: the scratch folder of the synced workspace
+ * that holds `target`, or null for a path no synced workspace holds (the temp file then sits
+ * beside the target, as it always did). The workspaces module registers it at start-up; until
+ * then every write is plain.
+ */
+export type StagingResolver = (target: string) => string | null;
+
+let resolveStaging: StagingResolver = () => null;
+
+/** Install the resolver `atomicWriteFile` asks when its caller names no staging folder. */
+export function setStagingResolver(resolver: StagingResolver): void {
+  resolveStaging = resolver;
+}
+
+/**
+ * The one atomic write of everything Kaipu keeps in a workspace folder: a unique temp file,
+ * fsync, rename over `target`, then a folder flush (best effort). A failure removes the temp.
+ *
+ * In a synced workspace (Google Drive, iCloud, OneDrive) no temp file may ever appear inside
+ * the folder: the provider would upload it and could keep a conflict copy. So the temp file
+ * lives in the workspace's scratch folder, outside the folder the provider uploads, and only
+ * the final rename reaches it. `stagingDir` names that folder; left `undefined` it is looked
+ * up from `target` (see `setStagingResolver`), so a writer that holds only a path cannot
+ * forget; `null` means "plain, beside the target". A rename the volumes refuse (EXDEV) falls
+ * back to a temp file beside `target`: a replace has no other atomic form, and a save that
+ * fails is worse than a temp file the provider briefly sees.
  */
 export async function atomicWriteFile(
   target: string,
   data: string | Uint8Array,
   suffix = "tmp",
-  stagingDir: string | null = null,
+  stagingDir: string | null | undefined = undefined,
 ): Promise<void> {
-  const temp = stagingDir
-    ? join(stagingDir, basename(uniqueTempPath(target, suffix)))
+  const staging = stagingDir === undefined ? resolveStaging(target) : stagingDir;
+  const temp = staging
+    ? join(staging, basename(uniqueTempPath(target, suffix)))
     : uniqueTempPath(target, suffix);
   try {
-    if (stagingDir) await mkdir(stagingDir, { recursive: true });
+    if (staging) await mkdir(staging, { recursive: true });
     const handle = await open(temp, "w");
     try {
       await handle.writeFile(data);
@@ -79,8 +101,8 @@ export async function atomicWriteFile(
     await rename(temp, target);
   } catch (error) {
     await rm(temp, { force: true }).catch(() => {});
-    if (stagingDir && (error as NodeJS.ErrnoException | null)?.code === "EXDEV") {
-      return atomicWriteFile(target, data, suffix);
+    if (staging && (error as NodeJS.ErrnoException | null)?.code === "EXDEV") {
+      return atomicWriteFile(target, data, suffix, null);
     }
     throw error;
   }

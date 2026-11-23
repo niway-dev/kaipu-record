@@ -5,7 +5,6 @@ import {
   type CanvasReadResult,
   type CanvasSavePayload,
 } from "@shared/types/screenshot-canvas";
-import { atomicWriteFile } from "../library/atomic-write";
 import { isPlainItemId, type LibraryVault } from "../library/library-vault";
 
 /** Largest canvas document main stores or returns (5 MB of JSON text). */
@@ -67,13 +66,13 @@ export async function writeCanvas(
     const keep = new Set<string>();
     for (const { assetId, png } of canvas.assets) {
       const file = `${assetId}.png`;
-      await atomicWriteFile(join(paths.assetsDir, file), Buffer.from(png));
+      await vault.writeAtomic(join(paths.assetsDir, file), Buffer.from(png));
       keep.add(file);
     }
     for (const name of await readdir(paths.assetsDir)) {
       if (!keep.has(name)) await rm(join(paths.assetsDir, name), { recursive: true, force: true });
     }
-    await atomicWriteFile(paths.canvasDoc, canvas.docJson);
+    await vault.writeAtomic(paths.canvasDoc, canvas.docJson);
   } catch (error) {
     console.warn(`screenshot canvas: could not store the document for ${id}`, error);
     // Remove the assets too, not only the document: the old ones may hold unredacted pixels

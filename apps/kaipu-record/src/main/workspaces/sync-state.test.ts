@@ -4,6 +4,7 @@ import {
   probeWorkspaceFacts,
   scratchDrag,
   scratchTmp,
+  stagingDirForPath,
   SyncStates,
 } from "./sync-state";
 
@@ -129,6 +130,57 @@ describe("scratch folders", () => {
   it("live in userData, per workspace, outside the workspace folder", () => {
     expect(scratchTmp("/ud", "ws-1")).toBe("/ud/workspace-scratch/ws-1/tmp");
     expect(scratchDrag("/ud", "ws-1")).toBe("/ud/workspace-scratch/ws-1/drag");
+  });
+});
+
+describe("stagingDirForPath: where an atomic write under a workspace stages its temp file", () => {
+  const HOME = "/Users/me";
+  const drive = `${HOME}/Library/CloudStorage/GoogleDrive-me@x.com/My Drive/Work`;
+  const plain = "/Volumes/Disk/Work";
+  const entries = [
+    { id: "ws-drive", path: drive },
+    { id: "ws-plain", path: plain },
+  ];
+  const stage = (target: string, synced: (id: string) => boolean = (id) => id === "ws-drive") =>
+    stagingDirForPath(target, entries, (entry) => synced(entry.id), "/ud", HOME);
+
+  it("is the scratch folder of the synced workspace that holds the file", () => {
+    expect(stage(`${drive}/.kaipu/tags.json`)).toBe("/ud/workspace-scratch/ws-drive/tmp");
+    expect(stage(`${drive}/Demo.mp4`)).toBe("/ud/workspace-scratch/ws-drive/tmp");
+  });
+
+  it("is null for a plain workspace, userData and any other path: they keep their behavior", () => {
+    expect(stage(`${plain}/.kaipu/tags.json`)).toBeNull();
+    expect(stage("/ud/preferences.json")).toBeNull();
+    expect(stage("/Users/me/Downloads/transcript.srt")).toBeNull();
+  });
+
+  it("does not take a sibling folder that only shares the prefix", () => {
+    expect(stage(`${plain}-old/file.json`)).toBeNull();
+    // Inside the provider but in no registered workspace: the shared scratch, not ws-drive's.
+    expect(stage(`${drive}-old/file.json`)).toBe("/ud/workspace-scratch/unregistered/tmp");
+  });
+
+  it("follows what the registry detected, not the path alone", () => {
+    expect(stage(`${plain}/a.json`, (id) => id === "ws-plain")).toBe(
+      "/ud/workspace-scratch/ws-plain/tmp",
+    );
+    expect(stage(`${drive}/a.json`, () => false)).toBeNull();
+  });
+
+  it("the innermost registered workspace decides for a nested folder", () => {
+    const nested = [...entries, { id: "ws-inner", path: `${plain}/Inner` }];
+    expect(
+      stagingDirForPath(`${plain}/Inner/a.json`, nested, (e) => e.id === "ws-inner", "/ud", HOME),
+    ).toBe("/ud/workspace-scratch/ws-inner/tmp");
+    expect(
+      stagingDirForPath(`${plain}/Inner/a.json`, nested, (e) => e.id === "ws-plain", "/ud", HOME),
+    ).toBeNull();
+  });
+
+  it("a folder inside a provider that no workspace holds yet stages in the shared unregistered scratch", () => {
+    const fresh = `${HOME}/Library/CloudStorage/OneDrive-Personal/New/.kaipu/workspace/identity.json`;
+    expect(stage(fresh)).toBe("/ud/workspace-scratch/unregistered/tmp");
   });
 });
 
