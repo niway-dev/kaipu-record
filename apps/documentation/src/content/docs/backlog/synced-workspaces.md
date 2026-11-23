@@ -28,7 +28,7 @@ asking for another login.
   a workspace made with "Connect a cloud folder…", off for a folder that became synced some other
   way; a user who never turns it on never sees any provider wording.
 - **Download from the cloud** for a file the provider has offloaded, with a message and progress.
-- **Where each file is**: "On this Mac" or "Cloud only" (and "Uploading"/"Uploaded" if macOS
+- **Where each file is**: "On this Mac" or "Not downloaded" (and "Uploading"/"Uploaded" if macOS
   reports it for that provider).
 - **Free up space**: asks the provider to evict a file, never deletes it.
 - **Warnings** when the provider is not running and when it made a conflict copy.

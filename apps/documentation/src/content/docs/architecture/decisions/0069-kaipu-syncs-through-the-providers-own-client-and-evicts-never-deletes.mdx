@@ -41,7 +41,7 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
    does not let Kaipu evict another provider's file, Kaipu reveals it in Finder for the provider's
    own "Remove Download".
 4. **Kaipu claims "uploaded" only when macOS says so.** Without that signal it shows only what it
-   can observe: on this Mac, or cloud only.
+   can observe: on this Mac, or not downloaded.
 5. **The safety rules for a synced folder are not optional:** no partial files in the folder, no
    hard links, no implicit reads of evicted media. They run whenever the folder is synced. The one
    exception is small `.kaipu/` files (identity, settings, sidecars, `tags.json`), which may be read
