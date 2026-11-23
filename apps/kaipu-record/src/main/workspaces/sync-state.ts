@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SyncProvider } from "@shared/types/workspaces";
@@ -16,16 +17,34 @@ export class SyncStates {
    */
   private readonly unanswered = new Set<string>();
 
+  /**
+   * Workspaces detected as "not synced" while their `identity.json` was not there (the mount
+   * was not up yet, or the provider had not tagged a fresh file): the xattr fallback could not
+   * have said anything, so that "no" is provisional until the folder is seen available.
+   */
+  private readonly provisional = new Set<string>();
+
   constructor(
     private readonly detect: (path: string) => Promise<SyncProvider | null> = detectSync,
     private readonly home: string = homedir(),
+    private readonly hasIdentity: (path: string) => Promise<boolean> = identityIsThere,
   ) {}
 
   async refresh(entry: { id: string; path: string }): Promise<SyncProvider | null> {
     const sync = await this.detect(entry.path);
     this.known.set(entry.id, { path: entry.path, sync });
     this.unanswered.delete(entry.id); // a new detection (launch, relocation) starts afresh
+    if (sync === null && !(await this.hasIdentity(entry.path))) this.provisional.add(entry.id);
+    else this.provisional.delete(entry.id);
     return sync;
+  }
+
+  /**
+   * The workspace was detected as plain without its identity file to ask about, so it must be
+   * detected again once its folder is available. A plain answer never stays wrong for a session.
+   */
+  needsRecheck(id: string): boolean {
+    return this.provisional.has(id);
   }
 
   /** The workspace's check did not answer in time (`answered(id)` when a later one does). */
@@ -45,6 +64,7 @@ export class SyncStates {
   /** The workspace was removed from the registry. */
   forget(id: string): void {
     this.known.delete(id);
+    this.provisional.delete(id);
     this.unanswered.delete(id);
   }
 
@@ -54,6 +74,15 @@ export class SyncStates {
     if (hit && hit.path === entry.path) return hit.sync;
     return syncProviderOfPath(entry.path, this.home);
   }
+}
+
+/** Is Kaipu's own file there? One bounded `stat` (never a read); no answer counts as "not there". */
+async function identityIsThere(path: string): Promise<boolean> {
+  return withTimeout(
+    stat(join(path, ".kaipu", "workspace", "identity.json")).then(() => true),
+    1_000,
+    false,
+  );
 }
 
 /** Parent of every synced workspace's scratch folder, in userData. */

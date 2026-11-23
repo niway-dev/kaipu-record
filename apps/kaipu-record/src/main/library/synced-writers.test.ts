@@ -163,7 +163,9 @@ describe("rename", () => {
     expect(await readFile(join(folder, `${result.recording.id}.mp4`), "utf-8")).toBe("media");
   });
 
-  it("a case-only rename also goes by rename: no hard link, even through the temporary name", async () => {
+  // On a case-sensitive volume `Demo` is simply a free name, so this is the ordinary rename;
+  // the temporary-name hop itself is pinned in safe-place.by-rename.test.ts (renameCaseOnlyByRename).
+  it("a case-only title change also goes by rename: no hard link, whatever the volume's case rules", async () => {
     await seed("demo");
     const result = await rename(synced(), "demo", "Demo");
 

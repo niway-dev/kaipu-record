@@ -29,6 +29,44 @@ describe("SyncStates", () => {
   });
 });
 
+describe("SyncStates, a plain answer given before the folder was there", () => {
+  const HOME = "/Users/x";
+  const entry = { id: "w", path: `${HOME}/Documents/K` };
+
+  it("is provisional until detected again: a mount that was not up at launch is not 'not synced'", async () => {
+    let mounted = false;
+    const detect = vi.fn(async () => (mounted ? ("google-drive" as const) : null));
+    const states = new SyncStates(detect, HOME, async () => mounted);
+    expect(await states.refresh(entry)).toBeNull();
+    expect(states.needsRecheck("w")).toBe(true);
+    mounted = true;
+    expect(await states.refresh(entry)).toBe("google-drive");
+    expect(states.needsRecheck("w")).toBe(false);
+    expect(states.of(entry)).toBe("google-drive");
+  });
+
+  it("a plain folder whose identity file is there is final", async () => {
+    const states = new SyncStates(
+      async () => null,
+      HOME,
+      async () => true,
+    );
+    await states.refresh(entry);
+    expect(states.needsRecheck("w")).toBe(false);
+  });
+
+  it("forget drops it", async () => {
+    const states = new SyncStates(
+      async () => null,
+      HOME,
+      async () => false,
+    );
+    await states.refresh(entry);
+    states.forget("w");
+    expect(states.needsRecheck("w")).toBe(false);
+  });
+});
+
 describe("SyncStates, workspaces whose check did not answer", () => {
   const HOME = "/Users/x";
   const entry = { id: "w", path: `${HOME}/Movies/K` };

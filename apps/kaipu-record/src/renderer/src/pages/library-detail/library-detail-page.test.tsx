@@ -1409,6 +1409,20 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/shot-1"));
   });
 
+  it("an offloaded screenshot's Edit image is disabled with the not-downloaded hint, never a dead click", async () => {
+    list({
+      ...screenshotItem,
+      local: { ...screenshotItem.local!, evicted: "media" as const },
+    });
+    const router = renderWithState("/library/shot-1");
+    await waitForLoaded();
+    const edit = screen.getByRole("button", { name: "Edit image" }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toMatch(/download it in Finder/i);
+    fireEvent.click(edit);
+    expect(router.state.location.pathname).toBe("/library/shot-1");
+  });
+
   it("the Edit image button on the preview opens the image editor too", async () => {
     list(shownShot);
     const router = renderWithState("/library/shot-1");

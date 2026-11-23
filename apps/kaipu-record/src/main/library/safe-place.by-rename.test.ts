@@ -1,6 +1,6 @@
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // A synced folder must never get a second name for a file: `link` is counted, never used.
@@ -12,6 +12,12 @@ const hooks = vi.hoisted(() => ({
   unlinkOnly: null as null | string,
   /** Runs where a rename is refused: a file that arrives between the check and the move. */
   atRename: null as null | ((to: string) => Promise<void>),
+  /** Every rename made, in order (a case-only rename is two). */
+  renames: [] as Array<[string, string]>,
+  /** When set, a rename onto this path fails (the second step of a case-only rename). */
+  renameFailsTo: null as null | string,
+  /** `lstat` answers like a case-insensitive volume: a name matches whatever its case. */
+  foldCase: false,
 }));
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
@@ -26,7 +32,20 @@ vi.mock("node:fs/promises", async (importActual) => {
         throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
       return actual.unlink(path);
     },
+    lstat: async (path: string, options?: unknown) => {
+      let at = path;
+      if (hooks.foldCase) {
+        const names = await actual.readdir(dirname(path));
+        const hit = names.find((name) => name.toLowerCase() === basename(path).toLowerCase());
+        if (hit) at = join(dirname(path), hit);
+      }
+      return actual.lstat(at, options as never);
+    },
     rename: async (from: string, to: string) => {
+      hooks.renames.push([from, to]);
+      if (hooks.renameFailsTo === to) {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      }
       // Only the move into the destination is refused: setting a source aside must still work.
       if (hooks.renameError && !to.endsWith(".placed")) {
         await hooks.atRename?.(to);
@@ -37,7 +56,7 @@ vi.mock("node:fs/promises", async (importActual) => {
   };
 });
 
-const { identityAt, placeByRename } = await import("./safe-place");
+const { identityAt, placeByRename, renameCaseOnlyByRename } = await import("./safe-place");
 
 describe("placeByRename (synced folders: no hard link, ever)", () => {
   let dir: string;
@@ -48,6 +67,9 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     hooks.unlinkFails = false;
     hooks.unlinkOnly = null;
     hooks.atRename = null;
+    hooks.renames = [];
+    hooks.renameFailsTo = null;
+    hooks.foldCase = false;
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -94,7 +116,9 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     expect(names.some((name) => name.endsWith(".placed"))).toBe(true);
   });
 
-  it("across devices, a file that arrives after the check is never replaced and the source stays", async () => {
+  // The same-device window (a file created between the check and `rename`) is the one the doc
+  // comment states: POSIX `rename` replaces, and nothing can be injected there deterministically.
+  it("across devices only, a file that arrives after the check is never replaced and the source stays", async () => {
     hooks.renameError = "EXDEV";
     hooks.atRename = (to) => writeFile(to, "someone else");
     await writeFile(join(dir, "take.part"), "new");
@@ -106,9 +130,11 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
   it("refuses a source that is no longer the file the caller meant (expect), and moves nothing", async () => {
     await writeFile(join(dir, "take.part"), "the take");
     const expected = (await identityAt(join(dir, "take.part")))!;
-    // The name is taken over by another file (a new inode) before the placement.
-    await rm(join(dir, "take.part"));
-    await writeFile(join(dir, "take.part"), "someone else's file");
+    // The name is taken over by another file before the placement. The replacement is made
+    // while the original still exists and renamed over it, so it cannot get the original's
+    // inode back (a file system may reuse a freed inode number straight away).
+    await writeFile(join(dir, "other.part"), "someone else's file");
+    await rename(join(dir, "other.part"), join(dir, "take.part"));
 
     await expect(
       placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"), { expect: expected }),
@@ -130,5 +156,47 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     await expect(stat(join(dir, "Take.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("bytes");
     expect(hooks.links).toBe(0);
+  });
+  describe("renameCaseOnlyByRename (a case-insensitive volume, simulated)", () => {
+    it("goes through a temporary sibling by plain renames, never a link, and ends with the new case", async () => {
+      await writeFile(join(dir, "clip.mp4"), "mine");
+      hooks.foldCase = true; // `Clip.mp4` now answers with the identity of `clip.mp4`
+
+      expect(await renameCaseOnlyByRename(join(dir, "clip.mp4"), join(dir, "Clip.mp4"))).toBe(
+        "placed",
+      );
+
+      expect(hooks.links).toBe(0);
+      expect(hooks.renames).toHaveLength(2);
+      const [first, second] = hooks.renames as [[string, string], [string, string]];
+      expect(first[0]).toBe(join(dir, "clip.mp4"));
+      expect(basename(first[1])).toMatch(/^\.clip\.mp4\.case-/);
+      expect(second).toEqual([first[1], join(dir, "Clip.mp4")]);
+      expect(await readdir(dir)).toEqual(["Clip.mp4"]);
+      expect(await readFile(join(dir, "Clip.mp4"), "utf-8")).toBe("mine");
+    });
+
+    it("a failed second step renames the file back to its old name and fails", async () => {
+      await writeFile(join(dir, "clip.mp4"), "mine");
+      hooks.foldCase = true;
+      hooks.renameFailsTo = join(dir, "Clip.mp4");
+
+      await expect(
+        renameCaseOnlyByRename(join(dir, "clip.mp4"), join(dir, "Clip.mp4")),
+      ).rejects.toMatchObject({ code: "EACCES" });
+
+      expect(hooks.links).toBe(0);
+      expect(await readdir(dir)).toEqual(["clip.mp4"]);
+      expect(await readFile(join(dir, "clip.mp4"), "utf-8")).toBe("mine");
+    });
+
+    it("where the new name is free, it is one placement by rename", async () => {
+      await writeFile(join(dir, "clip.mp4"), "mine");
+      expect(await renameCaseOnlyByRename(join(dir, "clip.mp4"), join(dir, "Other.mp4"))).toBe(
+        "placed",
+      );
+      expect(hooks.renames).toHaveLength(1);
+      expect(await readdir(dir)).toEqual(["Other.mp4"]);
+    });
   });
 });

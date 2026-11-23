@@ -184,8 +184,12 @@ export function VersionsList({
               assetId={copy.assetId}
               current={viewing(copy.assetId)}
               order={order}
+              // An offloaded copy (or poster) cannot be dragged: main would refuse it, so the
+              // control is not offered rather than dead (a drag copy would download it).
               dragSource={
-                copy.id !== null ? { id: copy.id, assetId: copy.assetId, title: copy.title } : null
+                copy.id !== null && !copy.evicted
+                  ? { id: copy.id, assetId: copy.assetId, title: copy.title }
+                  : null
               }
               dragLabel={t("copyDragLabel", { name })}
               dragText={t("copyDrag")}

@@ -437,9 +437,11 @@ export function LibraryDetailPage(): React.JSX.Element {
     }
   };
 
-  // Re-open a saved screenshot in the editor (its URL is /editor/image/:assetId).
+  // Re-open a saved screenshot in the editor (its URL is /editor/image/:assetId). An offloaded
+  // one cannot open: the editor would read it, which downloads it.
+  const canEditImage = canOpenInEditor(video);
   const editScreenshot = (): void => {
-    if (!localId) return;
+    if (!localId || !canEditImage) return;
     openItem(video);
   };
 
@@ -548,7 +550,13 @@ export function LibraryDetailPage(): React.JSX.Element {
           )}
           <div {...uiArea("libraryDetail.actions")} className={styles.actions}>
             {localId && isScreenshot && (
-              <Button variant="primary" size="sm" onClick={editScreenshot}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={editScreenshot}
+                disabled={!canEditImage}
+                title={canEditImage ? undefined : t("evictedHint")}
+              >
                 <Pencil size={15} strokeWidth={1.8} />
                 {t("editImage")}
               </Button>
@@ -770,7 +778,7 @@ export function LibraryDetailPage(): React.JSX.Element {
                 }
               />
             ) : isGif ? (
-              localId && <GifViewer key={video.assetId} id={localId} />
+              localId && <GifViewer key={video.assetId} id={localId} canDrag={!video.evicted} />
             ) : (
               localId && (
                 <div {...uiArea("libraryDetail.preview")} className={styles.player}>

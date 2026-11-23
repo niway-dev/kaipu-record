@@ -64,6 +64,24 @@ export async function runMoveGroup(
 }
 
 /**
+ * `resolve` for one group: once it answers null (the target is not connected, or a stalled
+ * provider did not answer in time) the rest of the group gets null at once. Each answer costs up
+ * to the availability bound (about 6 s for a synced folder), so asking again per item would hold
+ * the switch lock for N times that for a target that is not coming back during the run.
+ */
+export function rememberingUnavailable(
+  resolve: () => Promise<string | null>,
+): () => Promise<string | null> {
+  let unavailable = false;
+  return async () => {
+    if (unavailable) return null;
+    const directory = await resolve();
+    if (directory === null) unavailable = true;
+    return directory;
+  };
+}
+
+/**
  * Why a group move threw before or around its items: a stale window and a maintenance run are
  * what they say; anything else (a failed read, a full disk) is an I/O failure, never "stale".
  */

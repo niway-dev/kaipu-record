@@ -1150,12 +1150,22 @@ export class LibraryVault {
     const ids = media.map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
     // A synced workspace asks the provider once for the whole folder: every media file and
     // every thumbnail, in one batched `stat` (never a read).
-    const evicted = this.evictionProbe
-      ? await this.evictionProbe([
-          ...media.map((f) => join(this.directory, f)),
-          ...ids.map((id) => this.thumbnailPath(id)),
-        ])
-      : undefined;
+    // Only posters that exist are asked about (one `readdir`, never a download): a path that is
+    // not there makes `stat` fail, which sends the whole batch to the slow per-path fallback,
+    // and a probe that runs out of time reports every unanswered path evicted (a local file
+    // would then read "Not downloaded"). A screenshot has no poster at all.
+    let evicted: ReadonlySet<string> | undefined;
+    if (this.evictionProbe) {
+      const posters = new Set(await readdir(this.metaDirectory()).catch(() => [] as string[]));
+      evicted = await this.evictionProbe([
+        ...media.map((f) => join(this.directory, f)),
+        ...ids.flatMap((id, index) =>
+          IMAGE_EXTS.some((ext) => media[index]!.endsWith(ext)) || !posters.has(`${id}.jpg`)
+            ? []
+            : [this.thumbnailPath(id)],
+        ),
+      ]);
+    }
     const described = await Promise.all(ids.map((id) => this.describe(id, evicted)));
     return described
       .filter((r): r is LocalRecording => r !== null)
@@ -1190,17 +1200,13 @@ export class LibraryVault {
       if (error instanceof ItemGoneError) return null;
       // Still listed, so the user sees the file exists; read-only until the sidecar reads again.
       if (error instanceof SidecarUnavailableError) {
-        return this.describeUnreadable(id, filePath, info, error.issue);
+        return this.describeUnreadable(id, filePath, info, error.issue, evicted);
       }
       throw error;
     }
     // An evicted media file (or a video's evicted poster) gets no image URL: the protocol would
     // read it, and reading downloads it (decision 15, Things the code contradicted, 18).
-    const offloaded = this.evictionProbe
-      ? (evicted ?? (await this.evictionProbe([filePath, this.thumbnailPath(id)])))
-      : null;
-    const mediaEvicted = offloaded?.has(filePath) ?? false;
-    const thumbEvicted = !isImage && (offloaded?.has(this.thumbnailPath(id)) ?? false);
+    const { mediaEvicted, thumbEvicted } = await this.evictionOf(id, filePath, isImage, evicted);
     // A legacy stamp (no ctime, no inode) still counts here, as before: describe never hashes,
     // so refusing it would leave cloud-linked items "pending" until something else re-hashes.
     const hashIsFresh =
@@ -1277,14 +1283,16 @@ export class LibraryVault {
    * still key and list it; `metadataIssue` is what tells every consumer not to trust or
    * write it.
    */
-  private describeUnreadable(
+  private async describeUnreadable(
     id: string,
     filePath: string,
     info: { size: number; birthtimeMs: number },
     issue: MetadataIssue,
-  ): LocalRecording {
+    evicted?: ReadonlySet<string>,
+  ): Promise<LocalRecording> {
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
+    const { mediaEvicted, thumbEvicted } = await this.evictionOf(id, filePath, isImage, evicted);
     return {
       id,
       assetId: `${UNREADABLE_ASSET_PREFIX}${id}`,
@@ -1306,6 +1314,33 @@ export class LibraryVault {
       capture: null,
       thumbnailUrl: null,
       metadataIssue: issue,
+      ...(mediaEvicted
+        ? { evicted: "media" as const }
+        : thumbEvicted
+          ? { evicted: "thumbnail" as const }
+          : {}),
+    };
+  }
+
+  /**
+   * Which of an item's two files the provider has offloaded: its media and, for a video or a
+   * GIF, its poster. A listing passes its one batched answer (`evicted`); a single call asks for
+   * this item. Only a poster that is there is asked about (a missing path makes `stat` slow).
+   */
+  private async evictionOf(
+    id: string,
+    filePath: string,
+    isImage: boolean,
+    evicted?: ReadonlySet<string>,
+  ): Promise<{ mediaEvicted: boolean; thumbEvicted: boolean }> {
+    if (!this.evictionProbe) return { mediaEvicted: false, thumbEvicted: false };
+    const poster = this.thumbnailPath(id);
+    const hasPoster = !isImage && (evicted !== undefined || (await exists(poster)));
+    const offloaded =
+      evicted ?? (await this.evictionProbe(hasPoster ? [filePath, poster] : [filePath]));
+    return {
+      mediaEvicted: offloaded.has(filePath),
+      thumbEvicted: hasPoster && offloaded.has(poster),
     };
   }
 

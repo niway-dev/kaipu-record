@@ -193,7 +193,7 @@ export const UI_MAP = {
       preview: {
         states: ["video", "image", "imageHover", "gif", "unavailable", "notDownloaded"],
       },
-      // notDownloaded: the provider offloaded the file, so Edit video and Open file are disabled.
+      // notDownloaded: the provider offloaded the file, so Edit video, Edit image and Open file are disabled.
       actions: { states: ["recording", "screenshot", "gif", "cloudOnly", "notDownloaded"] },
       // The Transcribe action beside Edit video (NIW2-818), icon and word, behind the
       // `transcription` flag; the states are the same looks as on a Library card.

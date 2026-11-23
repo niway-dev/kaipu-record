@@ -31,7 +31,7 @@ import { dragLedger } from "../library/drag-ledger";
 import { LibraryVault } from "../library/library-vault";
 import { loadDeviceId } from "../library/tag-repository";
 import { vaultActivity } from "../library/vault-activity";
-import { refusalOfError, runMoveGroup } from "./move-group";
+import { refusalOfError, rememberingUnavailable, runMoveGroup } from "./move-group";
 import { healMoves, moveItem, type MoveSide } from "./move-item";
 import { uuidv7 } from "../library/tag-repository";
 import { defaultVaultDirectory, forgetCachedPreferences } from "../library/vault-location";
@@ -170,10 +170,18 @@ export async function refreshActiveWorkspaceSettings(): Promise<void> {
  */
 async function availabilityOf(id: string): Promise<{ availability: Availability; id: string }> {
   const reg = requireRegistry();
-  const entry = reg.get(id);
+  let entry = reg.get(id);
   if (!entry || syncStates.of(entry) === null) {
     syncStates.answered(id); // relocated to a plain folder: nothing is left to verify
-    return reg.availability(id);
+    const plain = await reg.availability(id);
+    // "Not synced" was decided while the folder had no identity file to ask about (the mount
+    // was not up at launch). Now it is there, so ask again: a synced folder must not keep
+    // hard links and in-folder staging for the whole session.
+    if (!entry || plain.availability.state !== "available" || !syncStates.needsRecheck(id)) {
+      return plain;
+    }
+    entry = reg.get(plain.id) ?? entry;
+    if ((await syncStates.refresh(entry)) === null) return plain;
   }
   const answered = await boundedProbe(reg.availability(id), null);
   if (answered) {
@@ -278,6 +286,9 @@ async function moveItems(
           throw error;
         });
         const device = await deviceId;
+        const targetDirectory = rememberingUnavailable(() =>
+          resolveMoveSide({ workspaceId: target, directory: "" }),
+        );
         const result = await runMoveGroup(
           items,
           async (item) => {
@@ -286,7 +297,7 @@ async function moveItems(
             if (target === source.id) return { ok: false, reason: "same-workspace" };
             const entry = reg.get(target);
             if (!entry) return { ok: false, reason: "target-unavailable" };
-            const directory = await resolveMoveSide({ workspaceId: target, directory: "" });
+            const directory = await targetDirectory();
             if (directory === null) return { ok: false, reason: "target-unavailable" };
             const outcome = await moveItem(
               {

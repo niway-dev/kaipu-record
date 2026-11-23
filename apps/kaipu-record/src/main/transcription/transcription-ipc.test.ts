@@ -728,7 +728,9 @@ describe("with a real vault", () => {
   describe("a synced workspace", () => {
     it("leaves the freshness unknown for an evicted file, without hashing it", async () => {
       const item = await addMedia("fresh-evicted", "some recording");
-      await writeFile(vault.companionPaths("fresh-evicted").transcript, "{}");
+      // A valid transcript: an invalid one returns before the vault is asked, so the
+      // eviction branch would never run.
+      await seedTranscript("fresh-evicted", "h");
       const ensure = vi
         .spyOn(LibraryVault.prototype, "ensureContentHash")
         .mockRejectedValue(new EvictedFileError(item.filePath));
@@ -736,9 +738,12 @@ describe("with a real vault", () => {
       try {
         hashSpy.mockClear();
         await expect(checkFreshness("fresh-evicted")).resolves.toMatchObject({
+          verdict: "unknown",
           autoRetranscribe: false,
         });
+        expect(ensure).toHaveBeenCalledTimes(1);
         expect(hashSpy).not.toHaveBeenCalled();
+        // Silent only because the Evicted branch skipped the log (any other error warns).
         expect(warn).not.toHaveBeenCalled();
       } finally {
         ensure.mockRestore();

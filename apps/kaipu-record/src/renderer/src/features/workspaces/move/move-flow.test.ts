@@ -24,10 +24,10 @@ const cloudExport = item({ assetId: "exp3", derivedFromAssetId: "rec", id: null 
 const other = item({ assetId: "other" });
 
 describe("exportsToSuggest", () => {
-  it("does not count an export whose media the provider offloaded: it cannot move", () => {
+  it("does not count an export whose media or poster the provider offloaded: it cannot move", () => {
     const offloaded = item({ assetId: "exp4", derivedFromAssetId: "rec", evicted: "media" });
     const posterOnly = item({ assetId: "exp5", derivedFromAssetId: "rec", evicted: "thumbnail" });
-    expect(exportsToSuggest([rec], [rec, exp1, offloaded, posterOnly])).toEqual([exp1, posterOnly]);
+    expect(exportsToSuggest([rec], [rec, exp1, offloaded, posterOnly])).toEqual([exp1]);
   });
 
   it("counts the local exports of a selected recording", () => {
@@ -63,10 +63,10 @@ describe("notMovableReason", () => {
     expect(notMovableReason(rec)).toBeNull();
   });
 
-  it("refuses an item whose media a synced workspace's provider offloaded: download it first", () => {
+  it("refuses an item whose media or poster a synced workspace's provider offloaded: download it first", () => {
     expect(notMovableReason({ ...rec, evicted: "media" })).toBe("evicted");
-    // Only its poster is offloaded: the media is local, the move can copy it.
-    expect(notMovableReason({ ...rec, evicted: "thumbnail" })).toBeNull();
+    // Only its poster is offloaded, but the move copies it too and main refuses an offloaded one.
+    expect(notMovableReason({ ...rec, evicted: "thumbnail" })).toBe("evicted");
   });
 });
 

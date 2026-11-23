@@ -9,7 +9,10 @@ export interface MovableItem {
   kind: "recording" | "screenshot" | "gif";
   derivedFromAssetId: string | null;
   metadataIssue?: unknown;
-  /** A synced workspace's provider offloaded the media ("media"): it cannot move until downloaded. */
+  /**
+   * A synced workspace's provider offloaded the media ("media") or its poster ("thumbnail"):
+   * the move copies both, so either one stops it until downloaded.
+   */
   evicted?: "media" | "thumbnail";
 }
 
@@ -17,8 +20,9 @@ export interface MovableItem {
 export function notMovableReason(item: MovableItem): "cloud" | "record" | "evicted" | null {
   if (item.id === null) return "cloud";
   if (item.metadataIssue) return "record";
-  // Copying an evicted file would download it (decision 15): "Download it first".
-  if (item.evicted === "media") return "evicted";
+  // Copying an evicted file would download it (decision 15): "Download it first". The move
+  // copies the poster too, so an offloaded poster refuses it just like the media does.
+  if (item.evicted) return "evicted";
   return null;
 }
 

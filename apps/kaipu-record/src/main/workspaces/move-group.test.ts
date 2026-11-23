@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MoveItemRef } from "@shared/types/workspaces";
 import { MaintenanceError } from "../library/vault-activity";
 import { StaleWorkspaceError } from "./gate";
-import { refusalOfError, runMoveGroup } from "./move-group";
+import { refusalOfError, rememberingUnavailable, runMoveGroup } from "./move-group";
 
 const items: MoveItemRef[] = ["a", "b", "c", "d"].map((id) => ({ id, assetId: `x-${id}` }));
 
@@ -78,5 +78,20 @@ describe("refusalOfError", () => {
     expect(refusalOfError(new MaintenanceError())).toBe("maintenance");
     expect(refusalOfError(new Error("EACCES: reading the device id"))).toBe("io");
     expect(refusalOfError("not even an Error")).toBe("io");
+  });
+});
+
+describe("rememberingUnavailable", () => {
+  it("asks once more per item while the target answers, and never again after it does not", async () => {
+    const answers: Array<string | null> = ["/ws", "/ws", null, "/ws"];
+    const resolve = vi.fn(async () => answers.shift() ?? null);
+    const target = rememberingUnavailable(resolve);
+    expect(await target()).toBe("/ws");
+    expect(await target()).toBe("/ws");
+    // A stalled provider costs one bound for the group, not one per remaining item.
+    expect(await target()).toBeNull();
+    expect(await target()).toBeNull();
+    expect(await target()).toBeNull();
+    expect(resolve).toHaveBeenCalledTimes(3);
   });
 });

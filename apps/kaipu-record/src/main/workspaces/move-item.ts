@@ -30,7 +30,14 @@ import {
   type Sidecar,
 } from "../library/library-vault";
 import { probeDataless } from "../library/dataless";
-import { copyExclusive, placeByRename, placeNoReplace } from "../library/safe-place";
+import {
+  copyExclusive,
+  placeByRename,
+  placeNew,
+  placeNoReplace,
+  removeIfSame,
+  type FileIdentity,
+} from "../library/safe-place";
 import { TagRegistryError, VaultTagRepository } from "../library/tag-repository";
 import type { SessionMeta } from "../library/video-edit-session";
 
@@ -371,8 +378,9 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
   const finalMedia = (newId: string): string => join(target.directory, `${newId}${ext}`);
   let mediaPlaced = false;
-  // The file this move put at its final name in the target: the one a rollback may remove.
-  let placedAt: string | null = null;
+  // The file this move put at its final name in the target: the one a rollback may remove,
+  // and only while that name still holds this very file (`removeIfSame`).
+  let placedAt: { path: string; identity: FileIdentity } | null = null;
   let committedMode: "linked" | "copied" = "copied";
   try {
     // ── 3. Tags, then the target record: the stem is taken from here on.
@@ -448,9 +456,9 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
       const placed =
         target.scratch !== undefined
           ? await placeByRename(staged, finalMedia(newId))
-          : await placeNoReplace(staged, finalMedia(newId), { stuck: "rollback" });
+          : await placeNew(staged, finalMedia(newId), { stuck: "rollback" });
       if (placed === "taken") throw new Error(`target media taken: ${finalMedia(newId)}`);
-      placedAt = finalMedia(newId);
+      placedAt = { path: finalMedia(newId), identity: placed };
       // With a synced side, the bytes are checked again where they now live, before the
       // source may go: a provider may have touched the file in between.
       if (synced && (await fs.sha256(finalMedia(newId))) !== journal.media.sha256) {
@@ -628,20 +636,23 @@ async function removeCompanions(paths: CompanionPaths): Promise<void> {
 /**
  * Undo what a move made in the target: the record and companions under `newId` (only while
  * the record there is this item's, or gone), its staging folder, and the media only when it
- * is `media` (a file this move placed and verified to be its own).
+ * is `media`. A live move passes the file it placed with the identity it got then, and the name
+ * is removed only while it still holds that file (a provider-rewritten or foreign file there is
+ * left alone). Healing passes a bare path: it has just proven the record and the source.
  */
 async function rollBackTarget(
   to: LibraryVault,
   newId: string,
   assetId: string,
   staging: string,
-  media: string | null,
+  media: string | { path: string; identity: FileIdentity } | null,
 ): Promise<void> {
   await rm(staging, { recursive: true, force: true }).catch(() => {});
   const read = await readSidecarStrict(to.sidecarPath(newId));
   if (read.status === "ok" && read.sidecar.assetId !== assetId) return;
   if (read.status !== "ok" && read.status !== "missing") return;
-  if (media) await rm(media, { force: true });
+  if (typeof media === "string") await rm(media, { force: true });
+  else if (media) await removeIfSame(media.path, media.identity);
   await removeCompanions(to.companionPaths(newId));
 }
 
@@ -790,6 +801,18 @@ async function healEntry(
 
   const targetId = journal.targetId;
   const targetMedia = join(targetDir, `${targetId}${journal.ext}`);
+  // A synced side: the checks below hash the target copy (a copy always has a new mtime) and
+  // compare the two edit projects, and reading an offloaded file downloads it (decision 15).
+  // The heal runs at startup and before every group, so it waits until they are local instead.
+  if (journal.source.scratch !== undefined || journal.target.scratch !== undefined) {
+    const reads = [
+      targetMedia,
+      join(staging, `${targetId}${journal.ext}`),
+      to.companionPaths(targetId).editSession,
+      from.companionPaths(journal.sourceId).editSession,
+    ];
+    if ((await deps.fs.evicted(reads)).size > 0) return "waiting";
+  }
   const targetMatches = await mediaMatches(targetMedia, journal, deps.fs);
   const targetPresent = (await statOrNull(targetMedia)) !== null;
   const targetRecord = await readSidecarStrict(to.sidecarPath(targetId));

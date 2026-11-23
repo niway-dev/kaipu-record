@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import {
   appendFile,
@@ -587,6 +587,66 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     expect(await filesOf(src.directory, "Demo")).toEqual(before);
     expect(await filesOf(dst.directory, "Demo")).toEqual([]);
     expect(await readdir(journalDir)).toEqual([]);
+  });
+
+  it("a rollback leaves a file that is not the one the move placed (a foreign file at the final name)", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const finalPath = join(dst.directory, "Demo.mp4");
+    let calls = 0;
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        fs: {
+          sha256: async (path) => {
+            if (path !== finalPath) return sha256FileBase64(path);
+            // The placed file is replaced by another one (a provider rewrote it, or someone put
+            // one there) before the check that fails; the rollback must not remove that file.
+            calls += 1;
+            await rm(finalPath);
+            await writeFile(finalPath, "someone else's file");
+            return "corrupt";
+          },
+        },
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, id: "Demo", reason: "checksum-mismatch" });
+    expect(calls).toBe(1);
+    expect(await readFile(finalPath, "utf-8")).toBe("someone else's file");
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+  });
+
+  it("healing waits, without reading, while the target copy is offloaded on a synced side", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    await expect(
+      moveItem(
+        { source: src, target, id: item.id },
+        deps({
+          hooks: {
+            after: (at) => {
+              if (at === "media-placed") throw new SimulatedCrash(at);
+            },
+          },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(SimulatedCrash);
+
+    // The copy has a new mtime, so a heal would hash it: the provider has offloaded it since.
+    const sha256 = vi.fn(async (path: string) => sha256FileBase64(path));
+    const offloaded = join(dst.directory, "Demo.mp4");
+    const report = await heal({
+      fs: { sha256, evicted: async (paths) => new Set(paths.filter((p) => p === offloaded)) },
+    });
+    expect(report).toMatchObject({ healed: 0, waiting: 1 });
+    expect(sha256).not.toHaveBeenCalled();
+    expect(await readdir(journalDir)).toHaveLength(1);
+
+    // Downloaded: the same heal finishes the move.
+    expect(await heal({ fs: { evicted: async () => new Set() } })).toMatchObject({
+      healed: 1,
+      waiting: 0,
+    });
   });
 
   it("a crash after the staged copy is verified heals from the scratch folder", async () => {

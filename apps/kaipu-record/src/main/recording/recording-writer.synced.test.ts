@@ -130,4 +130,60 @@ describe("RecordingWriter — a synced workspace", () => {
     expect(await readFile(tempPath, "utf-8")).toBe("bytes");
     await expect(stat(join(vaultDir, "T.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  const webcamMeta = {
+    startOffsetMs: 120,
+    offsetQuality: "exact" as const,
+    width: 640,
+    height: 480,
+    fps: 30,
+  };
+
+  it("a take with a webcam stages both parts in the scratch folder and places both by rename", async () => {
+    const w = writer();
+    const { tempPath } = await w.create("s1");
+    const webcam = await w.create("s1", "webcam");
+    expect(webcam.tempPath.startsWith(scratch)).toBe(true);
+    await w.write("s1", new TextEncoder().encode("screen").buffer, 0);
+    await w.write("s1", new TextEncoder().encode("camera").buffer, 0, "webcam");
+    void tempPath;
+    const rec = await w.finalize("s1", {
+      title: "T",
+      durationSeconds: 1,
+      durationMs: 1000,
+      webcam: webcamMeta,
+    });
+    const webcamFile = join(vaultDir, ".kaipu", "T.webcam.mp4");
+    // A hard link of either file into the synced folder would renames its cloud item.
+    expect(hooks.links).toEqual([]);
+    expect(rec.webcam).toBeTruthy();
+    expect(await readFile(webcamFile, "utf-8")).toBe("camera");
+    expect((await stat(webcamFile)).nlink).toBe(1);
+    expect((await stat(rec.filePath)).nlink).toBe(1);
+    expect(await readdir(scratch)).toEqual([]);
+    expect((await readdir(join(vaultDir, ".kaipu"))).filter((n) => n.endsWith(".part"))).toEqual(
+      [],
+    );
+  });
+
+  it("a failed sidecar write takes both the screen and the webcam back to scratch by rename", async () => {
+    const w = writer();
+    const { tempPath } = await w.create("s1");
+    const webcam = await w.create("s1", "webcam");
+    await w.write("s1", new TextEncoder().encode("screen").buffer, 0);
+    await w.write("s1", new TextEncoder().encode("camera").buffer, 0, "webcam");
+    vi.spyOn(LibraryVault.prototype, "writeMeta").mockImplementationOnce(async () => {
+      throw new Error("disk full");
+    });
+    await expect(
+      w.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000, webcam: webcamMeta }),
+    ).rejects.toThrow();
+    expect(hooks.links).toEqual([]);
+    expect(await readFile(tempPath, "utf-8")).toBe("screen");
+    expect(await readFile(webcam.tempPath, "utf-8")).toBe("camera");
+    await expect(stat(join(vaultDir, "T.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(vaultDir, ".kaipu", "T.webcam.mp4"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
 });

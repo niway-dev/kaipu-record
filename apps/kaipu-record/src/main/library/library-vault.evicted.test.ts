@@ -77,6 +77,47 @@ describe("LibraryVault — evicted files get no image URL", () => {
     expect(byId.get("c")?.thumbnailUrl).toMatch(/^kaipu-media:\/\/screenshot\//);
   });
 
+  it("list() never asks about a poster that is not there: a screenshot has none, and a missing path slows the whole probe", async () => {
+    await seedVideo("a");
+    await seedShot("c");
+    // A video whose poster was never written.
+    await writeFile(join(directory, "bare.mp4"), Buffer.alloc(64));
+    const probe = vi.fn(async () => new Set<string>());
+    await new LibraryVault(directory, "ws-1", undefined, probe).list();
+    const asked = (probe.mock.calls[0] as unknown as [string[]])[0];
+    expect(asked).toEqual(
+      expect.arrayContaining([
+        join(directory, "a.mp4"),
+        join(directory, "bare.mp4"),
+        join(directory, "c.png"),
+        join(directory, ".kaipu", "a.jpg"),
+      ]),
+    );
+    expect(asked).not.toContain(join(directory, ".kaipu", "c.jpg"));
+    expect(asked).not.toContain(join(directory, ".kaipu", "bare.jpg"));
+  });
+
+  it("describe() of one item asks about its media and only the poster that exists", async () => {
+    await seedShot("c");
+    const probe = vi.fn(async () => new Set<string>());
+    await new LibraryVault(directory, "ws-1", undefined, probe).describe("c");
+    expect(probe).toHaveBeenCalledWith([join(directory, "c.png")]);
+  });
+
+  it("an item whose sidecar cannot be read still says its media is not downloaded", async () => {
+    await seedVideo("clip");
+    await writeFile(join(directory, ".kaipu", "clip.json"), "{ truncated");
+    const file = join(directory, "clip.mp4");
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set([file]));
+    expect(await vault.describe("clip")).toMatchObject({
+      evicted: "media",
+      thumbnailUrl: null,
+      metadataIssue: expect.anything(),
+    });
+    const [listed] = await vault.list();
+    expect(listed).toMatchObject({ id: "clip", evicted: "media" });
+  });
+
   it("a plain (not synced) workspace never probes", async () => {
     await seedVideo("a");
     const vault = new LibraryVault(directory, "ws-1");

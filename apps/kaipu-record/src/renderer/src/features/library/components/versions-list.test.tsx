@@ -229,6 +229,12 @@ describe("VersionsList", () => {
     expect(unseenCopyIds(getReadyCopies()).has("yt")).toBe(false);
   });
 
+  it("offers no drag for an offloaded copy: main would refuse it, so the control is not dead", () => {
+    const offloaded = { ...yt, evicted: "media" as const };
+    const region = renderList(master, [master, offloaded]);
+    expect(within(region).queryByRole("button", { name: /^Drag YouTube 1440p/ })).toBeNull();
+  });
+
   it("names an Email copy by its stored destination, not by its Balanced preset", () => {
     const email = video({
       id: "em",
