@@ -450,6 +450,43 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     });
   });
 
+  it("refuses with no-room when the staging volume of a synced target is full, not the target's", async () => {
+    const item = await seedItem(src.directory);
+    const scratch = join(root, "scratch", "dst");
+    const target: MoveSide = { ...dst, scratch };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        fs: { freeBytes: async (directory) => (directory === scratch ? 1024 : 1e12) },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: false, reason: "no-room" });
+    expect(await filesOf(dst.directory, "Demo")).toEqual([]);
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+  });
+
+  it("a failing re-hash at the final path leaves no stray media in the target", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        fs: {
+          sha256: async (path) => {
+            if (path === join(dst.directory, "Demo.mp4")) {
+              throw Object.assign(new Error("read failed"), { code: "EIO" });
+            }
+            return sha256FileBase64(path);
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: false, reason: "io" });
+    expect(await filesOf(dst.directory, "Demo")).toEqual([]);
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    expect(await readdir(journalDir)).toEqual([]);
+  });
+
   it("a mismatch at the final path rolls the target back and leaves the source intact", async () => {
     const item = await seedItem(src.directory);
     const before = await filesOf(src.directory, "Demo");

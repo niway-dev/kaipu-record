@@ -1,11 +1,24 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultCaptureName } from "@shared/default-capture-name";
 import { PLACED_MARKER_SUFFIX } from "../library/safe-place";
 import { STAGING_DIR } from "./recording-writer";
 import { PLACED_PARTS_DIR, recoverStrandedRecordings } from "./stranded-recordings";
+
+// A synced workspace must never get a second name for a file: `link` is counted.
+const hooks = vi.hoisted(() => ({ links: 0 }));
+vi.mock("node:fs/promises", async (importActual) => {
+  const actual = await importActual<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    link: async (from: string, to: string) => {
+      hooks.links += 1;
+      return actual.link(from, to);
+    },
+  };
+});
 
 describe("recoverStrandedRecordings", () => {
   let vaultDir: string;
@@ -14,6 +27,7 @@ describe("recoverStrandedRecordings", () => {
   const old = new Date(now - 10 * 60_000);
 
   beforeEach(async () => {
+    hooks.links = 0;
     vaultDir = await mkdtemp(join(tmpdir(), "sweep-vault-"));
     fallbackTempDir = await mkdtemp(join(tmpdir(), "sweep-tmp-"));
     await mkdir(join(vaultDir, STAGING_DIR), { recursive: true });
@@ -212,6 +226,21 @@ describe("recoverStrandedRecordings", () => {
       const kept = join(staging, PLACED_PARTS_DIR, "kaipu-rec-session-abcd.mp4.part");
       expect(await readFile(kept, "utf-8")).toBe("original");
       expect(await readFile(destination, "utf-8")).toBe("original");
+    });
+
+    it("in a synced workspace keeps the placed part by rename, never by a hard link", async () => {
+      const { staging } = await marked("original");
+      await recoverStrandedRecordings({
+        vaultDir,
+        fallbackTempDir,
+        title: "Recovered",
+        now: () => now,
+        placeByRename: true,
+      });
+      expect(hooks.links).toBe(0);
+      const kept = join(staging, PLACED_PARTS_DIR, "kaipu-rec-session-abcd.mp4.part");
+      expect(await readFile(kept, "utf-8")).toBe("original");
+      expect(await readdir(staging)).toEqual([PLACED_PARTS_DIR]);
     });
 
     it("keeps the only remaining original when a same-size file replaced its destination", async () => {

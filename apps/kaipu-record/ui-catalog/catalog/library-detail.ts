@@ -396,6 +396,10 @@ export const libraryDetail = catalog(
         "needsSetup",
         "needs a file a sync provider offloaded (SF_DATALESS); the seeded vault is not synced",
       ),
+      "libraryDetail.actions:notDownloaded": nc(
+        "needsSetup",
+        "needs a file a sync provider offloaded (SF_DATALESS); the seeded vault is not synced",
+      ),
       "libraryDetail.header:cloudOnly": nc(
         "needsApi",
         "needs a cloud-only item; the catalog runs offline",

@@ -518,6 +518,37 @@ export async function renameCaseOnly(from: string, to: string): Promise<Placemen
 }
 
 /**
+ * `renameCaseOnly` for a synced folder (spec, decision 15): the same two steps, each a plain
+ * `rename`, never a hard link (a link inside a Google Drive folder renames the cloud item). The
+ * file goes to a unique temporary sibling, then to the new name; a failed second step renames it
+ * back. A different file at `to` → "taken"; where `to` is simply free, one `placeByRename`.
+ */
+export async function renameCaseOnlyByRename(from: string, to: string): Promise<Placement> {
+  const source = await identityAt(from);
+  if (source === null) {
+    throw Object.assign(new Error(`"${from}" does not exist`), { code: "ENOENT", path: from });
+  }
+  const existing = await identityAt(to);
+  if (existing === null) return (await placeByRename(from, to)) === "taken" ? "taken" : "placed";
+  if (!sameFile(existing, source)) return "taken";
+  if (from === to) return "placed";
+
+  const temp = siblingTemp(from, "case");
+  const first = await placeByRename(from, temp, { expect: source });
+  if (first === "taken") return "taken";
+  try {
+    await rename(temp, to);
+  } catch (error) {
+    await rename(temp, from).catch(() => {
+      console.error(`case-only rename: the file could not return to its name; it is at "${temp}"`);
+    });
+    throw error;
+  }
+  await syncDir(dirname(to)).catch(() => {});
+  return "placed";
+}
+
+/**
  * Second step failed: the file goes back to its old name. If even that fails (on a
  * case-insensitive volume a file that took the new name also holds the old one) it stays at
  * the temporary name, never removed, and the rename fails with an error naming it.

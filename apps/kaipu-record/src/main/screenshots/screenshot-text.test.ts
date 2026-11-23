@@ -322,6 +322,28 @@ describe("recognizeScreenshotText in a synced workspace", () => {
     // The PNG on disk could not be compared without downloading it, so no cache was written.
     await expect(readFile(cachePath(id), "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it("never reads an evicted canvas asset to check the cache either", async () => {
+    const id = await seedItem("Shot", "flat");
+    await seedCanvas(id, { base: "pixels" });
+    const asset = join(vault.companionPaths(id).assetsDir, "base.png");
+    const synced = new LibraryVault(
+      directory,
+      undefined,
+      undefined,
+      async (paths) => new Set(paths.filter((path) => path === asset)),
+    );
+    const { recognizer } = fakeRecognizer();
+
+    const result = await recognizeScreenshotText(
+      { vault: synced, recognizer },
+      { id, assetId: "base", png: bytes("pixels") },
+    );
+
+    expect(result).toEqual({ status: "ready", words: [word("hello")] });
+    // Hashing the asset would have downloaded it; without a hash nothing is cached.
+    await expect(readFile(cachePath(id), "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
 });
 
 describe("saveTextCache", () => {

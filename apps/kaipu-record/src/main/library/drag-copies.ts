@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { copyFile, link, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { scratchDrag, scratchParent } from "../workspaces/sync-state";
@@ -74,7 +75,7 @@ export async function pruneDragCopies(
 /** The two filesystem calls whose failure decides the fallback; injectable for tests. */
 export interface DragCopyFs {
   link: (existing: string, target: string) => Promise<void>;
-  copyFile: (source: string, target: string) => Promise<void>;
+  copyFile: (source: string, target: string, mode?: number) => Promise<void>;
 }
 
 export interface DragCopyOptions {
@@ -114,7 +115,9 @@ export async function createDragCopy(
   }
   const target = join(dir, fileName);
   if (options.synced) {
-    await fs.copyFile(vaultFile, target);
+    // A clone where the volume has them (APFS, same volume as userData): the drag starts at
+    // once however large the take; elsewhere it is the full copy the no-link rule requires.
+    await fs.copyFile(vaultFile, target, constants.COPYFILE_FICLONE);
     return target;
   }
   try {

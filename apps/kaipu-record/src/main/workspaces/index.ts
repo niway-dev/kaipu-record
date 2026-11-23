@@ -38,7 +38,14 @@ import { defaultVaultDirectory, forgetCachedPreferences } from "../library/vault
 import { StaleWorkspaceError, WorkspaceGate } from "./gate";
 import { WorkspaceRegistry, type Availability, type WorkspaceEntry } from "./registry";
 import { probeDataless, type EvictionProbe } from "../library/dataless";
-import { boundedProbe, scratchRoot, scratchTmp, SyncStates } from "./sync-state";
+import {
+  boundedProbe,
+  probeWorkspaceFacts,
+  scratchRoot,
+  scratchTmp,
+  SYNCED_PROBE_TIMEOUT_MS,
+  SyncStates,
+} from "./sync-state";
 import { MachineSettingsStore } from "./settings-overrides";
 import { WorkspaceSettings } from "./workspace-settings";
 import { PrepareRequests } from "./prepare-windows";
@@ -424,30 +431,29 @@ async function listState(): Promise<WorkspacesState> {
       .entries()
       .slice()
       .map(async (entry): Promise<WorkspaceView> => {
+        const startedAt = Date.now();
         const { availability, id } = await availabilityOf(entry.id);
         // A pending active entry that adopted its folder's id: windows must take the new stamp.
         if (workspaceGate().adopt(entry.id, id, reg.active().id)) void broadcastState();
-        // A synced folder's count and device are bounded too: `readdir` and `stat` never
-        // download, but a stuck provider must not hang the switcher.
-        const count =
-          availability.state === "available"
-            ? await boundedProbe(
-                new LibraryVault(entry.path).countMedia().catch(() => null),
-                null,
-              )
-            : null;
-        // Which volume the folder is on: "Move to" says whether a move copies or is instant.
-        const device =
-          availability.state === "available"
-            ? await boundedProbe(
-                stat(entry.path).then(
-                  (info) => String(info.dev),
-                  () => null,
-                ),
-                null,
-                1_000,
-              )
-            : null;
+        // Count and drive are bounded for a synced folder (`readdir` and `stat` never download,
+        // but a stuck provider must not hang the switcher), within the same deadline as its
+        // availability check; an unverified one asks nothing. The drive tells "Move to" whether
+        // a move copies or is instant.
+        const { count, device } = await probeWorkspaceFacts(
+          {
+            synced: syncStates.of(entry) !== null,
+            skip: availability.state !== "available" || syncStates.isUnverified(id),
+            remainingMs: SYNCED_PROBE_TIMEOUT_MS - (Date.now() - startedAt),
+          },
+          {
+            count: () => new LibraryVault(entry.path).countMedia().catch(() => null),
+            device: () =>
+              stat(entry.path).then(
+                (info) => String(info.dev),
+                () => null,
+              ),
+          },
+        );
         const current = reg.get(id) ?? entry;
         return toWorkspaceView(current, availability, count, device, syncStates.of(current));
       }),

@@ -24,6 +24,12 @@ const cloudExport = item({ assetId: "exp3", derivedFromAssetId: "rec", id: null 
 const other = item({ assetId: "other" });
 
 describe("exportsToSuggest", () => {
+  it("does not count an export whose media the provider offloaded: it cannot move", () => {
+    const offloaded = item({ assetId: "exp4", derivedFromAssetId: "rec", evicted: "media" });
+    const posterOnly = item({ assetId: "exp5", derivedFromAssetId: "rec", evicted: "thumbnail" });
+    expect(exportsToSuggest([rec], [rec, exp1, offloaded, posterOnly])).toEqual([exp1, posterOnly]);
+  });
+
   it("counts the local exports of a selected recording", () => {
     expect(exportsToSuggest([rec], [rec, exp1, exp2, cloudExport, other])).toEqual([exp1, exp2]);
   });

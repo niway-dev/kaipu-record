@@ -2,7 +2,12 @@ import { mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LibraryVault } from "../library/library-vault";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { PLACED_MARKER_SUFFIX, placeNoReplace, readPlacementMarker } from "../library/safe-place";
+import {
+  PLACED_MARKER_SUFFIX,
+  placeByRename,
+  placeNoReplace,
+  readPlacementMarker,
+} from "../library/safe-place";
 import { STAGING_DIR, placeTake, webcamPartFor } from "./recording-writer";
 
 const PART_RE = /^kaipu-rec-.+\.mp4\.part$/;
@@ -87,7 +92,7 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
         // marker only stops a second recovery: the destination may hold another file by now,
         // so the part is kept, never deleted.
         if (await placedElsewhere(path, info.size)) {
-          if (dir !== deps.fallbackTempDir) await retainPlaced(dir, name);
+          if (dir !== deps.fallbackTempDir) await retainPlaced(dir, name, byRename);
           continue;
         }
         if (info.size === 0) {
@@ -153,11 +158,14 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
 }
 
 /** Move a placed part into `placed-parts/` (never replacing); left where it is on failure. */
-async function retainPlaced(dir: string, name: string): Promise<void> {
+async function retainPlaced(dir: string, name: string, byRename: boolean): Promise<void> {
   const keep = join(dir, PLACED_PARTS_DIR);
   try {
     await mkdir(keep, { recursive: true });
-    const moved = await placeNoReplace(join(dir, name), join(keep, name), { stuck: "rollback" });
+    // A scratch folder or synced workspace never gets a second name for a file: rename there.
+    const moved = byRename
+      ? await placeByRename(join(dir, name), join(keep, name), { stuck: "rollback" })
+      : await placeNoReplace(join(dir, name), join(keep, name), { stuck: "rollback" });
     if (moved === "placed") await unlink(join(dir, `${name}${PLACED_MARKER_SUFFIX}`));
   } catch {
     // Still marked: skipped again on the next launch.

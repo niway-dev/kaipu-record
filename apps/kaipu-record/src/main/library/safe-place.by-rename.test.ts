@@ -8,6 +8,8 @@ const hooks = vi.hoisted(() => ({
   links: 0,
   renameError: null as null | string,
   unlinkFails: false,
+  /** When set, only this path's unlink fails (the source, while its copy must still be removable). */
+  unlinkOnly: null as null | string,
   /** Runs where a rename is refused: a file that arrives between the check and the move. */
   atRename: null as null | ((to: string) => Promise<void>),
 }));
@@ -20,7 +22,8 @@ vi.mock("node:fs/promises", async (importActual) => {
       return actual.link(from, to);
     },
     unlink: async (path: string) => {
-      if (hooks.unlinkFails) throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
+      if (hooks.unlinkFails && (hooks.unlinkOnly === null || path === hooks.unlinkOnly))
+        throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
       return actual.unlink(path);
     },
     rename: async (from: string, to: string) => {
@@ -34,7 +37,7 @@ vi.mock("node:fs/promises", async (importActual) => {
   };
 });
 
-const { placeByRename } = await import("./safe-place");
+const { identityAt, placeByRename } = await import("./safe-place");
 
 describe("placeByRename (synced folders: no hard link, ever)", () => {
   let dir: string;
@@ -43,6 +46,7 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     hooks.links = 0;
     hooks.renameError = null;
     hooks.unlinkFails = false;
+    hooks.unlinkOnly = null;
     hooks.atRename = null;
   });
   afterEach(async () => {
@@ -97,5 +101,34 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     expect(await placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"))).toBe("taken");
     expect(await readFile(join(dir, "Take.mp4"), "utf-8")).toBe("someone else");
     expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("new");
+  });
+
+  it("refuses a source that is no longer the file the caller meant (expect), and moves nothing", async () => {
+    await writeFile(join(dir, "take.part"), "the take");
+    const expected = (await identityAt(join(dir, "take.part")))!;
+    // The name is taken over by another file (a new inode) before the placement.
+    await rm(join(dir, "take.part"));
+    await writeFile(join(dir, "take.part"), "someone else's file");
+
+    await expect(
+      placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"), { expect: expected }),
+    ).rejects.toMatchObject({ code: "ESTALE" });
+    await expect(stat(join(dir, "Take.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("someone else's file");
+  });
+
+  it("across devices with stuck: rollback, a source that cannot be removed undoes the copy and keeps the source", async () => {
+    hooks.renameError = "EXDEV";
+    hooks.unlinkFails = true;
+    hooks.unlinkOnly = join(dir, "take.part");
+    await writeFile(join(dir, "take.part"), "bytes");
+
+    await expect(
+      placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"), { stuck: "rollback" }),
+    ).rejects.toMatchObject({ code: "EBUSY" });
+    // One copy of the take, in its old place: a failed rename must not leave it in two.
+    await expect(stat(join(dir, "Take.mp4"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("bytes");
+    expect(hooks.links).toBe(0);
   });
 });

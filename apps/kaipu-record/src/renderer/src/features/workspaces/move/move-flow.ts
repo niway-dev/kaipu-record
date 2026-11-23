@@ -35,7 +35,9 @@ export function moveCost(target: WorkspaceView, active: WorkspaceView): MoveCost
 /**
  * The exports a move should suggest (ADR 0033, decision 15): local exports in the loaded list
  * whose source is one of the selected recordings, counted once, and not already selected.
- * Cloud-only exports are not counted, and moving an export never suggests its source.
+ * Exports that cannot move (cloud-only, a broken record, media the provider offloaded) are not
+ * counted, so "Move all N" promises only what the move can do. Moving an export never suggests
+ * its source.
  */
 export function exportsToSuggest(
   selected: readonly MovableItem[],
@@ -46,7 +48,7 @@ export function exportsToSuggest(
   const chosen = new Set(selected.map((i) => i.assetId));
   const seen = new Set<string>();
   return library.filter((item) => {
-    if (item.id === null || item.metadataIssue) return false;
+    if (notMovableReason(item) !== null) return false;
     if (!item.derivedFromAssetId || !sources.has(item.derivedFromAssetId)) return false;
     if (chosen.has(item.assetId) || seen.has(item.assetId)) return false;
     seen.add(item.assetId);

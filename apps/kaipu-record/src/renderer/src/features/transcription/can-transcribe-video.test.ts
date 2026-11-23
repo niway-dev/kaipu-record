@@ -7,11 +7,20 @@ describe("canTranscribeVideo", () => {
     expect(canTranscribeVideo({ kind: "recording", id: "a" }, true)).toBe(true);
   });
 
+  it("accepts a recording whose poster alone is offloaded", () => {
+    expect(canTranscribeVideo({ kind: "recording", id: "a", evicted: "thumbnail" })).toBe(true);
+  });
+
   it.each([
     ["a screenshot", { kind: "screenshot" as const, id: "a" }, undefined],
     ["a GIF export", { kind: "gif" as const, id: "a" }, undefined],
     ["a cloud-only item", { kind: "recording" as const, id: null }, undefined],
     ["a recording without audio", { kind: "recording" as const, id: "a" }, false],
+    [
+      "a recording the sync provider offloaded",
+      { kind: "recording" as const, id: "a", evicted: "media" as const },
+      undefined,
+    ],
   ])("rejects %s", (_name, video, hasAudio) => {
     expect(canTranscribeVideo(video, hasAudio)).toBe(false);
   });

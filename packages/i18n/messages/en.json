@@ -952,6 +952,7 @@
     "renameKeptBusy": "Name saved. The file keeps its old name while an export is running.",
     "renameKeptEditing": "Name saved. The file keeps its old name while it is open in the editor.",
     "renameKeptTaken": "Name saved. The file keeps its old name because another file just appeared under the new one.",
+    "renameKeptEvicted": "Name saved. The file keeps its old name because part of it is not downloaded from the cloud yet.",
     "renameKeptError": "Name saved, but the file could not be renamed.",
     "itemAmbiguous": "Two files in your folder claim to be this item, so Kaipu left both alone. Remove the duplicate and try again.",
     "errorDelete": "We couldn't delete the file.",
@@ -3747,8 +3748,6 @@
     "transcribeFailed_unknown": "Transcription failed. Try again."
   },
   "workspaceCloud": {
-    "location_this-mac": "This Mac",
-    "location_external-drive": "An external drive",
     "location_google-drive": "Google Drive",
     "location_onedrive": "OneDrive",
     "location_icloud": "iCloud Drive",

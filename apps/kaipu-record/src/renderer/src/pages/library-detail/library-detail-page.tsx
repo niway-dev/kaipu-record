@@ -588,7 +588,8 @@ export function LibraryDetailPage(): React.JSX.Element {
                   variant="secondary"
                   size="sm"
                   aria-label={t("openFile")}
-                  title={t("openFileHint")}
+                  title={video.evicted === "media" ? t("evictedHint") : t("openFileHint")}
+                  disabled={video.evicted === "media"}
                   onClick={() => void openFile()}
                 >
                   <SquareArrowOutUpRight size={15} strokeWidth={1.8} />

@@ -183,7 +183,9 @@ async function onDiskSha256(
   const missing = (error: unknown): boolean =>
     ["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException)?.code ?? "");
   try {
-    return sha256Hex(await readFile(join(paths.assetsDir, `${assetId}.png`)));
+    // An offloaded asset is not hashed (that would download it): the catch below treats the
+    // refusal as "unknown", so no cache is judged.
+    return sha256Hex(await vault.readLocalFile(join(paths.assetsDir, `${assetId}.png`)));
   } catch (error) {
     if (!missing(error)) return null;
   }

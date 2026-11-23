@@ -89,3 +89,30 @@ export const SYNCED_PROBE_TIMEOUT_MS = 5_000;
 export function boundedProbe<T>(probe: Promise<T>, onTimeout: T, ms = SYNCED_PROBE_TIMEOUT_MS) {
   return withTimeout(probe, ms, onTimeout);
 }
+
+/** What the switcher shows beside a workspace: its item count and the drive it is on. */
+export interface WorkspaceFacts {
+  count: number | null;
+  device: string | null;
+}
+
+/**
+ * The count and drive of one workspace, asked side by side. A synced workspace shares ONE
+ * deadline with its availability check: `remainingMs` is what is left of `SYNCED_PROBE_TIMEOUT_MS`
+ * after that check, so a stalled provider costs the switcher one bound, not the sum of four.
+ * `skip` (the check never answered, so the folder is unverified) asks nothing. A plain folder's
+ * count is not bounded: a slow local scan is not a stalled provider, and a missing count would
+ * only hide a number that is really there.
+ */
+export async function probeWorkspaceFacts(
+  options: { synced: boolean; skip: boolean; remainingMs: number },
+  probes: { count(): Promise<number | null>; device(): Promise<string | null> },
+): Promise<WorkspaceFacts> {
+  if (options.skip) return { count: null, device: null };
+  const wait = Math.max(0, options.remainingMs);
+  const [count, device] = await Promise.all([
+    options.synced ? boundedProbe(probes.count(), null, wait) : probes.count(),
+    boundedProbe(probes.device(), null, options.synced ? Math.min(wait, 1_000) : 1_000),
+  ]);
+  return { count, device };
+}

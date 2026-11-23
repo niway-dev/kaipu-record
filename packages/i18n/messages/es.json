@@ -952,6 +952,7 @@
     "renameKeptBusy": "Nombre guardado. El archivo conserva su nombre anterior mientras se ejecuta una exportación.",
     "renameKeptEditing": "Nombre guardado. El archivo conserva su nombre anterior mientras está abierto en el editor.",
     "renameKeptTaken": "Nombre guardado. El archivo conserva su nombre anterior porque acaba de aparecer otro archivo con el nuevo nombre.",
+    "renameKeptEvicted": "Nombre guardado. El archivo conserva su nombre anterior porque una parte aún no está descargada de la nube.",
     "renameKeptError": "Nombre guardado, pero no se pudo renombrar el archivo.",
     "itemAmbiguous": "Dos archivos de tu carpeta dicen ser este elemento, así que Kaipu no tocó ninguno. Quita el duplicado e inténtalo de nuevo.",
     "errorDelete": "No pudimos eliminar el archivo.",
@@ -3747,8 +3748,6 @@
     "transcribeFailed_unknown": "La transcripción falló. Inténtalo de nuevo."
   },
   "workspaceCloud": {
-    "location_this-mac": "Este Mac",
-    "location_external-drive": "Un disco externo",
     "location_google-drive": "Google Drive",
     "location_onedrive": "OneDrive",
     "location_icloud": "iCloud Drive",

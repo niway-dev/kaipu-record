@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { boundedProbe, scratchDrag, scratchTmp, SyncStates } from "./sync-state";
+import { describe, expect, it, vi } from "vitest";
+import {
+  boundedProbe,
+  probeWorkspaceFacts,
+  scratchDrag,
+  scratchTmp,
+  SyncStates,
+} from "./sync-state";
 
 describe("SyncStates", () => {
   const HOME = "/Users/x";
@@ -55,5 +61,41 @@ describe("boundedProbe", () => {
   it("answers the fallback when the provider does not answer in time", async () => {
     expect(await boundedProbe(new Promise<string>(() => {}), "timeout", 20)).toBe("timeout");
     expect(await boundedProbe(Promise.resolve("ok"), "timeout", 20)).toBe("ok");
+  });
+});
+
+describe("probeWorkspaceFacts", () => {
+  const never = () => new Promise<never>(() => {});
+
+  it("a stalled synced folder costs one deadline, with the count and the drive asked together", async () => {
+    const started = Date.now();
+    const facts = await probeWorkspaceFacts(
+      { synced: true, skip: false, remainingMs: 60 },
+      { count: never, device: never },
+    );
+    expect(facts).toEqual({ count: null, device: null });
+    expect(Date.now() - started).toBeLessThan(250);
+  });
+
+  it("an unverified folder asks nothing", async () => {
+    const count = vi.fn(async () => 3);
+    const device = vi.fn(async () => "1");
+    expect(
+      await probeWorkspaceFacts(
+        { synced: true, skip: true, remainingMs: 5_000 },
+        { count, device },
+      ),
+    ).toEqual({ count: null, device: null });
+    expect(count).not.toHaveBeenCalled();
+    expect(device).not.toHaveBeenCalled();
+  });
+
+  it("a plain folder's slow count is waited for, never turned into a missing number", async () => {
+    const slow = () => new Promise<number>((resolve) => setTimeout(() => resolve(7), 80));
+    const facts = await probeWorkspaceFacts(
+      { synced: false, skip: false, remainingMs: 10 },
+      { count: slow, device: async () => "9" },
+    );
+    expect(facts).toEqual({ count: 7, device: "9" });
   });
 });

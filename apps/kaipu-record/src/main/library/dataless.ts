@@ -147,7 +147,8 @@ export const probeDataless: EvictionProbe = (paths) => datalessPaths(paths);
  * authorized by a check made for it, so a file the provider offloaded a moment ago is never
  * opened. To keep a grid of thumbnails to a few `stat` calls, the requests that arrive within
  * `windowMs` share one batched probe. An "evicted" answer is remembered for `ttlMs` (refusing
- * reads nothing); `forget()` drops it once a download ends.
+ * reads nothing); once it expires the path is probed again, so a download that finished in
+ * Finder is seen within `ttlMs`.
  */
 export class EvictionCache {
   private readonly evictedAt = new Map<string, number>();
@@ -171,10 +172,6 @@ export class EvictionCache {
       this.evictedAt.delete(path);
     }
     return evicted;
-  }
-
-  forget(path: string): void {
-    this.evictedAt.delete(path);
   }
 
   /** One probe for every path asked within the window. */

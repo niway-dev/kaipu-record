@@ -37,6 +37,7 @@ import {
   placeNoReplace,
   removeIfSame,
   renameCaseOnly,
+  renameCaseOnlyByRename,
   takenError,
 } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
@@ -929,9 +930,11 @@ export class LibraryVault {
                 errorOnExist: true,
               });
             }
-          } catch {
+          } catch (error) {
             await this.removePaths(created);
-            return { recording: await describeOld(), file: "kept-old-name", reason: "io" };
+            // An offloaded companion is not an I/O failure: the user can fix it (download it).
+            const reason = error instanceof EvictedFileError ? "evicted" : "io";
+            return { recording: await describeOld(), file: "kept-old-name", reason };
           }
 
           // 5. The commit point.
@@ -1060,10 +1063,12 @@ export class LibraryVault {
     const sleep = retry.sleep ?? sleepFor;
     for (let attempt = 0; ; attempt++) {
       try {
-        const placed = caseOnly
-          ? await renameCaseOnly(from, to)
-          : this.synced
-            ? await placeByRename(from, to)
+        const placed = this.synced
+          ? caseOnly
+            ? await renameCaseOnlyByRename(from, to)
+            : await placeByRename(from, to)
+          : caseOnly
+            ? await renameCaseOnly(from, to)
             : await placeNoReplace(from, to, { stuck: "rollback" });
         return placed === "taken" ? "taken" : null;
       } catch (error) {

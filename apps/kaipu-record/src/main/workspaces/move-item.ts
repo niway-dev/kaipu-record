@@ -13,7 +13,7 @@ import {
   statfs,
   unlink,
 } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { nextTagColor, type TagColor } from "@kaipu/domain/constants";
 import type { MoveRefusal } from "@shared/types/workspaces";
 import { atomicWriteFile } from "../library/atomic-write";
@@ -141,8 +141,18 @@ const defaultFs: MoverFs = {
   link,
   sha256: sha256FileBase64,
   freeBytes: async (directory) => {
-    const info = await statfs(directory);
-    return Number(info.bavail) * Number(info.bsize);
+    // A scratch folder is created by its first staged copy: ask the nearest folder that exists.
+    let at = directory;
+    for (;;) {
+      try {
+        const info = await statfs(at);
+        return Number(info.bavail) * Number(info.bsize);
+      } catch (error) {
+        const parent = dirname(at);
+        if (codeOf(error) !== "ENOENT" || parent === at) throw error;
+        at = parent;
+      }
+    }
   },
 };
 
@@ -308,6 +318,12 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
   const webcamInfo = await statOrNull(from.webcamFilePath(id));
   const spaceNeeded = mediaInfo.size + (webcamInfo?.size ?? 0) + MOVE_SPACE_MARGIN_BYTES;
   if (!linkable && (await fs.freeBytes(target.directory)) < spaceNeeded) return refuse("no-room");
+  // A synced target stages its copy in userData first, then renames it into the folder (a second
+  // copy when the volumes differ): the staging volume needs room as well, or the move would fail
+  // partway through as `io`.
+  if (target.scratch !== undefined && (await fs.freeBytes(target.scratch)) < spaceNeeded) {
+    return refuse("no-room");
+  }
 
   // Tags: resolved by name in the target's registry. One that cannot be trusted refuses the
   // move before anything is copied (decision 7).
@@ -348,6 +364,8 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
   const finalMedia = (newId: string): string => join(target.directory, `${newId}${ext}`);
   let mediaPlaced = false;
+  // The file this move put at its final name in the target: the one a rollback may remove.
+  let placedAt: string | null = null;
   let committedMode: "linked" | "copied" = "copied";
   try {
     // ── 3. Tags, then the target record: the stem is taken from here on.
@@ -425,10 +443,11 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
           ? await placeByRename(staged, finalMedia(newId))
           : await placeNoReplace(staged, finalMedia(newId), { stuck: "rollback" });
       if (placed === "taken") throw new Error(`target media taken: ${finalMedia(newId)}`);
+      placedAt = finalMedia(newId);
       // With a synced side, the bytes are checked again where they now live, before the
       // source may go: a provider may have touched the file in between.
       if (synced && (await fs.sha256(finalMedia(newId))) !== journal.media.sha256) {
-        await rollBackTarget(to, newId, assetId, staging, finalMedia(newId));
+        await rollBackTarget(to, newId, assetId, staging, placedAt);
         await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
         return refuse("checksum-mismatch");
       }
@@ -492,7 +511,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
         journal.targetId,
         assetId,
         stagingDir(target.directory, journal.moveId, target.scratch),
-        null,
+        placedAt,
       );
     }
     await rm(journalPath(deps.journalDir, journal.moveId), { force: true });

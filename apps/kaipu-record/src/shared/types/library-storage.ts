@@ -118,9 +118,10 @@ export type RenameFileOutcome = "renamed" | "unchanged" | "kept-old-name";
 /**
  * Why the file kept its old name: another app holds it, an export is reading it, the item
  * is open in the video editor (which holds its id for its lifetime), another file appeared
- * under the new name while the rename ran ("taken": never replaced), or another I/O error.
+ * under the new name while the rename ran ("taken": never replaced), a companion file the
+ * cloud provider has offloaded ("evicted": copying it would download it), or another I/O error.
  */
-export type RenameKeptReason = "locked" | "busy" | "editing" | "taken" | "io";
+export type RenameKeptReason = "locked" | "busy" | "editing" | "taken" | "evicted" | "io";
 
 export interface RenameResult {
   /** The item after the rename; `recording.id` is the id to use from now on. */

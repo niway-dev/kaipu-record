@@ -136,7 +136,7 @@ describe("EvictionCache (the media protocol's gate)", () => {
     expect(probe).toHaveBeenCalledTimes(1);
   });
 
-  it("remembers an evicted answer for the TTL only, and forget() drops it after a download", async () => {
+  it("remembers an evicted answer for the TTL only, so a finished download is seen after it", async () => {
     let now = 0;
     let evicted = true;
     const probe = vi.fn(async (paths: string[]) => new Set(evicted ? paths : []));
@@ -144,13 +144,13 @@ describe("EvictionCache (the media protocol's gate)", () => {
     expect(await cache.isEvicted("/x")).toBe(true);
     expect(await cache.isEvicted("/x")).toBe(true);
     expect(probe).toHaveBeenCalledTimes(1);
-    // Past the TTL, an evicted answer is asked again (no forget()).
+    // Past the TTL, an evicted answer is asked again.
     now = 5_000;
     expect(await cache.isEvicted("/x")).toBe(true);
     expect(probe).toHaveBeenCalledTimes(2);
-    // Within the TTL again, forget() makes the next read ask at once.
+    // The download finishes: the next question after the TTL sees the file as local.
     evicted = false;
-    cache.forget("/x");
+    now = 8_000;
     expect(await cache.isEvicted("/x")).toBe(false);
     expect(probe).toHaveBeenCalledTimes(3);
   });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { constants } from "node:fs";
 import {
   copyFile,
   mkdir,
@@ -135,6 +136,21 @@ describe("drag copies", () => {
       // The item keeps one name: the provider never sees a second one.
       expect((await stat(file)).nlink).toBe(1);
       expect(await readdir(join(vault, ".kaipu")).catch(() => [])).toEqual([]);
+    });
+
+    it("asks for a clone, so a large take does not delay the drag where the volume can", async () => {
+      const copy = vi.fn(copyFile);
+      await createDragCopy(
+        vault,
+        file,
+        "c.mp4",
+        { link: vi.fn(async () => {}), copyFile: copy },
+        {
+          root: scratch,
+          synced: true,
+        },
+      );
+      expect(copy).toHaveBeenCalledWith(file, expect.any(String), constants.COPYFILE_FICLONE);
     });
 
     it("prunes old drag folders in the scratch root, not in the workspace", async () => {

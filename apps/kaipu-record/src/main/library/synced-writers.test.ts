@@ -163,6 +163,27 @@ describe("rename", () => {
     expect(await readFile(join(folder, `${result.recording.id}.mp4`), "utf-8")).toBe("media");
   });
 
+  it("a case-only rename also goes by rename: no hard link, even through the temporary name", async () => {
+    await seed("demo");
+    const result = await rename(synced(), "demo", "Demo");
+
+    expect(result.file).toBe("renamed");
+    expect(hooks.links).toBe(0);
+    expect(await readdir(folder)).toContain("Demo.mp4");
+    expect(await readdir(folder)).not.toContain("demo.mp4");
+    expect((await readdir(folder)).filter((name) => name.includes(".case"))).toEqual([]);
+    expect(await readFile(join(folder, "Demo.mp4"), "utf-8")).toBe("media");
+  });
+
+  it("control: a plain folder does link on a case-only rename, so this test would catch one", async () => {
+    await seed("demo");
+    await new LibraryVault(folder, "ws-plain").renameItem(
+      { id: "demo", assetId: "asset-1" },
+      "Demo",
+    );
+    expect(hooks.links).toBeGreaterThan(0);
+  });
+
   it("keeps the old name, and the title, when a companion is offloaded: copying it would download it", async () => {
     await seed("old");
     const poster = join(folder, ".kaipu", "old.jpg");
@@ -171,7 +192,7 @@ describe("rename", () => {
     const vault = synced(async (paths) => new Set(paths.filter((path) => path === poster)));
     const result = await rename(vault, "old", "Sprint demo");
 
-    expect(result).toMatchObject({ file: "kept-old-name", reason: "io" });
+    expect(result).toMatchObject({ file: "kept-old-name", reason: "evicted" });
     expect(result.recording.title).toBe("Sprint demo");
     expect(await readFile(join(folder, "old.mp4"), "utf-8")).toBe("media");
     expect(await readdir(folder)).not.toContain("Sprint demo.mp4");
