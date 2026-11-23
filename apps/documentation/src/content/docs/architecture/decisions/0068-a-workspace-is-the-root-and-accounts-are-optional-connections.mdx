@@ -7,11 +7,11 @@ description: The workspace stays Kaipu's root unit. An account never owns worksp
 
 ## Status
 
-| Field   | Value                                                                                                                                                                                             |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Proposed, 2026-11-22. Design PR pending the owner's go. [NIW2-912](https://linear.app/niway/issue/NIW2-912).                                                                                      |
-| Spec    | [Synced workspaces — design](/specs/2026-11-22-synced-workspaces-design/)                                                                                                                         |
-| Extends | [ADR 0032](/architecture/decisions/0032-workspaces-identity-in-the-folder-one-active/): a workspace is still a folder with its identity inside it; this ADR adds what a workspace may connect to. |
+| Field   | Value                                                                                                                                                                                                                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status  | Proposed, 2026-11-22. Design PR pending the owner's go. [NIW2-912](https://linear.app/niway/issue/NIW2-912).                                                                                                                                                                                |
+| Spec    | [Synced workspaces — design](/specs/2026-11-22-synced-workspaces-design/)                                                                                                                                                                                                                   |
+| Extends | [ADR 0032](/architecture/decisions/0032-workspaces-identity-in-the-folder-one-active/): a workspace is still a folder with its identity inside it; this ADR adds what a workspace may connect to, and amends its "a copy gets a new id" rule for folders inside a synced root (decision 4). |
 
 ## Context
 
@@ -46,7 +46,7 @@ connections, as Obsidian does with a vault and Obsidian Sync.
 4. **One cloud folder per workspace.** A folder is owned by one provider account, so a workspace
    is synced by that account. Two accounts mean two workspaces, one in each. A folder shared with a
    second account (a shared folder or Shared drive) can appear at a second local path with the same
-   identity. This amends one rule of the several workspaces spec, which gives a folder a new id
+   identity. This amends one rule of the several workspaces spec and of ADR 0032's consequences, which gives a folder a new id
    when its id is already registered at an available path (a Finder copy). Outside a synced root
    that rule still holds. Inside one, Kaipu never rewrites an identity silently, because the folder
    may be one that another account also sees: when both paths are the same provider item (the
