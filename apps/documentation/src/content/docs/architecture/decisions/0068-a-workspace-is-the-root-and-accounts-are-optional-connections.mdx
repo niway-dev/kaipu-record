@@ -1,0 +1,81 @@
+---
+title: "ADR 0068: A workspace is the root, and accounts are optional connections of a workspace"
+description: The workspace stays Kaipu's root unit. An account never owns workspaces. A workspace may carry optional connections, the first being a folder inside a cloud provider account (Google Drive, OneDrive, iCloud Drive) chosen as account plus folder. A local-only workspace needs no account. Several accounts are used by giving each its own workspaces.
+---
+
+# ADR 0068: A workspace is the root, and accounts are optional connections of a workspace
+
+## Status
+
+| Field   | Value                                                                                                                                                                                             |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status  | Proposed, 2026-11-22. Design PR pending the owner's go. [NIW2-912](https://linear.app/niway/issue/NIW2-912).                                                                                      |
+| Spec    | [Synced workspaces — design](/specs/2026-11-22-synced-workspaces-design/)                                                                                                                         |
+| Extends | [ADR 0032](/architecture/decisions/0032-workspaces-identity-in-the-folder-one-active/): a workspace is still a folder with its identity inside it; this ADR adds what a workspace may connect to. |
+
+## Context
+
+ADR 0032 makes a workspace a folder with its identity in `.kaipu/workspace/identity.json`, one
+active at a time. The several-workspaces spec allowed that folder to sit inside a folder synced by
+Google Drive, OneDrive or iCloud Drive (its decision 15), and kept "a Kaipu Cloud account per
+workspace" out of the first release of workspaces (its decision 16).
+
+On 2026-11-22 the owner asked for the next step: a workspace pointed at a specific folder of a
+specific account ("Google Drive (company account) / folder1 / kaipu-assets"), more than one
+account on the same Mac, and later teams that share videos, notes and edit data. Two models were
+on the table: an account that owns its workspaces, as Slack does, or a workspace that owns its
+connections, as Obsidian does with a vault and Obsidian Sync.
+
+## Decision
+
+1. **The workspace is the root.** Every capture, setting override, tag and move is scoped by
+   workspace, as today. Nothing above it groups workspaces.
+2. **Connections are optional, and belong to the workspace.** A workspace has zero or more
+   connections. A workspace with none is a local folder and needs no account, which keeps Kaipu
+   usable without signing in.
+3. **The first connection type is a cloud folder:** a provider account plus a folder inside that
+   account's synced root, for example Google Drive, account `you@company.com`, folder
+   `folder1/kaipu-assets`. Kaipu records the provider, the account (read from the synced root's
+   name, `~/Library/CloudStorage/GoogleDrive-<account>`) and the folder relative to that root. The
+   absolute path stays in the workspace registry, as ADR 0032 has it.
+4. **One cloud folder per workspace.** A folder can live in one provider account only, so a
+   workspace cannot be synced by two accounts. Two accounts mean two workspaces, one in each.
+5. **A cloud-folder connection is per Mac.** It lives in the registry in userData, never in the
+   folder: another Mac may open the same folder through a different path, or without the provider.
+   The folder carries only its identity, as before.
+6. **Later connection types fit the same slot:** a Kaipu Cloud team is the expected second one. Its
+   design is separate and is not decided here.
+
+## Alternatives rejected
+
+- **An account owns its workspaces (Slack model).** A local-only workspace would have no owner,
+  which breaks "Kaipu works without an account", and the Default workspace of every existing
+  customer would need an account to keep existing.
+- **Every workspace is bound to exactly one account.** Same problem for local workspaces, and it
+  confuses two different accounts: the provider account that syncs the folder and a Kaipu account.
+- **One workspace synced by several provider accounts.** Not possible with a folder: the provider
+  that owns the folder is the one that syncs it. Copying between accounts would be a second copy
+  of every file.
+
+## Consequences
+
+- A user with a personal and a company Google account creates one workspace in each account's
+  folder, and switches between them as between any two workspaces.
+- The registry gains a connection record per workspace. A downgrade ignores it (the older version
+  sees a workspace at a path, as today).
+- Team features (shared notes, shared edits) attach to a workspace connection later, not to a new
+  top-level "account" screen.
+
+## Non-goals
+
+- A team or organization screen above workspaces.
+- Moving a workspace between accounts as one action (today: Change folder… after moving the
+  folder in Finder).
+- Windows paths. The connection model is the same, but provider detection is macOS-only here.
+
+## What would reopen this
+
+- Teams need a view across several workspaces of the same organization that a per-workspace
+  connection cannot give.
+- A provider stops exposing its synced folder through `~/Library/CloudStorage` or iCloud's
+  `Mobile Documents`, so a folder no longer identifies its account.

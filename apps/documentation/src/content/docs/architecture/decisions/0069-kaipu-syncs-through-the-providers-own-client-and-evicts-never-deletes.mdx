@@ -1,0 +1,75 @@
+---
+title: "ADR 0069: Kaipu syncs through the provider's own client, and frees space by evicting, never deleting"
+description: Kaipu never calls Google Drive, OneDrive or iCloud web APIs and never streams from them. A synced workspace is a folder the provider's desktop client keeps in sync through macOS File Provider. Kaipu downloads a cloud-only file by reading it through macOS, frees space only by evicting, never by deleting, and claims a file is uploaded only when macOS reports it.
+---
+
+# ADR 0069: Kaipu syncs through the provider's own client, and frees space by evicting, never deleting
+
+## Status
+
+| Field  | Value                                                                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status | Proposed, 2026-11-22. Design PR pending the owner's go. [NIW2-912](https://linear.app/niway/issue/NIW2-912).                                                              |
+| Spec   | [Synced workspaces — design](/specs/2026-11-22-synced-workspaces-design/)                                                                                                 |
+| Reuses | Decisions 15 and 16 of the [several workspaces spec](/specs/2026-10-29-several-workspaces-design/): synced folders allowed, no provider API. This ADR makes them durable. |
+
+## Context
+
+A workspace folder can sit inside a folder synced by Google Drive for desktop, OneDrive or iCloud
+Drive. On macOS all three use Apple's File Provider: the folder is real files on the local disk,
+the client uploads what appears there, and when space is low it evicts a file (the name stays, the
+bytes stay in the cloud, and the file carries `SF_DATALESS`). Reading an evicted file makes macOS
+ask the client to download it.
+
+On 2026-11-22 the owner weighed three richer options and declined them: uploading through the
+Drive API, streaming video from Drive, and Drive share links. Each needs an OAuth login, Google's
+app verification and quota handling, and duplicates what the client already does. The owner wants
+the simplest correct design: let the provider's features do the syncing, keep a local copy to watch
+and edit, and add chunks or streaming only when a real requirement asks for it.
+
+## Decision
+
+1. **No provider web API, no OAuth, no streaming, no provider share links.** Kaipu reads and writes
+   files in the folder; the provider's client syncs them.
+2. **A download is a read through macOS.** Kaipu triggers it on the user's request (a coordinated
+   read or a plain read of the file), shows progress from the file's allocated size, and never
+   opens a file before it is fully local.
+3. **Freeing space is eviction, never deletion.** Deleting a file in a synced folder deletes it in
+   the cloud and on every device, so no code path for "Free up space" may call `unlink`. When macOS
+   does not let Kaipu evict another provider's file, Kaipu reveals it in Finder for the provider's
+   own "Remove Download".
+4. **Kaipu claims "uploaded" only when macOS says so.** Without that signal it shows only what it
+   can observe: on this Mac, or cloud only.
+5. **The safety rules for a synced folder are not optional:** no partial files in the folder, no
+   hard links, no implicit reads of evicted files. They run whenever the folder is synced.
+
+## Alternatives rejected
+
+- **Drive API upload and download.** OAuth, Google's verification of a Drive-scoped app, quotas,
+  resumable uploads and our own conflict handling, to get what the client does already.
+- **Streaming from Drive.** Needs the API as well. When streaming becomes a requirement, Kaipu
+  Cloud (our own storage) is the place to serve ranges, without a third party's approval.
+- **Drive share links.** Need the API, and compete with Kaipu Cloud's own links, which the
+  [cloud product spec](/specs/2026-09-09-cloud-product/) defines with consent and revocation.
+- **A local hidden copy plus the Drive copy.** Two copies of every 4 GB take. The scratch file
+  becomes the workspace file by `rename` on the same volume, so there is only ever one.
+
+## Consequences
+
+- Kaipu depends on the provider client being installed and running; a disconnected client is a
+  warning, not an error (local files stay usable, downloads stop).
+- Some signals may not exist for third parties (upload state, evict, pin). The spec's layer 0
+  finds out; each "no" removes a feature and keeps the safety.
+- Watching or editing a cloud-only original needs a download until proxy editing exists.
+
+## Non-goals
+
+- Sync between providers, or between a provider and Kaipu Cloud.
+- Merging two edits of the same item made on two Macs.
+
+## What would reopen this
+
+- Users ask in numbers for Drive features the client cannot give (share links, Shared drive
+  pickers without the client, uploads from a Mac without the client installed).
+- macOS or a provider removes reading an evicted file as a way to download it.
+- Streaming becomes a requirement (then: Kaipu Cloud first, provider APIs only if that is not enough).
