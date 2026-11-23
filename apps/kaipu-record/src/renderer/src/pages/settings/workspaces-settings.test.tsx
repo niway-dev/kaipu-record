@@ -12,6 +12,11 @@ import type {
 import { WorkspacesProvider } from "@renderer/features/workspaces/workspaces-context";
 import { WorkspacesSettingsPage } from "./settings-pages";
 
+const syncedFlag = vi.hoisted(() => ({ on: false }));
+vi.mock("@renderer/features/analytics/use-flag", () => ({
+  useFlag: (name: string) => name === "synced-workspaces" && syncedFlag.on,
+}));
+
 const showToast = vi.hoisted(() => vi.fn());
 vi.mock("@renderer/ui/toast-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@renderer/ui/toast-store")>()),
@@ -66,7 +71,10 @@ const confirmRemoval = async (): Promise<void> => {
   );
 };
 
-beforeEach(() => showToast.mockClear());
+beforeEach(() => {
+  showToast.mockClear();
+  syncedFlag.on = false;
+});
 afterEach(() => {
   window.electronAPI = realApi;
 });
@@ -289,8 +297,8 @@ describe("Settings → Workspaces → Change folder…", () => {
   });
 });
 
-describe("Settings → Workspaces: a synced folder (decision 15)", () => {
-  it("labels a workspace inside Google Drive as synced by it", async () => {
+describe("Settings → Workspaces: a synced folder (decisions 13 and 15)", () => {
+  const renderSynced = (): void => {
     window.electronAPI = {
       ...realApi,
       workspaces: {
@@ -306,7 +314,18 @@ describe("Settings → Workspaces: a synced folder (decision 15)", () => {
         <WorkspacesSettingsPage />
       </WorkspacesProvider>,
     );
+  };
+
+  it("with synced-workspaces on, labels a workspace inside Google Drive as synced by it", async () => {
+    syncedFlag.on = true;
+    renderSynced();
     expect(await screen.findByText(/\/Users\/me\/Bravo · Synced by Google Drive/)).toBeTruthy();
     expect(screen.queryByText(/\/Users\/me\/Alpha.*Synced/)).toBeNull();
+  });
+
+  it("with synced-workspaces off, names no provider anywhere", async () => {
+    renderSynced();
+    expect(await screen.findByText("/Users/me/Bravo")).toBeTruthy();
+    expect(screen.queryByText(/Synced by|Google Drive/)).toBeNull();
   });
 });

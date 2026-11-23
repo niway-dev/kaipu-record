@@ -124,7 +124,7 @@ export function registerMediaProtocol(): void {
     // A synced workspace's evicted file is never opened: reading it downloads it (decision 15).
     // That covers a URL a renderer cached before the file was evicted, for every kind.
     if (activeEvictionProbe() && (await isEvictedFile(target))) {
-      return new Response("In the cloud: download it first", { status: 409 });
+      return new Response("Not downloaded: download it in Finder first", { status: 409 });
     }
     try {
       return await streamFile(target, request.headers.get("range"));

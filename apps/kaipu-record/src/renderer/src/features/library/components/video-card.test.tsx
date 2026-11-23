@@ -33,6 +33,17 @@ vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcr
 const realElectronApi = window.electronAPI;
 
 describe("VideoCard", () => {
+  it("shows the neutral Not downloaded poster for an evicted file, naming no provider", () => {
+    render(
+      <VideoCard video={{ ...video, evicted: "media" }} onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(screen.getByText("Not downloaded")).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Not downloaded: download it in Finder to open it here."),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/Google Drive|OneDrive|iCloud|provider/);
+  });
+
   it("tags the poster with how the recording was captured, and nothing without it", () => {
     const { rerender } = render(
       <VideoCard

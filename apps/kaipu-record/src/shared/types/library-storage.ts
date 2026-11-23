@@ -40,7 +40,7 @@ export interface LocalRecording {
   thumbnailUrl?: string | null;
   /**
    * Synced workspaces only (spec, Synced folders): the provider offloaded this item's media
-   * ("media": "In the cloud", it cannot be opened, dragged or moved until downloaded) or only
+   * ("media": "Not downloaded", it cannot be opened, dragged or moved until downloaded) or only
    * its poster ("thumbnail": the item works, it just draws a placeholder). Absent when local.
    * Nothing reads an evicted file: that would download it.
    */

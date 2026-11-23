@@ -12,6 +12,7 @@ import {
 import { useTranslations } from "@kaipu/i18n";
 import type { WorkspacesState, WorkspaceView } from "@shared/types/workspaces";
 import "@renderer/features/library/tags/tag-palette.css";
+import { useFlag } from "@renderer/features/analytics/use-flag";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { useWorkspaces } from "./workspaces-context";
 import styles from "./workspace-switcher.module.css";
@@ -46,10 +47,12 @@ export function WorkspaceTile({
 function useLocationLabel(): (workspace: WorkspaceView) => string {
   const t = useTranslations("workspaces");
   const tCloud = useTranslations("workspaceCloud");
-  // A synced folder names its provider (decision 15). The internal drive has no volume name:
-  // name the machine by the host, like the folder shortcut does (Finder / Explorer).
+  // Behind `synced-workspaces` (decision 13): a synced folder names its provider only with the
+  // flag on; with it off the workspace reads as any folder. The internal drive has no volume
+  // name: name the machine by the host, like the folder shortcut does (Finder / Explorer).
+  const providerNamed = useFlag("synced-workspaces");
   return (workspace) =>
-    workspace.sync
+    providerNamed && workspace.sync
       ? tCloud(`location_${workspace.sync}`)
       : (workspace.volume ?? (isWindowsHost() ? t("thisPc") : t("thisMac")));
 }

@@ -6,6 +6,11 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 import { WorkspaceNotConnectedNotice } from "./not-connected-notice";
 import { useWorkspaces, WorkspacesProvider } from "./workspaces-context";
 
+const syncedFlag = vi.hoisted(() => ({ on: false }));
+vi.mock("@renderer/features/analytics/use-flag", () => ({
+  useFlag: (name: string) => name === "synced-workspaces" && syncedFlag.on,
+}));
+
 const DEFAULT: WorkspaceView = {
   id: "ws-default",
   name: "Default workspace",
@@ -97,9 +102,34 @@ const openMenu = async (): Promise<void> => {
   fireEvent.click(await screen.findByRole("button", { name: /^Workspace:/ }));
 };
 
-beforeEach(() => setup(state()));
+beforeEach(() => {
+  syncedFlag.on = false;
+  setup(state());
+});
 afterEach(() => {
   window.electronAPI = realApi;
+});
+
+describe("WorkspaceSwitcher location of a synced folder (spec decision 13)", () => {
+  const syncedState = (): WorkspacesState =>
+    state({ workspaces: [{ ...DEFAULT, sync: "google-drive" }] });
+
+  it("names the provider only with synced-workspaces on", async () => {
+    syncedFlag.on = true;
+    setup(syncedState());
+    renderSwitcher();
+    expect(await screen.findByRole("button", { name: /^Workspace:/ })).toHaveTextContent(
+      "Google Drive",
+    );
+  });
+
+  it("with synced-workspaces off, reads as any folder and names no provider", async () => {
+    setup(syncedState());
+    renderSwitcher();
+    const bar = await screen.findByRole("button", { name: /^Workspace:/ });
+    expect(bar).toHaveTextContent("This Mac");
+    expect(bar).not.toHaveTextContent(/Google Drive|OneDrive|iCloud/);
+  });
 });
 
 describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {

@@ -1082,8 +1082,8 @@
     "reconcileKept": "{count, plural, one {# item kept its name for now (open in the editor, locked by another app, or its new name just taken). Fix all again later.} other {# items kept their names for now (open in the editor, locked by another app, or their new name just taken). Fix all again later.}}",
     "reconcileFailed": "{count, plural, one {# change failed. Details are in .kaipu/reconcile.} other {# changes failed. Details are in .kaipu/reconcile.}}",
     "reconcileError": "Fix all stopped: {message}",
-    "evictedLabel": "In the cloud",
-    "evictedHint": "The folder's provider offloaded this file. Download it in Finder to open it here."
+    "evictedLabel": "Not downloaded",
+    "evictedHint": "Not downloaded: download it in Finder to open it here."
   },
   "prepare": {
     "pageTitle": "Where is it going?",
@@ -3626,8 +3626,8 @@
     "reason_io": "a file couldn't be copied; the original is untouched",
     "closeRefused": "The editor stayed open, so nothing moved.",
     "costSynced": "Synced folder · copies",
-    "notMovableEvicted": "In the cloud: download it first",
-    "reason_evicted": "it's in the cloud: download it first"
+    "notMovableEvicted": "Not downloaded: download it in Finder first",
+    "reason_evicted": "it is not downloaded: download it in Finder first"
   },
   "settingsScope": {
     "selectorLabel": "Settings for",

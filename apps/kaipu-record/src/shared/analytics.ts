@@ -19,6 +19,7 @@ export const FLAG_NAMES = [
   "timeline-levels",
   "zoom-filmstrip",
   "transcription",
+  "synced-workspaces",
 ] as const;
 export type FlagName = (typeof FLAG_NAMES)[number];
 
@@ -53,6 +54,11 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   // Local transcription with Parakeet, macOS arm64 first (NIW2-818): the model offer in
   // onboarding and settings, the Transcript panel and the Transcribe actions. Off until owner QA.
   transcription: false,
+  // Synced workspaces (NIW2-912, ADR 0069): every surface that names a cloud provider (the
+  // "Synced by <provider>" label, the provider as a workspace's location) shows only with this
+  // on. The safety rules (staging outside the folder, no hard links, no implicit reads of an
+  // evicted file) and the neutral "Not downloaded" and delete guards run whatever it says.
+  "synced-workspaces": false,
 };
 
 /**

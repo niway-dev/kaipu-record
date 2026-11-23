@@ -268,6 +268,7 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
   const tw = useTranslations("workspaces");
   const tc = useTranslations("common");
   const tCloud = useTranslations("workspaceCloud");
+  const providerNamed = useFlag("synced-workspaces");
   const { state, openCreateDialog, openEditDialog, remove, openFolder, changeFolder } =
     useWorkspaces();
   const [removing, setRemoving] = React.useState<WorkspaceView | null>(null);
@@ -305,8 +306,8 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
                   {[
                     workspace.path,
                     status,
-                    // Synced folders (decision 15): the provider is named, never configured.
-                    workspace.sync
+                    // Behind `synced-workspaces` (decision 13): the provider is named, never configured.
+                    providerNamed && workspace.sync
                       ? tCloud("syncedBy", { provider: tCloud(`location_${workspace.sync}`) })
                       : null,
                   ]
