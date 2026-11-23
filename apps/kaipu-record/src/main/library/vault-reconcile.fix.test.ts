@@ -27,6 +27,10 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 const T0 = new Date(2026, 9, 29, 19, 57, 30).getTime();
+
+/** The vault's files without the run log a fix writes. */
+const itemFiles = async (directory: string): Promise<string[]> =>
+  (await listFiles(directory)).filter((path) => !path.startsWith(".kaipu/reconcile/"));
 const noWait = { delaysMs: [], sleep: async () => {} };
 
 let directory = "";
@@ -748,9 +752,89 @@ describe("fixVault on a synced workspace: every scan reads through the workspace
       path: "recording-2026-10-30-00-57-30.mp4",
       reason: "changed",
     });
-    // The newer version kept its title; the later rename step followed it, not the scan.
+    // The newer version kept its title, and nothing more was done to it in this run: the
+    // rename step does not follow the newer record either; the next scan picks it up fresh.
     const [item] = await vault.list();
     expect(item).toMatchObject({ assetId: "from-other-device", title: "Mine" });
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toEqual([]);
+    expect(await itemFiles(directory)).toEqual([
+      ".kaipu/recording-2026-10-30-00-57-30.json",
+      "recording-2026-10-30-00-57-30.mp4",
+    ]);
+  });
+
+  it("does not rename or count an item whose identity arrived between the scan and the rename-step mint", async () => {
+    directory = await makeVault({
+      "Old.mp4": "video-a",
+      ".kaipu/Old.json": sidecar({ title: "New", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const arrived = sidecar({ assetId: "from-other-device", title: "Newer", createdAt: T0 });
+    const mint = vault.mintIdentity.bind(vault);
+    vi.spyOn(vault, "mintIdentity").mockImplementation(async (id) => {
+      await writeFile(join(directory, ".kaipu/Old.json"), arrived);
+      return mint(id);
+    });
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toContainEqual({ path: "Old.mp4", reason: "changed" });
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toEqual([]);
+    expect(await itemFiles(directory)).toEqual([".kaipu/Old.json", "Old.mp4"]);
+  });
+
+  it("reports a failure, not a kept item, when the mint finds the item gone (title step)", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    vi.spyOn(vault, "mintIdentity").mockResolvedValue(null);
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toEqual([]);
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toContainEqual({
+      path: "recording-2026-10-30-00-57-30.mp4",
+      error: expect.stringContaining("gone"),
+    });
+  });
+
+  it("reports a failure, not a kept item, when the mint finds the item gone (rename step)", async () => {
+    directory = await makeVault({
+      "Old.mp4": "video-a",
+      ".kaipu/Old.json": sidecar({ title: "New", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    vi.spyOn(vault, "mintIdentity").mockResolvedValue(null);
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toEqual([]);
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toContainEqual({
+      path: "Old.mp4",
+      error: expect.stringContaining("gone"),
+    });
+    expect(await itemFiles(directory)).toEqual([".kaipu/Old.json", "Old.mp4"]);
   });
 
   it("gives up on a record the provider never delivers in each scan that reads records, instead of reading it plainly", async () => {

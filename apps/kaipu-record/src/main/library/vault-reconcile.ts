@@ -941,6 +941,9 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   const first = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
   for (const finding of first) report.counts[finding.kind] = (report.counts[finding.kind] ?? 0) + 1;
   const skipped = (finding: ScanFinding): boolean => options.skip?.has(finding.path) ?? false;
+  // Paths whose record changed or vanished after the scan: nothing more is done to them in this
+  // run (no rename in step 3); the next scan picks them up fresh.
+  const stopped = new Set<string>();
   const actions = first.filter((f) => f.fixable && f.kind !== "name-mismatch" && !skipped(f));
   let done = 0;
   let total = first.filter((f) => f.fixable && !skipped(f)).length;
@@ -994,8 +997,12 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
         if (finding.assetId === undefined && vault.synced) {
           // An identity that arrived since the scan means the record changed: the title computed
           // from the scan would overwrite the newer version, so this finding waits for the next scan.
-          if (!(await vault.mintIdentity(finding.stem))?.minted) {
-            report.kept.push({ path: finding.path, reason: "changed" });
+          const minted = await vault.mintIdentity(finding.stem);
+          if (!minted?.minted) {
+            stopped.add(finding.path);
+            // `null`: the item or its record is gone; otherwise an identity arrived meanwhile.
+            if (minted === null) fail(finding.path, "the item is gone or its record is unreadable");
+            else report.kept.push({ path: finding.path, reason: "changed" });
             step();
             continue;
           }
@@ -1018,7 +1025,9 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
       .filter((f) => ["stale-auto-title", "untitled-legacy", "missing-sidecar"].includes(f.kind))
       .map((f) => f.stem),
   );
-  const renames = second.filter((f) => f.kind === "name-mismatch" && !skipped(f));
+  const renames = second.filter(
+    (f) => f.kind === "name-mismatch" && !skipped(f) && !stopped.has(f.path),
+  );
   total = done + renames.length;
   const plan: Planned[] = renames.map((finding) => ({
     finding,
@@ -1094,7 +1103,8 @@ async function runPlan(
       if (assetId === undefined && vault.synced) {
         // Not minted by this run: the record changed since the scan, so it is not renamed.
         const minted = await vault.mintIdentity(finding.stem);
-        if (!minted?.minted) {
+        if (minted === null) throw new Error("the item is gone or its record is unreadable");
+        if (!minted.minted) {
           report.kept.push({ path: finding.path, reason: "changed" });
           onRenamed(finding, false);
           return;

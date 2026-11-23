@@ -70,7 +70,7 @@ export type ReconcileKeptReason =
   | "evicted"
   | "io"
   | "shared"
-  /** The record changed after the scan (an identity arrived from another device): nothing was written. */
+  /** The record changed after the scan (an identity arrived from another device): nothing was written, and the rest of the run leaves it alone. */
   | "changed";
 
 export interface ReconcileReport {
