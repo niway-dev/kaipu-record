@@ -894,6 +894,32 @@ export class LibraryVault {
     });
   }
 
+  /**
+   * The identity of an item whose record is readable, minting one into that record when it has
+   * none (a sidecar from before identities). Only for an explicit "Check and fix files": a
+   * synced workspace never mints on its own (`ensureIdentity`), and `adoptMedia` serves only a
+   * missing sidecar, so without this a pre-identity record in a synced folder stays read-only.
+   * Every other field is kept. Null when the record is missing or unreadable (nothing is
+   * written: a missing one may still be on its way down) or the media is gone.
+   */
+  async mintIdentity(id: string): Promise<string | null> {
+    if (isVaultOwnedStem(id) || !isPlainItemId(id)) return null;
+    const path = this.sidecarPath(id);
+    return withLock(path, async () => {
+      const read = await this.readRecordStrict(path);
+      if (read.status !== "ok") return null;
+      if (read.sidecar.assetId) return read.sidecar.assetId;
+      if (!(await this.hasMedia(id))) return null;
+      const assetId = readOnlyIdentityMemo.get(path) ?? randomUUID();
+      await this.writeAtomic(
+        path,
+        JSON.stringify({ ...read.sidecar, sidecarVersion: 2, assetId }, null, 2),
+      );
+      readOnlyIdentityMemo.delete(path);
+      return assetId;
+    });
+  }
+
   /** Whether `candidate` with `media`'s extension is the very same file (case-insensitive FS). */
   private async isSameFile(candidate: string, media: string): Promise<boolean> {
     try {
@@ -1272,6 +1298,22 @@ export class LibraryVault {
   }
 
   /**
+   * Where a synced vault stages a file bound for `target`: its scratch folder, or a hidden folder
+   * on the target's volume, created. Never beside the target: a half-written file there is
+   * uploaded as it stands. Throws EXDEV when there is no folder outside the provider.
+   */
+  private async stagingFolderFor(target: string): Promise<string> {
+    const folder = this.stagingDir ?? (await volumeStagingDir(target, { assumeSynced: true }));
+    if (folder === null) {
+      throw Object.assign(new Error(`no folder outside the provider to stage "${target}"`), {
+        code: "EXDEV",
+      });
+    }
+    await mkdir(folder, { recursive: true });
+    return folder;
+  }
+
+  /**
    * Copies one companion to `target`, never replacing a file there. In a synced folder the copy
    * is never written under a name the provider can see: a half-written file there is uploaded
    * as it stands. It is staged outside the folder (the scratch folder, or a hidden folder on the
@@ -1283,13 +1325,7 @@ export class LibraryVault {
       await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
       return;
     }
-    const folder = this.stagingDir ?? (await volumeStagingDir(target, { assumeSynced: true }));
-    if (folder === null) {
-      throw Object.assign(new Error(`no folder outside the provider to stage "${target}"`), {
-        code: "EXDEV",
-      });
-    }
-    await mkdir(folder, { recursive: true });
+    const folder = await this.stagingFolderFor(target);
     const staged = join(folder, basename(uniqueTempPath(target, "part")));
     try {
       await copyFile(source, staged, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
@@ -1709,7 +1745,8 @@ export class LibraryVault {
       // over the one that arrived: the item loses its title, tags and identity. So a synced
       // vault never mints here: it reads the sidecar once more and uses the identity it has. A
       // missing sidecar, or a readable one without an identity, leaves the item read-only for
-      // as long as it takes; the user can mint one on purpose through "Check and fix files".
+      // as long as it takes; the user can mint one on purpose through "Check and fix files"
+      // (`adoptMedia` for a missing sidecar, `mintIdentity` for a readable one without it).
       if (this.synced && current.assetId === undefined) {
         const again = await this.readRecord(id);
         if (again.status !== "ok" || again.sidecar.assetId === undefined) {
@@ -1975,11 +2012,8 @@ export class LibraryVault {
   private async placeNewFile(target: string, bytes: Uint8Array): Promise<PlacedFile> {
     // A synced workspace stages outside its folder (no `.part` for the provider to upload) and
     // places by rename: a hard link inside a synced folder renames the cloud item (ADR 0069).
-    if (this.stagingDir) await mkdir(this.stagingDir, { recursive: true });
-    const part = uniqueTempPath(
-      this.stagingDir ? join(this.stagingDir, basename(target)) : target,
-      "part",
-    );
+    const folder = this.synced ? await this.stagingFolderFor(target) : null;
+    const part = uniqueTempPath(folder ? join(folder, basename(target)) : target, "part");
     try {
       const handle = await open(part, "wx");
       try {
@@ -2198,6 +2232,11 @@ function sameStamp(a: FileStamp, b: FileStamp): boolean {
  * Proves each copy equals its source: the source is unchanged since it was stamped (before the
  * copy and again after hashing it) and both hash the same. Throws EIO otherwise, so the rename
  * keeps the old name and the old files.
+ *
+ * Cost, on purpose: each companion is read three times in all (source and copy here, the source
+ * again right before it is deleted in `removeUnchangedCompanions`), under the names lock. The
+ * webcam track is as large as a take, so renaming an item that has one takes a while. Each read
+ * is a proof before a delete; a stamp cannot stand in for any of them.
  */
 async function verifyCopies(copies: CompanionCopy[]): Promise<void> {
   const mismatch = (path: string): Error =>

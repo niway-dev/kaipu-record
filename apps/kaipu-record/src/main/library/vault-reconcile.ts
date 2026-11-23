@@ -95,6 +95,7 @@ const FIXABLE: ReadonlySet<ReconcileFindingKind> = new Set<FixableFindingKind>([
   "untitled-legacy",
   "name-mismatch",
   "missing-sidecar",
+  "missing-identity",
   "missing-media",
   "orphan-companion",
 ]);
@@ -363,6 +364,9 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
       continue;
     }
     const date = new Date(createdAt);
+    // A synced workspace never mints an identity on its own, so a record without one stays
+    // read-only until this fix mints it: listed even when nothing else is wrong with the item.
+    const needsIdentity = vault.synced && !record.assetId;
     const title =
       typeof record.title === "string" && record.title.trim() ? record.title : undefined;
     const rename = (newTitle: string): Pick<ScanFinding, "newTitle" | "newName"> => ({
@@ -384,6 +388,8 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
           fixable: true,
           ...rename(humanizeId(item.stem)),
         });
+      } else if (needsIdentity) {
+        findings.push({ ...withDate, kind: "missing-identity", fixable: true });
       }
       continue;
     }
@@ -402,6 +408,8 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
       });
     } else if (!isAligned(item.stem, title, kind, date)) {
       findings.push({ ...withDate, kind: "name-mismatch", fixable: true, title, ...rename(title) });
+    } else if (needsIdentity) {
+      findings.push({ ...withDate, kind: "missing-identity", fixable: true, title });
     }
   }
 
@@ -932,6 +940,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
     "missing-media",
     "orphan-companion",
     "missing-sidecar",
+    "missing-identity",
     "stale-auto-title",
     "untitled-legacy",
   ];
@@ -947,6 +956,8 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
       if (finding.kind === "missing-media" && finding.action === "cloud-only") {
         await vault.writeMeta(finding.stem, { localRemovedAt: now() });
         report.fixed += 1;
+      } else if (finding.kind === "missing-identity") {
+        if ((await vault.mintIdentity(finding.stem)) !== null) report.fixed += 1;
       } else if (finding.kind === "missing-media" || finding.kind === "orphan-companion") {
         const { moved, problems } = await orphans.move(finding);
         report.movedToOrphans += moved;
@@ -964,7 +975,10 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
           report.fixed += 1;
         }
       } else {
-        // stale-auto-title, untitled-legacy: the title first; the rename below aligns it.
+        // stale-auto-title, untitled-legacy: the title first; the rename below aligns it. The
+        // user asked for this fix, so a record without an identity gets one now: a synced
+        // workspace mints nowhere else, and the rename needs it.
+        if (finding.assetId === undefined) await vault.mintIdentity(finding.stem);
         await vault.writeMeta(finding.stem, { title: finding.newTitle! });
         report.fixed += 1;
       }
@@ -1052,8 +1066,12 @@ async function runPlan(
     const { finding } = item;
     let renamed = false;
     try {
-      // Reconcile mints an identity only on items it is fixing (I2).
-      const assetId = finding.assetId ?? (await vault.describe(finding.stem))?.assetId;
+      // Reconcile mints an identity only on items it is fixing (I2). A synced workspace's
+      // `describe` never mints, so a record without one gets it here, on this explicit fix.
+      const assetId =
+        finding.assetId ??
+        (await vault.mintIdentity(finding.stem)) ??
+        (await vault.describe(finding.stem))?.assetId;
       if (!assetId) throw new Error("the item is gone");
       const result = await vault.renameItem({ id: finding.stem, assetId }, item.title, {
         allowLeftover: false,

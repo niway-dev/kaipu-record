@@ -219,6 +219,7 @@ describe("finding groups", () => {
       "untitled-legacy",
       "name-mismatch",
       "missing-sidecar",
+      "missing-identity",
       "missing-media",
       "orphan-companion",
       "stem-conflict",
@@ -231,7 +232,7 @@ describe("finding groups", () => {
     scanResult = ok(
       kinds.map((kind, i) => ({
         kind,
-        fixable: i < 6,
+        fixable: i < 7,
         path: `item-${i}.mp4`,
         newName: `Item ${i}.mp4`,
       })),
@@ -254,10 +255,13 @@ describe("finding groups", () => {
       return [...g.querySelectorAll("li")].map((li) => li.textContent);
     };
     expect(rowText(groups[0]!)).toEqual(["item-0Item 0", "item-1Item 1", "item-2Item 2"]);
-    expect(rowText(groups[1]!)).toEqual(["item-3Added to the library"]);
+    expect(rowText(groups[1]!)).toEqual([
+      "item-3Added to the library",
+      "item-4Gets an identity, so it can be edited",
+    ]);
     expect(rowText(groups[2]!)).toEqual([
-      "item-4.mp4No file. Its record moves to the orphans folder",
-      "item-5.mp4Belongs to no item. Moves to the orphans folder",
+      "item-5.mp4No file. Its record moves to the orphans folder",
+      "item-6.mp4Belongs to no item. Moves to the orphans folder",
     ]);
     expect(rowText(groups[3]!).every((text) => (text ?? "").length > "item-0.mp4".length)).toBe(
       true,

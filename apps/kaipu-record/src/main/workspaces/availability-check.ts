@@ -42,7 +42,11 @@ export async function checkAvailability(
   const { reg, syncStates } = deps;
   const probeMs = deps.probeMs ?? SYNCED_PROBE_TIMEOUT_MS;
   const check = syncStates.beginCheck(requestedId);
-  const current = (): boolean => syncStates.isCurrentCheck(requestedId, check);
+  // Whether this is still the newest check of the workspace. Adopting the folder's own id
+  // moves the workspace to a new id, which supersedes the requested id's checks, this one
+  // included: the check is then numbered again under the adopted id (see below), so what it
+  // learns afterwards still counts when no newer check has started.
+  let current = (): boolean => syncStates.isCurrentCheck(requestedId, check);
   // The id the registry knows the entry by now: a pending entry adopts its folder's own id the
   // first time it is checked, and every later ask uses the adopted one.
   let id = requestedId;
@@ -55,7 +59,12 @@ export async function checkAvailability(
       ? await boundedProbe(reg.availability(id), null, probeMs)
       : await reg.availability(id);
     if (plain) {
+      const newest = current();
       syncStates.rekey(id, plain.id); // a pending entry may have adopted its folder's id
+      if (newest && plain.id !== id) {
+        const adopted = syncStates.beginCheck(plain.id);
+        current = () => syncStates.isCurrentCheck(plain.id, adopted);
+      }
       // "Not synced" was decided while the folder had no identity file to ask about (the mount
       // was not up at launch). Now it is there, so ask again: a synced folder must not keep
       // hard links and in-folder staging for the whole session.

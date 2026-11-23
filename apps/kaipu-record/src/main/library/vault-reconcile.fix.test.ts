@@ -640,6 +640,35 @@ describe("fixVault — an orphan bundle with a file that did not move", () => {
 });
 
 describe("fixVault on a synced workspace: every scan reads through the workspace's vault (AC13)", () => {
+  it("mints an identity into a readable record that has none, so the fix can retitle and rename it", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+      "Plain Name.mp4": "video-b",
+      ".kaipu/Plain Name.json": sidecar({ createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const before = await vault.list();
+    // A synced workspace mints nowhere on its own: both are read-only until the user asks.
+    expect(before.every((item) => item.metadataIssue === "unreadable")).toBe(true);
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.failed).toEqual([]);
+    const after = await vault.list();
+    expect(after).toHaveLength(2);
+    for (const item of after) {
+      expect(item.metadataIssue).toBeUndefined();
+      expect(item.assetId).toEqual(expect.any(String));
+      expect(item.assetId.startsWith("unreadable:")).toBe(false);
+    }
+  });
+
   it("gives up on a record the provider never delivers in each scan that reads records, instead of reading it plainly", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {

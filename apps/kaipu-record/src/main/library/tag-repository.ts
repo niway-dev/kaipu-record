@@ -56,6 +56,11 @@ export class TagRegistryError extends Error {
 export class VaultTagRepository implements TagRepository {
   private chain: Promise<unknown> = Promise.resolve();
   private readonly quarantined = new Set<string>();
+  /**
+   * The last `read` found no registry in a synced workspace. Operations run one at a time
+   * (`serial`) and each reads before it writes, so this is the answer the next `write` rests on.
+   */
+  private absentAtRead = false;
 
   constructor(
     private readonly vault: () => LibraryVault,
@@ -76,6 +81,7 @@ export class VaultTagRepository implements TagRepository {
 
   private async read(): Promise<Tag[]> {
     const path = this.registryPath();
+    this.absentAtRead = false;
     let raw: string;
     try {
       // Bounded in a synced workspace: an offloaded registry is refused (reading it would
@@ -88,7 +94,11 @@ export class VaultTagRepository implements TagRepository {
         // A synced folder may still be delivering another device's registry: importing here
         // would write an empty one at its path. The workspace has no tags until it arrives (or
         // until the user creates one on purpose).
-        return this.vault().synced ? [] : this.importLegacy();
+        if (this.vault().synced) {
+          this.absentAtRead = true;
+          return [];
+        }
+        return this.importLegacy();
       }
       throw new TagRegistryError("unreadable", `tags: cannot read ${path}: ${String(error)}`);
     }
@@ -118,6 +128,28 @@ export class VaultTagRepository implements TagRepository {
 
   private async write(tags: Tag[]): Promise<void> {
     const target = this.registryPath();
+    // The registry was missing when this operation read it. In a synced workspace it may have been
+    // delivered since: writing now would replace another device's tags with this one alone.
+    // Only a clean "still not there" lets the write go on.
+    if (this.absentAtRead) {
+      this.absentAtRead = false;
+      const arrived = await stat(target).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return false;
+          throw new TagRegistryError(
+            "unreadable",
+            `tags: cannot check ${target}: ${String(error)}`,
+          );
+        },
+      );
+      if (arrived) {
+        throw new TagRegistryError(
+          "unreadable",
+          `tags: ${target} arrived from the sync provider while the change was being made; nothing was written. Try again.`,
+        );
+      }
+    }
     await mkdir(join(this.vault().directory, ".kaipu"), { recursive: true });
     const file: RegistryFile = { version: 1, tags };
     await this.vault().writeAtomic(target, JSON.stringify(file, null, 2));

@@ -29,7 +29,7 @@ function deps(
     states,
     syncStates: states,
     reg: {
-      get: (id) => (id === "w" ? { id: "w", path } : undefined),
+      get: (id) => (id === "w" || id === "adopted" ? { id, path } : undefined),
       availability: options.availability,
     },
     isDirectory: options.isDirectory ?? (async () => true),
@@ -59,6 +59,82 @@ describe("checkAvailability", () => {
     await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS + 1);
     expect(await result).toEqual({ availability: { state: "available" }, id: "w" });
     expect(states.isUnverified("w")).toBe(true);
+  });
+
+  describe("a workspace first detected as plain without its identity file (AC13)", () => {
+    const PLAIN_PATH = `${HOME}/Documents/K`;
+    /** Detected plain once with no identity file to ask about, then again on the recheck. */
+    async function provisional(secondAnswer: "google-drive" | null) {
+      const detect = vi
+        .fn<(path: string) => Promise<"google-drive" | null>>()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(secondAnswer);
+      let identityThere = false;
+      const states = new SyncStates(detect, HOME, async () => identityThere);
+      await states.refresh({ id: "w", path: PLAIN_PATH });
+      expect(states.needsRecheck("w")).toBe(true);
+      identityThere = true; // the mount came up: the next detection can read the folder
+      return { states, detect };
+    }
+
+    it("is detected again once the folder answers, and goes on as a synced workspace when it is one", async () => {
+      const { states, detect } = await provisional("google-drive");
+      const asked = vi.fn<AvailabilityDeps["reg"]["availability"]>().mockResolvedValue(AVAILABLE);
+      const d = deps(PLAIN_PATH, { states, availability: asked });
+
+      expect(await checkAvailability(d, "w")).toEqual(AVAILABLE);
+
+      expect(detect).toHaveBeenCalledTimes(2);
+      // The folder is asked once as a provisional plain one, then again as the synced one it is.
+      expect(asked).toHaveBeenCalledTimes(2);
+      expect(states.of({ id: "w", path: PLAIN_PATH })).toBe("google-drive");
+      expect(states.needsRecheck("w")).toBe(false);
+      expect(states.isUnverified("w")).toBe(false);
+    });
+
+    it("stays plain, with the first answer, when the second detection still finds no provider", async () => {
+      const { states, detect } = await provisional(null);
+      const asked = vi.fn<AvailabilityDeps["reg"]["availability"]>().mockResolvedValue(AVAILABLE);
+      const d = deps(PLAIN_PATH, { states, availability: asked });
+
+      expect(await checkAvailability(d, "w")).toEqual(AVAILABLE);
+
+      expect(detect).toHaveBeenCalledTimes(2);
+      expect(asked).toHaveBeenCalledTimes(1); // no second probe: nothing to verify
+      expect(states.of({ id: "w", path: PLAIN_PATH })).toBeNull();
+    });
+
+    it("counts a probe that rejects as unanswered: available under its id, unverified", async () => {
+      const { states } = await provisional(null);
+      const d = deps(PLAIN_PATH, {
+        states,
+        availability: async () => {
+          throw new Error("EIO: the provider failed");
+        },
+      });
+
+      expect(await checkAvailability(d, "w")).toEqual({
+        availability: { state: "available" },
+        id: "w",
+      });
+      expect(states.isUnverified("w")).toBe(true);
+    });
+
+    it("keeps the unverified flag when the id was adopted by the first probe and the second one stalls", async () => {
+      const { states } = await provisional("google-drive");
+      const asked = vi
+        .fn<AvailabilityDeps["reg"]["availability"]>()
+        .mockResolvedValueOnce({ availability: { state: "available" }, id: "adopted" })
+        .mockImplementation(never);
+      const d = deps(PLAIN_PATH, { states, availability: asked });
+
+      const result = checkAvailability(d, "w");
+      await vi.advanceTimersByTimeAsync(SYNCED_PROBE_TIMEOUT_MS + 1);
+
+      expect(await result).toEqual({ availability: { state: "available" }, id: "adopted" });
+      // A move must not treat it as verified: its provider never answered the second probe.
+      expect(states.isUnverified("adopted")).toBe(true);
+    });
   });
 
   it("a plain folder with its identity file is never bounded: a slow local folder is no stalled provider", async () => {

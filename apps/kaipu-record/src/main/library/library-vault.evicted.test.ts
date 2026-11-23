@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EvictedFileError } from "./dataless";
@@ -374,6 +374,49 @@ describe("LibraryVault — evicted files get no image URL", () => {
       await expect(access(sidecarFile())).resolves.toBeUndefined();
       // A second explicit request finds the record and does not replace it.
       expect(await vault.adoptMedia("clip", fields, { explicit: true })).toBe(false);
+    });
+
+    it("mintIdentity gives a readable sidecar without an identity one, keeping its fields (Z1)", async () => {
+      await seedVideo("clip");
+      await writeFile(
+        sidecarFile(),
+        JSON.stringify({ sidecarVersion: 1, title: "Legacy", tagIds: ["t-1"] }),
+      );
+      const vault = syncedVault();
+      expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
+
+      const minted = await vault.mintIdentity("clip");
+      expect(minted).toEqual(expect.any(String));
+      expect(JSON.parse(await readFile(sidecarFile(), "utf-8"))).toMatchObject({
+        sidecarVersion: 2,
+        assetId: minted,
+        title: "Legacy",
+        tagIds: ["t-1"],
+      });
+      expect(await vault.describe("clip")).toMatchObject({ assetId: minted, title: "Legacy" });
+      // A second request keeps the identity the first one minted.
+      expect(await vault.mintIdentity("clip")).toBe(minted);
+    });
+
+    it("mintIdentity never creates a sidecar and refuses an unreadable one", async () => {
+      await seedVideo("clip");
+      const vault = syncedVault();
+      expect(await vault.mintIdentity("clip")).toBeNull();
+      await expect(access(sidecarFile())).rejects.toMatchObject({ code: "ENOENT" });
+
+      await writeFile(sidecarFile(), "{ not json");
+      expect(await vault.mintIdentity("clip")).toBeNull();
+      expect(await readFile(sidecarFile(), "utf-8")).toBe("{ not json");
+    });
+
+    it("a vault with only the eviction probe never writes a new file inside its folder (placeNewFile)", async () => {
+      // No staging folder, and a temp directory has no provider root to stage next to: the write
+      // is refused; it is never staged beside the target, where the provider would upload it.
+      const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+      await expect(vault.writeGif("anim", Buffer.from("GIF89a"))).rejects.toMatchObject({
+        code: "EXDEV",
+      });
+      expect((await readdir(directory)).filter((name) => name !== ".kaipu")).toEqual([]);
     });
 
     it("a plain workspace gives a legacy item its identity at once", async () => {

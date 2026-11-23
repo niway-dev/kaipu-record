@@ -423,6 +423,16 @@ async function destinationOf(path: string, expected: FileIdentity): Promise<Dest
   }
 }
 
+/** The destination as it is now, whichever file that is; null when nothing is there or it cannot be read. */
+async function destinationAt(path: string): Promise<Destination | null> {
+  try {
+    const stamp = await stampAt(path);
+    return stamp === null ? null : { path, stamp };
+  } catch {
+    return null;
+  }
+}
+
 function sameDestination(a: Destination | null, b: Destination | null): boolean {
   return a !== null && b !== null && sameStamp(a.stamp, b.stamp);
 }
@@ -822,12 +832,14 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
       placedAt = { path: finalMedia(newId), identity: placed };
       // With a synced side, the bytes are checked again where they now live, before the
       // source may go: a provider may have touched the file in between. The file is stamped
-      // before and after the read, and both must be the file this move placed: a provider that
-      // rewrote it while it was read has not been verified.
+      // before and after the read, and both stamps must be the same file: a provider that
+      // rewrote it while it was read has not been verified. It need not be the inode the
+      // placement returned: a provider may give the placed file a new one right after the
+      // rename (`safe-place`), and the bytes it holds are what the hash proves.
       if (synced) {
-        const beforeRead = await destinationOf(finalMedia(newId), placed);
+        const beforeRead = await destinationAt(finalMedia(newId));
         const hash = await fs.sha256(finalMedia(newId));
-        const afterRead = await destinationOf(finalMedia(newId), placed);
+        const afterRead = await destinationAt(finalMedia(newId));
         if (hash !== journal.media.sha256 || !sameDestination(beforeRead, afterRead)) {
           await rollBackTarget(to, newId, assetId, staging, placedAt);
           await rm(journalPath(deps.journalDir, journal.moveId), { force: true });

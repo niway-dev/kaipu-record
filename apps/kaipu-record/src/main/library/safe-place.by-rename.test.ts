@@ -99,23 +99,28 @@ const { identityAt, placeByRename, renameCaseOnlyByRename, replaceConfirmed } =
   await import("./safe-place");
 const { setStagingResolver, setSyncRootResolver } = await import("./atomic-write");
 
+/** Every hook back to its default: the hooks object is shared by every test in this file. */
+function resetHooks(): void {
+  hooks.links = 0;
+  hooks.renameError = null;
+  hooks.unlinkFails = false;
+  hooks.unlinkOnly = null;
+  hooks.atRename = null;
+  hooks.renames = [];
+  hooks.renameFailsTo = [];
+  hooks.foldCase = false;
+  hooks.beforeRename = null;
+  hooks.afterRename = null;
+  hooks.exdevOnce = false;
+  hooks.atOpenDir = null;
+  hooks.atLstat = null;
+}
+
 describe("placeByRename (synced folders: no hard link, ever)", () => {
   let dir: string;
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "kaipu-by-rename-"));
-    hooks.links = 0;
-    hooks.renameError = null;
-    hooks.unlinkFails = false;
-    hooks.unlinkOnly = null;
-    hooks.atRename = null;
-    hooks.renames = [];
-    hooks.renameFailsTo = [];
-    hooks.foldCase = false;
-    hooks.beforeRename = null;
-    hooks.afterRename = null;
-    hooks.exdevOnce = false;
-    hooks.atOpenDir = null;
-    hooks.atLstat = null;
+    resetHooks();
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -254,6 +259,39 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
         expect(await readdir(join(dir, "scratch"))).toEqual(["take.mp4"]);
       },
     );
+
+    it("a source rewritten after the copy keeps its newer bytes, and the copy the provider gave a new inode is still taken back (round 1)", async () => {
+      await mkdir(join(dir, "synced"), { recursive: true });
+      await mkdir(join(dir, "scratch"), { recursive: true });
+      const source = join(dir, "scratch", "take.mp4");
+      const target = join(dir, "synced", "Take.mp4");
+      await writeFile(source, "whole file");
+      await utimes(source, 1_700_000_000, 1_700_000_000);
+      const calls: Array<[string, string]> = [];
+      const refuse = refusingOnce(calls);
+      await expect(
+        placeByRename(source, target, {
+          deps: {
+            isSynced: syncedOf(dir),
+            syncRoot: () => join(dir, "synced"),
+            rename: async (from, to) => {
+              await refuse(from, to);
+              if (calls.length < 2) return;
+              // The provider re-creates the placed file (same bytes, another inode), then the
+              // source is rewritten in place with the same size, mtime and inode.
+              writeFileSync(`${target}.provider`, "whole file");
+              renameSync(`${target}.provider`, target);
+              await writeFile(source, "WHOLE FILE");
+              await utimes(source, 1_700_000_000, 1_700_000_000);
+            },
+          },
+        }),
+      ).rejects.toMatchObject({ code: "EIO" });
+      expect(await readFile(source, "utf-8")).toBe("WHOLE FILE");
+      // No stale copy stays under the final name for the provider to upload.
+      await expect(stat(target)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readdir(join(dir, "synced"))).toEqual([]);
+    });
 
     it("with no folder outside the synced one that can stage it, fails and keeps the source (nothing partial is placed)", async () => {
       await mkdir(join(dir, "synced"), { recursive: true });
@@ -621,8 +659,7 @@ describe("replaceConfirmed across volumes into a synced folder (by rename; NIW2-
   let dir: string;
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "kaipu-replace-synced-"));
-    hooks.exdevOnce = false;
-    hooks.renames = [];
+    resetHooks();
     await mkdir(join(dir, "synced"), { recursive: true });
     await mkdir(join(dir, "scratch"), { recursive: true });
     await writeFile(join(dir, "scratch", "take.mp4"), "new bytes");

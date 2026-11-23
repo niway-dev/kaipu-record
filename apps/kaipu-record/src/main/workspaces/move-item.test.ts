@@ -39,6 +39,8 @@ const seen = vi.hoisted(() => ({
   renames: [] as { from: string; to: string }[],
   /** A `.mp4` renamed into this folder is refused across volumes (EXDEV), once. */
   exdevInto: null as string | null,
+  /** Runs right after a rename that went through: a provider acting once a file is in its folder. */
+  afterRename: null as null | ((to: string) => Promise<void>),
 }));
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
@@ -65,7 +67,8 @@ vi.mock("node:fs/promises", async (importActual) => {
           throw Object.assign(new Error("cross-device link not permitted"), { code: "EXDEV" });
         }
       }
-      return actual.rename(from, to);
+      await actual.rename(from, to);
+      await seen.afterRename?.(String(to));
     },
   };
 });
@@ -178,6 +181,7 @@ beforeEach(async () => {
   src = { workspaceId: "ws-src", directory: join(root, "src") };
   dst = { workspaceId: "ws-dst", directory: join(root, "dst") };
   journalDir = join(root, "userData", "workspace-moves");
+  seen.afterRename = null;
   await mkdir(src.directory);
   await mkdir(dst.directory);
 });
@@ -915,6 +919,22 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
   }
 
   const journalReason = journalReasonOnDisk;
+
+  it("a provider that gives the placed file a new inode right after the rename does not fail the move: the bytes are what is verified", async () => {
+    const item = await seedItem(src.directory);
+    const finalPath = join(dst.directory, "Demo.mp4");
+    // The provider re-creates the file it was just handed: same bytes, another inode.
+    seen.afterRename = async (to) => {
+      if (to !== finalPath) return;
+      seen.afterRename = null; // once: the replacement is a rename too
+      await replaceWith(finalPath, item.media);
+    };
+    const outcome = await moveItem({ source: src, target: syncedTarget(), id: item.id }, deps());
+    expect(outcome).toEqual({ ok: true, id: "Demo", newId: "Demo", mode: "copied" });
+    expect(await readFile(finalPath)).toEqual(item.media);
+    expect(await filesOf(src.directory, "Demo")).toEqual([]);
+    expect(await readdir(journalDir)).toEqual([]);
+  });
 
   it("C1: a source replaced by another file of the same size and mtime is kept (identity before size and mtime)", async () => {
     const item = await seedItem(src.directory);

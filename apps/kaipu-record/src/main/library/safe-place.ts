@@ -148,6 +148,27 @@ export async function removeIfSame(path: string, identity: FileIdentity): Promis
   }
 }
 
+/**
+ * Take back a copy this operation placed at `path`, once it is known to hold `digest` (what was
+ * read from the source). By identity first; and when the name now holds another file, by
+ * content: a provider can give the placed file a new inode right after the rename, and the
+ * stale copy must not stay under its final name for the provider to upload. Another file's
+ * bytes (a stranger, or the user) never match the digest, so it is left alone; so is a name
+ * that cannot be read. Best effort, like {@link removeIfSame}.
+ */
+async function takeBackCopy(path: string, copied: FileIdentity, digest: string): Promise<boolean> {
+  if (await removeIfSame(path, copied)) return true;
+  try {
+    const now = await identityAt(path);
+    if (!now || sameFile(now, copied)) return false;
+    if ((await hashFile(path)) !== digest) return false;
+    await unlink(path);
+    return true;
+  } catch {
+    return false; // left in place: never guess
+  }
+}
+
 /** A unique sibling name for a temporary file next to `path` (hidden, not a known extension). */
 export function siblingTemp(path: string, tag: string): string {
   return join(dirname(path), `.${basename(path)}.${tag}-${randomUUID().slice(0, 8)}`);
@@ -483,6 +504,9 @@ async function copyAcrossDevices(
   // inode, because a provider may give the file a new inode right after the rename and a stranger
   // (or the user) may rewrite it in place. Anything else keeps the source.
   const digest = sourceHash.digest("hex");
+  // Cost, on purpose: after the copy this reads `to` once and, in `removeSource`, the source once
+  // more, so a multi-GB take is read about three times in all (the copy's own read included).
+  // Both reads are the proof before a delete; a stamp cannot stand in for either.
   try {
     if ((await identityAt(to)) === null) {
       console.error(`"${to}" vanished right after copying; the source keeps the bytes`);
@@ -512,14 +536,14 @@ async function copyAcrossDevices(
       await setAside(from, sourceId, to, copied.size);
       return copied;
     }
-    await removeIfSame(to, copied); // a rename that must be undone leaves the take in one place
+    await takeBackCopy(to, copied, digest); // a rename that must be undone leaves the take in one place
     throw error;
   }
   if (removal === "changed") {
     // The source is not what was copied: `to` holds a stale copy, and the source holds the newer
     // bytes under its own name. The copy is taken back (it is ours and was verified) and the
     // source stays where it was: nothing is reported as placed, and nothing is set aside.
-    await removeIfSame(to, copied);
+    await takeBackCopy(to, copied, digest);
     throw Object.assign(
       new Error(`"${from}" changed while it was being copied; it is kept where it was`),
       { code: "EIO", path: from },

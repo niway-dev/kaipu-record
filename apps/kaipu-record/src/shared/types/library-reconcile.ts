@@ -9,6 +9,8 @@ export type FixableFindingKind =
   | "untitled-legacy"
   | "name-mismatch"
   | "missing-sidecar"
+  /** Synced workspaces only: a readable record with no identity, which nothing else mints. */
+  | "missing-identity"
   | "missing-media"
   | "orphan-companion";
 

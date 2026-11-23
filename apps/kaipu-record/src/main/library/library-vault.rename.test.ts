@@ -62,6 +62,8 @@ const renameFailure = vi.hoisted(() => ({
 
 /** Where every `copyFile` and `cp` of this file wrote, in order. */
 const copyTargets = vi.hoisted(() => [] as string[]);
+/** Every `rename` made, in order: where a file was written before it arrived under its name. */
+const renamed = vi.hoisted(() => [] as Array<{ from: string; to: string }>);
 /** A source path whose `copyFile` fails halfway: some bytes land at the target, then EIO. */
 const copyFailure = vi.hoisted(() => ({ source: null as string | null }));
 /** Runs right after the copy of `source` finished (a provider or another app touching a file). */
@@ -119,6 +121,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     }),
     // The arrival hits whichever call targets the new name, so a plain rename shows it too.
     rename: vi.fn(async (from: string, to: string) => {
+      renamed.push({ from: String(from), to: String(to) });
       // A synced workspace places the media by rename: that is its commit point.
       if (/\.mp4$/.test(String(from)) && !String(from).includes("/.kaipu/")) {
         await atCommit.run?.();
@@ -157,6 +160,7 @@ describe("LibraryVault.renameItem", () => {
     renameFailure.arrival = null;
     uncheckable.clear();
     copyTargets.length = 0;
+    renamed.length = 0;
     copyFailure.source = null;
     afterCopy.source = null;
     afterCopy.run = null;
@@ -265,9 +269,15 @@ describe("LibraryVault.renameItem", () => {
 
       await synced.describe("Take");
 
-      expect(copyTargets.filter((target) => target.startsWith(directory))).toEqual([]);
       const copies = (await readdir(meta)).filter((name) => name.startsWith("Take.json.corrupt-"));
       expect(copies).toHaveLength(1);
+      // The quarantine copy is written by `writeAtomic`, not by a file copy: the proof of staging
+      // is the rename that gave it its name. It came from the staging folder, never from a temp
+      // file beside it in `.kaipu/`.
+      const arrival = renamed.filter(({ to }) => to === join(meta, copies[0]!));
+      expect(arrival).toHaveLength(1);
+      expect(arrival[0]!.from.startsWith(staging)).toBe(true);
+      expect(copyTargets.filter((target) => target.startsWith(directory))).toEqual([]);
       expect(await readFile(join(meta, copies[0]!), "utf-8")).toBe("{not json");
       expect(await readdir(staging)).toEqual([]);
     } finally {

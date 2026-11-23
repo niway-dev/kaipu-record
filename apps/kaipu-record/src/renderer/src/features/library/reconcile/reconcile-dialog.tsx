@@ -76,6 +76,8 @@ export function describeFinding(finding: ReconcileFinding, t: LibraryT): Finding
       };
     case "missing-sidecar":
       return note(t("reconcileAdopt"), withoutExt(path));
+    case "missing-identity":
+      return note(t("reconcileMintIdentity"), withoutExt(path));
     case "missing-media": {
       const name = finding.title || fileName(path);
       return note(
@@ -113,6 +115,7 @@ const GROUP_OF: Record<ReconcileFinding["kind"], GroupId> = {
   "untitled-legacy": "rename",
   "name-mismatch": "rename",
   "missing-sidecar": "adopt",
+  "missing-identity": "adopt",
   "missing-media": "gone",
   "orphan-companion": "gone",
   "stem-conflict": "listed",

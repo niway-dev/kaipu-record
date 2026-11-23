@@ -296,6 +296,31 @@ describe("VaultTagRepository", () => {
       expect(JSON.parse(await readFile(path, "utf-8"))).toEqual({ version: 1, tags: [] });
     });
 
+    it("a tags.json delivered between the read and the write is not replaced (round 1)", async () => {
+      await mkdir(kaipu(), { recursive: true });
+      const path = join(kaipu(), "tags.json");
+      const theirs = JSON.stringify({ version: 1, tags: [] });
+      const synced = new LibraryVault(
+        directory,
+        "ws-1",
+        {
+          // The registry reads as missing, and the provider delivers it right after.
+          readText: async (file) => {
+            await writeFile(file, theirs);
+            throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+          },
+        },
+        async () => new Set<string>(),
+      );
+      const repo = new VaultTagRepository(
+        () => synced,
+        () => "d-test",
+        () => clock++,
+      );
+      await expect(repo.create("New")).rejects.toBeInstanceOf(TagRegistryError);
+      expect(await readFile(path, "utf-8")).toBe(theirs);
+    });
+
     it("a tags.json that has not arrived is not replaced by an empty registry", async () => {
       await writeItem("clip");
       await mkdir(kaipu(), { recursive: true });
