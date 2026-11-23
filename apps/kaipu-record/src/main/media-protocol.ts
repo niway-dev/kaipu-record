@@ -9,7 +9,8 @@ import {
   thumbnailFilePath,
   webcamFilePath,
 } from "./library";
-import { activeWorkspace } from "./workspaces";
+import { activeEvictionProbe, activeWorkspace } from "./workspaces";
+import { EvictionCache } from "./library/dataless";
 import { isForeignWorkspaceUrl } from "./media-workspace";
 import { parseByteRange } from "./media-range";
 import { MEDIA_SCHEME, parseMediaUrl } from "@shared/media-url";
@@ -92,6 +93,11 @@ async function streamFile(target: string, rangeHeader: string | null): Promise<R
   });
 }
 
+/** Evicted files of a synced workspace, remembered briefly so a grid costs a few `stat` calls. */
+const evictions = new EvictionCache(
+  (paths) => activeEvictionProbe()?.(paths) ?? Promise.resolve(new Set()),
+);
+
 export function registerMediaProtocol(): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     // Decoded exactly once (ids are titles: `#`, `?`, `%` are legal); a malformed escape
@@ -115,6 +121,11 @@ export function registerMediaProtocol(): void {
           : hostname === "webcam"
             ? webcamFilePath(id)
             : await recordingFilePath(id);
+    // A synced workspace's evicted file is never opened: reading it downloads it (decision 15).
+    // That covers a URL a renderer cached before the file was evicted, for every kind.
+    if (activeEvictionProbe() && (await isEvictedFile(target))) {
+      return new Response("In the cloud: download it first", { status: 409 });
+    }
     try {
       return await streamFile(target, request.headers.get("range"));
     } catch {
@@ -122,4 +133,9 @@ export function registerMediaProtocol(): void {
       return new Response("Not found", { status: 404 });
     }
   });
+}
+
+/** True when the file is evicted; a probe that fails reads as not evicted (the stream then 404s). */
+async function isEvictedFile(path: string): Promise<boolean> {
+  return evictions.isEvicted(path).catch(() => false);
 }

@@ -41,6 +41,8 @@ vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ lo
 // workspace's stamp as its first argument is refused.
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
+  activeEvictionProbe: () => null,
+  activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({
     run: (stamp: { workspaceId?: string } | null, fn: () => unknown) =>

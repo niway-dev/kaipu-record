@@ -70,7 +70,9 @@ export function MoveTargetList({
                     ? "costSameDrive"
                     : cost === "other-drive"
                       ? "costOtherDrive"
-                      : "costNotConnected",
+                      : cost === "synced"
+                        ? "costSynced"
+                        : "costNotConnected",
                 )}
               </span>
             </span>

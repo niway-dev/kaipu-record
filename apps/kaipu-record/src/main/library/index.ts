@@ -34,7 +34,13 @@ import { createDragCopy, dragRoot } from "./drag-copies";
 import { dragLedger } from "./drag-ledger";
 import { withItemLock } from "./item-lock";
 import { friendlyDragName } from "./drag-name";
-import { activeWorkspace, ownsLegacyCloud, workspaceGate } from "../workspaces";
+import {
+  activeEvictionProbe,
+  activeScratch,
+  activeWorkspace,
+  ownsLegacyCloud,
+  workspaceGate,
+} from "../workspaces";
 import { registerVideoEditSessionHandlers } from "./video-edit-session";
 import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
 import { skipPaths } from "./vault-reconcile";
@@ -61,7 +67,8 @@ export function broadcastLibraryChanged(): void {
  */
 export function currentVault(): LibraryVault {
   const active = activeWorkspace();
-  return new LibraryVault(active.path, active.id);
+  // A synced workspace asks which files are evicted, so no URL it hands out downloads one.
+  return new LibraryVault(active.path, active.id, undefined, activeEvictionProbe());
 }
 
 /** The active workspace's folder. */
@@ -368,16 +375,28 @@ export function registerLibraryVaultHandlers(deps: {
         if (typeof id !== "string" || /[\\/]|\.\./.test(id)) return;
         const vault = currentVault();
         const file = await vault.filePath(id);
+        // A synced workspace (decision 15): an evicted file cannot be dragged (a copy would
+        // download it), and the drag copy is a real copy in userData, never a hard link.
+        const scratch = activeScratch();
+        const probe = activeEvictionProbe();
+        if (probe && (await probe([file])).has(file)) return;
         // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
         const icon = nativeImage.createFromPath(vault.thumbnailPath(id));
         if (icon.isEmpty()) return;
+        const root = scratch ? join(scratch, "drag") : dragRoot(vault.directory);
         const dragFile =
           typeof name === "string" && name.length > 0
-            ? await createDragCopy(vault.directory, file, friendlyDragName(name, extname(file)))
+            ? await createDragCopy(
+                vault.directory,
+                file,
+                friendlyDragName(name, extname(file)),
+                undefined,
+                { root, synced: scratch !== null },
+              )
             : file;
         // A move of this item waits 10 s after a drag, and removes its drag folder (ADR 0033).
         const workspaceId = activeWorkspace().id;
-        const inDragRoot = dragFile.startsWith(dragRoot(vault.directory));
+        const inDragRoot = dragFile.startsWith(root);
         dragLedger.record({ workspaceId, itemId: id, dir: inDragRoot ? dirname(dragFile) : null });
         event.sender.startDrag({ file: dragFile, icon: icon.resize({ width: 96 }) });
       })

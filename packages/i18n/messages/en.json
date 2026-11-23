@@ -1081,7 +1081,9 @@
     "reconcileTileFailed": "Failed",
     "reconcileKept": "{count, plural, one {# item kept its name for now (open in the editor, locked by another app, or its new name just taken). Fix all again later.} other {# items kept their names for now (open in the editor, locked by another app, or their new name just taken). Fix all again later.}}",
     "reconcileFailed": "{count, plural, one {# change failed. Details are in .kaipu/reconcile.} other {# changes failed. Details are in .kaipu/reconcile.}}",
-    "reconcileError": "Fix all stopped: {message}"
+    "reconcileError": "Fix all stopped: {message}",
+    "evictedLabel": "In the cloud",
+    "evictedHint": "The folder's provider offloaded this file. Download it in Finder to open it here."
   },
   "prepare": {
     "pageTitle": "Where is it going?",
@@ -3622,7 +3624,10 @@
     "reason_maintenance": "Kaipu is fixing your files",
     "reason_stale": "the workspace changed",
     "reason_io": "a file couldn't be copied; the original is untouched",
-    "closeRefused": "The editor stayed open, so nothing moved."
+    "closeRefused": "The editor stayed open, so nothing moved.",
+    "costSynced": "Synced folder · copies",
+    "notMovableEvicted": "In the cloud: download it first",
+    "reason_evicted": "it's in the cloud: download it first"
   },
   "settingsScope": {
     "selectorLabel": "Settings for",
@@ -3734,5 +3739,14 @@
     "transcribeFailed_decode-failed": "The audio of this video could not be read.",
     "transcribeFailed_busy": "Another video is being transcribed. Try again when it finishes.",
     "transcribeFailed_unknown": "Transcription failed. Try again."
+  },
+  "workspaceCloud": {
+    "location_this-mac": "This Mac",
+    "location_external-drive": "An external drive",
+    "location_google-drive": "Google Drive",
+    "location_onedrive": "OneDrive",
+    "location_icloud": "iCloud Drive",
+    "location_cloud-provider": "A cloud provider",
+    "syncedBy": "Synced by {provider}"
   }
 }

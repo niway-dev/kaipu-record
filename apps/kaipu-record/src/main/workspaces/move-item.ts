@@ -29,7 +29,8 @@ import {
   type CompanionPaths,
   type Sidecar,
 } from "../library/library-vault";
-import { copyExclusive, placeNoReplace } from "../library/safe-place";
+import { probeDataless } from "../library/dataless";
+import { copyExclusive, placeByRename, placeNoReplace } from "../library/safe-place";
 import { TagRegistryError, VaultTagRepository } from "../library/tag-repository";
 import type { SessionMeta } from "../library/video-edit-session";
 
@@ -44,6 +45,10 @@ import type { SessionMeta } from "../library/video-edit-session";
  *   4. the small files (and the webcam track), copied or linked
  *   5. the media: a hard link on the same volume; otherwise a copy into the target's
  *      `.kaipu/tmp/move-<moveId>/`, its sha256 compared, then placed. **The commit.**
+ *      A synced side (Google Drive, OneDrive, iCloud: `MoveSide.scratch`) is never linked,
+ *      even on one device (decision 15): a hard link renames the cloud item or leaves it
+ *      unsynced. It copies into the scratch folder in userData, places by rename and verifies
+ *      the sha256 again at the final path.
  *   6. journal `committed`, then the source media, then the source's small files
  *   7. the journal entry goes
  *
@@ -85,6 +90,12 @@ export class SimulatedCrash extends Error {
 export interface MoveSide {
   workspaceId: string;
   directory: string;
+  /**
+   * Set for a synced workspace: its scratch folder in userData
+   * (`workspace-scratch/<workspaceId>`), where the move stages instead of `.kaipu/tmp/`. Its
+   * presence is what marks the side as synced, so the journal carries it to healing.
+   */
+  scratch?: string;
 }
 
 export interface MoveRequest {
@@ -105,6 +116,11 @@ export interface MoverFs {
   sha256(path: string): Promise<string>;
   /** Free bytes on the volume that holds `directory`. */
   freeBytes(directory: string): Promise<number>;
+  /**
+   * Which of these files a provider has offloaded (`SF_DATALESS`). Asked only when the source
+   * is synced, before any byte of it is read: reading an evicted file downloads it.
+   */
+  evicted(paths: string[]): Promise<ReadonlySet<string>>;
 }
 
 export interface MoverDeps {
@@ -121,6 +137,7 @@ export interface MoverDeps {
 export const MOVE_SPACE_MARGIN_BYTES = 256 * 1024 * 1024;
 
 const defaultFs: MoverFs = {
+  evicted: probeDataless,
   link,
   sha256: sha256FileBase64,
   freeBytes: async (directory) => {
@@ -193,8 +210,10 @@ async function writeJournal(dir: string, journal: MoveJournal): Promise<void> {
   await atomicWriteFile(journalPath(dir, journal.moveId), JSON.stringify(journal, null, 2));
 }
 
-function stagingDir(targetDir: string, moveId: string): string {
-  return join(targetDir, META_DIR, "tmp", `move-${moveId}`);
+function stagingDir(targetDir: string, moveId: string, scratch?: string): string {
+  return scratch
+    ? join(scratch, "tmp", `move-${moveId}`)
+    : join(targetDir, META_DIR, "tmp", `move-${moveId}`);
 }
 
 /** `link` errors that mean "no hard link here": the file is copied instead. */
@@ -265,11 +284,20 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
   const media = item.filePath;
   const ext = extname(media);
+  // The renderer refuses an evicted item too, but its list may be older than the eviction: main
+  // checks again before the hash or the copy reads the file (decision 15).
+  if (source.scratch !== undefined) {
+    const offloaded = await fs.evicted([media, from.webcamFilePath(id)]);
+    if (offloaded.size > 0) return refuse("evicted");
+  }
   const mediaInfo = await stat(media);
   const sameDevice = (await stat(source.directory)).dev === targetInfo.dev;
+  // A synced side always copies: never a second name for a file a provider syncs.
+  const synced = source.scratch !== undefined || target.scratch !== undefined;
+  const linkable = sameDevice && !synced;
   const webcamInfo = await statOrNull(from.webcamFilePath(id));
   const spaceNeeded = mediaInfo.size + (webcamInfo?.size ?? 0) + MOVE_SPACE_MARGIN_BYTES;
-  if (!sameDevice && (await fs.freeBytes(target.directory)) < spaceNeeded) return refuse("no-room");
+  if (!linkable && (await fs.freeBytes(target.directory)) < spaceNeeded) return refuse("no-room");
 
   // Tags: resolved by name in the target's registry. One that cannot be trusted refuses the
   // move before anything is copied (decision 7).
@@ -289,7 +317,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
   // The media's identity, for healing. A copy always hashes; a link keeps size and mtime.
   const cached =
     record.contentSha256 && stampMatches(record, mediaInfo) ? record.contentSha256 : null;
-  const sha256 = sameDevice ? cached : (cached ?? (await fs.sha256(media)));
+  const sha256 = linkable ? cached : (cached ?? (await fs.sha256(media)));
 
   // ── 2. The journal.
   const journal: MoveJournal = {
@@ -332,7 +360,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     for (const key of COMPANION_FILES) {
       if (!(await existsStrict(fromPaths[key]))) continue;
       await transfer(fromPaths[key], toPaths[key], {
-        sameDevice,
+        sameDevice: linkable,
         verify: key === "webcam",
         fs,
       });
@@ -348,7 +376,8 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
     // ── 5. The media. This is the commit.
     let mode: "linked" | "copied" = "copied";
-    if (sameDevice) {
+    const staging = stagingDir(target.directory, journal.moveId, target.scratch);
+    if (linkable) {
       try {
         await fs.link(media, finalMedia(newId));
         mode = "linked";
@@ -359,14 +388,8 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     if (mode === "copied") {
       // The link was refused (another volume after all, or no hard links there): a copy
       // needs room, checked before a byte is written.
-      if (sameDevice && (await fs.freeBytes(target.directory)) < spaceNeeded) {
-        await rollBackTarget(
-          to,
-          newId,
-          assetId,
-          stagingDir(target.directory, journal.moveId),
-          null,
-        );
+      if (linkable && (await fs.freeBytes(target.directory)) < spaceNeeded) {
+        await rollBackTarget(to, newId, assetId, staging, null);
         await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
         return refuse("no-room");
       }
@@ -375,7 +398,6 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
         journal.media.sha256 = await fs.sha256(media);
         await writeJournal(deps.journalDir, journal);
       }
-      const staging = stagingDir(target.directory, journal.moveId);
       await mkdir(staging, { recursive: true });
       const staged = join(staging, `${newId}${ext}`);
       const copied = await copyExclusive(media, staged);
@@ -387,8 +409,19 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
         return refuse("checksum-mismatch");
       }
       await after("media-verified");
-      const placed = await placeNoReplace(staged, finalMedia(newId), { stuck: "rollback" });
+      // Into a synced folder: one rename, never a hard link (decision 15).
+      const placed =
+        target.scratch !== undefined
+          ? await placeByRename(staged, finalMedia(newId))
+          : await placeNoReplace(staged, finalMedia(newId), { stuck: "rollback" });
       if (placed === "taken") throw new Error(`target media taken: ${finalMedia(newId)}`);
+      // With a synced side, the bytes are checked again where they now live, before the
+      // source may go: a provider may have touched the file in between.
+      if (synced && (await fs.sha256(finalMedia(newId))) !== journal.media.sha256) {
+        await rollBackTarget(to, newId, assetId, staging, finalMedia(newId));
+        await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
+        return refuse("checksum-mismatch");
+      }
     }
     mediaPlaced = true;
     committedMode = mode;
@@ -414,7 +447,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     await after("source-companions-deleted");
 
     // ── 7. Done.
-    await rm(stagingDir(target.directory, journal.moveId), { recursive: true, force: true });
+    await rm(staging, { recursive: true, force: true });
     await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
     return { ok: true, id, newId, mode };
   } catch (error) {
@@ -438,7 +471,7 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
         to,
         journal.targetId,
         assetId,
-        stagingDir(target.directory, journal.moveId),
+        stagingDir(target.directory, journal.moveId, target.scratch),
         null,
       );
     }
@@ -651,7 +684,7 @@ async function healEntry(
   if (sourceDir === null || targetDir === null) return "waiting";
   const from = new LibraryVault(sourceDir);
   const to = new LibraryVault(targetDir);
-  const staging = stagingDir(targetDir, journal.moveId);
+  const staging = stagingDir(targetDir, journal.moveId, journal.target.scratch);
   const done = async (): Promise<"healed"> => {
     await rm(staging, { recursive: true, force: true }).catch(() => {});
     await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
@@ -759,9 +792,13 @@ async function healEntry(
   // Neither side has the media: a verified copy may still be in staging.
   const staged = join(staging, `${targetId}${journal.ext}`);
   if (recordIsOurs && (await mediaMatches(staged, journal, deps.fs))) {
-    if ((await placeNoReplace(staged, targetMedia, { stuck: "rollback" })) === "placed") {
-      return healEntry(journal, deps);
-    }
+    const placed =
+      journal.target.scratch !== undefined
+        ? (await placeByRename(staged, targetMedia)) === "taken"
+          ? "taken"
+          : "placed"
+        : await placeNoReplace(staged, targetMedia, { stuck: "rollback" });
+    if (placed === "placed") return healEntry(journal, deps);
   }
   return quarantine("no media on either side");
 }

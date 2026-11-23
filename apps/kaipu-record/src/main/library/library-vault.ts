@@ -40,6 +40,7 @@ import {
 } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
 import { legacyStampMatches, sameStat, stampFields, stampMatches } from "./hash-stamp";
+import type { EvictionProbe } from "./dataless";
 import { webcamTrackState } from "./webcam-track-state";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
@@ -460,11 +461,14 @@ export class LibraryVault {
    * `workspaceId` goes into the `kaipu-media://` URLs `describe()` hands out, so a URL cached
    * before a switch never shows another workspace's item with the same id (ADR 0032).
    * `reader` is how sidecars are read (a test fails a read on demand).
+   * `evictionProbe` is set for a synced workspace (spec, Synced folders): it says which files
+   * the provider has offloaded, so `describe()` never hands out a URL that would download one.
    */
   constructor(
     readonly directory: string,
     readonly workspaceId: string | null = null,
     private readonly reader: VaultReader = fsReader,
+    private readonly evictionProbe: EvictionProbe | null = null,
   ) {}
 
   /** The query a media URL this vault hands out carries: the caller's, plus the workspace. */
@@ -1077,10 +1081,17 @@ export class LibraryVault {
     // "vault is empty" and gets rendered as the first-run empty state, which
     // reads as data loss. The caller surfaces the real error.
     const entries = await readdir(this.directory);
-    const ids = entries
-      .filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext)))
-      .map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
-    const described = await Promise.all(ids.map((id) => this.describe(id)));
+    const media = entries.filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext)));
+    const ids = media.map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
+    // A synced workspace asks the provider once for the whole folder: every media file and
+    // every thumbnail, in one batched `stat` (never a read).
+    const evicted = this.evictionProbe
+      ? await this.evictionProbe([
+          ...media.map((f) => join(this.directory, f)),
+          ...ids.map((id) => this.thumbnailPath(id)),
+        ])
+      : undefined;
+    const described = await Promise.all(ids.map((id) => this.describe(id, evicted)));
     return described
       .filter((r): r is LocalRecording => r !== null)
       .sort((a, b) => b.createdAt - a.createdAt);
@@ -1092,7 +1103,11 @@ export class LibraryVault {
     return entries.filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext))).length;
   }
 
-  async describe(id: string): Promise<LocalRecording | null> {
+  /**
+   * The item, or null when its media is gone. `evicted` is the answer of this vault's eviction
+   * probe for a whole listing; a single call asks for this item's two files itself.
+   */
+  async describe(id: string, evicted?: ReadonlySet<string>): Promise<LocalRecording | null> {
     const filePath = await this.filePath(id);
     let info;
     try {
@@ -1114,6 +1129,13 @@ export class LibraryVault {
       }
       throw error;
     }
+    // An evicted media file (or a video's evicted poster) gets no image URL: the protocol would
+    // read it, and reading downloads it (decision 15, Things the code contradicted, 18).
+    const offloaded = this.evictionProbe
+      ? (evicted ?? (await this.evictionProbe([filePath, this.thumbnailPath(id)])))
+      : null;
+    const mediaEvicted = offloaded?.has(filePath) ?? false;
+    const thumbEvicted = !isImage && (offloaded?.has(this.thumbnailPath(id)) ?? false);
     // A legacy stamp (no ctime, no inode) still counts here, as before: describe never hashes,
     // so refusing it would leave cloud-linked items "pending" until something else re-hashes.
     const hashIsFresh =
@@ -1161,18 +1183,26 @@ export class LibraryVault {
       editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
       capture: isImage || isGif ? null : sanitizeRecordingCapture(meta.capture),
       webcam,
-      thumbnailUrl: isImage
-        ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
-          // overwritten in place (same id/URL) — only the changed item, so the
-          // rest stay cacheable.
-          mediaUrl("screenshot", id, this.mediaParams({ v: String(Math.round(info.mtimeMs)) }))
-        : thumbnailMtime === null
+      thumbnailUrl:
+        mediaEvicted || thumbEvicted
           ? null
-          : // Same for a poster: the webcam composite rewrites it in place (NIW2-845).
-            mediaUrl("thumb", id, this.mediaParams({ v: String(Math.round(thumbnailMtime)) })),
+          : isImage
+            ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
+              // overwritten in place (same id/URL) — only the changed item, so the
+              // rest stay cacheable.
+              mediaUrl("screenshot", id, this.mediaParams({ v: String(Math.round(info.mtimeMs)) }))
+            : thumbnailMtime === null
+              ? null
+              : // Same for a poster: the webcam composite rewrites it in place (NIW2-845).
+                mediaUrl("thumb", id, this.mediaParams({ v: String(Math.round(thumbnailMtime)) })),
       // Only a webcam recording (`webcam` is null without its file) whose poster is not yet
       // the composite. Absent for everything else, so older callers see no field.
       ...(webcam ? { thumbnailNeedsWebcam: !hasWebcamThumbnail(meta) } : {}),
+      ...(mediaEvicted
+        ? { evicted: "media" as const }
+        : thumbEvicted
+          ? { evicted: "thumbnail" as const }
+          : {}),
     };
   }
 

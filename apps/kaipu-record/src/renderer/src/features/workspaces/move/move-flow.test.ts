@@ -56,6 +56,12 @@ describe("notMovableReason", () => {
     expect(notMovableReason(item({ assetId: "x", metadataIssue: "corrupt" }))).toBe("record");
     expect(notMovableReason(rec)).toBeNull();
   });
+
+  it("refuses an item whose media a synced workspace's provider offloaded: download it first", () => {
+    expect(notMovableReason({ ...rec, evicted: "media" })).toBe("evicted");
+    // Only its poster is offloaded: the media is local, the move can copy it.
+    expect(notMovableReason({ ...rec, evicted: "thumbnail" })).toBeNull();
+  });
 });
 
 describe("moveCost", () => {
@@ -69,6 +75,7 @@ describe("moveCost", () => {
     state: "available",
     itemCount: null,
     device: "1",
+    sync: null,
     ...over,
   });
   it("is instant on the same drive, copies on another, and is off when not connected", () => {
@@ -78,6 +85,12 @@ describe("moveCost", () => {
     expect(moveCost(view({ id: "b", state: "unavailable", device: null }), active)).toBe(
       "not-connected",
     );
+  });
+
+  it("a synced side copies, even on the same drive (decision 15)", () => {
+    const active = view({ id: "a" });
+    expect(moveCost(view({ id: "b", sync: "google-drive" }), active)).toBe("synced");
+    expect(moveCost(view({ id: "b" }), view({ id: "a", sync: "onedrive" }))).toBe("synced");
   });
 });
 

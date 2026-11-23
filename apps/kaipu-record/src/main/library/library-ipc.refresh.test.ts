@@ -33,6 +33,8 @@ vi.mock("electron", () => ({
 vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ locale: "en" }) }));
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
+  activeEvictionProbe: () => null,
+  activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({
     run: (_stamp: unknown, fn: () => unknown) => Promise.resolve().then(fn),

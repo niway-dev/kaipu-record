@@ -21,6 +21,12 @@ export type WorkspaceUnavailableReason =
   /** Another workspace's identity is in that folder. */
   | "different";
 
+/**
+ * The cloud provider that syncs a workspace folder (spec, Synced folders). Kaipu does not sync
+ * to it: the folder is detected by path (and Google Drive's xattr) and labelled.
+ */
+export type SyncProvider = "google-drive" | "onedrive" | "icloud" | "cloud-provider";
+
 /** What locks the switcher (and the "Move to" menus). */
 export type WorkspaceBusy = "recording" | "exporting" | "moving";
 
@@ -58,6 +64,8 @@ export interface WorkspaceView {
    * workspaces on the same one is instant, otherwise it copies. Null when not connected.
    */
   device: string | null;
+  /** The provider whose synced folder holds this workspace, or null for a plain folder. */
+  sync: SyncProvider | null;
 }
 
 /** `workspaces:list` (and the `workspaces:changed` broadcast). */
@@ -226,6 +234,8 @@ export type MoveRefusal =
   | "tags-unreadable"
   /** The copy did not match the original byte for byte; the original is untouched. */
   | "checksum-mismatch"
+  /** A synced workspace's provider offloaded the media: copying it would download it. */
+  | "evicted"
   /** "Check and fix files" is running. */
   | "maintenance"
   /** The window's workspace is no longer the active one. */

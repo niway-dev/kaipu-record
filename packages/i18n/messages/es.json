@@ -1081,7 +1081,9 @@
     "reconcileTileFailed": "Fallaron",
     "reconcileKept": "{count, plural, one {# elemento conservó su nombre por ahora (abierto en el editor, bloqueado por otra app o con el nuevo nombre recién ocupado). Vuelve a arreglar más tarde.} other {# elementos conservaron su nombre por ahora (abiertos en el editor, bloqueados por otra app o con el nuevo nombre recién ocupado). Vuelve a arreglar más tarde.}}",
     "reconcileFailed": "{count, plural, one {# cambio falló. Los detalles están en .kaipu/reconcile.} other {# cambios fallaron. Los detalles están en .kaipu/reconcile.}}",
-    "reconcileError": "Arreglar todo se detuvo: {message}"
+    "reconcileError": "Arreglar todo se detuvo: {message}",
+    "evictedLabel": "En la nube",
+    "evictedHint": "El proveedor de la carpeta liberó este archivo. Descárgalo en Finder para abrirlo aquí."
   },
   "prepare": {
     "pageTitle": "¿A dónde va?",
@@ -3622,7 +3624,10 @@
     "reason_maintenance": "Kaipu está reparando tus archivos",
     "reason_stale": "el espacio de trabajo cambió",
     "reason_io": "no se pudo copiar un archivo; el original no se tocó",
-    "closeRefused": "El editor siguió abierto, así que no se movió nada."
+    "closeRefused": "El editor siguió abierto, así que no se movió nada.",
+    "costSynced": "Carpeta sincronizada · copia",
+    "notMovableEvicted": "En la nube: descárgalo primero",
+    "reason_evicted": "está en la nube: descárgalo primero"
   },
   "settingsScope": {
     "selectorLabel": "Ajustes de",
@@ -3734,5 +3739,14 @@
     "transcribeFailed_decode-failed": "No se pudo leer el audio de este video.",
     "transcribeFailed_busy": "Se está transcribiendo otro video. Inténtalo de nuevo cuando termine.",
     "transcribeFailed_unknown": "La transcripción falló. Inténtalo de nuevo."
+  },
+  "workspaceCloud": {
+    "location_this-mac": "Este Mac",
+    "location_external-drive": "Un disco externo",
+    "location_google-drive": "Google Drive",
+    "location_onedrive": "OneDrive",
+    "location_icloud": "iCloud Drive",
+    "location_cloud-provider": "Un proveedor en la nube",
+    "syncedBy": "Sincronizado por {provider}"
   }
 }

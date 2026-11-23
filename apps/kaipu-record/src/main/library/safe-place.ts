@@ -293,6 +293,44 @@ export async function placeNew(
   return placed;
 }
 
+/**
+ * Synced folders (spec, decision 15): put `from` at `to` with a plain `rename`, never a hard
+ * link. A hard link to a file inside a Google Drive folder renames the cloud item to the other
+ * name, and one between the folder and userData leaves the item unsynced (the 2026-10-30
+ * spike), so a placement into or out of a synced workspace must not create a second name.
+ * `rename` into Drive is atomic and the file uploads (same spike).
+ *
+ * The no-replace check is a `lstat` before the rename: Node has no rename-without-replace. The
+ * window is the instant between the two calls, on a name the caller has just reserved (a stub
+ * sidecar holds the stem), which is narrower than, and stated alongside, the threat model above.
+ * A rename refused across devices falls back to an exclusive copy, then removes the source.
+ */
+export async function placeByRename(from: string, to: string): Promise<PlacedFile | "taken"> {
+  const occupied = await lstat(to).then(
+    () => true,
+    (error: unknown) => {
+      if (codeOf(error) === "ENOENT") return false;
+      throw error;
+    },
+  );
+  if (occupied) return "taken";
+  try {
+    await rename(from, to);
+  } catch (error) {
+    if (codeOf(error) !== "EXDEV") throw error;
+    const copied = await copyExclusive(from, to);
+    if (copied === "taken") return "taken";
+    await syncDir(dirname(to)).catch(() => {});
+    await unlink(from).catch(() => {});
+    return copied;
+  }
+  await syncDir(dirname(to)).catch(() => {});
+  const placed = await identityAt(to);
+  if (!placed)
+    throw Object.assign(new Error(`"${to}" vanished right after placing`), { code: "EIO" });
+  return placed;
+}
+
 /** "kept": another file holds the source's name; "unknown": the name could not be read. */
 type SourceRemoval = "removed" | "kept" | "unknown";
 
