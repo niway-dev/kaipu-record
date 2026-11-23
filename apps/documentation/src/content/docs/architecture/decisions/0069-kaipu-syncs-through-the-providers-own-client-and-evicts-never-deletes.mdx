@@ -39,7 +39,10 @@ and edit, and add chunks or streaming only when a real requirement asks for it.
 3. **Freeing space is eviction, never deletion.** Deleting a file in a synced folder deletes it in
    the cloud and on every device, so no code path for "Free up space" may call `unlink`. When macOS
    does not let Kaipu evict another provider's file, Kaipu reveals it in Finder for the provider's
-   own "Remove Download".
+   own "Remove Download". The same rule covers Kaipu Cloud's existing "Remove local copy" in a synced
+   workspace: it evicts (or reveals in Finder) and never calls `rm`. "Delete", and a move out of a
+   synced workspace, still delete on purpose, and say so: the file goes from the cloud on every
+   device.
 4. **Kaipu claims "uploaded" only when macOS says so.** Without that signal it shows only what it
    can observe: on this Mac, or not downloaded.
 5. **The safety rules for a synced folder are not optional:** no partial files in the folder, no

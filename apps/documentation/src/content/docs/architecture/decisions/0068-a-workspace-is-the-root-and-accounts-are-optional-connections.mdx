@@ -75,8 +75,9 @@ connections, as Obsidian does with a vault and Obsidian Sync.
 
 - A user with a personal and a company Google account creates one workspace in each account's
   folder, and switches between them as between any two workspaces.
-- The registry gains a connection record per workspace. A downgrade ignores it (the older version
-  sees a workspace at a path, as today).
+- The registry gains a connection record per workspace, under its own `workspaceConnections` key
+  of `preferences.json`. An older version ignores it and keeps it when it writes, because it
+  spreads the file it read; it sees a workspace at a path, as today.
 - Team features (shared notes, shared edits) attach to a workspace connection later, not to a new
   top-level "account" screen.
 
