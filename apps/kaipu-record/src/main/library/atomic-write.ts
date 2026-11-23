@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { access, mkdir, open, rename, rm, stat } from "node:fs/promises";
 import { constants } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 
 /**
  * Per-key async mutex, module scope: it spans every `LibraryVault` instance
@@ -75,37 +75,73 @@ export function isSyncedPath(path: string): boolean {
 /** Hidden folder that holds a cross-volume placement while it is copied (see below). */
 export const VOLUME_STAGING_DIR = ".kaipu-staging";
 
+/**
+ * The root of the provider folder that holds `path`, when the app KNOWS where that root is (the
+ * path rule names it: `~/Library/CloudStorage/<provider>`, `~/Google Drive`, ...), else null. A
+ * folder detected as synced by anything else (Google Drive's xattr on a custom mount, a detection
+ * that did not answer) has no known root: nothing above it can be told apart from the provider's
+ * own folder. The workspaces module registers it at start-up; until then no root is known.
+ */
+export type SyncRootResolver = (path: string) => string | null;
+
+let resolveSyncRoot: SyncRootResolver = () => null;
+
+/** Install the resolver `volumeStagingDir` asks where a synced path's provider root is. */
+export function setSyncRootResolver(resolver: SyncRootResolver): void {
+  resolveSyncRoot = resolver;
+}
+
 export interface VolumeStagingDeps {
   /** Whether a folder is inside a synced folder; defaults to the app's detection. */
   isSynced?: (path: string) => boolean;
+  /** The provider root that holds a path, or null when unknown; defaults to the app's path rule. */
+  syncRoot?: SyncRootResolver;
+  /**
+   * The caller already knows `target` is in a synced folder (a detection `isSynced` does not
+   * share, such as a folder the user picked in a save dialog). Staging still needs a known root.
+   */
+  assumeSynced?: boolean;
 }
 
 /**
  * Where a copy bound for `target` (a path in a synced folder) is staged when the rename from the
  * scratch folder is refused because the volumes differ (EXDEV): a hidden folder on the TARGET's
- * volume that the provider does not upload. It is made inside the nearest ancestor of the target
- * that (1) the synced-folder detection says is not synced, (2) is writable and (3) lives on the
- * same device as the target's folder, so the final rename is a same-volume rename and nothing
- * partial ever appears under the synced path. Null when there is no such ancestor (the provider's
- * mount is its own volume, or every ancestor is read-only): the caller fails and keeps the
- * original, because a partial file in the synced folder is worse than a failed write.
+ * volume that the provider does not upload.
+ *
+ * It is made only where it is PROVABLY outside the provider: the target's provider root must be
+ * known (the path rule named it, `SyncRootResolver`), and the folder is the nearest ancestor of
+ * that root that is not synced, is writable and lives on the same device as the target's folder,
+ * so the final rename is a same-volume rename and nothing partial ever appears under the synced
+ * path. "Not detected as synced" is never taken as "outside": a folder found synced only through
+ * an xattr, or whose detection did not answer, has no known root, and every ancestor of it could
+ * be inside the folder the provider uploads. Null then, and also when there is no such ancestor
+ * (the provider's mount is its own volume, or every ancestor is read-only): the caller fails with
+ * EXDEV and keeps the original, because a partial file in the synced folder is worse than a
+ * failed write.
  */
 export async function volumeStagingDir(
   target: string,
   deps: VolumeStagingDeps = {},
 ): Promise<string | null> {
   const isSynced = deps.isSynced ?? isSyncedPath;
-  // The detection must claim the target itself: when it cannot say where the synced root is, no
-  // ancestor can be told apart from the synced folder, and staging in one could land inside it.
-  if (!isSynced(target)) return null;
-  const folder = dirname(target);
+  if (deps.assumeSynced !== true && !isSynced(target)) return null;
+  const root = (deps.syncRoot ?? resolveSyncRoot)(target);
+  if (root === null) return null;
+  const absoluteRoot = resolve(root);
+  const absoluteTarget = resolve(target);
+  // A root that does not hold the target says nothing about where the target's provider is.
+  if (absoluteTarget !== absoluteRoot && !absoluteTarget.startsWith(absoluteRoot + sep)) {
+    return null;
+  }
   let device: number;
   try {
-    device = (await stat(folder)).dev;
+    device = (await stat(dirname(absoluteTarget))).dev;
   } catch {
     return null;
   }
-  for (let at = folder; ; at = dirname(at)) {
+  // Start ABOVE the root: every candidate is outside the folder the provider uploads by
+  // construction, not by a detection that could miss.
+  for (let at = dirname(absoluteRoot); ; at = dirname(at)) {
     if (!isSynced(at)) {
       try {
         const info = await stat(at);
@@ -136,8 +172,9 @@ export async function volumeStagingDir(
  * A rename the volumes refuse (EXDEV: the scratch folder and the synced folder are on different
  * volumes) never falls back to a temp file inside the synced folder, which the provider would
  * upload while it is half written. The write is redone through `volumeStagingDir`, a hidden folder
- * on the target's own volume outside the synced root. With none, the write fails with the EXDEV
- * error: the previous file is untouched and nothing partial is placed.
+ * on the target's own volume provably outside the provider's root. With none (an unknown root
+ * included), the write fails with the EXDEV error: the previous file is untouched and nothing
+ * partial is placed.
  */
 export async function atomicWriteFile(
   target: string,

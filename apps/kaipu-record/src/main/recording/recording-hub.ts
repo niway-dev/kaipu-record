@@ -66,7 +66,7 @@ import {
   requireCaptureWorkspace,
   syncedStagingFor,
 } from "../workspaces";
-import { detectSync } from "../workspaces/synced-folder";
+import { detectSyncedFolder } from "../workspaces/synced-folder";
 import { endRecordTiming, markRecordTiming, receiveRecordTiming } from "./record-timing";
 import {
   applyDockPolicy,
@@ -276,7 +276,7 @@ export function registerRecordingHub(
     // A synced workspace stages its takes in userData, never inside the folder (decision 15).
     stagingFor: syncedStagingFor,
     // A take saved elsewhere (the save dialog) may land in a provider's folder: place it by rename.
-    isSyncedFolder: async (directory) => (await detectSync(directory)) !== null,
+    isSyncedFolder: async (directory) => (await detectSyncedFolder(directory)) !== null,
   });
 
   // Cursor tracks, keyed by writer session id (see plans/video-editor-v2/02).

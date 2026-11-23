@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 
@@ -14,6 +14,10 @@ const state = vi.hoisted(() => ({
   iconPresent: false,
   /** Every set of paths the eviction probe was asked about. */
   probed: [] as string[][],
+  /** The active workspace's scratch folder; null is a workspace that is not synced. */
+  scratch: null as string | null,
+  /** Whether the drag icon came from the placeholder buffer instead of the poster path. */
+  iconFrom: [] as string[],
 }));
 
 vi.mock("electron", () => ({
@@ -27,7 +31,14 @@ vi.mock("electron", () => ({
   BrowserWindow: { getAllWindows: () => [], fromWebContents: () => null },
   dialog: { showOpenDialog: vi.fn(), showMessageBox: vi.fn() },
   nativeImage: {
-    createFromPath: () => ({ isEmpty: () => !state.iconPresent, resize: () => ({}) }),
+    createFromPath: () => {
+      state.iconFrom.push("poster");
+      return { isEmpty: () => !state.iconPresent, resize: () => ({}) };
+    },
+    createFromBuffer: () => {
+      state.iconFrom.push("placeholder");
+      return { isEmpty: () => false, resize: () => ({}) };
+    },
   },
   shell: { openPath: vi.fn(async () => ""), showItemInFolder: vi.fn() },
 }));
@@ -39,7 +50,7 @@ vi.mock("../workspaces", () => ({
     return Promise.resolve(new Set(paths.filter((path) => state.evicted.has(path))));
   },
   activeStagingDir: () => join(state.dir, "scratch"),
-  activeScratch: () => null,
+  activeScratch: () => state.scratch,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({
     run: (_stamp: unknown, fn: () => unknown) => Promise.resolve().then(fn),
@@ -55,6 +66,7 @@ vi.mock("./tag-repository", async (importOriginal) => ({
   loadDeviceId: async () => "test-device",
 }));
 
+import { dragLedger } from "./drag-ledger";
 import { registerLibraryVaultHandlers } from "./index";
 
 /** The workspace stamp the preload sends first on every item-scoped call. */
@@ -90,6 +102,8 @@ describe("library IPC — openLocalRecording and localRecordingPath (NIW2-669)",
     state.evicted.clear();
     state.probed.length = 0;
     state.iconPresent = false;
+    state.scratch = null;
+    state.iconFrom.length = 0;
     vi.mocked(shell.openPath).mockClear();
     vi.mocked(shell.openPath).mockResolvedValue("");
   });
@@ -210,10 +224,77 @@ describe("library IPC — openLocalRecording and localRecordingPath (NIW2-669)",
       expect(startDrag).not.toHaveBeenCalled();
     });
 
-    it("stops the drag when only the poster is evicted: the drag icon reads it", async () => {
+    it("drags a file whose poster alone is offloaded, with a placeholder icon: the poster is never read", async () => {
       state.evicted.add(join(vault, ".kaipu", "item-1.jpg"));
       await drag("item-1");
-      expect(startDrag).not.toHaveBeenCalled();
+      expect(startDrag).toHaveBeenCalledTimes(1);
+      expect(state.iconFrom).toEqual(["placeholder"]);
+    });
+
+    describe("with the workspace's scratch folder (the synced branch)", () => {
+      let scratchRoot: string;
+      let dragRoot: string;
+      beforeEach(() => {
+        scratchRoot = join(state.dir, "workspace-scratch", "ws-test");
+        dragRoot = join(scratchRoot, "drag");
+        state.scratch = scratchRoot;
+      });
+
+      /** Like `drag`, with the item's title the renderer sends. */
+      async function dragNamed(id: string, name?: string): Promise<void> {
+        const fn = state.on.get(IPC_CHANNELS.startFileDrag);
+        if (!fn) throw new Error("no listener registered for startFileDrag");
+        state.probed.length = 0;
+        fn({ sender: { startDrag } }, STAMP, id, name);
+        await vi.waitFor(() => expect(startDrag).toHaveBeenCalled());
+      }
+
+      it("drags a named copy that lives under the scratch root, never the vault file", async () => {
+        await dragNamed("item-1", "My clip");
+        const dragged = startDrag.mock.calls[0]![0].file as string;
+        expect(dragged.startsWith(dragRoot)).toBe(true);
+        expect(dragged).not.toBe(join(vault, "item-1.mp4"));
+        expect(await readFile(dragged, "utf-8")).toBe("video");
+      });
+
+      it("records the copy's folder in the drag ledger so a move can wait and clean it", async () => {
+        const record = vi.spyOn(dragLedger, "record");
+        try {
+          await dragNamed("item-1", "Ledger clip");
+          const dragged = startDrag.mock.calls[0]![0].file as string;
+          expect(record).toHaveBeenCalledWith({
+            workspaceId: "ws-test",
+            itemId: "item-1",
+            dir: dirname(dragged),
+          });
+        } finally {
+          record.mockRestore();
+        }
+      });
+
+      it("drags a copy even when the renderer sends no name (the GIF viewer)", async () => {
+        await dragNamed("gif-1");
+        const dragged = startDrag.mock.calls[0]![0].file as string;
+        expect(dragged.startsWith(dragRoot)).toBe(true);
+        expect(basename(dragged)).toBe("gif-1.gif");
+      });
+
+      it("refuses the drag when the scratch folder cannot be created: never the original", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        // A FILE where the drag folder must be: mkdir fails.
+        await rm(dragRoot, { recursive: true, force: true });
+        await mkdir(scratchRoot, { recursive: true });
+        await writeFile(dragRoot, "in the way");
+        try {
+          const fn = state.on.get(IPC_CHANNELS.startFileDrag)!;
+          fn({ sender: { startDrag } }, STAMP, "item-1", "My clip");
+          await vi.waitFor(() => expect(errors).toHaveBeenCalled());
+          expect(startDrag).not.toHaveBeenCalled();
+        } finally {
+          errors.mockRestore();
+          await rm(dragRoot, { force: true });
+        }
+      });
     });
   });
 });

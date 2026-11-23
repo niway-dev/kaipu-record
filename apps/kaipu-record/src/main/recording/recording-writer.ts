@@ -58,8 +58,9 @@ export interface RecordingWriterDeps {
   stagingFor?: (vaultDir: string) => string | null;
   /**
    * Whether a folder the user picks for a salvaged take is inside a provider's folder (path
-   * rule plus xattr, `detectSync`). A take staged in a plain workspace and saved there is placed
-   * by rename, not by the hard link and temp sibling that would land inside the provider folder.
+   * rule plus the xattr of the folder and its ancestors, `detectSyncedFolder`). A take staged in
+   * a plain workspace and saved there is placed by rename, not by the hard link and temp sibling
+   * that would land inside the provider folder.
    * Unset: no folder counts as synced.
    */
   isSyncedFolder?: (directory: string) => Promise<boolean>;
@@ -158,14 +159,23 @@ export class RecordingWriter {
     this.now = deps.now ?? (() => Date.now());
   }
 
-  private async stagingDir(vaultDir: string): Promise<string> {
-    if (this.deps.tempDir) return this.deps.tempDir;
+  /**
+   * The folder a take is staged in, and whether the take is then placed by rename. Both come
+   * from ONE `stagingFor` answer: it reads state a refresh can change between two calls, and a
+   * take staged in userData but placed with a hard link is the failure the rename path exists
+   * to avoid.
+   */
+  private async stagingDir(vaultDir: string): Promise<{ dir: string; byRename: boolean }> {
+    const scratch = this.deps.stagingFor?.(vaultDir) ?? null;
+    if (this.deps.tempDir) return { dir: this.deps.tempDir, byRename: scratch !== null };
     try {
-      const dir = this.deps.stagingFor?.(vaultDir) ?? join(vaultDir, STAGING_DIR);
+      const dir = scratch ?? join(vaultDir, STAGING_DIR);
       await mkdir(dir, { recursive: true });
-      return dir;
+      return { dir, byRename: scratch !== null };
     } catch {
-      return this.fallbackTempDir; // vault missing/unwritable: record to tmp, finalize reports it
+      // Vault missing/unwritable: record to tmp, finalize reports it. A synced workspace's take
+      // is placed by rename whichever folder it was staged in (a rename is always safe).
+      return { dir: this.fallbackTempDir, byRename: scratch !== null };
     }
   }
 
@@ -188,7 +198,7 @@ export class RecordingWriter {
     // Outside the staging fallback on purpose: a workspace that is not connected refuses
     // the take here, it does not record into the temp folder.
     const vaultDir = await this.deps.vaultDir();
-    const dir = await this.stagingDir(vaultDir);
+    const { dir, byRename } = await this.stagingDir(vaultDir);
     const tempPath = join(dir, `kaipu-rec-${sessionId}-${randomUUID().slice(0, 8)}.mp4.part`);
     const handle = await open(tempPath, "wx+");
     if (this.sessions.has(sessionKey(sessionId, "screen"))) {
@@ -203,7 +213,7 @@ export class RecordingWriter {
       handle,
       tempPath,
       vaultDir,
-      byRename: (this.deps.stagingFor?.(vaultDir) ?? null) !== null,
+      byRename,
       queue: Promise.resolve(),
     });
     return { tempPath };
@@ -561,7 +571,12 @@ export class RecordingWriter {
     // moves by rename, and so does one saved into a provider folder from a plain workspace: a
     // hard link into that folder misbehaves, and a temp sibling there would be uploaded.
     const intoSynced = await this.isSyncedFolder(dirname(destPath));
-    await replaceConfirmed(session.tempPath, destPath, (session.byRename ?? false) || intoSynced);
+    await replaceConfirmed(
+      session.tempPath,
+      destPath,
+      (session.byRename ?? false) || intoSynced,
+      intoSynced,
+    );
     this.forget(session);
     if (webcam?.stranded) {
       this.forget(webcam);
@@ -570,6 +585,7 @@ export class RecordingWriter {
         webcam.tempPath,
         destPath,
         (webcam.byRename ?? false) || intoSynced,
+        intoSynced,
       ).catch((error) => console.error("webcam salvage failed", error));
     }
   }
@@ -683,12 +699,13 @@ async function placeWebcamBeside(
   from: string,
   screenPath: string,
   byRename: boolean,
+  intoSynced = false,
 ): Promise<string> {
   const first = webcamSiblingPath(screenPath);
   for (let n = 1; n < 1000; n++) {
     const candidate = n === 1 ? first : first.replace(/\.webcam\.mp4$/, `.webcam-${n}.mp4`);
     const placed = byRename
-      ? (await placeByRename(from, candidate)) === "taken"
+      ? (await placeByRename(from, candidate, { intoSynced })) === "taken"
         ? "taken"
         : "placed"
       : await placeNoReplace(from, candidate);

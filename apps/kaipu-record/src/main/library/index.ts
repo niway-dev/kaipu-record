@@ -1,5 +1,5 @@
 import { lstat } from "node:fs/promises";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import {
   app,
   BrowserWindow,
@@ -30,7 +30,7 @@ import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repo
 import { isTagColor } from "@kaipu/domain/constants";
 import { saveGif } from "./gif-save";
 import { importVideoFiles, type ImportVideoDeps } from "./import-video";
-import { createDragCopy, dragRoot } from "./drag-copies";
+import { DRAG_PLACEHOLDER_ICON_PNG, createDragCopy, dragRoot } from "./drag-copies";
 import { dragLedger } from "./drag-ledger";
 import { withItemLock } from "./item-lock";
 import { friendlyDragName } from "./drag-name";
@@ -391,26 +391,35 @@ export function registerLibraryVaultHandlers(deps: {
         const scratch = activeScratch();
         const probe = activeEvictionProbe();
         const poster = vault.thumbnailPath(id);
-        // The poster is read for the drag icon, so an offloaded one stops the drag too.
+        // An offloaded poster is never read for the icon (reading it downloads it): the drag
+        // gets a placeholder icon instead, and still works, because the media is local.
+        let posterOffloaded = false;
         if (probe) {
           const offloaded = await probe([file, poster]);
-          if (offloaded.has(file) || offloaded.has(poster)) return;
+          if (offloaded.has(file)) return;
+          posterOffloaded = offloaded.has(poster);
         }
         // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
-        const icon = nativeImage.createFromPath(poster);
+        const icon = posterOffloaded
+          ? nativeImage.createFromBuffer(DRAG_PLACEHOLDER_ICON_PNG)
+          : nativeImage.createFromPath(poster);
         if (icon.isEmpty()) return;
         const root = scratch
           ? scratchDrag(app.getPath("userData"), activeWorkspace().id)
           : dragRoot(vault.directory);
-        const dragFile =
+        // A synced workspace always drags a copy, named or not: the original never leaves it.
+        const copyName =
           typeof name === "string" && name.length > 0
-            ? await createDragCopy(
-                vault.directory,
-                file,
-                friendlyDragName(name, extname(file)),
-                undefined,
-                { root, synced: scratch !== null },
-              )
+            ? friendlyDragName(name, extname(file))
+            : scratch !== null
+              ? basename(file)
+              : null;
+        const dragFile =
+          copyName !== null
+            ? await createDragCopy(vault.directory, file, copyName, undefined, {
+                root,
+                synced: scratch !== null,
+              })
             : file;
         // A move of this item waits 10 s after a drag, and removes its drag folder (ADR 0033).
         const workspaceId = activeWorkspace().id;

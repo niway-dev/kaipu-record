@@ -167,6 +167,47 @@ describe("SyncStates, overlapping detections of one workspace (NIW2-912)", () =>
     expect(states.of({ id: "w", path: oldPath })).toBeNull();
   });
 
+  it("a detection started before forget stays stale when the same id is added again", async () => {
+    const { detect, waiting } = stalled();
+    const states = new SyncStates(detect, HOME, async () => true);
+    const stale = states.refresh({ id: "w", path: oldPath }); // generation 1, still running
+    states.forget("w");
+    const fresh = states.refresh({ id: "w", path: newPath }); // the id is added again
+    waiting[1]!.answer("google-drive");
+    await fresh;
+    waiting[0]!.answer(null); // the old run lands last and must not win
+    await stale;
+
+    expect(states.of({ id: "w", path: newPath })).toBe("google-drive");
+    expect(states.needsRecheck("w")).toBe(false);
+  });
+
+  it("a check started before forget is not current once the id is added again", () => {
+    const states = new SyncStates(
+      async () => null,
+      HOME,
+      async () => true,
+    );
+    const old = states.beginCheck("w");
+    states.forget("w");
+    const next = states.beginCheck("w");
+
+    expect(states.isCurrentCheck("w", old)).toBe(false);
+    expect(states.isCurrentCheck("w", next)).toBe(true);
+  });
+
+  it("a check started before forget is not current even before the id comes back", () => {
+    const states = new SyncStates(
+      async () => null,
+      HOME,
+      async () => true,
+    );
+    const old = states.beginCheck("w");
+    states.forget("w");
+
+    expect(states.isCurrentCheck("w", old)).toBe(false);
+  });
+
   it("a detection that lands after rekey leaves the old id gone", async () => {
     const { detect, waiting } = stalled();
     const states = new SyncStates(detect, HOME, async () => false);

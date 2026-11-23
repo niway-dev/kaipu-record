@@ -39,7 +39,8 @@ import { StaleWorkspaceError, WorkspaceGate } from "./gate";
 import { checkAvailability } from "./availability-check";
 import { WorkspaceRegistry, type Availability, type WorkspaceEntry } from "./registry";
 import { probeDataless, type EvictionProbe } from "../library/dataless";
-import { setStagingResolver } from "../library/atomic-write";
+import { setStagingResolver, setSyncRootResolver } from "../library/atomic-write";
+import { syncRootOfPath } from "./synced-folder";
 import {
   probeWorkspaceFacts,
   scratchRoot,
@@ -112,6 +113,9 @@ export async function initWorkspaces(): Promise<void> {
       app.getPath("userData"),
     ),
   );
+  // Where a cross-volume placement may stage (`volumeStagingDir`): only a root the path rule
+  // names is known, so a folder detected through its xattr alone never gets a sibling staging folder.
+  setSyncRootResolver((path) => syncRootOfPath(path));
   registry = await WorkspaceRegistry.open({
     preferencesFile: join(app.getPath("userData"), "preferences.json"),
     defaultDirectory: defaultVaultDirectory(),

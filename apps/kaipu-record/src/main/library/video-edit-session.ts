@@ -95,8 +95,9 @@ const plainVault: SessionVault = () => new LibraryVault(vaultDirectory().path);
  * The export stamp already on disk: a number, null when nothing is known to be exported (no
  * meta sidecar, or one that is not valid JSON: the safe side, the badge then tells the user to
  * export), or "unreadable" when the file is there but cannot be read now (a provider offline or
- * stalled, an offloaded file, EIO). Unreadable is not "never exported": the caller keeps the
- * meta file it could not read instead of writing a new one over the stamp.
+ * stalled, an offloaded file, EIO). Unreadable is not "never exported", and it is not "unchanged"
+ * either: a save that cannot tell refuses before it writes anything (`ExportStampUnreadableError`),
+ * so the session, the assets and the meta never disagree.
  */
 async function readExportedSavedAt(
   id: string,
@@ -116,6 +117,22 @@ async function readExportedSavedAt(
   }
 }
 
+/**
+ * A save was refused before it wrote a byte: the export stamp in the meta file cannot be read now
+ * (offloaded by the provider, stalled, unreadable). Writing the session without carrying the stamp
+ * forward would make the badge say "exported" for a scene that was edited afterwards, or "never
+ * exported" for one that was; leaving the old meta beside a new session would misreport the assets.
+ * The editor keeps its pending state and saves again once the file can be read.
+ */
+export class ExportStampUnreadableError extends Error {
+  constructor(readonly id: string) {
+    super(
+      `The edit project of "${id}" was not saved: its export record is not available right now (a synced folder may still be downloading it). Try again in a moment.`,
+    );
+    this.name = "ExportStampUnreadableError";
+  }
+}
+
 // Exported (not just used via the IPC handlers below) so unit tests can exercise the
 // atomic-write/prune/delete behaviour directly against a temp vault dir.
 export async function saveSession(
@@ -128,6 +145,13 @@ export async function saveSession(
   // Before any write: an item whose record cannot be read is read-only (F9). Through the
   // workspace's own vault, so a synced folder's read is bounded and never downloads a file.
   await vault.assertWritableRecord(id);
+
+  // The previous export stamp, read BEFORE anything is written: when it cannot be read the whole
+  // save is refused, so the session, the assets and the meta are never left out of step (a new
+  // session beside an old meta reports the wrong assets, and an old "exported" stamp for a scene
+  // edited since). An export's own save carries no previous stamp.
+  const previous = exported ? null : await readExportedSavedAt(id, vault);
+  if (previous === "unreadable") throw new ExportStampUnreadableError(id);
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
@@ -179,10 +203,6 @@ export async function saveSession(
     // make every edit after an export look like it had never been exported at all,
     // collapsing the two states the badge exists to tell apart.
     const savedAt = Date.now();
-    const previous = exported ? null : await readExportedSavedAt(id, vault);
-    // The previous stamp could not be read: writing a meta now would drop it and show the item
-    // as never exported. The existing meta stays as it is (the probe reads its own mtime check).
-    if (previous === "unreadable") return;
     const meta: SessionMeta = {
       sourceSizeBytes: source.size,
       sourceMtimeMs: source.mtimeMs,

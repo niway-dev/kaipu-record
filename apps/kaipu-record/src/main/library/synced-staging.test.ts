@@ -156,6 +156,7 @@ describe("atomicWriteFile", () => {
       await atomicWriteFile(join(folder, ".kaipu", "a.json"), '{"whole":true}', "tmp", staging, {
         rename,
         isSynced: (path) => path === folder || inside(path),
+        syncRoot: () => folder, // the path rule named the provider root: staging goes above it
       });
 
       expect(leaks()).toEqual([]);
@@ -167,6 +168,26 @@ describe("atomicWriteFile", () => {
       expect(await readdir(join(folder, ".kaipu"))).toEqual(["a.json"]);
     });
 
+    it("a synced folder whose provider root is unknown (found by xattr alone) is never staged beside: fails with EXDEV, nothing partial", async () => {
+      syncFolder();
+      await writeFile(join(folder, ".kaipu", "a.json"), "previous");
+      record();
+      const { rename } = refusingOnce();
+      // Nothing above the folder is claimed as synced, but the folder's parent may be the
+      // provider's own folder: "not detected" is not "outside".
+      await expect(
+        atomicWriteFile(join(folder, ".kaipu", "a.json"), "new", "tmp", staging, {
+          rename,
+          isSynced: (path) => path === folder || inside(path),
+          syncRoot: () => null,
+        }),
+      ).rejects.toMatchObject({ code: "EXDEV" });
+
+      expect(leaks()).toEqual([]);
+      await expect(readdir(join(root, ".kaipu-staging"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(join(folder, ".kaipu", "a.json"), "utf-8")).toBe("previous");
+    });
+
     it("with no folder outside the synced one that can stage it, fails and leaves the previous file untouched", async () => {
       syncFolder();
       await writeFile(join(folder, ".kaipu", "a.json"), "previous");
@@ -176,6 +197,7 @@ describe("atomicWriteFile", () => {
         atomicWriteFile(join(folder, ".kaipu", "a.json"), "new", "tmp", staging, {
           rename,
           isSynced: () => true,
+          syncRoot: () => folder,
         }),
       ).rejects.toMatchObject({ code: "EXDEV" });
 

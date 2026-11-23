@@ -44,6 +44,7 @@ import { sha256FileBase64 } from "./content-hash";
 import { legacyStampMatches, sameStat, stampFields, stampMatches } from "./hash-stamp";
 import { EvictedFileError, type EvictionProbe } from "./dataless";
 import { webcamTrackState } from "./webcam-track-state";
+import { mapLimit } from "./map-limit";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
 
@@ -425,6 +426,16 @@ const fsReader: VaultReader = { readText: (path) => readFile(path, "utf-8") };
  */
 export const SYNCED_SIDECAR_READ_TIMEOUT_MS = 5_000;
 
+/** How many items a synced vault describes (reads a sidecar of) at once in `list()`. */
+export const SYNCED_LIST_CONCURRENCY = 8;
+
+/**
+ * Sidecar reads that may time out in one synced listing before the rest of the items are listed
+ * without a read (read-only, "unreadable"). With the concurrency cap, a provider that has
+ * stopped answering would otherwise cost the whole folder `5 s x items / concurrency`.
+ */
+export const SYNCED_LIST_STALL_LIMIT = 4;
+
 /** Prefix of the stand-in `assetId` of an item whose sidecar cannot be read; never persisted. */
 export const UNREADABLE_ASSET_PREFIX = "unreadable:";
 
@@ -494,6 +505,9 @@ export class LibraryVault {
     private readonly stagingDir: string | null = null,
   ) {}
 
+  /** Sidecar reads of this vault that gave up (see `readSidecarText`); only ever goes up. */
+  private sidecarTimeouts = 0;
+
   /**
    * One sidecar read through the vault's reader. A synced vault bounds it: an offloaded sidecar
    * is downloaded by the read, and a stalled provider must not hang the Library. A read that
@@ -503,11 +517,10 @@ export class LibraryVault {
     if (!this.synced) return this.reader.readText(path);
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(Object.assign(new Error(`reading "${path}" timed out`), { code: "ETIMEDOUT" })),
-        SYNCED_SIDECAR_READ_TIMEOUT_MS,
-      );
+      timer = setTimeout(() => {
+        this.sidecarTimeouts += 1;
+        reject(Object.assign(new Error(`reading "${path}" timed out`), { code: "ETIMEDOUT" }));
+      }, SYNCED_SIDECAR_READ_TIMEOUT_MS);
     });
     try {
       return await Promise.race([this.reader.readText(path), timeout]);
@@ -537,7 +550,9 @@ export class LibraryVault {
    * Every file this vault keeps beside or under its folder (sidecars, posters, cursor tracks,
    * tags, canvas documents, text caches): written through a temp file, then renamed over the
    * target. A synced vault keeps that temp file in its scratch folder, so the provider never
-   * uploads and deletes it (an EXDEV rename falls back to a file beside the target). A vault
+   * uploads and deletes it. A rename the volumes refuse (EXDEV) is redone through a hidden folder
+   * that is provably outside the provider's root, or fails with EXDEV: it never falls back to a
+   * file beside the target in a synced folder. A vault
    * built without a staging folder asks `atomicWriteFile`, which looks the folder up from the
    * path, so one built for a synced workspace by mistake still stages outside it.
    */
@@ -1230,7 +1245,15 @@ export class LibraryVault {
         ),
       ]);
     }
-    const described = await Promise.all(ids.map((id) => this.describe(id, evicted)));
+    // Each item reads its sidecar, and in a synced folder a read can download it: at most
+    // `SYNCED_LIST_CONCURRENCY` at a time (a thousand starting at once is a download storm that
+    // also makes every read wait behind the rest and time out). A plain vault reads side by side.
+    const stalls = { since: this.sidecarTimeouts };
+    const described = await mapLimit(
+      ids,
+      this.synced ? SYNCED_LIST_CONCURRENCY : Math.max(1, ids.length),
+      (id) => this.describe(id, evicted, stalls),
+    );
     return described
       .filter((r): r is LocalRecording => r !== null)
       .sort((a, b) => b.createdAt - a.createdAt);
@@ -1246,7 +1269,11 @@ export class LibraryVault {
    * The item, or null when its media is gone. `evicted` is the answer of this vault's eviction
    * probe for a whole listing; a single call asks for this item's two files itself.
    */
-  async describe(id: string, evicted?: ReadonlySet<string>): Promise<LocalRecording | null> {
+  async describe(
+    id: string,
+    evicted?: ReadonlySet<string>,
+    stalls?: { since: number },
+  ): Promise<LocalRecording | null> {
     const filePath = await this.filePath(id);
     let info;
     try {
@@ -1257,6 +1284,10 @@ export class LibraryVault {
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
     let meta: Sidecar & { assetId: string };
+    // This listing already saw the provider stall on several sidecars: stop asking it.
+    if (stalls && this.sidecarTimeouts - stalls.since >= SYNCED_LIST_STALL_LIMIT) {
+      return this.describeUnreadable(id, filePath, info, "unreadable", evicted);
+    }
     try {
       meta = await this.ensureIdentity(id);
     } catch (error) {
@@ -1704,11 +1735,19 @@ export class LibraryVault {
     await this.writeAtomic(this.cursorTrackPath(id), json);
   }
 
-  /** The raw track JSON, or null when this recording has none. */
+  /**
+   * The raw track JSON, or null when this recording has none. Read like every other companion of
+   * a synced vault: an offloaded track is never downloaded by the read and a stalled provider
+   * gives up after `SYNCED_SIDECAR_READ_TIMEOUT_MS`. Those two THROW (`EvictedFileError`,
+   * `ETIMEDOUT`) instead of reading as "no track": a track that exists but cannot be read now is
+   * not a recording without one, and the caller must be able to tell.
+   */
   async readCursorTrack(id: string): Promise<string | null> {
     try {
-      return await readFile(this.cursorTrackPath(id), "utf-8");
-    } catch {
+      return await this.readTextBounded(this.cursorTrackPath(id));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (error instanceof EvictedFileError || code === "ETIMEDOUT") throw error;
       return null;
     }
   }

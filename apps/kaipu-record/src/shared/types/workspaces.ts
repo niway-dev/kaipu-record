@@ -244,10 +244,12 @@ export type MoveRefusal =
   | "io";
 
 /**
- * An item that did arrive in the target but whose original was kept: the source changed after it
- * was copied (its media, its edit project or any small file), or the target copy could not be
- * confirmed as the one the move placed right before the source would have gone. Removing the
- * original could have discarded newer data, so both stay. The user should check both.
+ * An item that did arrive in the target but whose original (or part of it) was kept: the source
+ * changed after it was copied (its media, its edit project or any small file), or the target copy
+ * could not be confirmed as the one the move placed right before the source would have gone.
+ * Removing it could have discarded newer data, so it stays. The kept part can be the media, or,
+ * when the source media was already removed, only the record and the companions that changed
+ * after the copy: then the source lists a record with no media. The user should check both.
  */
 export type MoveKeptOriginal = "source-changed";
 
@@ -265,7 +267,7 @@ export interface MoveItemsRequest {
 /** `workspaces:move-items`: a group of single moves, run one after another (ADR 0033, decision 14). */
 export interface MoveItemsResult {
   targetId: string;
-  /** `keptOriginal` is set when the copy arrived but the original stayed (it is in both workspaces). */
+  /** `keptOriginal` is set when the copy arrived but the original, or part of it, stayed (the item is in both workspaces). */
   moved: { id: string; newId: string; keptOriginal?: MoveKeptOriginal }[];
   failed: { id: string; reason: MoveRefusal }[];
   /**

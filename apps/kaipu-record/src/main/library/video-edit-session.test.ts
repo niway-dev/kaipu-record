@@ -10,6 +10,7 @@ vi.mock("./vault-location", () => ({
 
 import {
   deleteVideoEditSession,
+  ExportStampUnreadableError,
   loadSession,
   saveSession,
   saveSessionLocked,
@@ -193,24 +194,55 @@ describe("video-edit-session", () => {
         join(vaultDir, "..", "scratch-tmp"),
       );
 
-    it("an export stamp that cannot be read now is kept: the save does not write a meta over it", async () => {
+    it("an export stamp that cannot be read now refuses the whole save before anything is written", async () => {
       await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
-      await saveSession("rec-1", { sessionJson: "{}", assets: [], exported: true });
+      await saveSession("rec-1", {
+        sessionJson: '{"scene":"exported"}',
+        assets: [{ assetId: "kept", bytes: bytesOf("k") }],
+        exported: true,
+      });
       const before = await readFile(metaPath(), "utf-8");
       expect(JSON.parse(before).exportedSavedAt).toEqual(expect.any(Number));
       await new Promise((resolve) => setTimeout(resolve, 5));
 
       // The provider has offloaded the meta file: reading it would download it (or stall).
+      await expect(
+        saveSession(
+          "rec-1",
+          { sessionJson: '{"edited":true}', assets: [{ assetId: "other", bytes: bytesOf("o") }] },
+          syncedVault((path) => path.endsWith(".edit.meta.json")),
+        ),
+      ).rejects.toBeInstanceOf(ExportStampUnreadableError);
+
+      // Nothing was touched: the session, the assets and the meta still describe the same scene,
+      // so the badge and the dependency probe read the truth.
+      expect(await readFile(metaPath(), "utf-8")).toBe(before);
+      expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
+        '{"scene":"exported"}',
+      );
+      expect(await readdir(join(vaultDir, ".kaipu", "rec-1.assets"))).toEqual(["kept.png"]);
+    });
+
+    it("the refused save goes through once the meta can be read again", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [], exported: true });
+      const stamp = JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt;
+      await expect(
+        saveSession(
+          "rec-1",
+          { sessionJson: '{"edited":true}', assets: [] },
+          syncedVault((path) => path.endsWith(".edit.meta.json")),
+        ),
+      ).rejects.toBeInstanceOf(ExportStampUnreadableError);
       await saveSession(
         "rec-1",
         { sessionJson: '{"edited":true}', assets: [] },
-        syncedVault((path) => path.endsWith(".edit.meta.json")),
+        syncedVault(() => false),
       );
-
-      expect(await readFile(metaPath(), "utf-8")).toBe(before); // the stamp survives
       expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
         '{"edited":true}',
       );
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBe(stamp);
     });
 
     it("a readable export stamp is carried forward as before", async () => {
@@ -234,7 +266,7 @@ describe("video-edit-session", () => {
       expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBeNull();
     });
 
-    it("every read of a save goes through the workspace's vault, so the provider is asked before the stamp is read", async () => {
+    it("the export stamp is read through the workspace's vault: the provider is asked about the meta file", async () => {
       await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
       const asked: string[] = [];
       await saveSession(

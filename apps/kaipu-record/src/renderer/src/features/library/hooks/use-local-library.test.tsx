@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useLocalLibrary } from "./use-local-library";
+import { FOCUS_RELIST_MIN_INTERVAL_MS, useLocalLibrary } from "./use-local-library";
 import { reportError } from "@renderer/features/analytics";
 import type { LibraryItem } from "@shared/types/library-item";
 import {
@@ -547,6 +547,63 @@ describe("useLocalLibrary", () => {
 
       await waitFor(() => expect(result.current.videos[0]?.evicted).toBeUndefined());
       expect(list).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not start a re-list while one is running, nor within the throttle of the last one", async () => {
+      let release: (() => void) | null = null;
+      const evicted = { items: evictedItems, vaultError: null, catalogVerifiedAt: null };
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce(evicted)
+        // The focus re-list stays open until the test lets it finish.
+        .mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve(evicted))))
+        .mockResolvedValue(evicted);
+      window.electronAPI.listLibraryItems = list;
+      const now = vi.spyOn(Date, "now");
+      now.mockReturnValue(1_000_000);
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+      expect(list).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+        window.dispatchEvent(new Event("focus")); // while the first is still running
+      });
+      expect(list).toHaveBeenCalledTimes(2);
+
+      await act(async () => release?.());
+      await waitFor(() => expect(result.current.isRefreshing).toBe(false));
+      now.mockReturnValue(1_000_000 + FOCUS_RELIST_MIN_INTERVAL_MS - 1);
+      act(() => {
+        window.dispatchEvent(new Event("focus")); // too soon after the last one
+      });
+      expect(list).toHaveBeenCalledTimes(2);
+
+      now.mockReturnValue(1_000_000 + FOCUS_RELIST_MIN_INTERVAL_MS);
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+      now.mockRestore();
+    });
+
+    it("keeps quiet when a re-list started by focus fails: no error toast per focus", async () => {
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: null })
+        .mockRejectedValue(new Error("provider offline"));
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await waitFor(() => expect(result.current.hasError).toBe(true));
+
+      expect(reportError).not.toHaveBeenCalled();
+      // The list on screen is kept, not blanked.
+      expect(result.current.videos).toHaveLength(2);
     });
 
     it("listens to focus only while something is not downloaded", async () => {

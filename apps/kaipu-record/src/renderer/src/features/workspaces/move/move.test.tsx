@@ -221,7 +221,7 @@ describe("moving a recording that has exports", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Move only the recording" }));
     await waitFor(() =>
       expect(getToasts().at(-1)?.message).toBe(
-        "Copied to Personal, but the original stayed in Work because it changed during the move. Check both workspaces: Demo",
+        "Copied to Personal, but the original, or part of it, stayed in Work because something there changed during the move. Check both workspaces: Demo",
       ),
     );
   });

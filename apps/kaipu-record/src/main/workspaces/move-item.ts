@@ -14,7 +14,7 @@ import {
   stat,
   statfs,
 } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative } from "node:path";
 import { nextTagColor, type TagColor } from "@kaipu/domain/constants";
 import type { MoveKeptOriginal, MoveRefusal } from "@shared/types/workspaces";
 import { atomicWriteFile } from "../library/atomic-write";
@@ -55,8 +55,10 @@ import type { SessionMeta } from "../library/video-edit-session";
  *      `.kaipu/tmp/move-<moveId>/`, its sha256 compared, then placed. **The commit.**
  *      A synced side (Google Drive, OneDrive, iCloud: `MoveSide.scratch`) is never linked,
  *      even on one device (decision 15): a hard link renames the cloud item or leaves it
- *      unsynced. It copies into the scratch folder in userData, places by rename and verifies
- *      the sha256 again at the final path.
+ *      unsynced. A synced TARGET copies into the scratch folder in userData, places by rename
+ *      and verifies the sha256 again at the final path. A synced source with a plain target
+ *      copies into the target's `.kaipu/tmp/move-<id>/` and places with `placeNew`. Either
+ *      way the copy is never a link and its sha256 is checked again where it ends up.
  *   6. journal `committed`, then the source media, then the source's small files
  *   7. the journal entry goes
  *
@@ -120,7 +122,7 @@ export type MoveOutcome =
       id: string;
       newId: string;
       mode: "linked" | "copied";
-      /** The copy arrived but the original stayed: the item is now in both workspaces. */
+      /** The copy arrived but the original, or part of it, stayed: the item is now in both workspaces. */
       keptOriginal?: MoveKeptOriginal;
     }
   | { ok: false; id: string; reason: MoveRefusal };
@@ -196,6 +198,19 @@ export interface MoveJournal {
   /** The media's extension, with its dot. */
   ext: string;
   media: { size: number; mtimeMs: number; sha256: string | null };
+  /**
+   * The source media as the move read it, before the first byte was copied (dev, inode, size and
+   * mtime to the nanosecond). Healing deletes the source only against THIS stamp, never against a
+   * fresh snapshot: a file swapped in between a crash and the recovery is not the copy. A journal
+   * without it (written before this field existed) never deletes anything.
+   */
+  sourceStamp?: StampRecord;
+  /**
+   * Every small file the source item owned at the same moment, with paths relative to
+   * `source.directory`. Healing compares each companion against these stamps: one that changed,
+   * or one that was added, is kept. Absent: the source's small files are never deleted.
+   */
+  companions?: CompanionRecord;
   createdAt: number;
   /** Set by healing when neither side can be proven complete: kept and surfaced, never deleted. */
   quarantined?: string;
@@ -256,6 +271,99 @@ async function stampAt(path: string): Promise<FileStamp | null> {
 function sameStamp(a: FileStamp | null, b: FileStamp | null): boolean {
   if (a === null || b === null) return a === b;
   return sameFile(a, b) && a.size === b.size && a.mtimeNs === b.mtimeNs;
+}
+
+/** A `FileStamp` as the journal stores it: bigints do not survive JSON, so they are strings. */
+interface StampRecord {
+  dev: string;
+  ino: string;
+  size: string;
+  mtimeNs: string;
+}
+
+/** The persisted form of a `CompanionSnapshot`, relative to the source folder. */
+interface CompanionRecord {
+  files: [string, StampRecord | null][];
+  dirs: string[];
+  sidecar: string;
+}
+
+function stampToRecord(stamp: FileStamp): StampRecord {
+  return {
+    dev: stamp.dev.toString(),
+    ino: stamp.ino.toString(),
+    size: stamp.size.toString(),
+    mtimeNs: stamp.mtimeNs.toString(),
+  };
+}
+
+/** The stamp a record holds, or undefined when it is not a well-formed one (never guessed). */
+function stampFromRecord(record: unknown): FileStamp | undefined {
+  if (typeof record !== "object" || record === null) return undefined;
+  const { dev, ino, size, mtimeNs } = record as Record<string, unknown>;
+  try {
+    if (
+      typeof dev !== "string" ||
+      typeof ino !== "string" ||
+      typeof size !== "string" ||
+      typeof mtimeNs !== "string"
+    ) {
+      return undefined;
+    }
+    return { dev: BigInt(dev), ino: BigInt(ino), size: BigInt(size), mtimeNs: BigInt(mtimeNs) };
+  } catch {
+    return undefined;
+  }
+}
+
+function snapshotToRecord(snapshot: CompanionSnapshot, directory: string): CompanionRecord {
+  return {
+    files: [...snapshot.files].map(([path, stamp]) => [
+      relative(directory, path),
+      stamp === null ? null : stampToRecord(stamp),
+    ]),
+    dirs: snapshot.dirs.map((dir) => relative(directory, dir)),
+    sidecar: relative(directory, snapshot.sidecar),
+  };
+}
+
+/**
+ * The snapshot a journal persisted, rebased on the folder the workspace lives in now; undefined
+ * when the journal has none or it is malformed, and a path that climbs out of the folder is
+ * refused whole (a journal is a file on disk: nothing it says may point a delete elsewhere).
+ */
+function snapshotFromRecord(
+  record: CompanionRecord | undefined,
+  directory: string,
+): CompanionSnapshot | undefined {
+  if (!record || !Array.isArray(record.files) || !Array.isArray(record.dirs)) return undefined;
+  const inside = (rel: unknown): string | undefined => {
+    if (typeof rel !== "string" || rel === "" || isAbsolute(rel)) return undefined;
+    const path = join(directory, rel);
+    const back = relative(directory, path);
+    return back === "" || back.startsWith("..") || isAbsolute(back) ? undefined : path;
+  };
+  const files = new Map<string, FileStamp | null>();
+  for (const entry of record.files) {
+    if (!Array.isArray(entry)) return undefined;
+    const path = inside(entry[0]);
+    if (path === undefined) return undefined;
+    if (entry[1] === null) files.set(path, null);
+    else {
+      const stamp = stampFromRecord(entry[1]);
+      if (stamp === undefined) return undefined;
+      files.set(path, stamp);
+    }
+  }
+  const dirs: string[] = [];
+  for (const dir of record.dirs) {
+    const path = inside(dir);
+    if (path === undefined) return undefined;
+    dirs.push(path);
+  }
+  const sidecar = inside(record.sidecar);
+  if (sidecar === undefined) return undefined;
+  return { files, dirs, sidecar };
 }
 
 /** Every file the source's item owns, as the move found it before it copied a byte. */
@@ -379,8 +487,10 @@ async function snapshotChangedFile(
 
 /**
  * Remove the source's small files, each one only while it is still what the snapshot saw and the
- * destination is still the verified copy (`removeGuarded`). Stops at the first file that changed
- * and names it; the record goes last. Resolves null when everything went.
+ * destination is still the verified copy (`removeGuarded`). Stops at the FIRST file that changed
+ * or that could not be removed and says why; the record goes last, so a source that stopped
+ * halfway keeps its identity, and the caller keeps the journal. Resolves null when everything
+ * went: an error is never swallowed into a success.
  */
 async function removeCompanionsGuarded(
   snapshot: CompanionSnapshot,
@@ -392,10 +502,11 @@ async function removeCompanionsGuarded(
   for (const [path, expected] of ordered) {
     try {
       if ((await removeGuarded(path, expected, destination)) === "kept") {
-        return `file ${basename(path)}`;
+        return `source file ${basename(path)} changed after the move committed`;
       }
     } catch (error) {
       console.error(`move: could not remove "${path}"`, error);
+      return `source file ${basename(path)} could not be removed after the move committed`;
     }
   }
   for (const dir of snapshot.dirs) {
@@ -403,8 +514,39 @@ async function removeCompanionsGuarded(
       await rmdir(dir);
     } catch (error) {
       const code = codeOf(error);
-      if (code === "ENOTEMPTY" || code === "EEXIST") return `folder ${basename(dir)}`;
-      if (code !== "ENOENT") console.error(`move: could not remove "${dir}"`, error);
+      if (code === "ENOTEMPTY" || code === "EEXIST") {
+        return `source folder ${basename(dir)} changed after the move committed`;
+      }
+      if (code !== "ENOENT") {
+        console.error(`move: could not remove "${dir}"`, error);
+        return `source folder ${basename(dir)} could not be removed after the move committed`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The first file of the source that is not what the JOURNAL recorded before the copy (changed,
+ * replaced or added since), as a short name, or null. A file that is gone now is not a change: an
+ * interrupted move may have removed it, and removing less is never a risk. Unreadable counts as
+ * changed.
+ */
+async function changedSinceJournal(
+  recorded: CompanionSnapshot,
+  paths: CompanionPaths,
+): Promise<string | null> {
+  let now: CompanionSnapshot;
+  try {
+    now = await snapshotCompanions(paths);
+  } catch {
+    return "files";
+  }
+  for (const [path, stamp] of now.files) {
+    if (stamp === null) continue;
+    const before = recorded.files.get(path);
+    if (before === undefined || before === null || !sameStamp(stamp, before)) {
+      return `file ${basename(path)}`;
     }
   }
   return null;
@@ -582,6 +724,9 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     assetId,
     ext,
     media: { size: mediaInfo.size, mtimeMs: mediaInfo.mtimeMs, sha256 },
+    // What the source was before the first byte was copied: healing deletes against this.
+    sourceStamp: stampToRecord(mediaStamp),
+    companions: snapshotToRecord(companionSnapshot, source.directory),
     createdAt: now(),
   };
   await writeJournal(deps.journalDir, journal);
@@ -750,8 +895,8 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
       console.error("move: could not stamp the moved item's media", error),
     );
     await after("source-media-deleted");
-    const changed = await removeCompanionsGuarded(companionSnapshot, destination);
-    if (changed) return keepOriginal(`source ${changed} changed after the move committed`);
+    const incomplete = await removeCompanionsGuarded(companionSnapshot, destination);
+    if (incomplete) return keepOriginal(incomplete);
     await after("source-companions-deleted");
 
     // ── 7. Done.
@@ -1107,10 +1252,19 @@ async function healEntry(
   // The identity the checks below are made against: the delete is held to it (`removeGuarded`).
   const sourceStamp = await stampAt(sourceMedia).catch(() => null);
   const sourcePresent = sourceStat !== null;
+  // The identity the move recorded before it copied: the one thing the source may be deleted
+  // against. A journal without a well-formed stamp proves nothing about the file there now.
+  const recordedSource = stampFromRecord(journal.sourceStamp);
+  const sourceProven =
+    recordedSource !== undefined && sourceStamp !== null && sameStamp(sourceStamp, recordedSource);
+  // Looser, for the branches that remove only the TARGET's partial copy (never the source):
+  // the recorded identity when there is one, else what older journals recorded.
   const sourceMatches =
-    sourceStat !== null &&
-    sourceStat.size === journal.media.size &&
-    sourceStat.mtimeMs === journal.media.mtimeMs;
+    recordedSource !== undefined
+      ? sourceProven
+      : sourceStat !== null &&
+        sourceStat.size === journal.media.size &&
+        sourceStat.mtimeMs === journal.media.mtimeMs;
 
   if (journal.targetId === null) {
     // Died before the stem was reserved, or in the middle of it: only a record can be there.
@@ -1170,18 +1324,39 @@ async function healEntry(
     const sourceIsOurs =
       sourceRecord.status === "missing" || sourceRecord.sidecar.assetId === journal.assetId;
     if (sourceIsOurs) {
-      // What the small files are now, before the edit project is compared: they go only while
-      // each is still what this snapshot saw.
-      const companionSnapshot = await snapshotCompanions(from.companionPaths(journal.sourceId));
+      // What the source was BEFORE the copy, as the journal recorded it. Comparing against a fresh
+      // snapshot would make whatever is there after a crash the baseline, and delete it.
+      const recorded = snapshotFromRecord(journal.companions, sourceDir);
+      if (recordedSource === undefined || recorded === undefined) {
+        // An older journal, or a damaged one: nothing proves what the source held. If anything
+        // of it is still there it stays; a source with nothing left has nothing to protect.
+        const left = await snapshotCompanions(from.companionPaths(journal.sourceId)).catch(
+          () => null,
+        );
+        const anything = left === null || [...left.files.values()].some((stamp) => stamp !== null);
+        if (sourcePresent || anything) {
+          return quarantine(
+            "the journal records no identity of the source (written by an older version): source kept",
+          );
+        }
+        return done();
+      }
       if (sourcePresent) {
-        if (!sourceMatches) return quarantine("source media changed after the move committed");
+        if (!sourceProven) return quarantine("source media is not the file that was copied");
         if (await editProjectChanged(from, to, journal.sourceId, targetId)) {
           return quarantine("source edit project changed after the move committed");
         }
+      }
+      const changedFile = await changedSinceJournal(
+        recorded,
+        from.companionPaths(journal.sourceId),
+      );
+      if (changedFile) return quarantine(`source ${changedFile} changed after the move committed`);
+      if (sourcePresent) {
         // The checks above read, hashed and awaited: the delete re-checks the source and the
         // target together, with nothing awaited between that check and the `rm`.
         try {
-          if ((await removeGuarded(sourceMedia, sourceStamp, destination)) === "kept") {
+          if ((await removeGuarded(sourceMedia, recordedSource, destination)) === "kept") {
             return quarantine("source or target media changed just before the source was removed");
           }
         } catch (error) {
@@ -1193,8 +1368,8 @@ async function healEntry(
         // The removal moved the shared inode's ctime (a linked move): stamp again.
         await stampMovedMedia(to, targetId, journal).catch(() => {});
       }
-      const changed = await removeCompanionsGuarded(companionSnapshot, destination);
-      if (changed) return quarantine(`source ${changed} changed after the move committed`);
+      const incomplete = await removeCompanionsGuarded(recorded, destination);
+      if (incomplete) return quarantine(incomplete);
     }
     return done();
   }

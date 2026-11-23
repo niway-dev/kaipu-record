@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   chmod,
   mkdir,
@@ -14,7 +14,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
 import { parseMediaUrl } from "@shared/media-url";
-import { LibraryVault, humanizeId } from "./library-vault";
+import { EvictedFileError } from "./dataless";
+import {
+  LibraryVault,
+  SYNCED_LIST_CONCURRENCY,
+  SYNCED_LIST_STALL_LIMIT,
+  SYNCED_SIDECAR_READ_TIMEOUT_MS,
+  humanizeId,
+} from "./library-vault";
 
 /** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
 async function renameById(
@@ -172,6 +179,102 @@ describe("LibraryVault", () => {
     expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.cursor.json.tmp");
     await vault.remove("rec");
     expect(await vault.readCursorTrack("rec")).toBeNull();
+  });
+
+  it("never downloads an evicted cursor track: it throws instead of reading null", async () => {
+    await writeRecording("rec");
+    await vault.writeCursorTrack("rec", '{"version":1}');
+    const track = vault.cursorTrackPath("rec");
+    const read = vi.fn(async () => "never");
+    const synced = new LibraryVault(
+      directory,
+      null,
+      { readText: read } as never,
+      async () => new Set([track]),
+    );
+    await expect(synced.readCursorTrack("rec")).rejects.toBeInstanceOf(EvictedFileError);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("gives up on a stalled cursor track read in a synced vault and says so", async () => {
+    vi.useFakeTimers();
+    try {
+      const synced = new LibraryVault(
+        directory,
+        null,
+        { readText: () => new Promise<string>(() => {}) } as never,
+        async () => new Set(),
+      );
+      const result = synced.readCursorTrack("rec").catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
+      expect(await result).toMatchObject({ code: "ETIMEDOUT" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe("listing a synced folder with many items", () => {
+    const seed = async (count: number): Promise<string[]> => {
+      const ids = Array.from({ length: count }, (_, i) => `clip-${String(i).padStart(3, "0")}`);
+      for (const id of ids) {
+        await writeRecording(id);
+        await writeSidecar(id, { assetId: `asset-${id}`, sidecarVersion: 2 });
+      }
+      return ids;
+    };
+
+    it("reads at most SYNCED_LIST_CONCURRENCY sidecars at once", async () => {
+      const ids = await seed(40);
+      let inFlight = 0;
+      let peak = 0;
+      const reader = {
+        readText: async (path: string) => {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          await new Promise((resolve) => setImmediate(resolve));
+          inFlight -= 1;
+          return readFile(path, "utf-8");
+        },
+      };
+      const synced = new LibraryVault(directory, null, reader, async () => new Set());
+
+      const listed = await synced.list();
+
+      expect(listed).toHaveLength(ids.length);
+      expect(peak).toBeGreaterThan(1);
+      expect(peak).toBeLessThanOrEqual(SYNCED_LIST_CONCURRENCY);
+    });
+
+    it("stops asking a provider that stalled on several sidecars: the rest list read-only", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const ids = await seed(40);
+        const read = vi.fn(() => new Promise<string>(() => {}));
+        const synced = new LibraryVault(directory, null, { readText: read }, async () => new Set());
+
+        const pending = synced.list();
+        for (let i = 0; i < 20; i += 1) {
+          await new Promise((resolve) => setImmediate(resolve));
+          await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
+        }
+        const listed = await pending;
+
+        // Every item is still listed (read-only); only the first wave, plus the few reads that
+        // started before the limit was seen, ever hit the provider (not all 40).
+        expect(listed).toHaveLength(ids.length);
+        expect(listed.every((item) => item.metadataIssue === "unreadable")).toBe(true);
+        expect(read.mock.calls.length).toBeLessThanOrEqual(
+          SYNCED_LIST_CONCURRENCY + SYNCED_LIST_STALL_LIMIT,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("still reads a track that is simply absent as null in a synced vault", async () => {
+    const synced = new LibraryVault(directory, null, undefined, async () => new Set());
+    expect(await synced.readCursorTrack("nothing")).toBeNull();
   });
 
   it("removes a cursor track temp file left behind by an interrupted write", async () => {

@@ -72,6 +72,26 @@ export async function pruneDragCopies(
   );
 }
 
+/** A synced workspace's drag copy could not be made, so there is nothing safe to drag. */
+export class SyncedDragCopyError extends Error {
+  constructor(root: string, cause: unknown) {
+    super(`cannot create a drag copy in "${root}"; a synced item is never dragged as itself`, {
+      cause,
+    });
+    this.name = "SyncedDragCopyError";
+  }
+}
+
+/**
+ * The icon of a drag whose poster is offloaded (a 64 x 64 translucent gray PNG): the drag image
+ * must not be read from the poster, because reading an offloaded file downloads it, and macOS
+ * refuses a drag without an image.
+ */
+export const DRAG_PLACEHOLDER_ICON_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAl0lEQVR4nO3QMREAIAzAwMruiDxkIeMHMvyey+ye+7PRAVoDdIDWAB2gNUAHaA3QAVoDdIDWAB2gNUAHaA3QAVoDdIDWAB2gNUAHaA3QAVoDdIDWAB2gNUAHaA3QAVoDdIDWAB2gNUAHaA3QAVoDdIDWAB2gNUAHaA3QAVoDdIDWAB2gNUAHaA9WRYIONZ0KLgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 /** The two filesystem calls whose failure decides the fallback; injectable for tests. */
 export interface DragCopyFs {
   link: (existing: string, target: string) => Promise<void>;
@@ -95,8 +115,9 @@ export interface DragCopyOptions {
  * A hard link costs no disk space. If the link crosses devices (EXDEV) the vault file itself is
  * returned (no copy, the drag starts at once, under its id name); any other link failure (exFAT,
  * FAT) falls back to a copy. In a synced workspace (`options.synced`) it is always a real copy
- * in `options.root`, outside the folder, and never a link. Earlier drag folders are only pruned
- * when older than `DRAG_COPY_MAX_AGE_MS`.
+ * in `options.root`, outside the folder, never a link, and never the original: when the copy's
+ * folder cannot be made it throws {@link SyncedDragCopyError}. Earlier drag folders are only
+ * pruned when older than `DRAG_COPY_MAX_AGE_MS`.
  */
 export async function createDragCopy(
   vaultDir: string,
@@ -110,7 +131,10 @@ export async function createDragCopy(
   const dir = join(root, randomUUID());
   try {
     await mkdir(dir, { recursive: true });
-  } catch {
+  } catch (error) {
+    // A synced workspace never drags the original: a drop on the same volume would MOVE it,
+    // and moving a file out of a synced folder deletes it from the cloud. The drag is refused.
+    if (options.synced) throw new SyncedDragCopyError(root, error);
     return vaultFile; // read-only vault: drag the original rather than fail
   }
   const target = join(dir, fileName);

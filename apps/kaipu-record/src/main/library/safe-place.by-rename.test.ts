@@ -145,6 +145,7 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
         {
           deps: {
             isSynced: syncedOf(dir),
+            syncRoot: () => join(dir, "synced"),
             rename: async (from, to) => {
               // The moment the folder is touched: it holds nothing yet, and the staged file is whole.
               if (calls.length >= 1) {
@@ -176,11 +177,47 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
       // The detection claims every ancestor: no folder can be told apart from the synced one.
       await expect(
         placeByRename(join(dir, "scratch", "take.mp4"), join(dir, "synced", "Take.mp4"), {
-          deps: { isSynced: () => true, rename: refusingOnce(calls) },
+          deps: {
+            isSynced: () => true,
+            syncRoot: () => join(dir, "synced"),
+            rename: refusingOnce(calls),
+          },
         }),
       ).rejects.toMatchObject({ code: "EXDEV" });
       expect(calls).toHaveLength(1);
       expect(await readdir(join(dir, "synced"))).toEqual([]);
+      expect(await readFile(join(dir, "scratch", "take.mp4"), "utf-8")).toBe("whole file");
+    });
+
+    it("a synced destination whose provider root is unknown fails with EXDEV and keeps the source, with nothing staged beside it", async () => {
+      await mkdir(join(dir, "synced"), { recursive: true });
+      await mkdir(join(dir, "scratch"), { recursive: true });
+      await writeFile(join(dir, "scratch", "take.mp4"), "whole file");
+      const calls: Array<[string, string]> = [];
+      // Found synced by its xattr alone (no path rule names a root): its parent could be inside it.
+      await expect(
+        placeByRename(join(dir, "scratch", "take.mp4"), join(dir, "synced", "Take.mp4"), {
+          deps: { isSynced: syncedOf(dir), syncRoot: () => null, rename: refusingOnce(calls) },
+        }),
+      ).rejects.toMatchObject({ code: "EXDEV" });
+      expect(calls).toHaveLength(1);
+      expect(await readdir(join(dir, "synced"))).toEqual([]);
+      await expect(stat(join(dir, ".kaipu-staging"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(join(dir, "scratch", "take.mp4"), "utf-8")).toBe("whole file");
+    });
+
+    it("a destination the caller knows is synced (a save-dialog folder) never gets the direct copy either", async () => {
+      await mkdir(join(dir, "picked"), { recursive: true });
+      await mkdir(join(dir, "scratch"), { recursive: true });
+      await writeFile(join(dir, "scratch", "take.mp4"), "whole file");
+      const calls: Array<[string, string]> = [];
+      await expect(
+        placeByRename(join(dir, "scratch", "take.mp4"), join(dir, "picked", "Take.mp4"), {
+          intoSynced: true,
+          deps: { isSynced: () => false, syncRoot: () => null, rename: refusingOnce(calls) },
+        }),
+      ).rejects.toMatchObject({ code: "EXDEV" });
+      expect(await readdir(join(dir, "picked"))).toEqual([]);
       expect(await readFile(join(dir, "scratch", "take.mp4"), "utf-8")).toBe("whole file");
     });
 

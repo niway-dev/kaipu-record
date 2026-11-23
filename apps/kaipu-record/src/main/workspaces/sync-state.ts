@@ -24,6 +24,13 @@ export class SyncStates {
    */
   private readonly provisional = new Set<string>();
 
+  /**
+   * Source of every generation number, for refreshes and checks alike. It only ever goes up and
+   * is never reset: a counter that restarted at 1 when a workspace was forgotten and added again
+   * would hand a new refresh the number an old, still-running one already holds.
+   */
+  private clock = 0;
+
   /** The newest availability check of each workspace (see `beginCheck`). */
   private readonly checks = new Map<string, number>();
 
@@ -46,7 +53,7 @@ export class SyncStates {
    */
   async refresh(entry: { id: string; path: string }): Promise<SyncProvider | null> {
     const { id, path } = entry;
-    const generation = (this.refreshes.get(id) ?? 0) + 1;
+    const generation = ++this.clock;
     this.refreshes.set(id, generation);
     const sync = await this.detect(path);
     const hasIdentity = sync === null ? await this.hasIdentity(path) : true;
@@ -71,7 +78,7 @@ export class SyncStates {
    * finishes late asks `isCurrentCheck` before it changes what a newer one learned.
    */
   beginCheck(id: string): number {
-    const next = (this.checks.get(id) ?? 0) + 1;
+    const next = ++this.clock;
     this.checks.set(id, next);
     return next;
   }
@@ -110,10 +117,14 @@ export class SyncStates {
     this.forget(from);
   }
 
-  /** The workspace was removed from the registry. */
+  /**
+   * The workspace was removed from the registry. Whatever refresh or check is still running for
+   * it is superseded: its generation is replaced by a newer one instead of being deleted, so
+   * the id can be added again and a late result of the old run still cannot pass for current.
+   */
   forget(id: string): void {
-    this.checks.delete(id);
-    this.refreshes.delete(id);
+    this.checks.set(id, ++this.clock);
+    this.refreshes.set(id, ++this.clock);
     this.known.delete(id);
     this.provisional.delete(id);
     this.unanswered.delete(id);

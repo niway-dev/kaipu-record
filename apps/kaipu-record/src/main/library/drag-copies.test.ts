@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   DRAG_COPY_MAX_AGE_MS,
+  SyncedDragCopyError,
   cleanupDragCopies,
   cleanupLegacyDragCopies,
   cleanupScratchDragCopies,
@@ -151,6 +152,25 @@ describe("drag copies", () => {
         },
       );
       expect(copy).toHaveBeenCalledWith(file, expect.any(String), constants.COPYFILE_FICLONE);
+    });
+
+    it("refuses instead of handing out the original when the drag folder cannot be made", async () => {
+      const blocked = join(scratch, "blocked");
+      await writeFile(blocked, "a file where the folder must go");
+      await expect(
+        createDragCopy(vault, file, "x.mp4", undefined, {
+          root: join(blocked, "drag"),
+          synced: true,
+        }),
+      ).rejects.toBeInstanceOf(SyncedDragCopyError);
+    });
+
+    it("a workspace that is not synced still drags the original when its folder cannot be made", async () => {
+      const blocked = join(scratch, "blocked");
+      await writeFile(blocked, "a file where the folder must go");
+      expect(
+        await createDragCopy(vault, file, "x.mp4", undefined, { root: join(blocked, "drag") }),
+      ).toBe(file);
     });
 
     it("prunes old drag folders in the scratch root, not in the workspace", async () => {

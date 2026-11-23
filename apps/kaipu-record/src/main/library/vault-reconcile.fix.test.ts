@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { LibraryVault } from "./library-vault";
+import { LibraryVault, SYNCED_SIDECAR_READ_TIMEOUT_MS, type VaultReader } from "./library-vault";
 import { fixVault, resumeOrphanManifests, scanVault, skipPaths } from "./vault-reconcile";
 import { listFiles, makeVault, sidecar, snapshot } from "./vault-reconcile.test-helpers";
 
@@ -636,4 +636,49 @@ describe("fixVault — an orphan bundle with a file that did not move", () => {
       });
     },
   );
+});
+
+describe("fixVault on a synced workspace: every scan reads through the workspace's vault (AC13)", () => {
+  it("gives up on a record the provider never delivers in all four scans, instead of reading it plainly", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      directory = await makeVault({
+        "Clip.mp4": "video",
+        ".kaipu/Clip.json": sidecar({ assetId: "a-1", title: "Clip", createdAt: T0 }),
+        "Gone.mp4": "video",
+        ".kaipu/Dead.json": sidecar({ assetId: "a-2", title: "Dead", createdAt: T0 }),
+      });
+      const asked: string[] = [];
+      // The provider never delivers Clip.json; every other record reads normally.
+      const reader: VaultReader = {
+        readText: (path) => {
+          asked.push(path);
+          return path.endsWith("Clip.json")
+            ? new Promise<string>(() => {})
+            : readFile(path, "utf-8");
+        },
+      };
+      const vault = new LibraryVault(directory, "ws-1", reader, async () => new Set<string>());
+      const fixing = fixVault(directory, {
+        cloud: "unknown",
+        vault,
+        retry: noWait,
+        now: () => T0 + 60_000,
+      });
+      // Each scan that reads Clip.json waits its bound; real I/O runs between them, so advance the
+      // clock past the bound again and again until the fix settles.
+      let settled = false;
+      void fixing.finally(() => (settled = true));
+      while (!settled) {
+        await new Promise((resolve) => setImmediate(resolve));
+        await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
+      }
+      const report = await fixing;
+      expect(report.counts["unreadable-record"]).toBeGreaterThanOrEqual(1);
+      // A plain read would have delivered it: the record was never read except through the vault.
+      expect(asked.filter((path) => path.endsWith("Clip.json")).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

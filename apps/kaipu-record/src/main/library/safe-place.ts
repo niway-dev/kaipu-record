@@ -215,6 +215,8 @@ export interface PlaceDeps {
   rename?: typeof rename;
   /** Whether a path is inside a synced folder; defaults to the app's detection. */
   isSynced?: (path: string) => boolean;
+  /** The provider root that holds a path, or null when unknown; defaults to the app's path rule. */
+  syncRoot?: (path: string) => string | null;
 }
 
 export interface PlaceOptions {
@@ -222,6 +224,12 @@ export interface PlaceOptions {
   /** The file `from` must hold; any other file there fails the placement (ESTALE), untouched. */
   expect?: FileIdentity;
   deps?: PlaceDeps;
+  /**
+   * The destination is in a synced folder the app's detection does not know (a folder the user
+   * picked in a save dialog, found synced through its xattr): the copy across volumes is staged
+   * like one into a synced workspace, or fails with EXDEV, never written under its final name.
+   */
+  intoSynced?: boolean;
 }
 
 /**
@@ -361,9 +369,10 @@ export async function placeByRename(
  * stranded sweep cannot recover the same take a second time.
  *
  * Where the destination is in a synced folder the copy is never written under a name the provider
- * can see: it goes to `volumeStagingDir` (hidden, on the destination's volume, outside the synced
- * root) and is renamed into place once whole. When no such folder exists the placement fails with
- * EXDEV before a byte is written: the source stays and nothing partial is placed. A destination
+ * can see: it goes to `volumeStagingDir` (hidden, on the destination's volume, provably outside
+ * the provider's root) and is renamed into place once whole. When no such folder exists, an
+ * unknown provider root included, the placement fails with EXDEV before a byte is written: the
+ * source stays and nothing partial is placed. A destination
  * the detection does not call synced keeps the exclusive copy straight into it.
  */
 async function copyAcrossDevices(
@@ -373,8 +382,12 @@ async function copyAcrossDevices(
 ): Promise<PlacedFile | "taken"> {
   const isSynced = options.deps?.isSynced ?? isSyncedPath;
   let stageDir: string | null = null;
-  if (isSynced(to)) {
-    stageDir = await volumeStagingDir(to, { isSynced });
+  if (options.intoSynced === true || isSynced(to)) {
+    stageDir = await volumeStagingDir(to, {
+      isSynced,
+      syncRoot: options.deps?.syncRoot,
+      assumeSynced: options.intoSynced,
+    });
     if (stageDir === null) {
       throw Object.assign(
         new Error(
@@ -638,8 +651,15 @@ async function moveBack(temp: string, from: string): Promise<void> {
  * only that temporary file: the existing destination and the source are untouched. The source
  * is removed once the destination holds the bytes and its folder is flushed. `byRename` (a
  * synced workspace's scratch file) moves it with a plain rename instead, never a hard link.
+ * `intoSynced` says `to` is in a provider's folder the app's detection does not know: across
+ * volumes the replacement is staged outside it or fails (`volumeStagingDir`).
  */
-export async function replaceConfirmed(from: string, to: string, byRename = false): Promise<void> {
+export async function replaceConfirmed(
+  from: string,
+  to: string,
+  byRename = false,
+  intoSynced = false,
+): Promise<void> {
   // Replacing a file with itself (the dialog pointed at the take's own path) is a no-op: going
   // through a temporary sibling would leave the bytes under that hidden name.
   if (resolve(from) === resolve(to) || (await isSameFile(from, to))) return;
@@ -658,10 +678,12 @@ export async function replaceConfirmed(from: string, to: string, byRename = fals
     }
   }
   let temp = siblingTemp(to, "replace");
-  if (byRename && isSyncedPath(to)) {
+  if (byRename && (intoSynced || isSyncedPath(to))) {
     // Across volumes the temporary file must not sit beside `to`: the provider would upload it
-    // half written. It is staged on the destination's volume outside the synced root instead.
-    const stageDir = await volumeStagingDir(to);
+    // half written. It is staged on the destination's volume provably outside the provider's
+    // root instead, or the replacement fails and keeps the source (a folder found synced only
+    // through its xattr has no known root).
+    const stageDir = await volumeStagingDir(to, { assumeSynced: intoSynced });
     if (stageDir === null) {
       throw Object.assign(
         new Error(

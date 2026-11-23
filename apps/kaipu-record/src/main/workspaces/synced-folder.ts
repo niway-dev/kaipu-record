@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { SyncProvider } from "@shared/types/workspaces";
 
 /**
@@ -40,21 +40,43 @@ export const SYNC_DETECT_TIMEOUT_MS = 2_000;
  * override the user can set is the way out for the rest, and is not part of this change.
  */
 export function syncProviderOfPath(path: string, home: string = homedir()): SyncProvider | null {
+  return matchPathRule(path, home)?.provider ?? null;
+}
+
+/**
+ * The root of the provider folder that holds `path`, from the path rule alone, or null when the
+ * rule does not place `path` in one: `~/Library/Mobile Documents` (every iCloud container),
+ * `~/Library/CloudStorage/<mount>`, and the home-folder root of the older clients. A folder that
+ * is synced but not under these (a custom Drive mount found through its xattr, a detection that
+ * did not answer) has no known root, which is what keeps a staging folder from being made beside
+ * it: its parent could be inside the provider's folder.
+ */
+export function syncRootOfPath(path: string, home: string = homedir()): string | null {
+  return matchPathRule(path, home)?.root ?? null;
+}
+
+function matchPathRule(
+  path: string,
+  home: string,
+): { provider: SyncProvider; root: string } | null {
   const cloudStorage = join(home, "Library", "CloudStorage");
   const iCloud = join(home, "Library", "Mobile Documents");
-  if (path === iCloud || path.startsWith(`${iCloud}/`)) return "icloud";
+  if (path === iCloud || path.startsWith(`${iCloud}/`)) return { provider: "icloud", root: iCloud };
   if (path.startsWith(`${cloudStorage}/`)) {
-    const provider = path.slice(cloudStorage.length + 1).split("/")[0] ?? "";
-    if (provider.startsWith("GoogleDrive-")) return "google-drive";
-    if (provider.startsWith("OneDrive")) return "onedrive";
-    return provider.length > 0 ? "cloud-provider" : null;
+    const mount = path.slice(cloudStorage.length + 1).split("/")[0] ?? "";
+    if (mount.length === 0) return null;
+    const root = join(cloudStorage, mount);
+    if (mount.startsWith("GoogleDrive-")) return { provider: "google-drive", root };
+    if (mount.startsWith("OneDrive")) return { provider: "onedrive", root };
+    return { provider: "cloud-provider", root };
   }
   if (!path.startsWith(`${home}/`)) return null;
-  const root = path.slice(home.length + 1).split("/")[0] ?? "";
-  const named = (name: string): boolean => root === name || root.startsWith(`${name} `);
-  if (named("Google Drive")) return "google-drive";
-  if (named("OneDrive")) return "onedrive";
-  if (named("Dropbox")) return "cloud-provider";
+  const top = path.slice(home.length + 1).split("/")[0] ?? "";
+  const root = join(home, top);
+  const named = (name: string): boolean => top === name || top.startsWith(`${name} `);
+  if (named("Google Drive")) return { provider: "google-drive", root };
+  if (named("OneDrive")) return { provider: "onedrive", root };
+  if (named("Dropbox")) return { provider: "cloud-provider", root };
   return null;
 }
 
@@ -138,6 +160,50 @@ export async function detectSync(
     return "cloud-provider";
   }
   return null;
+}
+
+/** The most ancestors `detectSyncedFolder` asks about; a folder is rarely nested deeper than that. */
+const MAX_ANCESTORS_ASKED = 12;
+
+/**
+ * Detect whether an ARBITRARY folder (one the user picked in a save dialog) is inside a provider's
+ * folder. `detectSync` asks about Kaipu's own `identity.json`, which only a workspace root has, so
+ * for any other folder its xattr net always answers "no". This one asks the same question about the
+ * folder and each of its ancestors (the xattr is read from the folder itself: Drive tags what it
+ * syncs, and a custom mount is tagged all the way up to its root; the tag on a directory is
+ * unverified, which is why the identity file is asked about too). One budget covers the whole
+ * climb: when it runs out, or a step does not answer, the folder counts as synced, the same
+ * "unknown means synced" rule as `detectSync`. Never throws.
+ */
+export async function detectSyncedFolder(
+  path: string,
+  deps: SyncDetectDeps = defaultSyncDetectDeps,
+): Promise<SyncProvider | null> {
+  const byWorkspaceRule = await detectSync(path, deps);
+  if (byWorkspaceRule !== null) return byWorkspaceRule;
+  if (process.platform !== "darwin" && deps === defaultSyncDetectDeps) return null;
+  const deadline = Date.now() + deps.timeoutMs * 2;
+  let at = path;
+  for (let step = 0; step < MAX_ANCESTORS_ASKED; step++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return unknownSynced(path);
+    const tagged = await withTimeout<boolean | null>(
+      deps.hasXattr(at, GOOGLE_DRIVE_ITEM_XATTR),
+      Math.min(deps.timeoutMs, remaining),
+      null,
+    );
+    if (tagged) return "google-drive";
+    if (tagged === null) return unknownSynced(path);
+    const parent = dirname(at);
+    if (parent === at) return null;
+    at = parent;
+  }
+  return null;
+}
+
+function unknownSynced(path: string): SyncProvider {
+  console.warn(`[workspaces] could not tell whether "${path}" is synced; treating it as synced`);
+  return "cloud-provider";
 }
 
 const NO_ANSWER = Symbol("no answer");

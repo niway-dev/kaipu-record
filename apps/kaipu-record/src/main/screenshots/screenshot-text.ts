@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   recognizedWordsSchema,
@@ -65,13 +65,17 @@ export function bumpTextGeneration(vault: LibraryVault, id: string): void {
 const lockKey = (vault: LibraryVault, id: string): string =>
   `text-cache\u0000${itemKey(vault, id)}`;
 
-/** The cache's valid entries; a missing, oversized, corrupt or off-schema file is `{}`. */
+/**
+ * The cache's valid entries; a missing, oversized, corrupt or off-schema file is `{}`. It is read
+ * through the workspace's vault: in a synced folder an offloaded cache is never downloaded by the
+ * read and a stalled provider cannot hang it (both are `{}`, a cache miss, like any other failure).
+ */
 export async function readTextCache(vault: LibraryVault, id: string): Promise<TextCacheAssets> {
   try {
     const path = vault.companionPaths(id).textCache;
     const info = await stat(path);
     if (!info.isFile() || info.size > TEXT_CACHE_MAX_BYTES) return {};
-    const file = JSON.parse(await readFile(path, "utf-8")) as {
+    const file = JSON.parse(await vault.readTextBounded(path)) as {
       schemaVersion?: unknown;
       assets?: unknown;
     } | null;

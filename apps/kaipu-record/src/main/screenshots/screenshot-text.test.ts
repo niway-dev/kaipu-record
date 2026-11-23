@@ -306,6 +306,25 @@ describe("recognizeScreenshotText", () => {
 });
 
 describe("recognizeScreenshotText in a synced workspace", () => {
+  it("never reads an evicted text cache: it is a miss and the file is left as it was", async () => {
+    const id = await seedItem("Shot", "pixels");
+    const text = cachePath(id);
+    await writeFile(
+      text,
+      JSON.stringify({
+        schemaVersion: 1,
+        assets: { base: { sha256: sha(Buffer.from("pixels")), words: [word("cached")] } },
+      }),
+    );
+    const synced = new LibraryVault(
+      directory,
+      undefined,
+      { readText: () => Promise.reject(new Error("a read downloads it")) },
+      async (paths) => new Set(paths.filter((path) => path === text)),
+    );
+    expect(await readTextCache(synced, id)).toEqual({});
+  });
+
   it("never reads an evicted PNG to check the cache: the words come back, nothing is cached", async () => {
     const id = await seedItem("Shot", "pixels");
     const evicted = new Set([join(directory, `${id}.png`)]);

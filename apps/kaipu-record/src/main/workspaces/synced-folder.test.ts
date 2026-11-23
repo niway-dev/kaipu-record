@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   detectSync,
+  detectSyncedFolder,
   GOOGLE_DRIVE_ITEM_XATTR,
   syncProviderOfPath,
+  syncRootOfPath,
   type SyncDetectDeps,
 } from "./synced-folder";
 
@@ -138,5 +140,65 @@ describe("detectSync", () => {
         }),
       ),
     ).toBeNull();
+  });
+});
+
+describe("syncRootOfPath: where the provider's folder starts, from the path rule alone", () => {
+  it.each([
+    [
+      `${HOME}/Library/CloudStorage/GoogleDrive-ana@acme.com/My Drive/Kaipu`,
+      `${HOME}/Library/CloudStorage/GoogleDrive-ana@acme.com`,
+    ],
+    [
+      `${HOME}/Library/Mobile Documents/com~apple~CloudDocs/Kaipu`,
+      `${HOME}/Library/Mobile Documents`,
+    ],
+    [`${HOME}/Google Drive/Kaipu`, `${HOME}/Google Drive`],
+    [`${HOME}/Dropbox (Personal)/Kaipu`, `${HOME}/Dropbox (Personal)`],
+    [`${HOME}/OneDrive - Acme Corp/Captures`, `${HOME}/OneDrive - Acme Corp`],
+  ])("%s → %s", (path, root) => {
+    expect(syncRootOfPath(path, HOME)).toBe(root);
+  });
+
+  it("is null where the path rule names no provider, a folder found by xattr included", () => {
+    expect(syncRootOfPath("/Volumes/Ext/GoogleDrive/My Drive/Kaipu", HOME)).toBeNull();
+    expect(syncRootOfPath(`${HOME}/Documents/Kaipu`, HOME)).toBeNull();
+  });
+});
+
+describe("detectSyncedFolder: a folder the user picked, not a workspace root", () => {
+  const answering = (tagged: (file: string) => boolean | null): SyncDetectDeps => ({
+    home: HOME,
+    realpath: async (path) => path,
+    hasXattr: async (file) => tagged(file),
+    timeoutMs: 50,
+  });
+
+  it("finds a Drive folder through an ancestor the xattr names, though the folder has no identity.json", async () => {
+    const drive = "/Volumes/Ext/GoogleDrive/My Drive";
+    const deps = answering((file) => file === drive);
+    // `detectSync` alone asks only about identity.json, which this folder does not have.
+    expect(await detectSync(`${drive}/Exports`, deps)).toBeNull();
+    expect(await detectSyncedFolder(`${drive}/Exports`, deps)).toBe("google-drive");
+  });
+
+  it("a folder no ancestor tags is plain", async () => {
+    expect(
+      await detectSyncedFolder(
+        "/Volumes/Ext/Exports",
+        answering(() => false),
+      ),
+    ).toBeNull();
+  });
+
+  it("an ancestor that does not answer reads as synced, never as plain", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(
+      await detectSyncedFolder(
+        "/Volumes/Ext/Exports",
+        answering(() => null),
+      ),
+    ).toBe("cloud-provider");
+    warn.mockRestore();
   });
 });

@@ -10,12 +10,14 @@ type LocalLibraryVideo = LibraryVideo & { id: string };
  * A recording that used the webcam whose thumbnail is still the bare screen frame
  * (`thumbnailNeedsWebcam`, from the vault). Excluded: items whose sidecar cannot be read
  * (main refuses the write) and anything without a webcam track, whose files and thumbnail
- * stay as they are. An orphan waits for its heal (`useOrphanHeal`): the heal writes a plain
+ * stay as they are. An offloaded item (`evicted`) is never composed: its media would be decoded
+ * (downloading it, or failing for good when it is not there) and a new poster would be written
+ * over the offloaded one in the synced folder. An orphan waits for its heal (`useOrphanHeal`): the heal writes a plain
  * poster, which would replace a bubble composed before it; once it lands the item comes back
  * changed and is composed then.
  */
 function needsComposite(video: LocalLibraryVideo): boolean {
-  if (video.metadataIssue || isOrphan(video)) return false;
+  if (video.metadataIssue || video.evicted || isOrphan(video)) return false;
   return video.kind === "recording" && !!video.webcam && video.thumbnailNeedsWebcam === true;
 }
 

@@ -21,6 +21,7 @@ import { atomicWriteFile } from "./atomic-write";
 import { placeByRename, placeNoReplace, type Placement } from "./safe-place";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { fsFold, isVaultOwnedStem } from "./file-stem";
+import { mapLimit } from "./map-limit";
 import {
   LEGACY_STEM,
   LibraryVault,
@@ -158,24 +159,6 @@ function interpretations(name: string, isDirectory: boolean): Interpretation[] {
   return COMPANION_SUFFIXES.filter(({ suffix }) => name.endsWith(suffix))
     .map(({ suffix, role }) => ({ stem: name.slice(0, -suffix.length), role }))
     .filter((i) => isPlainItemId(i.stem));
-}
-
-/** Map with a concurrency limit, for slow network drives (F8). */
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const out: R[] = [];
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < items.length) {
-      const index = next++;
-      out[index] = await fn(items[index]!);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
 }
 
 const READ_CONCURRENCY = 32;
@@ -891,7 +874,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   if (resumed.unreadable.length > 0) {
     // Fail closed: that run's files are unknown, so any move, adoption or rename could split
     // its bundle or take one of its files. Listed until someone repairs or removes it.
-    const scan = (await scanVault({ directory, cloud: options.cloud })).findings;
+    const scan = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
     for (const finding of scan) {
       report.counts[finding.kind] = (report.counts[finding.kind] ?? 0) + 1;
     }
@@ -925,7 +908,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   };
 
   // 2. The first actions.
-  const first = (await scanVault({ directory, cloud: options.cloud })).findings;
+  const first = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
   for (const finding of first) report.counts[finding.kind] = (report.counts[finding.kind] ?? 0) + 1;
   const skipped = (finding: ScanFinding): boolean => options.skip?.has(finding.path) ?? false;
   const actions = first.filter((f) => f.fixable && f.kind !== "name-mismatch" && !skipped(f));
@@ -979,7 +962,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
 
   // 3. Renames, planned from a fresh inventory: an adopted `Ａ.mp4` is titled `Ａ`, whose
   // stem is `A`; a retitled item now differs from its stem.
-  const second = (await scanVault({ directory, cloud: options.cloud })).findings;
+  const second = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
   // Items already counted in step 2 (retitled or adopted) are not counted again.
   const retitled = new Set(
     actions
@@ -1010,7 +993,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   });
 
   // 4. What is left.
-  const third = (await scanVault({ directory, cloud: options.cloud })).findings;
+  const third = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
   report.remaining = third.map(publicFinding);
   const explained = new Set([
     ...report.kept.map((k) => k.path),

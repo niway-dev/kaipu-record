@@ -62,6 +62,9 @@ vi.mock("node:fs/promises", async (importActual) => {
   };
 });
 
+// chmod-based failures need an OS that enforces directory permissions (not Windows, not root).
+const enforcesPermissions = process.platform !== "win32" && process.getuid?.() !== 0;
+
 let root: string;
 let src: MoveSide;
 let dst: MoveSide;
@@ -86,6 +89,14 @@ interface Seeded {
 }
 
 /** A recording with every file an item owns today, and two tags. */
+/** The `quarantined` reason of the one move journal left on disk (it fails when there is not one). */
+async function journalReasonOnDisk(): Promise<string | undefined> {
+  const journals = await readdir(journalDir);
+  expect(journals).toHaveLength(1);
+  return (JSON.parse(await readFile(join(journalDir, journals[0]!), "utf-8")) as MoveJournal)
+    .quarantined;
+}
+
 async function seedItem(dir: string, id = "Demo", options: { tags?: string[] } = {}) {
   const vault = new LibraryVault(dir);
   const repo = new VaultTagRepository(
@@ -560,6 +571,10 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     );
     expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
     expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    // Kept because of the RECORD, not another check, and the other item's record is untouched.
+    expect(await journalReasonOnDisk()).toBe("source record changed after the move committed");
+    const record = JSON.parse(await readFile(join(src.directory, ".kaipu", "Demo.json"), "utf-8"));
+    expect(record.assetId).toBe("someone-else");
   });
 
   it("a source whose only difference is its mtime, with the same bytes, is removed as normal", async () => {
@@ -845,12 +860,7 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     await rename(`${path}.theirs`, path);
   }
 
-  const journalReason = async (): Promise<string | undefined> => {
-    const journals = await readdir(journalDir);
-    expect(journals).toHaveLength(1);
-    return (JSON.parse(await readFile(join(journalDir, journals[0]!), "utf-8")) as MoveJournal)
-      .quarantined;
-  };
+  const journalReason = journalReasonOnDisk;
 
   it("C1: a source replaced by another file of the same size and mtime is kept (identity before size and mtime)", async () => {
     const item = await seedItem(src.directory);
@@ -1010,6 +1020,17 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     expect(seen.created).toContain(join(dst.directory, ".kaipu", "Demo.webcam.mp4"));
   });
 
+  it("C4: control: into a plain target the assets are copied under their own name (the recorder sees what a synced target must not)", async () => {
+    const item = await seedItem(src.directory);
+    seen.created = [];
+    await moveItem({ source: src, target: dst, id: item.id }, deps({ fs: { link: exdev } }));
+    // Without this the "not.toContain(final)" check of the synced test could pass because the
+    // recorder never sees an asset copy at all.
+    expect(
+      seen.created.some((path) => path.startsWith(join(dst.directory, ".kaipu", "Demo.assets"))),
+    ).toBe(true);
+  });
+
   it("C6: the move reads the source through a vault that asks the provider, before its own preflight", async () => {
     const item = await seedItem(src.directory);
     const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
@@ -1069,6 +1090,150 @@ describe("moveItem — the source goes only while it is what was copied (NIW2-91
     expect(report.quarantined).toHaveLength(1);
     expect(await readFile(path)).toEqual(theirs);
   });
+});
+
+describe("healing deletes the source only against what the journal recorded (NIW2-912 second review)", () => {
+  const fixedTime = new Date(1_700_000_000_000);
+  const forceCopy = { link: exdev };
+
+  async function replaceWith(path: string, bytes: Buffer, mtime?: Date): Promise<void> {
+    await writeFile(`${path}.theirs`, bytes);
+    if (mtime) await utimes(`${path}.theirs`, mtime, mtime);
+    await rename(`${path}.theirs`, path);
+  }
+
+  /** A copy that crashed right after the media was placed, so the source is still whole. */
+  async function crashAfterCopy(): Promise<Seeded> {
+    const item = await seedItem(src.directory);
+    await utimes(join(src.directory, "Demo.mp4"), fixedTime, fixedTime);
+    await expect(
+      moveItem(
+        { source: src, target: dst, id: item.id },
+        deps({
+          fs: forceCopy,
+          hooks: {
+            after: (step) => {
+              if (step === "media-placed") throw new SimulatedCrash(step);
+            },
+          },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(SimulatedCrash);
+    return item;
+  }
+
+  const journalOnDisk = async (): Promise<{ name: string; journal: MoveJournal }> => {
+    const names = await readdir(journalDir);
+    expect(names).toHaveLength(1);
+    const raw = await readFile(join(journalDir, names[0]!), "utf-8");
+    return { name: names[0]!, journal: JSON.parse(raw) as MoveJournal };
+  };
+
+  it("X1: a source replaced between the crash and the recovery, with the same size and mtime, is kept", async () => {
+    const item = await crashAfterCopy();
+    const path = join(src.directory, "Demo.mp4");
+    const theirs = randomBytes(item.media.length);
+    await replaceWith(path, theirs, fixedTime);
+
+    const report = await heal();
+
+    expect(report.healed).toBe(0);
+    expect(report.quarantined).toHaveLength(1);
+    expect(await readFile(path)).toEqual(theirs);
+    expect(await stat(join(src.directory, ".kaipu", "Demo.json"))).toBeTruthy();
+    expect((await journalOnDisk()).journal.quarantined).toBe(
+      "source media is not the file that was copied",
+    );
+  });
+
+  it("X1: the journal records the source's identity before the first byte is copied", async () => {
+    await crashAfterCopy();
+    const { journal } = await journalOnDisk();
+    const info = await stat(join(src.directory, "Demo.mp4"), { bigint: true });
+    expect(journal.sourceStamp).toEqual({
+      dev: info.dev.toString(),
+      ino: info.ino.toString(),
+      size: info.size.toString(),
+      mtimeNs: info.mtimeNs.toString(),
+    });
+  });
+
+  it("X1/X2: a journal without the recorded stamps keeps the whole source and surfaces the move", async () => {
+    const item = await crashAfterCopy();
+    const { name, journal } = await journalOnDisk();
+    delete journal.sourceStamp;
+    delete journal.companions;
+    await writeFile(join(journalDir, name), JSON.stringify(journal));
+
+    const report = await heal();
+
+    expect(report.healed).toBe(0);
+    expect(report.quarantined).toHaveLength(1);
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    expect(await stat(join(src.directory, ".kaipu", "Demo.json"))).toBeTruthy();
+    expect(await stat(join(src.directory, ".kaipu", "Demo.webcam.mp4"))).toBeTruthy();
+  });
+
+  it("X2: a companion changed after the crash is not the baseline: the whole source is kept", async () => {
+    const item = await crashAfterCopy();
+    const canvas = join(src.directory, ".kaipu", "Demo.canvas.json");
+    await writeFile(canvas, '{"items":[{"added":"after the crash"}]}');
+
+    const report = await heal();
+
+    expect(report.healed).toBe(0);
+    expect(report.quarantined).toHaveLength(1);
+    expect(await readFile(canvas, "utf-8")).toBe('{"items":[{"added":"after the crash"}]}');
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
+    expect((await journalOnDisk()).journal.quarantined).toBe(
+      "source file Demo.canvas.json changed after the move committed",
+    );
+  });
+
+  it("X2: an asset added after the crash is kept with everything else", async () => {
+    await crashAfterCopy();
+    const added = join(src.directory, ".kaipu", "Demo.assets", "new.png");
+    await writeFile(added, "added after the crash");
+
+    const report = await heal();
+
+    expect(report.quarantined).toHaveLength(1);
+    expect(await readFile(added, "utf-8")).toBe("added after the crash");
+    expect(await stat(join(src.directory, "Demo.mp4"))).toBeTruthy();
+  });
+
+  it("control: nothing changed since the journal, so the source goes as before", async () => {
+    await crashAfterCopy();
+    const report = await heal();
+    expect(report.healed).toBe(1);
+    expect(await filesOf(src.directory, "Demo")).toEqual([]);
+  });
+
+  it.skipIf(!enforcesPermissions)(
+    "X4: a companion that cannot be removed keeps the record and the journal, and the outcome says the original stayed",
+    async () => {
+      const item = await seedItem(src.directory);
+      const meta = join(src.directory, ".kaipu");
+      const outcome = await moveItem(
+        { source: src, target: dst, id: item.id },
+        deps({
+          fs: forceCopy,
+          hooks: {
+            after: async (step) => {
+              // The media is gone; the folder of the small files now refuses deletions.
+              if (step === "source-media-deleted") await chmod(meta, 0o500);
+            },
+          },
+        }),
+      );
+      await chmod(meta, 0o700);
+
+      expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+      expect(await stat(join(meta, "Demo.json"))).toBeTruthy();
+      const { journal } = await journalOnDisk();
+      expect(journal.quarantined).toMatch(/^source file .+ could not be removed/);
+    },
+  );
 });
 
 describe("moveItem — a synced target never sees a temp file (NIW2-912)", () => {
@@ -1367,9 +1532,6 @@ describe("healing never deletes the only copy", () => {
     expect(await readdir(journalDir)).toHaveLength(1);
   });
 });
-
-// chmod-based failures need an OS that enforces directory permissions (not Windows, not root).
-const enforcesPermissions = process.platform !== "win32" && process.getuid?.() !== 0;
 
 describe("review findings on a move (PR 479)", () => {
   async function crashAfterPlacement(): Promise<void> {

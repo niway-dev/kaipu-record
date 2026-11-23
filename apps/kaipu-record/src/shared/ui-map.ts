@@ -156,9 +156,19 @@ export const UI_MAP = {
       emptyState: { states: ["empty", "noMatch", "error", "loading"] },
       readyCopyCard: { states: ["ready"] },
       videoCard: {
-        states: ["recording", "webcam", "screenshot", "gif", "selected", "cloudOnly"],
+        states: [
+          "recording",
+          "webcam",
+          "screenshot",
+          "gif",
+          "selected",
+          "cloudOnly",
+          "notDownloaded",
+        ],
       },
-      videoRow: { states: ["recording", "screenshot", "selected"] },
+      // notDownloaded (card and row): the provider offloaded the file (synced workspace), so the
+      // poster is the "Not downloaded" cloud icon and label instead of a frame.
+      videoRow: { states: ["recording", "screenshot", "selected", "notDownloaded"] },
       // The Transcribe action on a card and on a row (NIW2-818): an icon button on a local
       // recording, behind the `transcription` flag. needsModel is the same button, whose click
       // opens the download dialog; running shows "Transcribing 3/12" with a Cancel; done is the

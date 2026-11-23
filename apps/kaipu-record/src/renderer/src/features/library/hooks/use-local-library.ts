@@ -14,6 +14,9 @@ import {
 import { useOrphanHeal } from "./use-orphan-heal";
 import { useWebcamThumbnail } from "./use-webcam-thumbnail";
 
+/** The fewest ms between two re-lists started by the window regaining focus (see `anyEvicted`). */
+export const FOCUS_RELIST_MIN_INTERVAL_MS = 10_000;
+
 export interface LocalLibrary {
   videos: LibraryVideo[];
   /** True only until the first list lands; a later re-list never sets it again. */
@@ -66,7 +69,10 @@ export function useLocalLibrary(): LocalLibrary {
   const [hasError, setHasError] = useState(false);
   const [catalogVerifiedAt, setCatalogVerifiedAt] = useState<number | null>(null);
 
-  const refresh = useCallback((): Promise<void> => {
+  // `quiet`: a re-list the user did not ask for (the window regained focus). It still replaces
+  // the list when it succeeds, but a failure is not an error toast: a provider that is offline
+  // would otherwise raise one on every focus.
+  const runRefresh = useCallback((quiet: boolean): Promise<void> => {
     const seq = ++latest.current;
     const run = relist(seq);
     latestRun.current = run;
@@ -88,20 +94,22 @@ export function useLocalLibrary(): LocalLibrary {
         setVideos(result.items.map(toLibraryVideo));
         setCatalogVerifiedAt(result.catalogVerifiedAt);
         setHasError(result.vaultError !== null);
-        if (result.vaultError !== null) {
+        if (result.vaultError !== null && !quiet) {
           reportError(t("errorRead"), new Error(result.vaultError), {
             context: { phase: "library-list" },
-            retry: () => void refresh(),
+            retry: () => void runRefresh(false),
           });
         }
       } catch (error) {
         if (seq !== latest.current) return await latestRun.current;
         applied = true;
         setHasError(true);
-        reportError(t("errorRead"), error, {
-          context: { phase: "library-list" },
-          retry: () => void refresh(),
-        });
+        if (!quiet) {
+          reportError(t("errorRead"), error, {
+            context: { phase: "library-list" },
+            retry: () => void runRefresh(false),
+          });
+        }
       } finally {
         inFlight.current -= 1;
         if (inFlight.current === 0) setRefreshing(false);
@@ -111,6 +119,7 @@ export function useLocalLibrary(): LocalLibrary {
       }
     }
   }, []);
+  const refresh = useCallback((): Promise<void> => runRefresh(false), [runRefresh]);
 
   // NIW2-560: the file follows the title, so the item's id can change. Patched by
   // assetId (the identity), not by the old id; main also broadcasts `library:changed`.
@@ -247,13 +256,24 @@ export function useLocalLibrary(): LocalLibrary {
   // main watches the folder. While some item still reads "Not downloaded", coming back to the
   // window re-lists, so the page does not stay on a state the file has already left. Nothing is
   // listened to when no item is offloaded, so a plain workspace pays nothing.
+  //
+  // Each re-list lists the provider's folder in main, which can hang for minutes on a stalled
+  // provider, so a focus does not start one while another is running or within
+  // `FOCUS_RELIST_MIN_INTERVAL_MS` of the last, and a focus re-list that fails stays quiet.
   const anyEvicted = useMemo(() => videos.some((v) => v.evicted !== undefined), [videos]);
+  const lastFocusRelist = useRef(0);
   useEffect(() => {
     if (!anyEvicted) return;
-    const onFocus = (): void => void refresh();
+    const onFocus = (): void => {
+      const now = Date.now();
+      if (inFlight.current > 0) return;
+      if (now - lastFocusRelist.current < FOCUS_RELIST_MIN_INTERVAL_MS) return;
+      lastFocusRelist.current = now;
+      void runRefresh(true);
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [anyEvicted, refresh]);
+  }, [anyEvicted, runRefresh]);
 
   return {
     videos,
