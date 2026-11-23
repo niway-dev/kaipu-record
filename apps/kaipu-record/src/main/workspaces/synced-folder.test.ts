@@ -198,16 +198,18 @@ describe("detectSyncedFolder: a folder the user picked, not a workspace root", (
     ]);
   });
 
-  it("asks about at most MAX_ANCESTORS_ASKED folders, then calls the rest plain", async () => {
+  it("asks about at most MAX_ANCESTORS_ASKED folders, then calls the rest synced (never asked is not plain)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const asked: string[] = [];
     const deps = answering((file) => {
       asked.push(file);
       return false;
     });
     const deep = `/Volumes/Ext/${Array.from({ length: 30 }, (_, i) => `d${i}`).join("/")}`;
-    expect(await detectSyncedFolder(deep, deps)).toBeNull();
+    expect(await detectSyncedFolder(deep, deps)).toBe("cloud-provider");
     // One identity question from `detectSync`, then the climb: 12 folders, however deep it is.
     expect(asked).toHaveLength(1 + 12);
+    warn.mockRestore();
   });
 
   it("a climb that runs out of budget reads as synced, though every step answered no", async () => {
@@ -234,12 +236,15 @@ describe("detectSyncedFolder: a folder the user picked, not a workspace root", (
 
   it("an ancestor that does not answer reads as synced, never as plain", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(
-      await detectSyncedFolder(
-        "/Volumes/Ext/Exports",
-        answering(() => null),
-      ),
-    ).toBe("cloud-provider");
+    const asked: string[] = [];
+    // The identity file's question (`detectSync`) answers "no", so only the climb can say
+    // "synced": the folder itself does not answer.
+    const deps = answering((file) => {
+      asked.push(file);
+      return file.endsWith("identity.json") ? false : null;
+    });
+    expect(await detectSyncedFolder("/Volumes/Ext/Exports", deps)).toBe("cloud-provider");
+    expect(asked.some((file) => !file.endsWith("identity.json"))).toBe(true);
     warn.mockRestore();
   });
 });

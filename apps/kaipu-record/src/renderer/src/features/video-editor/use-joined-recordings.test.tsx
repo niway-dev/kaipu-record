@@ -118,6 +118,28 @@ describe("useJoinedRecordings", () => {
     expect(window.electronAPI.closeEditorSession).toHaveBeenCalledWith("c-file");
   });
 
+  it("a track that could not be read is read again at the next change to the joined sources", async () => {
+    items = [item("c")];
+    holds = { c: "c-file" };
+    cursorJson = { "c-file": JSON.stringify(TRACK) };
+    let failing = true;
+    window.electronAPI.loadCursorTrack = vi.fn(async (id: string) => {
+      if (failing) throw new Error("offloaded");
+      return cursorJson[id] ?? null;
+    }) as never;
+    const first = [source("s1", "c")];
+    const { result, rerender } = renderHook(({ list }) => useJoinedRecordings(list), {
+      initialProps: { list: first },
+    });
+    await waitFor(() => expect(result.current[0]!.status).toBe("missing"));
+
+    // The track is readable now; the next change to the joined sources reads it again.
+    failing = false;
+    rerender({ list: [...first] });
+    await waitFor(() => expect(result.current[0]!.status).toBe("ready"));
+    expect(result.current[0]).toMatchObject({ id: "c-file", cursorTrack: TRACK });
+  });
+
   it("is missing, without throwing, for a gone asset, a cloud-only one and a refused hold", async () => {
     items = [item("cloud", { local: null }), item("refused"), item("shot", { kind: "screenshot" })];
     holds = {}; // main answers null for everything

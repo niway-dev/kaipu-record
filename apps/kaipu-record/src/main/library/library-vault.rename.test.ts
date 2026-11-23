@@ -64,6 +64,13 @@ const renameFailure = vi.hoisted(() => ({
 const copyTargets = vi.hoisted(() => [] as string[]);
 /** A source path whose `copyFile` fails halfway: some bytes land at the target, then EIO. */
 const copyFailure = vi.hoisted(() => ({ source: null as string | null }));
+/** Runs right after the copy of `source` finished (a provider or another app touching a file). */
+const afterCopy = vi.hoisted(() => ({
+  source: null as string | null,
+  run: null as null | (() => Promise<void>),
+}));
+/** Runs when the media file is about to move: the commit point of a rename. */
+const atCommit = vi.hoisted(() => ({ run: null as null | (() => Promise<void>) }));
 
 /** Paths whose existence probe (`access`) fails with EACCES: they can be neither confirmed nor ruled out. */
 const uncheckable = vi.hoisted(() => new Set<string>());
@@ -84,7 +91,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
         await actual.writeFile(to, "half");
         throw Object.assign(new Error("EIO: mocked"), { code: "EIO" });
       }
-      return actual.copyFile(from, to, mode);
+      await actual.copyFile(from, to, mode);
+      if (afterCopy.source === String(from)) await afterCopy.run?.();
     }),
     cp: vi.fn(async (from: string, to: string, options?: Parameters<typeof actual.cp>[2]) => {
       copyTargets.push(String(to));
@@ -94,6 +102,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       const isMediaMove = /\.(mp4|webm|png|gif)$/.test(String(from));
       if (isMediaMove) {
         renameFailure.calls += 1;
+        await atCommit.run?.();
         renameFailure.pendingUnlink = null; // a lock lasts for one attempt
         if (renameFailure.arrival?.path === to) {
           await actual.writeFile(to, renameFailure.arrival.content);
@@ -110,6 +119,10 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     }),
     // The arrival hits whichever call targets the new name, so a plain rename shows it too.
     rename: vi.fn(async (from: string, to: string) => {
+      // A synced workspace places the media by rename: that is its commit point.
+      if (/\.mp4$/.test(String(from)) && !String(from).includes("/.kaipu/")) {
+        await atCommit.run?.();
+      }
       if (renameFailure.arrival?.path === to) {
         await actual.writeFile(to, renameFailure.arrival.content);
         renameFailure.arrival = null;
@@ -145,6 +158,9 @@ describe("LibraryVault.renameItem", () => {
     uncheckable.clear();
     copyTargets.length = 0;
     copyFailure.source = null;
+    afterCopy.source = null;
+    afterCopy.run = null;
+    atCommit.run = null;
   });
 
   afterEach(async () => {
@@ -282,6 +298,93 @@ describe("LibraryVault.renameItem", () => {
         "deep",
       );
       expect(await readdir(staging)).toEqual([]);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
+  it("a synced rename keeps an old companion edited after the copy and reports it (NIW2-912)", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      // Another device saves the old edit project while the rename is about to commit.
+      atCommit.run = () => writeFile(join(meta, "Take.edit.json"), '{"scene":2,"newer":true}');
+
+      const result = await renameById(synced, "Take", "Renamed");
+
+      expect(result.file).toBe("renamed");
+      expect(result.keptCompanions).toEqual(["Take.edit.json"]);
+      // The edit was never copied under the new name, and it was not deleted either.
+      expect(await readFile(join(meta, "Take.edit.json"), "utf-8")).toBe(
+        '{"scene":2,"newer":true}',
+      );
+      expect(await readFile(join(meta, "Renamed.edit.json"), "utf-8")).toBe('{"scene":1}');
+      // The companions that did not change are gone from the old name.
+      expect(
+        await readdir(meta).then((names) => names.filter((n) => n.startsWith("Take"))),
+      ).toEqual(["Take.edit.json"]);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
+  it("a synced rename keeps an old asset added after the copy (NIW2-912)", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      atCommit.run = () => writeFile(join(meta, "Take.assets", "late.png"), "late");
+
+      const result = await renameById(synced, "Take", "Renamed");
+
+      expect(result.file).toBe("renamed");
+      expect(result.keptCompanions).toEqual([join("Take.assets", "late.png")]);
+      expect(await readFile(join(meta, "Take.assets", "late.png"), "utf-8")).toBe("late");
+      expect(await readdir(join(meta, "Take.assets"))).toEqual(["late.png"]);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
+  it("a synced rename whose source changes while it is copied keeps the old name and every file (NIW2-912)", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      afterCopy.source = join(meta, "Take.edit.json");
+      afterCopy.run = () => writeFile(join(meta, "Take.edit.json"), '{"scene":2,"newer":true}');
+
+      const result = await renameById(synced, "Take", "Renamed");
+
+      expect(result).toMatchObject({ file: "kept-old-name", reason: "io" });
+      expect(await readFile(join(meta, "Take.edit.json"), "utf-8")).toBe(
+        '{"scene":2,"newer":true}',
+      );
+      expect((await readdir(meta)).filter((name) => name.startsWith("Renamed"))).toEqual([]);
+      expect(await readdir(directory)).toEqual([".kaipu", "Take.mp4"]);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+
+  it("a synced rename whose copy differs from its source keeps the old name (NIW2-912)", async () => {
+    const staging = await mkdtemp(join(tmpdir(), "kaipu-rename-staging-"));
+    try {
+      const synced = new LibraryVault(directory, "ws", undefined, async () => new Set(), staging);
+      await seedFullItem("Take");
+      // The staged copy is the file the provider may rewrite: same size, other bytes.
+      afterCopy.source = join(meta, "Take.edit.json");
+      afterCopy.run = async () => {
+        const staged = (await readdir(staging))[0]!;
+        await writeFile(join(staging, staged), '{"scene":9}');
+      };
+
+      const result = await renameById(synced, "Take", "Renamed");
+
+      expect(result).toMatchObject({ file: "kept-old-name", reason: "io" });
+      expect(await readFile(join(meta, "Take.edit.json"), "utf-8")).toBe('{"scene":1}');
+      expect((await readdir(meta)).filter((name) => name.startsWith("Renamed"))).toEqual([]);
     } finally {
       await rm(staging, { recursive: true, force: true });
     }

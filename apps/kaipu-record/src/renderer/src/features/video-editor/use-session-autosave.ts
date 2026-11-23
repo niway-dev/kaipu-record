@@ -19,13 +19,22 @@
  *     its write (a whole drag, then the debounce) it shows nothing: the owner read a chip
  *     that lit up on the first pointer move as "every change is saved immediately".
  *
+ * A write the folder refuses because the project's files are only in the cloud or cannot be read
+ * (`editProjectRefusal`, or an unreadable record) HALTS the autosave: the page goes read-only
+ * (`onRefused`, once), no later write is tried, and `pendingRef` stays true so leaving through
+ * the discard dialog still warns that the recent changes were not saved.
+ *
  * The scene the editor OPENED with is never written back: opening a recording and
  * leaving must not create a session file (and must not turn a pre-v2 recording into a
  * v2 one just because the detector proposed some zooms).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { captureException } from "@renderer/features/analytics";
-import { editProjectRefusal, isMaintenanceError } from "@renderer/features/library/vault-errors";
+import {
+  editProjectRefusal,
+  isMaintenanceError,
+  isUnreadableRecordError,
+} from "@renderer/features/library/vault-errors";
 import type { VideoScene } from "./scene";
 import { serializeSession } from "./session";
 import type { SlideAssetStore } from "./slide-assets";
@@ -54,11 +63,11 @@ export function useSessionAutosave(
   assetStoreRef: React.MutableRefObject<SlideAssetStore>,
   options: {
     /**
-     * Called once per run of refusals (until a save goes through) when a synced folder refused
-     * the save and main kept the edits as a draft on this computer: the user is told where
-     * their edits are, instead of a "Couldn't save" that retrying cannot fix.
+     * Called once, when the folder refused a save because the project's files are only in the
+     * cloud or cannot be read (a retry cannot fix that). The autosave has halted by then: the
+     * page goes read-only and says that the recent changes were not saved.
      */
-    onKeptOnThisComputer?: (reason: "cloud-only" | "folder-busy") => void;
+    onRefused?: () => void;
   } = {},
 ): SessionAutosave {
   const openedWith = useRef(scene);
@@ -71,11 +80,13 @@ export function useSessionAutosave(
   // one in flight). Only the latest write may set the chip or clear the flag.
   const writeGenRef = useRef(0);
   const [state, setState] = useState<SaveState>("idle");
-  const keptRef = useRef(options.onKeptOnThisComputer);
-  keptRef.current = options.onKeptOnThisComputer;
-  const keptToldRef = useRef(false);
+  const refusedRef = useRef(options.onRefused);
+  refusedRef.current = options.onRefused;
+  // Set by a refusal that retrying cannot fix: no write is tried after it.
+  const haltedRef = useRef(false);
 
   const write = useCallback(async (): Promise<void> => {
+    if (haltedRef.current) return;
     const snapshot = sceneRef.current;
     const gen = ++writeGenRef.current;
     setState("saving");
@@ -86,7 +97,6 @@ export function useSessionAutosave(
       await window.electronAPI.saveVideoEditSession(sourceId, serializeSession(snapshot), assets);
       // A newer write is in flight or already landed: it owns the chip and the flag.
       if (gen !== writeGenRef.current) return;
-      keptToldRef.current = false;
       // An edit may have landed while the write was in flight; it owns the flag now, and
       // nothing is in flight any more, so the chip goes quiet until that edit's write.
       if (sceneRef.current === snapshot) {
@@ -99,14 +109,11 @@ export function useSessionAutosave(
       // Non-fatal: keep `pendingRef` true so the discard dialog still warns on the way
       // out, and let the next edit retry. A refusal during "Check and fix files" is not
       // a fault: it is retried when maintenance ends (below).
-      const refusal = editProjectRefusal(error);
-      if (refusal !== null) {
-        // Not a fault: the folder cannot answer now, and main kept the edits as a draft on this
-        // computer. Said once, not on every edit.
-        if (!keptToldRef.current) {
-          keptToldRef.current = true;
-          keptRef.current?.(refusal);
-        }
+      if (editProjectRefusal(error) !== null || isUnreadableRecordError(error)) {
+        // Not a fault, and not fixable from here: the project's files cannot be written now.
+        // Halt, keep `pendingRef` true, and let the page say so once.
+        haltedRef.current = true;
+        refusedRef.current?.();
       } else if (!isMaintenanceError(error)) {
         captureException(error, { context: "video-edit-session-autosave" });
       }

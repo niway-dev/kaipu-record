@@ -14,7 +14,7 @@
  * path in the instant between our identity check and the `unlink` that follows it is not
  * covered; everywhere else, uncertain ownership keeps the bytes.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, type Hash } from "node:crypto";
 import type { BigIntStats } from "node:fs";
 import { link, lstat, open, readFile, rename, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
@@ -40,6 +40,42 @@ export interface FileIdentity {
 /** The file a placement created at its destination, and its size. */
 export interface PlacedFile extends FileIdentity {
   size: bigint;
+}
+
+/**
+ * What a source file looked like when its bytes were read for a copy (inode, size, mtime): the
+ * source may be deleted only while it still looks exactly like this.
+ */
+interface SourceStamp {
+  ino: bigint;
+  size: bigint;
+  mtimeNs: bigint;
+}
+
+function stampOf(stats: BigIntStats): SourceStamp {
+  return { ino: stats.ino, size: stats.size, mtimeNs: stats.mtimeNs };
+}
+
+function sameStamp(a: SourceStamp, b: SourceStamp): boolean {
+  return a.ino === b.ino && a.size === b.size && a.mtimeNs === b.mtimeNs;
+}
+
+/** sha256 of a whole file, read in chunks (never held in memory). */
+async function hashFile(path: string): Promise<string> {
+  const handle = await open(path, "r");
+  try {
+    const hash = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(COPY_CHUNK);
+    for (let position = 0; ; ) {
+      const { bytesRead } = await handle.read(buffer, 0, COPY_CHUNK, position);
+      if (bytesRead === 0) break;
+      hash.update(buffer.subarray(0, bytesRead));
+      position += bytesRead;
+    }
+    return hash.digest("hex");
+  } finally {
+    await handle.close().catch(() => {});
+  }
 }
 
 /** `link` errors that mean "this volume (or pair of volumes) has no hard links": copy instead. */
@@ -161,7 +197,11 @@ export async function copyExclusive(from: string, to: string): Promise<PlacedFil
   }
 }
 
-async function copyFromHandle(source: FileHandle, to: string): Promise<PlacedFile | "taken"> {
+async function copyFromHandle(
+  source: FileHandle,
+  to: string,
+  hash?: Hash,
+): Promise<PlacedFile | "taken"> {
   let target: FileHandle;
   try {
     target = await open(to, "wx");
@@ -178,6 +218,7 @@ async function copyFromHandle(source: FileHandle, to: string): Promise<PlacedFil
     for (;;) {
       const { bytesRead } = await source.read(buffer, 0, COPY_CHUNK, position);
       if (bytesRead === 0) break;
+      hash?.update(buffer.subarray(0, bytesRead));
       let written = 0;
       while (written < bytesRead) {
         const { bytesWritten } = await target.write(
@@ -408,10 +449,17 @@ async function copyAcrossDevices(
   const source = await open(from, "r");
   let sourceId: PlacedFile;
   let copied: PlacedFile | "taken";
+  // The source's content as it was read for the copy, and what the file looked like then.
+  const sourceHash = createHash("sha256");
+  let stampBefore: SourceStamp;
+  let stampAfter: SourceStamp;
   try {
-    sourceId = identityOf(await source.stat({ bigint: true }));
+    const first = await source.stat({ bigint: true });
+    sourceId = identityOf(first);
+    stampBefore = stampOf(first);
     if (options.expect && !sameFile(sourceId, options.expect)) throw notTheFile(from);
-    copied = await copyFromHandle(source, staged ?? to);
+    copied = await copyFromHandle(source, staged ?? to, sourceHash);
+    stampAfter = stampOf(await source.stat({ bigint: true }));
   } finally {
     await source.close().catch(() => {});
   }
@@ -430,22 +478,30 @@ async function copyAcrossDevices(
     }
   }
   await syncDir(dirname(to)).catch(() => {});
-  // The copy sits under its final name in a folder a provider writes into: the source may go
-  // only while `to` still holds the bytes just copied (as `placeNew` checks), else it keeps them.
-  let atDestination: PlacedFile | null;
+  // The copy sits under its final name in a folder a provider writes into. The source may go
+  // only if `to` still holds exactly the bytes that were read from it: compared by content, not by
+  // inode, because a provider may give the file a new inode right after the rename and a stranger
+  // (or the user) may rewrite it in place. Anything else keeps the source.
+  const digest = sourceHash.digest("hex");
   try {
-    atDestination = await identityAt(to);
+    if ((await identityAt(to)) === null) {
+      console.error(`"${to}" vanished right after copying; the source keeps the bytes`);
+      return "taken";
+    }
+    if ((await hashFile(to)) !== digest) {
+      console.error(`"${to}" holds other bytes right after copying; the source keeps the bytes`);
+      return "taken";
+    }
   } catch (error) {
     await removeIfSame(to, copied); // a name still unreadable is left alone
     throw error;
   }
-  if (!atDestination || !sameFile(atDestination, copied)) {
-    console.error(`"${to}" was replaced right after copying; the source keeps the bytes`);
-    return "taken";
-  }
+  // The source must also be untouched since it was read: an edit in place during or after the
+  // copy is not in `to`, so deleting the source would lose it.
+  const unchangedSince = sameStamp(stampBefore, stampAfter) ? stampBefore : null;
   let removal: SourceRemoval;
   try {
-    removal = await removeSource(from, sourceId);
+    removal = unchangedSince ? await removeSource(from, sourceId, unchangedSince) : "unknown";
   } catch (error) {
     if (options.stuck !== "rollback") {
       await setAside(from, sourceId, to, copied.size);
@@ -456,11 +512,11 @@ async function copyAcrossDevices(
   }
   if (removal === "unknown") {
     if (options.stuck === "rollback") {
-      // The copy is the only sure copy of the bytes while the source cannot be read: both stay.
-      throw Object.assign(new Error(`Could not check "${from}" before removing it`), {
-        code: "EIO",
-        path: from,
-      });
+      // The copy is the only sure copy of the bytes while the source cannot be verified: both stay.
+      throw Object.assign(
+        new Error(`Could not verify "${from}" against its copy before removing it; both are kept`),
+        { code: "EIO", path: from },
+      );
     }
     await setAside(from, sourceId, to, copied.size);
   } else if (removal === "removed") await syncDir(dirname(from)).catch(() => {});
@@ -472,10 +528,15 @@ type SourceRemoval = "removed" | "kept" | "unknown";
 
 /**
  * Remove the placed source, only while its name still holds `identity` (captured from the
- * source's own handle). A different file there, or a name that cannot be read, is kept and
- * logged. Retries a failed unlink once; a second failure propagates.
+ * source's own handle) and, when `unchangedSince` is given, still looks the way it did when its
+ * bytes were read (size, mtime, inode). A different file there, a changed one, or a name that
+ * cannot be read, is kept and logged. Retries a failed unlink once; a second failure propagates.
  */
-async function removeSource(path: string, identity: FileIdentity): Promise<SourceRemoval> {
+async function removeSource(
+  path: string,
+  identity: FileIdentity,
+  unchangedSince?: SourceStamp,
+): Promise<SourceRemoval> {
   for (let attempt = 0; ; attempt += 1) {
     let now: FileIdentity | null;
     try {
@@ -488,6 +549,19 @@ async function removeSource(path: string, identity: FileIdentity): Promise<Sourc
     if (!sameFile(now, identity)) {
       console.error(`another file took the placed source's name "${path}"; kept`);
       return "kept";
+    }
+    if (unchangedSince) {
+      // The same inode is not the same content: a write in place keeps it.
+      try {
+        const info = await lstat(path, { bigint: true });
+        if (!sameStamp(stampOf(info), unchangedSince)) {
+          console.error(`the placed source "${path}" changed since it was copied; kept`);
+          return "unknown";
+        }
+      } catch (error) {
+        console.error(`could not check the placed source "${path}"; kept`, error);
+        return "unknown";
+      }
     }
     try {
       // Residual window (ADR 0036): a swap between the check above and this call is not seen.

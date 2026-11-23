@@ -129,6 +129,11 @@ export interface RenameResult {
   file: RenameFileOutcome;
   /** Set only when `file` is "kept-old-name". */
   reason?: RenameKeptReason;
+  /**
+   * Set only in a synced workspace when `file` is "renamed": old companions (paths relative to
+   * the `.kaipu` folder) that changed after they were copied, so they were kept, not deleted.
+   */
+  keptCompanions?: string[];
 }
 
 /**

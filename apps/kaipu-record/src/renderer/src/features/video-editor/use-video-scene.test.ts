@@ -18,6 +18,32 @@ const WEBCAM_TRACK = {
 } as const;
 
 describe("useVideoScene", () => {
+  it("a frozen scene (read-only editor) ignores every way of changing it, and keeps what it shows", () => {
+    const { result, rerender } = renderHook(
+      ({ frozen }) => useVideoScene(initialScene(10), frozen),
+      {
+        initialProps: { frozen: false },
+      },
+    );
+    const first = result.current.scene;
+    act(() => result.current.commit({ ...first, overlays: [] }));
+    const edited = result.current.scene;
+    expect(edited).not.toBe(first);
+
+    rerender({ frozen: true });
+    act(() => result.current.commit({ ...edited, items: [] }));
+    act(() => result.current.beginInteract());
+    act(() => result.current.updateLive({ ...edited, items: [] }));
+    act(() => result.current.endInteract());
+    act(() => result.current.undo());
+    expect(result.current.scene).toBe(edited);
+    expect(result.current.interacting).toBe(false);
+    expect(result.current.canUndo).toBe(true);
+    // The in-memory edit stays visible: nothing was undone, nothing was added.
+    act(() => result.current.redo());
+    expect(result.current.scene).toBe(edited);
+  });
+
   it("commit creates one undo step; undo/redo walk history", () => {
     const { result } = renderHook(() => useVideoScene(initialScene(10)));
     const first = result.current.scene;

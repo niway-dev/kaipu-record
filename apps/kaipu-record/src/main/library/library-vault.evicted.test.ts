@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { EvictedFileError } from "./dataless";
 import {
   LibraryVault,
-  SYNCED_SIDECAR_GRACE_MS,
   SYNCED_SIDECAR_READ_TIMEOUT_MS,
   SyncedLocalCopyError,
   type VaultReader,
@@ -43,27 +42,34 @@ describe("LibraryVault — evicted files get no image URL", () => {
 
   it("an evicted screenshot has no thumbnail URL (its thumbnail is its own PNG)", async () => {
     await seedShot("shot");
+    // With its record, so describe() takes the normal path (a synced item without one is listed
+    // as unreadable, whose thumbnail is null whatever the eviction guard does).
+    await seedSidecar("shot");
     const evicted = new Set([join(directory, "shot.png")]);
     const vault = new LibraryVault(directory, "ws-1", undefined, async () => evicted);
     const item = await vault.describe("shot");
     expect(item).toMatchObject({ id: "shot", evicted: "media", thumbnailUrl: null });
+    expect(item?.metadataIssue).toBeUndefined();
   });
 
   it("a local video whose own .jpg is evicted gets no thumbnail URL and says so", async () => {
     await seedVideo("clip");
+    await seedSidecar("clip");
     const evicted = new Set([join(directory, ".kaipu", "clip.jpg")]);
     const vault = new LibraryVault(directory, "ws-1", undefined, async () => evicted);
-    expect(await vault.describe("clip")).toMatchObject({
-      evicted: "thumbnail",
-      thumbnailUrl: null,
-    });
+    const item = await vault.describe("clip");
+    expect(item).toMatchObject({ evicted: "thumbnail", thumbnailUrl: null });
+    expect(item?.metadataIssue).toBeUndefined();
   });
 
   it("an evicted video has no thumbnail URL even when its .jpg is local", async () => {
     await seedVideo("clip");
+    await seedSidecar("clip");
     const evicted = new Set([join(directory, "clip.mp4")]);
     const vault = new LibraryVault(directory, "ws-1", undefined, async () => evicted);
-    expect(await vault.describe("clip")).toMatchObject({ evicted: "media", thumbnailUrl: null });
+    const item = await vault.describe("clip");
+    expect(item).toMatchObject({ evicted: "media", thumbnailUrl: null });
+    expect(item?.metadataIssue).toBeUndefined();
   });
 
   it("list() asks once for the whole folder, media and thumbnails together", async () => {
@@ -227,26 +233,77 @@ describe("LibraryVault — evicted files get no image URL", () => {
     const evicted = new LibraryVault(directory, "ws-1", undefined, async () => new Set([file]));
     await expect(evicted.readLocalFile(file)).rejects.toMatchObject({ code: "EVICTED" });
   });
-  describe("a media file whose sidecar has not synced down yet (NIW2-912)", () => {
-    beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
-    afterEach(() => vi.useRealTimers());
-    const sidecarFile = () => join(directory, ".kaipu", "clip.json");
+  describe("the cursor track (NIW2-912)", () => {
+    const trackFile = () => join(directory, ".kaipu", "clip.cursor.json");
 
-    it("is listed read-only and given no identity until the grace period has passed", async () => {
+    it("is null only when there is none", async () => {
       await seedVideo("clip");
       const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
-      expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
-      await expect(access(sidecarFile())).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await vault.readCursorTrack("clip")).toBeNull();
+      await writeFile(trackFile(), '{"version":1}');
+      expect(await vault.readCursorTrack("clip")).toBe('{"version":1}');
+    });
 
-      vi.setSystemTime(Date.now() + SYNCED_SIDECAR_GRACE_MS + 1);
-      const grown = await vault.describe("clip");
-      expect(grown?.metadataIssue).toBeUndefined();
-      await expect(access(sidecarFile())).resolves.toBeUndefined();
+    it("an offloaded track throws EvictedFileError without being read", async () => {
+      await seedVideo("clip");
+      await writeFile(trackFile(), '{"version":1}');
+      const vault = new LibraryVault(
+        directory,
+        "ws-1",
+        undefined,
+        async () => new Set([trackFile()]),
+      );
+      await expect(vault.readCursorTrack("clip")).rejects.toBeInstanceOf(EvictedFileError);
+    });
+
+    it("a track that cannot be read for another reason throws that error, not EvictedFileError, and is read again next time", async () => {
+      await seedVideo("clip");
+      // A folder where the file should be: EISDIR, not ENOENT.
+      await mkdir(trackFile());
+      const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+      const failure = await vault.readCursorTrack("clip").catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(EvictedFileError);
+      expect((failure as NodeJS.ErrnoException).code).not.toBe("ENOENT");
+
+      // Nothing sticks: once the file is readable the same vault reads it.
+      await rm(trackFile(), { recursive: true });
+      await writeFile(trackFile(), '{"version":1}');
+      expect(await vault.readCursorTrack("clip")).toBe('{"version":1}');
+    });
+
+    it("a plain workspace reports an unreadable track too", async () => {
+      await seedVideo("clip");
+      await mkdir(trackFile());
+      await expect(new LibraryVault(directory, "ws-1").readCursorTrack("clip")).rejects.toThrow();
+    });
+  });
+
+  describe("a media file whose sidecar has not synced down yet (NIW2-912)", () => {
+    const sidecarFile = () => join(directory, ".kaipu", "clip.json");
+    const syncedVault = () =>
+      new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+
+    it("is listed read-only and never given an identity, however long it waits", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        await seedVideo("clip");
+        const vault = syncedVault();
+        expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
+        vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+        expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
+        expect(await vault.list()).toEqual([
+          expect.objectContaining({ metadataIssue: "unreadable" }),
+        ]);
+        await expect(access(sidecarFile())).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("keeps the sidecar that arrives meanwhile: nothing was minted over it", async () => {
       await seedVideo("clip");
-      const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+      const vault = syncedVault();
       expect(await vault.describe("clip")).toMatchObject({ metadataIssue: "unreadable" });
 
       await seedSidecar("clip", "the-real-identity");
@@ -259,11 +316,27 @@ describe("LibraryVault — evicted files get no image URL", () => {
       });
     });
 
+    it("adoptMedia mints nothing in a synced workspace unless the user asked", async () => {
+      await seedVideo("clip");
+      const vault = syncedVault();
+      const fields = { title: "Clip", createdAt: 1 };
+      expect(await vault.adoptMedia("clip", fields)).toBe(false);
+      await expect(access(sidecarFile())).rejects.toMatchObject({ code: "ENOENT" });
+
+      expect(await vault.adoptMedia("clip", fields, { explicit: true })).toBe(true);
+      await expect(access(sidecarFile())).resolves.toBeUndefined();
+      // A second explicit request finds the record and does not replace it.
+      expect(await vault.adoptMedia("clip", fields, { explicit: true })).toBe(false);
+    });
+
     it("a plain workspace gives a legacy item its identity at once", async () => {
       await seedVideo("clip");
       const vault = new LibraryVault(directory, "ws-1");
       expect((await vault.describe("clip"))?.metadataIssue).toBeUndefined();
       await expect(access(sidecarFile())).resolves.toBeUndefined();
+      expect(
+        await new LibraryVault(directory, "ws-2").adoptMedia("clip", { title: "x", createdAt: 1 }),
+      ).toBe(false);
     });
   });
 });

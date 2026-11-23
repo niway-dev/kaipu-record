@@ -1,6 +1,6 @@
 /**
  * What the editor needs to know about a joined recording (ADR 0058) from the Library, and the
- * best-effort read of its cursor track. Shared by the hook that loads joined recordings when
+ * read of its cursor track (null when it does not exist; any other failure throws). Shared by the hook that loads joined recordings when
  * the editor opens, and by the loader, which needs the webcam metas BEFORE the editor exists.
  */
 import type { CursorTrack } from "@shared/cursor-track";

@@ -37,6 +37,8 @@ const LOADING: Loaded = {
 
 interface Started {
   cancelled: boolean;
+  /** Set when the source was `missing` only because its cursor track could not be read now. */
+  retry?: boolean;
   /** The id main acknowledged holding for this source, released when it goes away. */
   heldId: string | null;
 }
@@ -47,9 +49,12 @@ interface Started {
  * CURRENT local id and held against renames the way the loader holds the opened recording
  * (`acquireEditorSession`, released with `closeEditorSession` when the source leaves the scene
  * or the editor unmounts); the webcam meta and capture come from the Library item, and the
- * cursor track is a best-effort read. It never throws and never blocks the editor: whatever
- * cannot be resolved is `missing`. A new source loads without reloading the others (keyed by
- * `source.id`).
+ * cursor track is read with them: a recording whose track does not exist joins without pointer
+ * data, one whose track exists but cannot be read now is `missing`, never a recording without
+ * pointer data. It never throws and never blocks the editor: whatever cannot be resolved is
+ * `missing`. A new source loads without reloading the others (keyed by `source.id`). A source
+ * that is `missing` only because its track could not be read now is read again at the next
+ * change to the joined sources (a join, an undo or a redo), like an unreadable library.
  */
 export function useJoinedRecordings(
   sources: readonly SceneSource[] | undefined,
@@ -102,6 +107,11 @@ export function useJoinedRecordings(
         entries.map(async ([source, entry]) => {
           const result = await resolve(source, entry, library);
           if (entry.cancelled) return;
+          // Not final: forget that it was started, so the next change to the joined sources reads
+          // its track again instead of showing it missing for the rest of the session.
+          if (entry.retry && started.current.get(source.id) === entry) {
+            started.current.delete(source.id);
+          }
           setLoaded((prev) => new Map(prev).set(source.id, result));
         }),
       );
@@ -154,6 +164,7 @@ async function resolve(
     // recording without pointer data.
     window.electronAPI.closeEditorSession(heldId);
     entry.heldId = null;
+    entry.retry = true;
     return MISSING;
   }
   return { status: "ready", id: heldId, cursorTrack, webcam: item.webcam, capture: item.capture };

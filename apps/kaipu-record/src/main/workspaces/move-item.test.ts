@@ -418,7 +418,11 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
   });
 
   it("refuses when only a companion or an asset is evicted, before anything is written", async () => {
-    for (const [index, suffix] of [".jpg", ".transcript.json", ".assets/slide.png"].entries()) {
+    for (const [index, suffix] of [
+      ".jpg",
+      ".transcript.json",
+      `.assets${sep}slide.png`,
+    ].entries()) {
       const item = await seedItem(src.directory, `Clip${index}`, {
         tags: index === 0 ? undefined : [],
       });
@@ -444,6 +448,30 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
       expect(await readdir(journalDir).catch(() => [])).toEqual([]); // no journal was written
       expect(await filesOf(dst.directory, item.id)).toEqual([]);
     }
+  });
+
+  it("refuses when a file in a sub-folder of the assets folder is evicted (the copy recurses)", async () => {
+    const item = await seedItem(src.directory);
+    const nested = join(src.directory, ".kaipu", `${item.id}.assets`, "deep", "er");
+    await mkdir(nested, { recursive: true });
+    await writeFile(join(nested, "slide.png"), "png");
+    const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
+    const read: string[] = [];
+    const outcome = await moveItem(
+      { source, target: dst, id: item.id },
+      deps({
+        fs: {
+          evicted: async (paths) => new Set(paths.filter((p) => p.endsWith("slide.png"))),
+          sha256: async (path) => {
+            read.push(path);
+            return sha256FileBase64(path);
+          },
+        },
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, id: item.id, reason: "evicted" });
+    expect(read).toEqual([]);
+    expect(await filesOf(dst.directory, item.id)).toEqual([]);
   });
 
   it("refuses as io, not evicted, when the assets folder cannot be listed", async () => {

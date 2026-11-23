@@ -172,7 +172,8 @@ const MAX_ANCESTORS_ASKED = 12;
  * folder and each of its ancestors (the xattr is read from the folder itself: Drive tags what it
  * syncs, and a custom mount is tagged all the way up to its root; the tag on a directory is
  * unverified, which is why the identity file is asked about too). One budget covers the whole
- * climb: when it runs out, or a step does not answer, the folder counts as synced, the same
+ * climb: when it runs out (of time or of ancestors), or a step does not answer, the folder counts
+ * as synced, the same
  * "unknown means synced" rule as `detectSync`. The budget is two timeouts (4 s) and starts after
  * `detectSync` has answered, which has its own two (`realpath` and the identity xattr), so the
  * whole call is 8 s at most. Never throws.
@@ -200,7 +201,9 @@ export async function detectSyncedFolder(
     if (parent === at) return null;
     at = parent;
   }
-  return null;
+  // The climb ran out of steps before the root: the folders above were never asked about, and a
+  // folder nobody asked about is not known to be plain.
+  return unknownSynced(path);
 }
 
 function unknownSynced(path: string): SyncProvider {

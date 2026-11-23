@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
@@ -649,13 +650,15 @@ describe("fixVault on a synced workspace: every scan reads through the workspace
         ".kaipu/Dead.json": sidecar({ assetId: "a-2", title: "Dead", createdAt: T0 }),
       });
       const asked: string[] = [];
-      // The provider never delivers Clip.json; every other record reads normally.
+      // The provider never delivers Clip.json; every other record reads normally. Those reads
+      // settle in a microtask, so the fake clock below can never time one of them out while real
+      // I/O is still pending (that made this test flaky under load).
       const reader: VaultReader = {
         readText: (path) => {
           asked.push(path);
           return path.endsWith("Clip.json")
             ? new Promise<string>(() => {})
-            : readFile(path, "utf-8");
+            : Promise.resolve().then(() => readFileSync(path, "utf-8"));
         },
       };
       const vault = new LibraryVault(directory, "ws-1", reader, async () => new Set<string>());
@@ -674,12 +677,48 @@ describe("fixVault on a synced workspace: every scan reads through the workspace
         await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
       }
       const report = await fixing;
-      expect(report.counts["unreadable-record"]).toBe(2);
+      // Only the record the provider never delivers is unreadable; the others read normally.
+      expect(report.counts["unreadable-record"]).toBe(1);
+      expect(report.remaining.filter((r) => r.kind === "unreadable-record")).toEqual([
+        expect.objectContaining({ path: ".kaipu/Clip.json" }),
+      ]);
       // A plain read would have delivered it: the record was never read except through the vault.
       // Exactly the three scans that read records ask for it, once each.
       expect(asked.filter((path) => path.endsWith("Clip.json"))).toHaveLength(3);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a scan past its reads deadline reports the records it did not read unreadable, and asks the provider for none", async () => {
+    directory = await makeVault({
+      "Clip.mp4": "video",
+      ".kaipu/Clip.json": sidecar({ assetId: "a-1", title: "Clip", createdAt: T0 }),
+      ".kaipu/Dead.json": sidecar({ assetId: "a-2", title: "Dead", createdAt: T0 }),
+    });
+    const asked: string[] = [];
+    const reader: VaultReader = {
+      readText: (path) => {
+        asked.push(path);
+        return readFile(path, "utf-8");
+      },
+    };
+    const vault = new LibraryVault(directory, "ws-1", reader, async () => new Set<string>());
+
+    const late = await scanVault({
+      directory,
+      vault,
+      cloud: "unknown",
+      readsDeadline: Date.now() - 1,
+    });
+
+    expect(asked).toEqual([]);
+    expect(
+      late.findings
+        .filter((f) => f.kind === "unreadable-record")
+        .map((f) => f.path)
+        .sort(),
+    ).toEqual([".kaipu/Clip.json", ".kaipu/Dead.json"]);
+    expect(late.findings.every((f) => !f.fixable)).toBe(true);
   });
 });

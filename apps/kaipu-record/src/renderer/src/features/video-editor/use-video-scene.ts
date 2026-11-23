@@ -37,8 +37,13 @@ export interface VideoSceneController {
  * past/future stacks, same interactBase-ref snapshot for drags, same reference-equality
  * no-op guards. Consistency with the proven hook matters more than novelty here.
  */
-export function useVideoScene(initial: VideoScene): VideoSceneController {
+export function useVideoScene(initial: VideoScene, frozen = false): VideoSceneController {
   const [scene, setScene] = useState<VideoScene>(initial);
+  // Read-only editor (a synced project that cannot be read or saved): the scene shown stays what
+  // it is. Every way to change it goes through the functions below, so they all stop here; a
+  // ref, so their identities do not change when the editor goes read-only mid-session.
+  const frozenRef = useRef(frozen);
+  frozenRef.current = frozen;
   const [past, setPast] = useState<VideoScene[]>([]);
   const [future, setFuture] = useState<VideoScene[]>([]);
   const sceneRef = useRef(scene);
@@ -52,6 +57,7 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
     // A drag owns history via begin/updateLive/endInteract — a stray commit mid-drag
     // (e.g. a keyboard shortcut firing while a pointer is still down) would fork the
     // in-progress interaction into its own undo step and corrupt the snapshot base.
+    if (frozenRef.current) return;
     if (snapshot.current !== null) return;
     if (next === sceneRef.current) return;
     setPast((p) => [...p, sceneRef.current]);
@@ -60,11 +66,14 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   }, []);
 
   const beginInteract = useCallback(() => {
+    if (frozenRef.current) return;
     snapshot.current = sceneRef.current;
     setInteracting(true);
   }, []);
 
   const updateLive = useCallback((next: VideoScene) => {
+    // A drag already running when the editor froze stops changing the scene (it still ends).
+    if (frozenRef.current) return;
     setScene(next);
     // Keep the ref in sync so endInteract can compare correctly within the same tick.
     sceneRef.current = next;
@@ -83,7 +92,7 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   const undo = useCallback(() => {
     // Same rationale as commit(): a ⌘Z fired mid-drag must not touch history — the
     // drag's own snapshot is still pending in endInteract.
-    if (snapshot.current !== null) return;
+    if (frozenRef.current || snapshot.current !== null) return;
     if (past.length === 0) return;
     setFuture((f) => [sceneRef.current, ...f]);
     setScene(past[past.length - 1]);
@@ -91,7 +100,7 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   }, [past]);
 
   const redo = useCallback(() => {
-    if (snapshot.current !== null) return;
+    if (frozenRef.current || snapshot.current !== null) return;
     if (future.length === 0) return;
     setPast((p) => [...p, sceneRef.current]);
     setScene(future[0]);

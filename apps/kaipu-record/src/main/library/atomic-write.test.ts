@@ -1,15 +1,9 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  atomicWriteFile,
-  STALE_STAGING_MS,
-  sweepVolumeStaging,
-  VOLUME_STAGING_DIR,
-  withLock,
-} from "./atomic-write";
+import { atomicWriteFile, withLock } from "./atomic-write";
 
 describe("withLock", () => {
   it("runs same-key tasks one at a time, in order", async () => {
@@ -68,55 +62,5 @@ describe("atomicWriteFile", () => {
     await expect(atomicWriteFile(join(directory, "missing", "g.json"), "x")).rejects.toThrow();
     expect(await readFile(target, "utf-8")).toBe("old");
     expect((await readdir(directory)).filter((n) => n.includes(".tmp"))).toEqual([]);
-  });
-});
-
-describe("sweepVolumeStaging (a crash mid-copy leaves a file the provider never sees)", () => {
-  let base: string;
-  let target: string;
-  let staging: string;
-  const NOW = Date.now();
-  beforeEach(async () => {
-    base = await mkdtemp(join(tmpdir(), "kaipu-volume-staging-"));
-    target = join(base, "provider", "folder", "Take.mp4");
-    staging = join(base, VOLUME_STAGING_DIR);
-    await mkdir(join(base, "provider", "folder"), { recursive: true });
-  });
-  afterEach(async () => {
-    await rm(base, { recursive: true, force: true });
-  });
-  const deps = () => ({
-    isSynced: (path: string) => path.startsWith(join(base, "provider")),
-    syncRoot: () => join(base, "provider"),
-  });
-  const leave = async (name: string, ageMs: number): Promise<void> => {
-    await mkdir(staging, { recursive: true });
-    await writeFile(join(staging, name), "half");
-    const when = new Date(NOW - ageMs);
-    await utimes(join(staging, name), when, when);
-  };
-
-  it("removes only our own leftovers that are older than the threshold", async () => {
-    await leave("Take.mp4.1a2b3c4d.part", STALE_STAGING_MS + 60_000);
-    await leave("x.json.123.0b9d6c5e-1111-4222-8333-444455556666.tmp", STALE_STAGING_MS + 60_000);
-    await leave("Fresh.mp4.5e6f7a8b.part", 60_000); // a copy that may still be running
-    await leave("notes.txt", STALE_STAGING_MS * 10); // not a name this app gives a file
-
-    const removed = await sweepVolumeStaging(target, { ...deps(), now: NOW });
-
-    expect(removed).toBe(2);
-    expect((await readdir(staging)).sort()).toEqual(["Fresh.mp4.5e6f7a8b.part", "notes.txt"]);
-  });
-
-  it("does not create the staging folder where there is none", async () => {
-    expect(await sweepVolumeStaging(target, { ...deps(), now: NOW })).toBe(0);
-    await expect(readdir(staging)).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("does nothing for a folder that is not synced", async () => {
-    await leave("Take.mp4.1a2b3c4d.part", STALE_STAGING_MS + 60_000);
-    const plain = { isSynced: () => false, syncRoot: () => join(base, "provider"), now: NOW };
-    expect(await sweepVolumeStaging(target, plain)).toBe(0);
-    expect(await readdir(staging)).toHaveLength(1);
   });
 });

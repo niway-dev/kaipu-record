@@ -11,14 +11,7 @@ import { uiArea } from "@renderer/lib/ui-area";
  * natively. Dragging it starts a NATIVE file drag (main resolves the vault path), so the
  * GIF can be dropped into Slack, a GitHub comment or Finder as a real file.
  */
-export function GifViewer({
-  id,
-  canDrag = true,
-}: {
-  id: string;
-  /** False while the provider has offloaded the GIF itself: main refuses that drag, so none starts. */
-  canDrag?: boolean;
-}): React.JSX.Element {
+export function GifViewer({ id }: { id: string }): React.JSX.Element {
   const t = useTranslations("library");
   const [failed, setFailed] = useState(false);
 
@@ -29,11 +22,11 @@ export function GifViewer({
           src={mediaUrl("recording", id)}
           alt=""
           className={styles.image}
-          draggable={canDrag}
-          title={canDrag ? t(isWindowsHost() ? "gifDragHintWindows" : "gifDragHint") : undefined}
+          draggable
+          title={t(isWindowsHost() ? "gifDragHintWindows" : "gifDragHint")}
           onDragStart={(event) => {
             event.preventDefault();
-            if (canDrag) window.electronAPI.startFileDrag(id);
+            window.electronAPI.startFileDrag(id);
           }}
           onError={() => setFailed(true)}
         />

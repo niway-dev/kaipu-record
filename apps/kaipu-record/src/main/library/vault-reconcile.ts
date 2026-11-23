@@ -34,6 +34,7 @@ import {
   isPlainItemId,
   kindFromExt,
   SharedCompanionError,
+  SYNCED_READS_BUDGET_MS,
   type CompanionPaths,
   type RetryPolicy,
   type Sidecar,
@@ -119,6 +120,11 @@ export interface ScanInput {
   directory: string;
   /** The active workspace's vault (a synced one stays out of every hard link). */
   vault?: LibraryVault;
+  /**
+   * When a synced vault stops starting record reads (epoch ms; default: `SYNCED_READS_BUDGET_MS`
+   * from the start of the scan). The records it did not read are reported unreadable.
+   */
+  readsDeadline?: number;
   /** Identities in the cached cloud catalog, or "unknown" (signed out). */
   cloud: ReadonlySet<string> | "unknown";
 }
@@ -184,6 +190,7 @@ interface LiveItem extends Media {
 export async function scanVault(input: ScanInput): Promise<VaultScan> {
   const { directory } = input;
   const vault = input.vault ?? new LibraryVault(directory);
+  const readsDeadline = input.readsDeadline ?? Date.now() + SYNCED_READS_BUDGET_MS;
   const findings: ScanFinding[] = [];
 
   // 1. The vault root: media candidates, and stems whose companions are protected.
@@ -262,7 +269,9 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   // 3. Each live item's record, read strictly.
   const live: LiveItem[] = await mapLimit(single, READ_CONCURRENCY, async (media) => ({
     ...media,
-    read: await vault.readRecordStrict(vault.sidecarPath(media.stem)),
+    read: await vault.readRecordStrict(vault.sidecarPath(media.stem), {
+      deadline: readsDeadline,
+    }),
   }));
   const liveFolds = new Set(live.map((item) => fsFold(item.stem)));
 
@@ -428,7 +437,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
     entry.found.length === 1 && entry.found[0]!.role === "sidecar";
   const records = ownerless.filter(isRecordName);
   const reads = await mapLimit(records, READ_CONCURRENCY, (entry) =>
-    vault.readRecordStrict(join(directory, META_DIR, entry.name)),
+    vault.readRecordStrict(join(directory, META_DIR, entry.name), { deadline: readsDeadline }),
   );
 
   /** Stems whose companions stay where they are (cloud-only, unreadable records). */
@@ -942,10 +951,13 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
         for (const path of problems) fail(path, "could not be moved to the orphans folder");
       } else if (finding.kind === "missing-sidecar") {
         if (
-          await vault.adoptMedia(finding.stem, {
-            title: finding.newTitle!,
-            createdAt: finding.createdAt!,
-          })
+          // The user asked for this fix: in a synced workspace it is the only way an
+          // identity is minted for a file whose sidecar has not arrived.
+          await vault.adoptMedia(
+            finding.stem,
+            { title: finding.newTitle!, createdAt: finding.createdAt! },
+            { explicit: true },
+          )
         ) {
           report.fixed += 1;
         }

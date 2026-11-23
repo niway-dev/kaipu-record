@@ -50,7 +50,6 @@ import { registerTranscriptionIpc } from "./transcription/transcription-ipc";
 import { registerSaveTextFileIpc } from "./save-text-file-ipc";
 import type { TranscriptionService } from "./transcription/transcription-service";
 import { vaultActivity, type ActivityLease } from "./library/vault-activity";
-import { sweepVolumeStaging } from "./library/atomic-write";
 import {
   cleanupDragCopies,
   cleanupLegacyDragCopies,
@@ -888,17 +887,6 @@ async function cleanupDragCopiesEverywhere(): Promise<void> {
   await cleanupScratchDragCopies(app.getPath("userData")).catch(() => {});
 }
 
-/**
- * Files a crash left in the hidden staging folder beside a synced workspace's provider root
- * (a copy across volumes, `volumeStagingDir`), at launch: only this app's own names, only the ones
- * older than a day. Best-effort, and a folder that has none is never made.
- */
-async function sweepVolumeStagingEverywhere(): Promise<void> {
-  for (const path of await availableWorkspacePaths().catch(() => [])) {
-    await sweepVolumeStaging(join(path, "item")).catch(() => {});
-  }
-}
-
 /** Stranded takes of every connected workspace, each into its own folder. */
 async function recoverStrandedEverywhere(): Promise<void> {
   const title = createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle");
@@ -960,7 +948,6 @@ app.whenReady().then(async () => {
   // Drag copies left by a previous run (crash, force quit) are stale; best-effort, in every
   // workspace that is connected.
   void cleanupDragCopiesEverywhere();
-  void sweepVolumeStagingEverywhere();
   cleanupLegacyDragCopies(app.getPath("temp")).catch(() => {});
 
   // The renderer reports when a video export starts and stops (NIW2-218); the close and quit

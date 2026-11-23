@@ -1443,6 +1443,10 @@ export const editorVideo = catalog(
         "transient",
         "drawn only while the transcript file is read, a few milliseconds for a file this size; a shot would race it",
       ),
+      "editorVideo.readOnlyBanner:shown": nc(
+        "needsSetup",
+        "needs a project whose files a sync provider offloaded (SF_DATALESS) or cannot be read; the seeded vault is not synced",
+      ),
       "editorVideo.toolbar:saving": nc(
         "transient",
         "held for ~800 ms after an edit, until the autosave writes; a shot would race it",

@@ -406,6 +406,10 @@ export const UI_MAP = {
       // The Timeline guide (NIW2-679): a dialog over the editor, one tab per lane.
       trackGuide: { states: ["clips", "zooms", "webcam"] },
       toolbar: { states: ["default", "saving", "saved"] },
+      // The banner over a read-only editor (NIW2-912): a synced project whose files are only in the
+      // cloud or could not be read, or whose save was refused. `shown` is the banner with the
+      // tools, inspector and timeline disabled.
+      readOnlyBanner: { states: ["shown"] },
       // The Transcribe action in the top bar (NIW2-818), icon and word, behind the
       // `transcription` flag; the states are the same looks as on a Library card.
       transcribe: {

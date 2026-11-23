@@ -23,8 +23,9 @@ export function isUnreadableRecordError(error: unknown): boolean {
 
 /**
  * Why main did not save the edit project into its synced folder, or null for any other error.
- * The edits are kept on this computer meanwhile: "cloud-only" when the project's files are
- * offloaded (retrying never downloads them), "folder-busy" when the provider does not answer.
+ * The editor goes read-only and keeps its changes in the open window only: "cloud-only" when the
+ * project's files are offloaded (retrying never downloads them), "folder-busy" when the provider
+ * does not answer.
  */
 export function editProjectRefusal(error: unknown): "cloud-only" | "folder-busy" | null {
   if (!(error instanceof Error) || !error.message.includes(EDIT_PROJECT_UNAVAILABLE_MARKER)) {

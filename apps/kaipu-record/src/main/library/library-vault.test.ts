@@ -19,6 +19,7 @@ import {
   LibraryVault,
   SYNCED_LIST_CONCURRENCY,
   SYNCED_LIST_STALL_LIMIT,
+  SYNCED_READS_BUDGET_MS,
   SYNCED_SIDECAR_READ_TIMEOUT_MS,
   humanizeId,
 } from "./library-vault";
@@ -269,6 +270,62 @@ describe("LibraryVault", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe("a provider that answers, but slowly (the time budget)", () => {
+    it("stops starting sidecar reads once a listing spent SYNCED_READS_BUDGET_MS, and lists the rest read-only", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        const ids = Array.from({ length: 40 }, (_, i) => `slow-${String(i).padStart(3, "0")}`);
+        for (const id of ids) {
+          await writeRecording(id);
+          await writeSidecar(id, { assetId: `asset-${id}`, sidecarVersion: 2 });
+        }
+        // Every read succeeds, each just under the 5 s bound: no timeout, so the stall limit
+        // never trips. Each costs 10 s of the (faked) clock.
+        const read = vi.fn(async (path: string) => {
+          vi.setSystemTime(Date.now() + 10_000);
+          return readFile(path, "utf-8");
+        });
+        const synced = new LibraryVault(directory, null, { readText: read }, async () => new Set());
+
+        const listed = await synced.list();
+
+        expect(listed).toHaveLength(ids.length);
+        // Reads that started before the budget ended may finish; none starts after it.
+        expect(read.mock.calls.length).toBeLessThanOrEqual(SYNCED_LIST_CONCURRENCY);
+        expect(read.mock.calls.length).toBeGreaterThan(0);
+        expect(listed.filter((item) => item.metadataIssue === "unreadable").length).toBe(
+          ids.length - read.mock.calls.length,
+        );
+        expect(SYNCED_READS_BUDGET_MS).toBeLessThanOrEqual(30_000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("a scan's record read past its deadline is unreadable without asking the provider", async () => {
+      await writeRecording("rec");
+      await writeSidecar("rec", { assetId: "asset-rec", sidecarVersion: 2 });
+      const read = vi.fn((path: string) => readFile(path, "utf-8"));
+      const synced = new LibraryVault(directory, null, { readText: read }, async () => new Set());
+
+      const late = await synced.readRecordStrict(synced.sidecarPath("rec"), {
+        deadline: Date.now() - 1,
+      });
+      expect(late.status).toBe("unreadable");
+      expect(read).not.toHaveBeenCalled();
+
+      const inTime = await synced.readRecordStrict(synced.sidecarPath("rec"), {
+        deadline: Date.now() + 60_000,
+      });
+      expect(inTime.status).toBe("ok");
+      // A plain vault has no budget.
+      const plain = new LibraryVault(directory);
+      expect((await plain.readRecordStrict(plain.sidecarPath("rec"), { deadline: 0 })).status).toBe(
+        "ok",
+      );
     });
   });
 

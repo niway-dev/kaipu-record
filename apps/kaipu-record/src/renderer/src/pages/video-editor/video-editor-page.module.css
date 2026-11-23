@@ -12,6 +12,26 @@
   height: 100%;
 }
 
+/* A read-only editor (a synced project that cannot be read or saved) puts a banner row on top. */
+.page[data-read-only] {
+  grid-template-rows: auto 1fr auto;
+}
+
+.readOnlyBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.readOnlyBanner p {
+  margin: 0;
+}
+
 /* Wraps the "ORIGINAL UNTOUCHED" badge so the title bar can hide it (data-collapse);
    the Badge itself takes no attributes. Not an inline style: that would beat the
    title bar's display: none. */

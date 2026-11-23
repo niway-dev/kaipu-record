@@ -1,4 +1,4 @@
-import { basename, extname, join } from "node:path";
+import { basename, extname, join, relative } from "node:path";
 import { constants, type Stats } from "node:fs";
 import {
   access,
@@ -10,6 +10,7 @@ import {
   readdir,
   rename,
   rm,
+  rmdir,
   stat,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -368,15 +369,6 @@ function errorCode(error: unknown): string | undefined {
 // directory (e.g. a fresh instance per IPC call) instead of re-minting on every read.
 const readOnlyIdentityMemo = new Map<string, string>();
 
-/**
- * When a synced item's media was first seen without a sidecar, keyed by the sidecar's path: the
- * wait `sidecarStillSyncing` gives the provider before the item is taken for a legacy one.
- */
-const sidecarFirstMissing = new Map<string, number>();
-
-/** How long a synced item may lack a sidecar before it is given an identity (see above). */
-export const SYNCED_SIDECAR_GRACE_MS = 2 * 60 * 1000;
-
 // Sidecars already copied aside this session (`quarantine`), by absolute path, so a list
 // that re-reads a corrupt sidecar every few seconds keeps one copy, not hundreds. A clean
 // read clears the path, so a sidecar that is repaired and later corrupted again gets a new copy.
@@ -449,6 +441,16 @@ export const SYNCED_LIST_CONCURRENCY = 8;
  * limit). When the stall begins only after the first wave, the listing takes two waves, 10 s.
  */
 export const SYNCED_LIST_STALL_LIMIT = 4;
+
+/**
+ * The longest one synced listing or reconcile scan keeps starting sidecar reads. The stall limit
+ * above only counts reads that time out; a provider that answers every read just under the 5 s
+ * bound never trips it, and a thousand items would take `5 s x 1000 / concurrency`. Past this
+ * budget no new read starts: the rest of the items are listed read-only ("unreadable"), and a
+ * scan reports their records unreadable (fixable: false), the same placeholders a stall gives.
+ * Reads already in flight still end by their own 5 s bound.
+ */
+export const SYNCED_READS_BUDGET_MS = 30_000;
 
 /** Prefix of the stand-in `assetId` of an item whose sidecar cannot be read; never persisted. */
 export const UNREADABLE_ASSET_PREFIX = "unreadable:";
@@ -548,7 +550,14 @@ export class LibraryVault {
    * other sidecar read (a timeout is `unreadable`), so a reconcile scan cannot hang on one
    * offloaded record.
    */
-  readRecordStrict(path: string): Promise<SidecarRead> {
+  readRecordStrict(path: string, options: { deadline?: number } = {}): Promise<SidecarRead> {
+    // Past a scan's budget no new read starts in a synced vault (`SYNCED_READS_BUDGET_MS`).
+    if (this.synced && options.deadline !== undefined && Date.now() >= options.deadline) {
+      return Promise.resolve({
+        status: "unreadable",
+        error: `reading "${path}" skipped: the provider was too slow`,
+      });
+    }
     return readSidecarStrict(path, (at) => this.readSidecarText(at));
   }
 
@@ -860,9 +869,18 @@ export class LibraryVault {
    * Give media without a record its first sidecar (reconcile adoption, NIW2-561): a new
    * identity, `title` and `createdAt`, in one atomic write. Does nothing (false) when a
    * record exists by now, of any readability, or the media is gone.
+   *
+   * In a synced workspace the missing sidecar may be on its way down from the provider, and a
+   * second one written here would conflict with it. It is minted only when the user asked for
+   * it (`explicit`: "Check and fix files"); otherwise this returns false.
    */
-  async adoptMedia(id: string, fields: { title: string; createdAt: number }): Promise<boolean> {
+  async adoptMedia(
+    id: string,
+    fields: { title: string; createdAt: number },
+    options: { explicit?: boolean } = {},
+  ): Promise<boolean> {
     if (isVaultOwnedStem(id)) return false;
+    if (this.synced && options.explicit !== true) return false;
     const path = this.sidecarPath(id);
     return withLock(path, async () => {
       if ((await this.readRecordStrict(path)).status !== "missing") return false;
@@ -975,6 +993,7 @@ export class LibraryVault {
         const from = this.companionPaths(id);
         const to = this.companionPaths(newId);
         const retry = options.retry ?? DEFAULT_RENAME_RETRY;
+        let keptCompanions: string[] = [];
 
         if (target.mode === "case") {
           const reason = await this.moveInPlace(from, to, oldMedia, newMedia, retry, id);
@@ -983,6 +1002,7 @@ export class LibraryVault {
           // 4. Companions to the new stem. A leftover of this item is cleared first.
           if (target.mode === "leftover") await this.removeCompanions(to);
           const created: string[] = [];
+          const copies: CompanionCopy[] = [];
           try {
             await this.writeAtomic(to.sidecar, JSON.stringify(meta, null, 2));
             created.push(to.sidecar);
@@ -1003,13 +1023,24 @@ export class LibraryVault {
               // A synced folder: copying an offloaded companion would download it, so the
               // rename stops (the title is saved) rather than start that download.
               await this.assertLocal([from[key]]);
+              // Stamped before the copy: the old file is deleted only if it is still this one.
+              if (this.synced)
+                copies.push({ from: from[key], to: to[key], stamp: await fileStamp(from[key]) });
               // A clone where the volume has them: the webcam file is as large as a take.
               await this.copyCompanion(from[key], to[key]);
               created.push(to[key]);
             }
             if (await existsStrict(from.assetsDir)) {
               if (this.synced) {
-                await this.assertLocal(await filesUnder(from.assetsDir));
+                const files = await filesUnder(from.assetsDir);
+                await this.assertLocal(files);
+                for (const file of files) {
+                  copies.push({
+                    from: file,
+                    to: join(to.assetsDir, relative(from.assetsDir, file)),
+                    stamp: await fileStamp(file),
+                  });
+                }
               }
               created.push(to.assetsDir);
               if (this.synced) {
@@ -1022,6 +1053,9 @@ export class LibraryVault {
                 });
               }
             }
+            // A synced folder: every copy is proven equal to an unchanged source before the
+            // commit, or the rename stops with both kept.
+            await verifyCopies(copies);
           } catch (error) {
             await this.removePaths(created);
             // An offloaded companion is not an I/O failure: the user can fix it (download it).
@@ -1037,15 +1071,19 @@ export class LibraryVault {
             return { recording: await describeOld(), file: "kept-old-name", reason: failure };
           }
 
-          // 6. Old companions last, best effort: a leftover is invisible to `list()`.
-          await this.removeCompanions(from);
+          // 6. Old companions last, best effort: a leftover is invisible to `list()`. In a
+          // synced folder one that changed since its stamp (another device edited it) is kept.
+          if (this.synced) keptCompanions = await this.removeUnchangedCompanions(from, copies);
+          else await this.removeCompanions(from);
         }
 
         readOnlyIdentityMemo.delete(oldSidecar);
         if (hashStampBefore) await this.restampAfterRename(newId, newMedia, hashStampBefore);
         const recording = await this.describe(newId);
         if (!recording) throw new ItemNotFoundError(newId);
-        return { recording, file: "renamed" };
+        return keptCompanions.length > 0
+          ? { recording, file: "renamed", keptCompanions }
+          : { recording, file: "renamed" };
       });
     });
   }
@@ -1271,6 +1309,41 @@ export class LibraryVault {
     await this.removePaths(Object.values(paths));
   }
 
+  /**
+   * Deletes the old name's companions after a synced rename, but only a file that is still the
+   * one that was copied (same size, mtime and inode as when it was stamped). One that changed,
+   * or that appeared after the copy, is kept and returned (relative to the `.kaipu` folder): the
+   * edit it holds was never copied under the new name.
+   */
+  private async removeUnchangedCompanions(
+    from: CompanionPaths,
+    copies: CompanionCopy[],
+  ): Promise<string[]> {
+    const kept: string[] = [];
+    const stamps = new Map(copies.map((copy) => [copy.from, copy.stamp]));
+    const meta = this.metaDirectory();
+    const removeIfUnchanged = async (path: string): Promise<void> => {
+      const stamp = stamps.get(path);
+      try {
+        if (stamp !== undefined && sameStamp(stamp, await fileStamp(path))) await rm(path);
+        else kept.push(relative(meta, path));
+      } catch (error) {
+        // Already gone: nothing to keep. Anything else could not be proven unchanged.
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") kept.push(relative(meta, path));
+      }
+    };
+    const { assetsDir, ...others } = from;
+    for (const path of Object.values(others)) {
+      // Not copied (the sidecar, written from memory, and the interrupted-write leftover).
+      if (!stamps.has(path)) await this.removePaths([path]);
+      else await removeIfUnchanged(path);
+    }
+    const files = await filesUnder(assetsDir).catch(() => [] as string[]);
+    for (const file of files) await removeIfUnchanged(file);
+    await removeEmptyFolders(assetsDir);
+    return kept;
+  }
+
   async list(): Promise<LocalRecording[]> {
     // The root is never created here: a missing folder is a workspace that is not
     // connected (an unplugged drive), and recreating it would list it as empty.
@@ -1302,7 +1375,7 @@ export class LibraryVault {
     // Each item reads its sidecar, and in a synced folder a read can download it: at most
     // `SYNCED_LIST_CONCURRENCY` at a time (a thousand starting at once is a download storm that
     // also makes every read wait behind the rest and time out). A plain vault reads side by side.
-    const stalls = { since: this.sidecarTimeouts };
+    const stalls = { since: this.sidecarTimeouts, deadline: Date.now() + SYNCED_READS_BUDGET_MS };
     const described = await mapLimit(
       ids,
       this.synced ? SYNCED_LIST_CONCURRENCY : Math.max(1, ids.length),
@@ -1326,7 +1399,7 @@ export class LibraryVault {
   async describe(
     id: string,
     evicted?: ReadonlySet<string>,
-    stalls?: { since: number },
+    stalls?: { since: number; deadline: number },
   ): Promise<LocalRecording | null> {
     const filePath = await this.filePath(id);
     let info;
@@ -1338,8 +1411,13 @@ export class LibraryVault {
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
     let meta: Sidecar & { assetId: string };
-    // This listing already saw the provider stall on several sidecars: stop asking it.
-    if (stalls && this.sidecarTimeouts - stalls.since >= SYNCED_LIST_STALL_LIMIT) {
+    // This listing already saw the provider stall on several sidecars, or spent its whole time
+    // budget on slow ones: stop asking it.
+    if (
+      stalls &&
+      (this.sidecarTimeouts - stalls.since >= SYNCED_LIST_STALL_LIMIT ||
+        (this.synced && Date.now() >= stalls.deadline))
+    ) {
       return this.describeUnreadable(id, filePath, info, "unreadable", evicted);
     }
     try {
@@ -1607,10 +1685,14 @@ export class LibraryVault {
     return withLock(sidecarPath, async () => {
       const current = await this.writableSidecar(id);
       if (current.assetId && current.localRemovedAt === undefined) {
-        sidecarFirstMissing.delete(sidecarPath);
         return current as Sidecar & { assetId: string };
       }
-      if (current.assetId === undefined && (await this.sidecarStillSyncing(id, sidecarPath))) {
+      // A synced folder can deliver the media before its sidecar. Minting an identity then
+      // would write a second, different sidecar next to the one about to arrive, and the
+      // provider keeps one of them (or both, as a conflicted copy): the item loses its title,
+      // tags and identity. So the file stays read-only until its sidecar arrives, however
+      // long that takes; the user can mint one on purpose through "Check and fix files".
+      if (current.assetId === undefined && (await this.sidecarIsMissingInSyncedVault(id))) {
         throw new SidecarUnavailableError("unreadable", sidecarPath);
       }
       const next: Sidecar = {
@@ -1622,7 +1704,6 @@ export class LibraryVault {
       try {
         await this.writeMetaLocked(id, next);
         readOnlyIdentityMemo.delete(sidecarPath);
-        sidecarFirstMissing.delete(sidecarPath);
       } catch (error) {
         // Renamed or removed while we read it: there is no item to give an identity to.
         if (error instanceof ItemGoneError || error instanceof UnreadableRecordError) throw error;
@@ -1633,21 +1714,9 @@ export class LibraryVault {
     });
   }
 
-  /**
-   * A synced folder can deliver the media before its sidecar: the two files sync independently.
-   * Minting an identity then would write a second, different sidecar next to the one that is
-   * about to arrive, and the provider keeps one of them (or both, as a conflicted copy), losing the
-   * item's title, tags and identity. So a media file with no sidecar is read-only for a grace
-   * period from the first time this session saw it so, and only a sidecar that still has not
-   * come is taken for a legacy item and given an identity. True while that wait is on.
-   */
-  private async sidecarStillSyncing(id: string, sidecarPath: string): Promise<boolean> {
-    if (!this.synced) return false;
-    if ((await this.readRecord(id)).status !== "missing") return false;
-    const now = Date.now();
-    const first = sidecarFirstMissing.get(sidecarPath) ?? now;
-    sidecarFirstMissing.set(sidecarPath, first);
-    return now - first < SYNCED_SIDECAR_GRACE_MS;
+  /** True in a synced workspace when the item has no sidecar at all (it may still be arriving). */
+  private async sidecarIsMissingInSyncedVault(id: string): Promise<boolean> {
+    return this.synced && (await this.readRecord(id)).status === "missing";
   }
 
   /**
@@ -1818,19 +1887,20 @@ export class LibraryVault {
   }
 
   /**
-   * The raw track JSON, or null when this recording has none. Read like every other companion of
-   * a synced vault: an offloaded track is never downloaded by the read and a stalled provider
-   * gives up after `SYNCED_SIDECAR_READ_TIMEOUT_MS`. Those two THROW (`EvictedFileError`,
-   * `ETIMEDOUT`) instead of reading as "no track": a track that exists but cannot be read now is
-   * not a recording without one, and the caller must be able to tell.
+   * The raw track JSON, or null only when this recording has none (`ENOENT`). Read like every
+   * other companion of a synced vault: an offloaded track is never downloaded by the read
+   * (`EvictedFileError`) and a stalled provider gives up after `SYNCED_SIDECAR_READ_TIMEOUT_MS`
+   * (`ETIMEDOUT`). Those and every other failure (EIO, EACCES, a folder in its place) THROW
+   * instead of reading as "no track": a track that exists but cannot be read now is not a
+   * recording without one. The thrown error says which: `EvictedFileError` for an offloaded
+   * track, the original error otherwise. Nothing is remembered: the next call reads again.
    */
   async readCursorTrack(id: string): Promise<string | null> {
     try {
       return await this.readTextBounded(this.cursorTrackPath(id));
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException | null)?.code;
-      if (error instanceof EvictedFileError || code === "ETIMEDOUT") throw error;
-      return null;
+      if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") return null;
+      throw error;
     }
   }
 
@@ -2062,6 +2132,65 @@ export function humanizeId(id: string): string {
  */
 export function isPlainItemId(id: string): boolean {
   return id.length > 0 && !id.startsWith(".") && !/[\\/]/.test(id) && basename(id) === id;
+}
+
+/** What a file looked like when it was stamped; a rewrite in place changes size or mtime. */
+interface FileStamp {
+  size: number;
+  mtimeMs: number;
+  ino: number;
+}
+
+/** A companion about to be copied to its new name, with the source's stamp from before. */
+interface CompanionCopy {
+  from: string;
+  to: string;
+  stamp: FileStamp;
+}
+
+async function fileStamp(path: string): Promise<FileStamp> {
+  const info = await stat(path);
+  return { size: info.size, mtimeMs: info.mtimeMs, ino: info.ino };
+}
+
+function sameStamp(a: FileStamp, b: FileStamp): boolean {
+  return a.size === b.size && a.mtimeMs === b.mtimeMs && a.ino === b.ino;
+}
+
+/**
+ * Proves each copy equals its source: the source is unchanged since it was stamped (before the
+ * copy and again after hashing it) and both hash the same. Throws EIO otherwise, so the rename
+ * keeps the old name and the old files.
+ */
+async function verifyCopies(copies: CompanionCopy[]): Promise<void> {
+  const mismatch = (path: string): Error =>
+    Object.assign(new Error(`"${path}" changed or did not copy faithfully; both are kept`), {
+      code: "EIO",
+    });
+  for (const copy of copies) {
+    if (!sameStamp(copy.stamp, await fileStamp(copy.from))) throw mismatch(copy.from);
+    const [source, copied] = await Promise.all([
+      sha256FileBase64(copy.from),
+      sha256FileBase64(copy.to),
+    ]);
+    if (source !== copied) throw mismatch(copy.from);
+    if (!sameStamp(copy.stamp, await fileStamp(copy.from))) throw mismatch(copy.from);
+  }
+}
+
+/** Removes `folder` and its subfolders that hold nothing; one with a file in it stays. */
+async function removeEmptyFolders(folder: string): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(folder, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) await removeEmptyFolders(join(folder, entry.name));
+  }
+  // `rmdir` refuses a folder that still holds anything, which is what keeps a kept file safe.
+  await rmdir(folder).catch(() => {});
 }
 
 /** Every file below `folder`, at any depth. */

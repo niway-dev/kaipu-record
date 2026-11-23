@@ -659,8 +659,8 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     const companions = from.companionPaths(id);
     const reads = [media, ...COMPANION_FILES.map((key) => companions[key])];
     try {
-      const names = await readdir(companions.assetsDir);
-      reads.push(...names.map((name) => join(companions.assetsDir, name)));
+      // Every file at any depth: `transferTree` copies each of them, so each must be local.
+      reads.push(...(await filesBelow(companions.assetsDir)));
     } catch (error) {
       // Unreadable (EACCES, EIO, ENOTDIR): never copy blind. It is an I/O refusal, not an
       // eviction: "download it in Finder" would send the user to wait for nothing.
@@ -1040,6 +1040,17 @@ async function transfer(
     await rm(to, { force: true });
     throw Object.assign(new Error(`checksum mismatch: ${to}`), { code: "EIO" });
   }
+}
+
+/** Every file under `directory` at any depth; a missing folder throws ENOENT, like `readdir`. */
+async function filesBelow(directory: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) found.push(...(await filesBelow(path)));
+    else found.push(path);
+  }
+  return found;
 }
 
 /**
