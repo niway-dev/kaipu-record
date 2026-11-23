@@ -16,7 +16,7 @@ import {
   probeWebcam,
   type EditSessionState,
 } from "./edit-project-probe";
-import type { LibraryVault } from "./library-vault";
+import { SYNCED_READS_BUDGET_MS, type LibraryVault } from "./library-vault";
 import { canRemoveLocalCopy } from "./remove-local-copy-policy";
 import type {
   ReconcileFixResult,
@@ -193,7 +193,26 @@ export class LibraryService {
     const transcribed: Record<string, number> = {};
     // The edit meta is read through the vault: bounded, and never a download, in a synced one.
     const vault = this.deps.vault();
-    const readMeta = (path: string) => vault.readTextBounded(path);
+    // One read per meta file serves both probes (the answer, or the failure, is memoized). A synced
+    // listing stops starting reads once it spent the vault's listing budget: a skipped read fails
+    // like a timeout, which both probes already treat as "unknown".
+    const metaReads = new Map<string, Promise<string>>();
+    const deadline = vault.synced ? Date.now() + SYNCED_READS_BUDGET_MS : null;
+    const readMeta = (path: string): Promise<string> => {
+      let read = metaReads.get(path);
+      if (!read) {
+        read =
+          deadline !== null && Date.now() >= deadline
+            ? Promise.reject(
+                Object.assign(new Error(`reading "${path}" skipped: the provider was too slow`), {
+                  code: "ETIMEDOUT",
+                }),
+              )
+            : vault.readTextBounded(path);
+        metaReads.set(path, read);
+      }
+      return read;
+    };
     for (const rec of local ?? []) {
       editing[rec.id] = await probeEditing(this.deps.vaultDir(), rec, readMeta);
       editSession[rec.id] = await probeEditSession(this.deps.vaultDir(), rec.id, readMeta);

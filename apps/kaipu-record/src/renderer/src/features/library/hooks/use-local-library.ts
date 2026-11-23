@@ -96,8 +96,8 @@ export function useLocalLibrary(): LocalLibrary {
         // "No recordings yet" empty state, indistinguishable from real data loss.
         setVideos(result.items.map(toLibraryVideo));
         setCatalogVerifiedAt(result.catalogVerifiedAt);
-        // A quiet re-list can clear the page error (it read fine now) but never raise one.
-        if (!quiet || result.vaultError === null) setHasError(result.vaultError !== null);
+        // A quiet re-list that errored returned above, so here the error flag follows the result.
+        setHasError(result.vaultError !== null);
         if (result.vaultError !== null && !quiet) {
           reportError(t("errorRead"), new Error(result.vaultError), {
             context: { phase: "library-list" },

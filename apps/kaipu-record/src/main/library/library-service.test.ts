@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { CloudCatalogEntry } from "@shared/types/library-item";
 import { CatalogCache } from "../cloud/catalog-cache";
 import { LibraryService } from "./library-service";
-import { LibraryVault } from "./library-vault";
+import { LibraryVault, SYNCED_READS_BUDGET_MS } from "./library-vault";
 
 /** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
 async function renameById(
@@ -244,12 +244,53 @@ describe("LibraryService", () => {
 
     const { items } = await synced.list();
 
-    // Both probes (editing and edit-session) go through the vault's bounded reader.
-    expect(readTextBounded.mock.calls.filter(([p]) => p === metaPath)).toHaveLength(2);
+    // Both probes (editing and edit-session) share one read through the vault's bounded reader.
+    expect(readTextBounded.mock.calls.filter(([p]) => p === metaPath)).toHaveLength(1);
     // Unknown, not damaged: an offloaded meta is neither "missing-dependencies" nor a bare read.
     expect(items[0]?.editing).toBe("project-available");
     expect(items[0]?.editExportedSavedAt ?? null).toBeNull();
     expect(items[0]?.editSavedAt ?? null).toBeNull();
+  });
+
+  it("list() in a synced workspace stops starting meta reads once the listing budget is spent", async () => {
+    for (const id of ["a", "b", "c"]) {
+      await writeFile(join(vaultDir, `${id}.mp4`), "");
+      await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+      await writeFile(join(vaultDir, ".kaipu", `${id}.edit.json`), "{}");
+      await writeFile(
+        join(vaultDir, ".kaipu", `${id}.edit.meta.json`),
+        JSON.stringify({ savedAt: 123 }),
+      );
+    }
+    const vault = new LibraryVault(vaultDir, "ws", undefined, async () => new Set());
+    const real = vault.readTextBounded.bind(vault);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // The first read answers, but only after the whole budget has gone by.
+      const readTextBounded = vi.spyOn(vault, "readTextBounded").mockImplementation(async (p) => {
+        vi.setSystemTime(Date.now() + SYNCED_READS_BUDGET_MS);
+        return real(p);
+      });
+      const synced = new LibraryService({
+        vault: () => vault,
+        vaultDir: () => vaultDir,
+        cache,
+        account: () => account,
+        fetchCatalog,
+        now: () => clock,
+      });
+
+      const { items } = await synced.list();
+
+      expect(readTextBounded).toHaveBeenCalledTimes(1);
+      expect(items).toHaveLength(3);
+      // The rest come back unknown, as a timeout would: available, no stamps.
+      const skipped = items.filter((i) => i.editSavedAt !== 123);
+      expect(skipped).toHaveLength(2);
+      expect(skipped.every((i) => i.editing === "project-available")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("removeLocalCopy in a synced workspace keeps the upload check: a different file is refused", async () => {
