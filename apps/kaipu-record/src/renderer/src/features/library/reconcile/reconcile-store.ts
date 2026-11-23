@@ -61,12 +61,14 @@ const isRunning = (): boolean => state.run.phase === "waiting" || state.run.phas
 
 /**
  * Findings the user must tick on purpose. A record without an identity in a synced folder may
- * only look that way because the newer version has not arrived yet, so minting one is never
- * part of a default "Fix all".
+ * only look that way because the newer version has not arrived yet, so a fix that mints one
+ * (`mints`, and every `missing-identity`) is never part of a default "Fix all".
  */
 function startsUnticked(scan: ReconcileScanResult): ReadonlySet<string> {
   if (scan.status !== "ok") return new Set();
-  return new Set(scan.findings.filter((f) => f.kind === "missing-identity").map((f) => f.path));
+  return new Set(
+    scan.findings.filter((f) => f.kind === "missing-identity" || f.mints).map((f) => f.path),
+  );
 }
 
 /** Scan now (read-only in main). */

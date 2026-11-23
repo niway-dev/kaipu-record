@@ -40,6 +40,11 @@ export interface ReconcileFinding {
   newName?: string;
   /** missing-media: what happens to the record. */
   action?: "to-orphans" | "cloud-only";
+  /**
+   * Synced workspaces: fixing it would mint an identity for a record that has none. A record can
+   * only look that way because the newer version has not arrived yet, so it starts unticked.
+   */
+  mints?: boolean;
 }
 
 export type ReconcileScanResult =
@@ -64,7 +69,9 @@ export type ReconcileKeptReason =
   | "taken"
   | "evicted"
   | "io"
-  | "shared";
+  | "shared"
+  /** The record changed after the scan (an identity arrived from another device): nothing was written. */
+  | "changed";
 
 export interface ReconcileReport {
   /** Findings per kind in the first scan. */

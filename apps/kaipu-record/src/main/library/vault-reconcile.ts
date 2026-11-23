@@ -347,6 +347,10 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
     const record: Sidecar = read.status === "ok" ? read.sidecar : {};
     const createdAt = captureDate(record, item.stem, item);
     const withDate = { ...base, createdAt, assetId: record.assetId };
+    // A synced workspace never mints an identity on its own, so a record without one stays
+    // read-only until this fix mints it: listed even when nothing else is wrong with the item.
+    const needsIdentity = vault.synced && !record.assetId;
+    const mints = needsIdentity ? { mints: true } : {};
     if (read.status === "missing") {
       // A file with no record becomes a new item under its disk name; a legacy writer
       // stem reads as its default name, as an untitled legacy item does.
@@ -364,9 +368,6 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
       continue;
     }
     const date = new Date(createdAt);
-    // A synced workspace never mints an identity on its own, so a record without one stays
-    // read-only until this fix mints it: listed even when nothing else is wrong with the item.
-    const needsIdentity = vault.synced && !record.assetId;
     const title =
       typeof record.title === "string" && record.title.trim() ? record.title : undefined;
     const rename = (newTitle: string): Pick<ScanFinding, "newTitle" | "newName"> => ({
@@ -379,6 +380,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
           ...withDate,
           kind: "untitled-legacy",
           fixable: true,
+          ...mints,
           ...rename(humanizeId(item.stem)),
         });
       } else if (!isAligned(item.stem, humanizeId(item.stem), kind, date)) {
@@ -386,10 +388,11 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
           ...withDate,
           kind: "name-mismatch",
           fixable: true,
+          ...mints,
           ...rename(humanizeId(item.stem)),
         });
       } else if (needsIdentity) {
-        findings.push({ ...withDate, kind: "missing-identity", fixable: true });
+        findings.push({ ...withDate, kind: "missing-identity", fixable: true, ...mints });
       }
       continue;
     }
@@ -403,13 +406,21 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
         ...withDate,
         kind: "stale-auto-title",
         fixable: true,
+        ...mints,
         title,
         ...rename(newTitle),
       });
     } else if (!isAligned(item.stem, title, kind, date)) {
-      findings.push({ ...withDate, kind: "name-mismatch", fixable: true, title, ...rename(title) });
+      findings.push({
+        ...withDate,
+        kind: "name-mismatch",
+        fixable: true,
+        ...mints,
+        title,
+        ...rename(title),
+      });
     } else if (needsIdentity) {
-      findings.push({ ...withDate, kind: "missing-identity", fixable: true, title });
+      findings.push({ ...withDate, kind: "missing-identity", fixable: true, ...mints, title });
     }
   }
 
@@ -980,7 +991,15 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
         // user asked for this fix, so a record without an identity gets one now: a synced
         // workspace mints nowhere else, and the rename needs it.
         // Only a synced workspace needs it here: a plain one gets its identity from `describe`.
-        if (finding.assetId === undefined && vault.synced) await vault.mintIdentity(finding.stem);
+        if (finding.assetId === undefined && vault.synced) {
+          // An identity that arrived since the scan means the record changed: the title computed
+          // from the scan would overwrite the newer version, so this finding waits for the next scan.
+          if (!(await vault.mintIdentity(finding.stem))?.minted) {
+            report.kept.push({ path: finding.path, reason: "changed" });
+            step();
+            continue;
+          }
+        }
         await vault.writeMeta(finding.stem, { title: finding.newTitle! });
         report.fixed += 1;
       }
@@ -1042,8 +1061,8 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
 
 /** The renderer's view of a finding (no internal fields). */
 export function publicFinding(finding: ScanFinding): ReconcileFinding {
-  const { kind, fixable, path, title, newTitle, newName, action } = finding;
-  return { kind, fixable, path, title, newTitle, newName, action };
+  const { kind, fixable, path, title, newTitle, newName, action, mints } = finding;
+  return { kind, fixable, path, title, newTitle, newName, action, mints };
 }
 
 /**
@@ -1071,10 +1090,18 @@ async function runPlan(
       // Reconcile mints an identity only on items it is fixing (I2). A synced workspace's
       // `describe` never mints, so a record without one gets it here, on this explicit fix; a
       // plain workspace keeps its own path (`describe` -> `ensureIdentity`).
-      const assetId =
-        finding.assetId ??
-        (vault.synced ? (await vault.mintIdentity(finding.stem))?.assetId : undefined) ??
-        (await vault.describe(finding.stem))?.assetId;
+      let assetId = finding.assetId;
+      if (assetId === undefined && vault.synced) {
+        // Not minted by this run: the record changed since the scan, so it is not renamed.
+        const minted = await vault.mintIdentity(finding.stem);
+        if (!minted?.minted) {
+          report.kept.push({ path: finding.path, reason: "changed" });
+          onRenamed(finding, false);
+          return;
+        }
+        assetId = minted.assetId;
+      }
+      assetId ??= (await vault.describe(finding.stem))?.assetId;
       if (!assetId) throw new Error("the item is gone");
       const result = await vault.renameItem({ id: finding.stem, assetId }, item.title, {
         allowLeftover: false,

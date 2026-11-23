@@ -404,6 +404,23 @@ describe("choosing what to fix", () => {
     expect(getReconcileState().skipped).toEqual(new Set(["Demo.mp4"]));
   });
 
+  it("a synced finding whose fix mints starts unticked; the same kind with an identity starts ticked (NIW2-912)", async () => {
+    const minting: ReconcileFinding = {
+      kind: "stale-auto-title",
+      fixable: true,
+      path: "Minting.mp4",
+      title: "Kaipu Recording",
+      newTitle: "Demo",
+      newName: "Demo.mp4",
+      mints: true,
+    };
+    const identified: ReconcileFinding = { ...minting, path: "Identified.mp4", mints: undefined };
+    scanResult = ok([minting, identified]);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
+    expect(getReconcileState().skipped).toEqual(new Set(["Minting.mp4"]));
+  });
+
   it("a new scan forgets what was unticked", async () => {
     scanResult = ok([rename, adopt]);
     mount();

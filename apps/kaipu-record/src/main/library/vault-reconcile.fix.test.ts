@@ -723,6 +723,36 @@ describe("fixVault on a synced workspace: every scan reads through the workspace
     expect(await readFile(join(directory, ".kaipu/Demo.json"), "utf8")).toBe(arrived);
   });
 
+  it("does not write the title or count the fix when the mint finds an identity that arrived since the scan", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const arrived = sidecar({ assetId: "from-other-device", title: "Mine", createdAt: T0 });
+    const mint = vault.mintIdentity.bind(vault);
+    vi.spyOn(vault, "mintIdentity").mockImplementation(async (id) => {
+      await writeFile(join(directory, ".kaipu/recording-2026-10-30-00-57-30.json"), arrived);
+      return mint(id);
+    });
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.counts["untitled-legacy"]).toBe(1);
+    expect(report.kept).toContainEqual({
+      path: "recording-2026-10-30-00-57-30.mp4",
+      reason: "changed",
+    });
+    // The newer version kept its title; the later rename step followed it, not the scan.
+    const [item] = await vault.list();
+    expect(item).toMatchObject({ assetId: "from-other-device", title: "Mine" });
+  });
+
   it("gives up on a record the provider never delivers in each scan that reads records, instead of reading it plainly", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
