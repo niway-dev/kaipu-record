@@ -46,8 +46,13 @@ connections, as Obsidian does with a vault and Obsidian Sync.
 4. **One cloud folder per workspace.** A folder is owned by one provider account, so a workspace
    is synced by that account. Two accounts mean two workspaces, one in each. A folder shared with a
    second account (a shared folder or Shared drive) can appear at a second local path with the same
-   identity; Kaipu registers an identity once per Mac, and adding it again from another path
-   offers to switch to the workspace already registered, never a second entry.
+   identity. This amends one rule of the several workspaces spec, which gives a folder a new id
+   when its id is already registered at an available path (a Finder copy). That rule still holds
+   for copies. The exception: when both paths are the same provider item (the provider's item id
+   on the folder matches, for Google Drive the `com.google.drivefs.item-id#S` attribute; layer 0
+   finds the equivalent for the others), it is a share, not a copy, and Kaipu offers to switch to
+   the workspace already registered instead of writing a new id into a folder the other account
+   also sees. Without an item id to compare, the copy rule applies.
 5. **A cloud-folder connection is per Mac.** It lives in the registry in userData, never in the
    folder: another Mac may open the same folder through a different path, or without the provider.
    The folder carries only its identity, as before.
