@@ -298,7 +298,11 @@ async function moveItems(
               { journalDir: movesJournalDir(), deviceId: () => device, dragLedger },
             );
             return outcome.ok
-              ? { ok: true, newId: outcome.newId }
+              ? {
+                  ok: true,
+                  newId: outcome.newId,
+                  ...(outcome.keptOriginal ? { keptOriginal: outcome.keptOriginal } : {}),
+                }
               : { ok: false, reason: outcome.reason };
           },
           {

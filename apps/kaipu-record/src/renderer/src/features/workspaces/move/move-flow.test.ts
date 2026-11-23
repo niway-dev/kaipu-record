@@ -127,6 +127,41 @@ describe("resultMessage", () => {
     expect(message).toContain("reason_no-room");
   });
 
+  it("names an item whose original was kept, and does not count it as moved", () => {
+    const message = resultMessage(
+      {
+        targetId: "p",
+        moved: [
+          { id: "a", newId: "a" },
+          { id: "b", newId: "b", keptOriginal: "source-changed" },
+        ],
+        failed: [],
+        skipped: [],
+      },
+      context,
+      t,
+    );
+    expect(message).toContain('resultAll{"count":1,"target":"Personal"}');
+    expect(message).toContain("resultKeptOriginal");
+    expect(message).toContain('"list":"Export"');
+    expect(message).toContain('"source":"Work"');
+  });
+
+  it("only kept originals: no 'Moved' sentence at all", () => {
+    const message = resultMessage(
+      {
+        targetId: "p",
+        moved: [{ id: "a", newId: "a", keptOriginal: "source-changed" }],
+        failed: [],
+        skipped: [],
+      },
+      context,
+      t,
+    );
+    expect(message).not.toContain("resultAll");
+    expect(message.startsWith("resultKeptOriginal")).toBe(true);
+  });
+
   it("a Stop before anything moved says nothing moved, not 'Moved 0 items'", () => {
     const message = resultMessage(
       { targetId: "p", moved: [], failed: [], skipped: ["a", "b"] },

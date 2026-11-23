@@ -1,5 +1,6 @@
 import type {
   MoveItemRef,
+  MoveKeptOriginal,
   MoveItemsResult,
   MoveProgress,
   MoveRefusal,
@@ -10,7 +11,9 @@ import { StaleWorkspaceError } from "./gate";
 
 export type SingleMove = (
   item: MoveItemRef,
-) => Promise<{ ok: true; newId: string } | { ok: false; reason: MoveRefusal }>;
+) => Promise<
+  { ok: true; newId: string; keptOriginal?: MoveKeptOriginal } | { ok: false; reason: MoveRefusal }
+>;
 
 export interface GroupOptions {
   targetId: string;
@@ -49,8 +52,13 @@ export async function runMoveGroup(
       console.error(`move of "${item.id}" threw`, error);
       outcome = { ok: false, reason: "io" };
     }
-    if (outcome.ok) result.moved.push({ id: item.id, newId: outcome.newId });
-    else result.failed.push({ id: item.id, reason: outcome.reason });
+    if (outcome.ok) {
+      result.moved.push({
+        id: item.id,
+        newId: outcome.newId,
+        ...(outcome.keptOriginal ? { keptOriginal: outcome.keptOriginal } : {}),
+      });
+    } else result.failed.push({ id: item.id, reason: outcome.reason });
   }
   return result;
 }

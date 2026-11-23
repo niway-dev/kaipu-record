@@ -441,13 +441,96 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
         },
       }),
     );
-    expect(outcome).toMatchObject({ ok: true, id: "Demo" });
+    // The item is in the target, and the outcome says the original stayed: never a plain "moved".
+    expect(outcome).toMatchObject({ ok: true, id: "Demo", keptOriginal: "source-changed" });
     expect((await stat(join(src.directory, "Demo.mp4"))).size).toBe(item.media.length + 5);
+    expect(
+      await readFile(join(target.directory, `${(outcome as { newId: string }).newId}.mp4`)),
+    ).toEqual(item.media);
     const journals = await readdir(journalDir);
     expect(journals).toHaveLength(1);
     expect(JSON.parse(await readFile(join(journalDir, journals[0]!), "utf-8"))).toMatchObject({
       quarantined: "source media changed after the move committed",
     });
+  });
+
+  it("a source whose only difference is its mtime, with the same bytes, is removed as normal", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        hooks: {
+          // A provider touches the file's mtime after the copy was verified; the bytes are the same.
+          after: async (step) => {
+            if (step === "committed") {
+              const later = new Date(Date.now() + 60_000);
+              await utimes(join(src.directory, "Demo.mp4"), later, later);
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome.ok).toBe(true);
+    expect(outcome).not.toHaveProperty("keptOriginal");
+    expect(await filesOf(src.directory, "Demo")).toEqual([]);
+    expect(await readdir(journalDir).catch(() => [])).toEqual([]);
+  });
+
+  it("a source whose mtime changed and whose bytes differ is kept", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        hooks: {
+          after: async (step) => {
+            if (step === "committed") {
+              // Same size, different bytes, newer mtime.
+              const path = join(src.directory, "Demo.mp4");
+              await writeFile(path, randomBytes(item.media.length));
+              const later = new Date(Date.now() + 60_000);
+              await utimes(path, later, later);
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+    expect((await stat(join(src.directory, "Demo.mp4"))).size).toBe(item.media.length);
+  });
+
+  it("an evicted source that looks changed is kept without reading it", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
+    let committed = false;
+    const hashed: string[] = [];
+    const outcome = await moveItem(
+      { source, target, id: item.id },
+      deps({
+        fs: {
+          evicted: async (paths) =>
+            new Set(committed ? paths.filter((p) => p.endsWith("Demo.mp4")) : []),
+          sha256: async (path) => {
+            if (committed) hashed.push(path);
+            return sha256FileBase64(path);
+          },
+        },
+        hooks: {
+          after: async (step) => {
+            if (step === "committed") {
+              committed = true;
+              const later = new Date(Date.now() + 60_000);
+              await utimes(join(src.directory, "Demo.mp4"), later, later);
+            }
+          },
+        },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, keptOriginal: "source-changed" });
+    expect(hashed).toEqual([]); // nothing was hashed after the commit: reading it would download it
+    expect(await readFile(join(src.directory, "Demo.mp4"))).toEqual(item.media);
   });
 
   it("refuses with no-room when the staging volume of a synced target is full, not the target's", async () => {

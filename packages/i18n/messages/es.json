@@ -3615,6 +3615,7 @@
     "resultPartial": "Se movieron {moved} de {total} a {target}. {failed, plural, one {# quedó} other {# quedaron}} en {source}: {list}",
     "resultNone": "No se movió nada a {target}. {list}",
     "resultSkipped": "{count, plural, one {# no se inició} other {# no se iniciaron}}",
+    "resultKeptOriginal": "Copiado a {target}, pero {count, plural, one {el original se quedó} other {los originales se quedaron}} en {source} porque {count, plural, one {cambió} other {cambiaron}} durante el movimiento. Revisa ambos espacios de trabajo: {list}",
     "resultItem": "{title} — {reason}",
     "resultUnknown": "No se pudo leer el resultado del movimiento. Revisa ambos espacios de trabajo.",
     "switchAction": "Cambiar",

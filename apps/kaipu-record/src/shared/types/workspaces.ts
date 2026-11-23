@@ -243,6 +243,12 @@ export type MoveRefusal =
   /** A file operation failed; the original is untouched. */
   | "io";
 
+/**
+ * An item that did arrive in the target but whose original was kept: the source changed after it
+ * was copied, so removing it could have discarded newer data. The user should check both.
+ */
+export type MoveKeptOriginal = "source-changed";
+
 /** One item of `workspaces:move-items`. */
 export interface MoveItemRef {
   id: string;
@@ -257,7 +263,8 @@ export interface MoveItemsRequest {
 /** `workspaces:move-items`: a group of single moves, run one after another (ADR 0033, decision 14). */
 export interface MoveItemsResult {
   targetId: string;
-  moved: { id: string; newId: string }[];
+  /** `keptOriginal` is set when the copy arrived but the original stayed (it is in both workspaces). */
+  moved: { id: string; newId: string; keptOriginal?: MoveKeptOriginal }[];
   failed: { id: string; reason: MoveRefusal }[];
   /**
    * Not started because the user pressed Stop. A group refused as a whole (busy, stale,

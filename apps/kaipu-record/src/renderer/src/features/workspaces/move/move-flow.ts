@@ -86,6 +86,9 @@ export function resultMessage(
   t: Translate,
 ): string {
   const total = result.moved.length + result.failed.length + result.skipped.length;
+  // An item whose original was kept did arrive, but it was not moved: it is in both workspaces.
+  const kept = result.moved.filter((item) => item.keptOriginal);
+  const movedCount = result.moved.length - kept.length;
   const list = result.failed
     .map(({ id, reason }) =>
       t("resultItem", { title: context.titles.get(id) ?? id, reason: reasonText(reason, t) }),
@@ -93,13 +96,13 @@ export function resultMessage(
     .join("; ");
   let message: string;
   if (result.failed.length === 0 && result.skipped.length === 0) {
-    message = t("resultAll", { count: result.moved.length, target: context.target });
-  } else if (result.moved.length === 0) {
+    message = movedCount > 0 ? t("resultAll", { count: movedCount, target: context.target }) : "";
+  } else if (movedCount === 0) {
     // Everything failed, or Stop came before the first move finished.
     message = t("resultNone", { target: context.target, list }).trim().replace(/\.$/, "");
   } else if (result.failed.length > 0) {
     message = t("resultPartial", {
-      moved: result.moved.length,
+      moved: movedCount,
       total,
       target: context.target,
       failed: result.failed.length,
@@ -107,10 +110,19 @@ export function resultMessage(
       list,
     });
   } else {
-    message = t("resultAll", { count: result.moved.length, target: context.target });
+    message = t("resultAll", { count: movedCount, target: context.target });
   }
   if (result.skipped.length > 0) {
     message = `${message}. ${t("resultSkipped", { count: result.skipped.length })}`;
+  }
+  if (kept.length > 0) {
+    const keptText = t("resultKeptOriginal", {
+      count: kept.length,
+      target: context.target,
+      source: context.source,
+      list: kept.map(({ id }) => context.titles.get(id) ?? id).join("; "),
+    });
+    message = message ? `${message}. ${keptText}` : keptText;
   }
   return message;
 }

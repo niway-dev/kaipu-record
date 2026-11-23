@@ -110,7 +110,10 @@ export function useMoveItems(): MoveItemsFlow {
           { titles, target: target.name, source: active.name },
           (key, values) => t(key as Parameters<typeof t>[0], values as never),
         ),
-        durationMs: result.failed.length > 0 ? 12_000 : 6_000,
+        durationMs:
+          result.failed.length > 0 || result.moved.some((item) => item.keptOriginal)
+            ? 12_000
+            : 6_000,
         ...(result.moved.length > 0
           ? { action: { label: t("switchAction"), onClick: () => void switchTo(targetId) } }
           : {}),

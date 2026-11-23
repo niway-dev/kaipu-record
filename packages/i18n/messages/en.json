@@ -3615,6 +3615,7 @@
     "resultPartial": "Moved {moved} of {total} to {target}. {failed, plural, one {# stayed} other {# stayed}} in {source}: {list}",
     "resultNone": "Nothing moved to {target}. {list}",
     "resultSkipped": "{count, plural, one {# wasn't started} other {# weren't started}}",
+    "resultKeptOriginal": "Copied to {target}, but {count, plural, one {the original stayed} other {the originals stayed}} in {source} because {count, plural, one {it changed} other {they changed}} during the move. Check both workspaces: {list}",
     "resultItem": "{title} — {reason}",
     "resultUnknown": "The result of the move could not be read. Check both workspaces.",
     "switchAction": "Switch",

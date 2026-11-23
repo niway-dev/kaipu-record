@@ -212,6 +212,19 @@ describe("moving a recording that has exports", () => {
     );
   });
 
+  it("a move whose original was kept says it was copied and the original stayed, not that it moved", async () => {
+    setup(state(), { moved: [{ id: "Demo", newId: "Demo", keptOriginal: "source-changed" }] });
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Personal/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move only the recording" }));
+    await waitFor(() =>
+      expect(getToasts().at(-1)?.message).toBe(
+        "Copied to Personal, but the original stayed in Work because it changed during the move. Check both workspaces: Demo",
+      ),
+    );
+  });
+
   it("a lost IPC reply says the result is unknown, never 'changed workspace' or 'untouched'", async () => {
     setup(state());
     moveItems.mockRejectedValue(new Error("ipc went away"));

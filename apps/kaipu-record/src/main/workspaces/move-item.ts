@@ -15,7 +15,7 @@ import {
 } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { nextTagColor, type TagColor } from "@kaipu/domain/constants";
-import type { MoveRefusal } from "@shared/types/workspaces";
+import type { MoveKeptOriginal, MoveRefusal } from "@shared/types/workspaces";
 import { atomicWriteFile } from "../library/atomic-write";
 import { sha256FileBase64 } from "../library/content-hash";
 import { stampFields, stampMatches, type StatLike } from "../library/hash-stamp";
@@ -107,7 +107,14 @@ export interface MoveRequest {
 }
 
 export type MoveOutcome =
-  | { ok: true; id: string; newId: string; mode: "linked" | "copied" }
+  | {
+      ok: true;
+      id: string;
+      newId: string;
+      mode: "linked" | "copied";
+      /** The copy arrived but the original stayed: the item is now in both workspaces. */
+      keptOriginal?: MoveKeptOriginal;
+    }
   | { ok: false; id: string; reason: MoveRefusal };
 
 /** File operations the mover goes through; a test injects EXDEV or a wrong checksum here. */
@@ -467,13 +474,13 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     await after("committed");
     // The copy of a synced file can take long, and the provider may bring a newer version of the
     // source in meanwhile: only the file that was copied goes. Otherwise the journal is left
-    // for healing, which keeps the source for review the same way (`healEntry`).
-    const current = await statOrNull(media);
-    if (
-      current &&
-      (current.size !== journal.media.size || current.mtimeMs !== journal.media.mtimeMs)
-    ) {
-      throw new Error(`source media "${media}" changed after it was copied`);
+    // for review, the same way healing keeps the source (`healEntry`), and the outcome says so.
+    if (await sourceChangedSinceCopy(media, mediaInfo, journal, source.scratch !== undefined, fs)) {
+      const reason = "source media changed after the move committed";
+      await writeJournal(deps.journalDir, { ...journal, quarantined: reason });
+      console.error(`move ${journal.moveId} of "${id}" kept for review: ${reason}`);
+      await rm(staging, { recursive: true, force: true }).catch(() => {});
+      return { ok: true, id, newId, mode, keptOriginal: "source-changed" };
     }
     await rm(media, { force: true });
     // A hard link shares the inode, and removing the source name moves its ctime: the hash
@@ -516,6 +523,34 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
     }
     await rm(journalPath(deps.journalDir, journal.moveId), { force: true });
     throw error;
+  }
+}
+
+/**
+ * Whether the source is no longer the file that was copied. Size and mtime are the cheap test;
+ * Google Drive and OneDrive often touch only the mtime, so a file with the same size and the same
+ * identity (inode) is hashed and compared with the copy's hash before it counts as changed. An
+ * evicted source is never hashed (reading it would download it): it counts as changed.
+ */
+async function sourceChangedSinceCopy(
+  media: string,
+  copied: { size: number; mtimeMs: number; ino: number },
+  journal: MoveJournal,
+  synced: boolean,
+  fs: MoverFs,
+): Promise<boolean> {
+  const current = await statOrNull(media);
+  if (!current) return false; // already gone: nothing is left to protect
+  if (current.size === journal.media.size && current.mtimeMs === journal.media.mtimeMs) {
+    return false;
+  }
+  if (current.size !== journal.media.size || current.ino !== copied.ino) return true;
+  if (journal.media.sha256 === null) return true;
+  if (synced && (await fs.evicted([media])).size > 0) return true;
+  try {
+    return (await fs.sha256(media)) !== journal.media.sha256;
+  } catch {
+    return true; // unreadable: keep the original
   }
 }
 
