@@ -9,7 +9,7 @@
  * right after `registerLibraryVaultHandlers()` so all library IPC stays in one module.
  */
 import { ipcMain } from "electron";
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import { atomicWriteFile } from "./atomic-write";
@@ -121,7 +121,8 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
   const keptIds = new Set(assets.map((a) => a.assetId));
 
   for (const { assetId, bytes } of assets) {
-    await writeFile(assetPath(id, assetId), Buffer.from(bytes));
+    // Atomic like the JSON: a provider must not upload a half-written image at its final name.
+    await atomicWriteFile(assetPath(id, assetId), Buffer.from(bytes));
   }
 
   // Prune asset files that were in the previous session but are no longer referenced —

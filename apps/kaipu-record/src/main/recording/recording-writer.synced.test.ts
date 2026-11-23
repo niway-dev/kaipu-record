@@ -57,6 +57,73 @@ describe("RecordingWriter — a synced workspace", () => {
     expect(await readdir(scratch)).toEqual([]);
   });
 
+  it("a plain workspace finalizes a take with a hard link (the control for the no-link cases)", async () => {
+    const w = new RecordingWriter({
+      vaultDir: () => vaultDir,
+      now: () => 5000,
+      stagingFor: () => null,
+    });
+    await w.create("s1");
+    await w.write("s1", new TextEncoder().encode("bytes").buffer, 0);
+    await w.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
+    expect(hooks.links.length).toBeGreaterThan(0);
+  });
+
+  describe("a plain workspace's stranded take saved into a folder the user picked", () => {
+    async function strand(isSyncedFolder: (dir: string) => Promise<boolean>) {
+      const w = new RecordingWriter({
+        vaultDir: () => vaultDir,
+        now: () => 5000,
+        stagingFor: () => null,
+        isSyncedFolder,
+      });
+      const { tempPath } = await w.create("s1");
+      await w.write("s1", new TextEncoder().encode("screen").buffer, 0);
+      vi.spyOn(LibraryVault.prototype, "writeMeta").mockImplementationOnce(async () => {
+        throw new Error("disk full");
+      });
+      await expect(
+        w.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+      ).rejects.toThrow();
+      hooks.links = []; // what finalize and the take-back did is not what is measured here
+      const picked = join(root, "GoogleDrive-me", "My Drive", "mine.mp4");
+      await mkdir(join(root, "GoogleDrive-me", "My Drive"), { recursive: true });
+      return { w, tempPath, picked };
+    }
+
+    it("inside a provider folder, moves by rename: no hard link, no temp file beside it", async () => {
+      const asked: string[] = [];
+      const { w, tempPath, picked } = await strand(async (dir) => {
+        asked.push(dir);
+        return true;
+      });
+      await writeFile(picked, "old take");
+      await w.salvage("s1", picked);
+      expect(asked).toEqual([join(root, "GoogleDrive-me", "My Drive")]);
+      expect(hooks.links).toEqual([]);
+      expect(await readFile(picked, "utf-8")).toBe("screen");
+      expect((await stat(picked)).nlink).toBe(1);
+      expect(await readdir(join(root, "GoogleDrive-me", "My Drive"))).toEqual(["mine.mp4"]);
+      await expect(stat(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    it("outside a provider folder, still the usual placement (the control)", async () => {
+      const { w, picked } = await strand(async () => false);
+      await w.salvage("s1", picked);
+      expect(hooks.links.length).toBeGreaterThan(0);
+      expect(await readFile(picked, "utf-8")).toBe("screen");
+    });
+
+    it("a detection that fails counts as synced: rename is always safe", async () => {
+      const { w, picked } = await strand(async () => {
+        throw new Error("no answer");
+      });
+      await w.salvage("s1", picked);
+      expect(hooks.links).toEqual([]);
+      expect(await readFile(picked, "utf-8")).toBe("screen");
+    });
+  });
+
   it("a plain workspace keeps staging in .kaipu/tmp", async () => {
     const w = new RecordingWriter({
       vaultDir: () => vaultDir,

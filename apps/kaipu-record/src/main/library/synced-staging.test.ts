@@ -235,27 +235,35 @@ describe("edit session and edit meta", () => {
     await writeFile(join(folder, "rec-1.mp4"), "video");
   }
 
-  it("the session JSON and its freshness stamp stage outside the synced folder", async () => {
+  const asset = {
+    assetId: "slide-1",
+    bytes: new TextEncoder().encode("png").buffer as ArrayBuffer,
+  };
+
+  it("the session JSON, an asset and the freshness stamp stage outside the synced folder", async () => {
     await seedMedia();
     syncFolder();
     record();
-    await saveSession("rec-1", { sessionJson: '{"version":1}', assets: [] });
+    await saveSession("rec-1", { sessionJson: '{"version":1}', assets: [asset] });
 
     expect(leaks()).toEqual([]);
-    expect(stagedPlacements()).toBe(2);
+    expect(stagedPlacements()).toBe(3);
     expect(await readFile(join(folder, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
       '{"version":1}',
+    );
+    expect(await readFile(join(folder, ".kaipu", "rec-1.assets", "slide-1.png"), "utf-8")).toBe(
+      "png",
     );
     expect(
       JSON.parse(await readFile(join(folder, ".kaipu", "rec-1.edit.meta.json"), "utf-8")),
     ).toMatchObject({ sourceSizeBytes: 5 });
   });
 
-  it("control: a plain folder writes both through temp files beside them", async () => {
+  it("control: a plain folder writes all three through temp files beside them", async () => {
     await seedMedia();
     record();
-    await saveSession("rec-1", { sessionJson: '{"version":1}', assets: [] });
-    expect(hooks.created.filter(inside)).toHaveLength(2);
+    await saveSession("rec-1", { sessionJson: '{"version":1}', assets: [asset] });
+    expect(hooks.created.filter(inside)).toHaveLength(3);
   });
 });
 

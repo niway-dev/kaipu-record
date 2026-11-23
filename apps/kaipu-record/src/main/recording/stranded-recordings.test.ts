@@ -226,6 +226,8 @@ describe("recoverStrandedRecordings", () => {
       const kept = join(staging, PLACED_PARTS_DIR, "kaipu-rec-session-abcd.mp4.part");
       expect(await readFile(kept, "utf-8")).toBe("original");
       expect(await readFile(destination, "utf-8")).toBe("original");
+      // The control for the synced case below: a plain workspace does keep the part by link.
+      expect(hooks.links).toBeGreaterThan(0);
     });
 
     it("in a synced workspace keeps the placed part by rename, never by a hard link", async () => {

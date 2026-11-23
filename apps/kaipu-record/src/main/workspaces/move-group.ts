@@ -66,8 +66,9 @@ export async function runMoveGroup(
 /**
  * `resolve` for one group: once it answers null (the target is not connected, or a stalled
  * provider did not answer in time) the rest of the group gets null at once. Each answer costs up
- * to the availability bound (about 6 s for a synced folder), so asking again per item would hold
- * the switch lock for N times that for a target that is not coming back during the run.
+ * to the availability bound (about 6 s for a synced folder, up to about 11 s when a workspace
+ * first detected as plain is detected again), so asking again per item would hold the switch
+ * lock for N times that for a target that is not coming back during the run.
  */
 export function rememberingUnavailable(
   resolve: () => Promise<string | null>,

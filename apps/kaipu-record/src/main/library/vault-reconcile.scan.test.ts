@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { humanizeId } from "./library-vault";
+import {
+  humanizeId,
+  LibraryVault,
+  SYNCED_SIDECAR_READ_TIMEOUT_MS,
+  type VaultReader,
+} from "./library-vault";
 import { isStaleAutoTitle, scanVault, type ScanFinding } from "./vault-reconcile";
 import { makeVault, sidecar, snapshot } from "./vault-reconcile.test-helpers";
 
@@ -406,5 +411,37 @@ describe("scanVault — only reads", () => {
     const before = await snapshot(directory);
     await scanVault({ directory, cloud: new Set(["g"]) });
     expect(await snapshot(directory)).toEqual(before);
+  });
+});
+
+describe("scanVault on a synced workspace (AC13)", () => {
+  it("gives up on a record the provider never delivers and lists it as unreadable, instead of hanging", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      directory = await makeVault({
+        "Clip.mp4": "video",
+        ".kaipu/Clip.json": sidecar({ assetId: "a-1", title: "Clip", createdAt: CREATED }),
+      });
+      let reading: () => void = () => {};
+      const started = new Promise<void>((resolve) => (reading = resolve));
+      const never: VaultReader = {
+        readText: () => {
+          reading();
+          return new Promise<string>(() => {});
+        },
+      };
+      // A synced vault: the eviction probe is set, so every sidecar read has a deadline.
+      const vault = new LibraryVault(directory, "ws-1", never, async () => new Set<string>());
+      const scanning = scanVault({ directory, vault, cloud: "unknown" });
+      await started;
+      await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
+      const { findings } = await scanning;
+      expect(findings.find((f) => f.path === ".kaipu/Clip.json")).toMatchObject({
+        kind: "unreadable-record",
+        fixable: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

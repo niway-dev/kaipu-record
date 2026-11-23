@@ -230,10 +230,13 @@ function isSidecarShape(value: unknown): value is Sidecar {
  * ENOENT is `missing`; any other read error is `unreadable`; then `corrupt-json` and
  * `invalid-schema`. Never writes.
  */
-export async function readSidecarStrict(path: string): Promise<SidecarRead> {
+export async function readSidecarStrict(
+  path: string,
+  readText: (path: string) => Promise<string> = (at) => readFile(at, "utf-8"),
+): Promise<SidecarRead> {
   let raw: string;
   try {
-    raw = await readFile(path, "utf-8");
+    raw = await readText(path);
   } catch (error) {
     if (errorCode(error) === "ENOENT") return { status: "missing" };
     return { status: "unreadable", error: String(error) };
@@ -514,6 +517,15 @@ export class LibraryVault {
   }
 
   /**
+   * `readSidecarStrict` through this vault's reader: a synced vault bounds the read like every
+   * other sidecar read (a timeout is `unreadable`), so a reconcile scan cannot hang on one
+   * offloaded record.
+   */
+  readRecordStrict(path: string): Promise<SidecarRead> {
+    return readSidecarStrict(path, (at) => this.readSidecarText(at));
+  }
+
+  /**
    * The workspace folder is synced by a provider (spec, Synced folders). A synced vault stages
    * outside the folder, places by `rename` (never a hard link) and never reads an evicted file.
    */
@@ -731,7 +743,7 @@ export class LibraryVault {
   async releaseReservation(reservation: Reservation): Promise<void> {
     const { id, assetId } = reservation;
     await withLock(this.sidecarPath(id), async () => {
-      const read = await readSidecarStrict(this.sidecarPath(id));
+      const read = await this.readRecordStrict(this.sidecarPath(id));
       if (read.status !== "ok" || read.sidecar.assetId !== assetId) return;
       await this.removeCompanions(this.companionPaths(id));
     });
@@ -813,7 +825,7 @@ export class LibraryVault {
     if (isVaultOwnedStem(id)) return false;
     const path = this.sidecarPath(id);
     return withLock(path, async () => {
-      if ((await readSidecarStrict(path)).status !== "missing") return false;
+      if ((await this.readRecordStrict(path)).status !== "missing") return false;
       if (!(await this.hasMedia(id))) return false;
       await mkdir(this.metaDirectory(), { recursive: true });
       const record: Sidecar = { sidecarVersion: 2, assetId: randomUUID(), ...fields };

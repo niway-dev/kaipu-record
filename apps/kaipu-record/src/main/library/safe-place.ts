@@ -361,9 +361,22 @@ async function copyAcrossDevices(
     await source.close().catch(() => {});
   }
   if (copied === "taken") return "taken";
+  await syncDir(dirname(to)).catch(() => {});
+  // The copy sits under its final name in a folder a provider writes into: the source may go
+  // only while `to` still holds the bytes just copied (as `placeNew` checks), else it keeps them.
+  let atDestination: PlacedFile | null;
+  try {
+    atDestination = await identityAt(to);
+  } catch (error) {
+    await removeIfSame(to, copied); // a name still unreadable is left alone
+    throw error;
+  }
+  if (!atDestination || !sameFile(atDestination, copied)) {
+    console.error(`"${to}" was replaced right after copying; the source keeps the bytes`);
+    return "taken";
+  }
   let removal: SourceRemoval;
   try {
-    await syncDir(dirname(to)).catch(() => {});
     removal = await removeSource(from, sourceId);
   } catch (error) {
     if (options.stuck !== "rollback") {

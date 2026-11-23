@@ -56,6 +56,13 @@ export interface RecordingWriterDeps {
    * a hard link (decision 15).
    */
   stagingFor?: (vaultDir: string) => string | null;
+  /**
+   * Whether a folder the user picks for a salvaged take is inside a provider's folder (path
+   * rule plus xattr, `detectSync`). A take staged in a plain workspace and saved there is placed
+   * by rename, not by the hard link and temp sibling that would land inside the provider folder.
+   * Unset: no folder counts as synced.
+   */
+  isSyncedFolder?: (directory: string) => Promise<boolean>;
 }
 
 interface Session {
@@ -551,16 +558,26 @@ export class RecordingWriter {
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
     const webcam = this.webcamOf(session);
     // The save dialog confirmed replacing. A take staged in a synced workspace's scratch folder
-    // moves by rename: the destination may be a provider folder, where a hard link misbehaves.
-    await replaceConfirmed(session.tempPath, destPath, session.byRename ?? false);
+    // moves by rename, and so does one saved into a provider folder from a plain workspace: a
+    // hard link into that folder misbehaves, and a temp sibling there would be uploaded.
+    const intoSynced = await this.isSyncedFolder(dirname(destPath));
+    await replaceConfirmed(session.tempPath, destPath, (session.byRename ?? false) || intoSynced);
     this.forget(session);
     if (webcam?.stranded) {
       this.forget(webcam);
       // The save dialog only confirmed replacing the screen file: never a webcam file there.
-      await placeWebcamBeside(webcam.tempPath, destPath, webcam.byRename ?? false).catch((error) =>
-        console.error("webcam salvage failed", error),
-      );
+      await placeWebcamBeside(
+        webcam.tempPath,
+        destPath,
+        (webcam.byRename ?? false) || intoSynced,
+      ).catch((error) => console.error("webcam salvage failed", error));
     }
+  }
+
+  /** Never throws: a folder that cannot be asked about is treated as synced (rename is always safe). */
+  private async isSyncedFolder(directory: string): Promise<boolean> {
+    if (!this.deps.isSyncedFolder) return false;
+    return this.deps.isSyncedFolder(directory).catch(() => true);
   }
 
   /** Ids of the takes still open (a stranded take included), e.g. to end them all on a reset. */

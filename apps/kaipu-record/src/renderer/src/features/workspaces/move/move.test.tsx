@@ -14,7 +14,8 @@ import { registerItemPageCloser } from "../prepare-switch";
 import { WorkspacesProvider } from "../workspaces-context";
 import { ItemMoveMenu } from "./item-move-menu";
 import { ItemWorkspaceChip } from "./item-workspace-chip";
-import { resetMoveUi } from "./move-store";
+import { MoveExportsDialogHost } from "./move-exports-dialog";
+import { askAboutExports, askAboutSyncedMove, resetMoveUi } from "./move-store";
 
 const DEFAULT: WorkspaceView = {
   id: "ws-work",
@@ -315,6 +316,30 @@ describe("moving out of a synced workspace (decision 4, always on)", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /Personal/ }));
     await screen.findByRole("button", { name: "Move only the recording" });
     expect(screen.queryByRole("button", { name: "Move anyway" })).toBeNull();
+  });
+});
+
+describe("the prompts that follow one another (synced confirmation, then exports)", () => {
+  it("the second prompt is a new overlay that takes focus, so Escape cancels it", async () => {
+    render(<MoveExportsDialogHost />);
+    let synced!: Promise<boolean>;
+    act(() => {
+      synced = askAboutSyncedMove({ source: "Work" });
+    });
+    const confirm = await screen.findByRole("button", { name: "Move anyway" });
+    confirm.focus(); // a real click focuses the button
+    // The answer and the next question land in one render (nothing renders between them): the
+    // overlay focuses itself only on mount, so the exports prompt must not reuse the first one.
+    let exportsAnswer!: Promise<unknown>;
+    act(() => {
+      fireEvent.click(confirm);
+      exportsAnswer = askAboutExports({ count: 2, source: "Work", selected: 1 });
+    });
+    expect(await synced).toBe(true);
+    await screen.findByRole("button", { name: "Move only the recording" });
+    expect(screen.getByRole("alertdialog")).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+    expect(await exportsAnswer).toBeNull();
   });
 });
 

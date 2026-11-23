@@ -36,11 +36,11 @@ import { healMoves, moveItem, type MoveSide } from "./move-item";
 import { uuidv7 } from "../library/tag-repository";
 import { defaultVaultDirectory, forgetCachedPreferences } from "../library/vault-location";
 import { StaleWorkspaceError, WorkspaceGate } from "./gate";
+import { checkAvailability } from "./availability-check";
 import { WorkspaceRegistry, type Availability, type WorkspaceEntry } from "./registry";
 import { probeDataless, type EvictionProbe } from "../library/dataless";
 import { setStagingResolver } from "../library/atomic-write";
 import {
-  boundedProbe,
   probeWorkspaceFacts,
   scratchRoot,
   scratchTmp,
@@ -175,48 +175,16 @@ export async function refreshActiveWorkspaceSettings(): Promise<void> {
   await workspaceSettings?.refresh(requireRegistry().active().id);
 }
 
-/**
- * The availability check, bounded for a synced workspace: a provider that does not answer
- * must never hang the switcher, a capture or a move, and the check never lists the provider's
- * root (spec, Availability and Synced folders). Unanswered, a folder that `stat` still sees is
- * available under its registered id, unverified; one that `stat` cannot see is missing.
- */
-async function availabilityOf(
-  requestedId: string,
-): Promise<{ availability: Availability; id: string }> {
-  const reg = requireRegistry();
-  // The id the registry knows the entry by now: a pending entry adopts its folder's own id the
-  // first time it is checked, and every later ask uses the adopted one.
-  let id = requestedId;
-  let entry = reg.get(id);
-  if (!entry || syncStates.of(entry) === null) {
-    syncStates.answered(id); // relocated to a plain folder: nothing is left to verify
-    const plain = await reg.availability(id);
-    syncStates.rekey(id, plain.id); // a pending entry may have adopted its folder's id
-    // "Not synced" was decided while the folder had no identity file to ask about (the mount
-    // was not up at launch). Now it is there, so ask again: a synced folder must not keep
-    // hard links and in-folder staging for the whole session.
-    if (!entry || plain.availability.state !== "available" || !syncStates.needsRecheck(plain.id)) {
-      return plain;
-    }
-    id = plain.id;
-    entry = reg.get(id) ?? entry;
-    if ((await syncStates.refresh(entry)) === null) return plain;
-  }
-  const answered = await boundedProbe(reg.availability(id), null);
-  if (answered) {
-    syncStates.rekey(id, answered.id); // the entry may have adopted its folder's id
-    syncStates.answered(answered.id);
-    return answered;
-  }
-  const seen = await boundedProbe(
-    stat(entry.path).then((info) => info.isDirectory()),
-    false,
-    1_000,
+/** The availability check of one workspace, bounded for a synced one (see `checkAvailability`). */
+function availabilityOf(requestedId: string): Promise<{ availability: Availability; id: string }> {
+  return checkAvailability(
+    {
+      reg: requireRegistry(),
+      syncStates,
+      isDirectory: (path) => stat(path).then((info) => info.isDirectory()),
+    },
+    requestedId,
   );
-  if (!seen) return { availability: { state: "unavailable", reason: "missing" }, id };
-  syncStates.markUnverified(id);
-  return { availability: { state: "available" }, id };
 }
 
 function movesJournalDir(): string {
@@ -449,7 +417,6 @@ export async function requireCaptureWorkspace(): Promise<WorkspaceEntry> {
  */
 export async function availableWorkspacePaths(): Promise<string[]> {
   const reg = requireRegistry();
-  // A copy: a probe may update an entry (a pending one adopting its folder's id).
   const checked = await Promise.all(
     reg.entries().map(async (entry) => ({
       path: entry.path,

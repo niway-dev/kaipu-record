@@ -21,17 +21,41 @@ export const GOOGLE_DRIVE_ITEM_XATTR = "com.google.drivefs.item-id#S";
 /** How long a detection step may take before it counts as "no answer". */
 export const SYNC_DETECT_TIMEOUT_MS = 2_000;
 
-/** The provider a path lives under, from the path alone. */
+/**
+ * The provider a path lives under, from the path alone. The roots that count:
+ * - `~/Library/CloudStorage/*`: where macOS 12.1+ File Provider mounts every current client
+ *   (Google Drive, OneDrive, Dropbox, Box, ...); the folder name says which.
+ * - `~/Library/Mobile Documents/*`: iCloud's containers, `com~apple~CloudDocs` being iCloud
+ *   Drive; every folder there is synced by iCloud.
+ * - `~/Google Drive`, `~/OneDrive*`, `~/Dropbox*`: the home-folder roots of the clients before
+ *   File Provider (Backup and Sync; the OneDrive and Dropbox installs that keep their old
+ *   folder). Business accounts add a suffix ("OneDrive - Acme", "Dropbox (Personal)"), so the
+ *   root is the first folder under home whose name is the provider's, alone or followed by a space.
+ *
+ * Not detected by path, on purpose: `~/Documents` and `~/Desktop` under iCloud's "Desktop &
+ * Documents" (the path is the same whether the setting is on or off, so a path rule would turn
+ * every folder in Documents into a synced one; the iCloud xattr is unverified, so no net exists
+ * for it), and a provider mounted somewhere else (an external volume, a custom Drive location):
+ * only Google Drive's own xattr catches those (`detectSync`). A "this folder is synced"
+ * override the user can set is the way out for the rest, and is not part of this change.
+ */
 export function syncProviderOfPath(path: string, home: string = homedir()): SyncProvider | null {
   const cloudStorage = join(home, "Library", "CloudStorage");
-  const iCloud = join(home, "Library", "Mobile Documents", "com~apple~CloudDocs");
-  const under = (root: string): boolean => path === root || path.startsWith(`${root}/`);
-  if (under(iCloud)) return "icloud";
-  if (!path.startsWith(`${cloudStorage}/`)) return null;
-  const provider = path.slice(cloudStorage.length + 1).split("/")[0] ?? "";
-  if (provider.startsWith("GoogleDrive-")) return "google-drive";
-  if (provider.startsWith("OneDrive")) return "onedrive";
-  return provider.length > 0 ? "cloud-provider" : null;
+  const iCloud = join(home, "Library", "Mobile Documents");
+  if (path === iCloud || path.startsWith(`${iCloud}/`)) return "icloud";
+  if (path.startsWith(`${cloudStorage}/`)) {
+    const provider = path.slice(cloudStorage.length + 1).split("/")[0] ?? "";
+    if (provider.startsWith("GoogleDrive-")) return "google-drive";
+    if (provider.startsWith("OneDrive")) return "onedrive";
+    return provider.length > 0 ? "cloud-provider" : null;
+  }
+  if (!path.startsWith(`${home}/`)) return null;
+  const root = path.slice(home.length + 1).split("/")[0] ?? "";
+  const named = (name: string): boolean => root === name || root.startsWith(`${name} `);
+  if (named("Google Drive")) return "google-drive";
+  if (named("OneDrive")) return "onedrive";
+  if (named("Dropbox")) return "cloud-provider";
+  return null;
 }
 
 export interface SyncDetectDeps {

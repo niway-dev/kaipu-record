@@ -32,7 +32,6 @@ import {
   isAligned,
   isPlainItemId,
   kindFromExt,
-  readSidecarStrict,
   SharedCompanionError,
   type CompanionPaths,
   type RetryPolicy,
@@ -280,7 +279,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   // 3. Each live item's record, read strictly.
   const live: LiveItem[] = await mapLimit(single, READ_CONCURRENCY, async (media) => ({
     ...media,
-    read: await readSidecarStrict(vault.sidecarPath(media.stem)),
+    read: await vault.readRecordStrict(vault.sidecarPath(media.stem)),
   }));
   const liveFolds = new Set(live.map((item) => fsFold(item.stem)));
 
@@ -446,7 +445,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
     entry.found.length === 1 && entry.found[0]!.role === "sidecar";
   const records = ownerless.filter(isRecordName);
   const reads = await mapLimit(records, READ_CONCURRENCY, (entry) =>
-    readSidecarStrict(join(directory, META_DIR, entry.name)),
+    vault.readRecordStrict(join(directory, META_DIR, entry.name)),
   );
 
   /** Stems whose companions stay where they are (cloud-only, unreadable records). */

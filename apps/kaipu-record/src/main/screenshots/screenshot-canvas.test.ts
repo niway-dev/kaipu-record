@@ -204,6 +204,55 @@ describe("screenshot canvas storage", () => {
       expect((error as Error).message).toBe("canvas document read failed: EISDIR");
     });
 
+    describe("in a synced workspace (AC13)", () => {
+      /** A synced vault whose provider has offloaded exactly the paths `evicted` names. */
+      function syncedVault(evicted: (paths: string) => boolean): LibraryVault {
+        return new LibraryVault(
+          directory,
+          "ws-1",
+          undefined,
+          async (paths) => new Set(paths.filter(evicted)),
+        );
+      }
+
+      it("refuses an offloaded canvas document instead of downloading it", async () => {
+        await seed(doc("a"), { a: "x" });
+        const doc0 = vault.companionPaths("S").canvasDoc;
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        await expect(
+          readCanvas(
+            syncedVault((p) => p === doc0),
+            "S",
+          ),
+        ).rejects.toMatchObject({
+          code: "EVICTED",
+        });
+      });
+
+      it("refuses an offloaded asset while the document is local", async () => {
+        await seed(doc("a"), { a: "x" });
+        const asset = join(vault.companionPaths("S").assetsDir, "a.png");
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        await expect(
+          readCanvas(
+            syncedVault((p) => p === asset),
+            "S",
+          ),
+        ).rejects.toMatchObject({
+          code: "EVICTED",
+        });
+      });
+
+      it("reads a document whose files are all local", async () => {
+        await seed(doc("a"), { a: "x" });
+        const read = await readCanvas(
+          syncedVault(() => false),
+          "S",
+        );
+        expect(read?.docJson).toBe(doc("a"));
+      });
+    });
+
     it("returns null for an id that would leave the metadata folder", async () => {
       await seed(doc("a"), { a: "x" });
       expect(await readCanvas(vault, "../.kaipu/S")).toBeNull();

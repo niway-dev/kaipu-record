@@ -25,7 +25,11 @@ export function MoveExportsDialogHost(): React.JSX.Element | null {
   const { prompt, syncedPrompt } = useMoveUi();
   if (syncedPrompt) {
     return (
-      <ModalOverlay onCancel={() => syncedPrompt.answer(false)} labelledBy="move-synced-title">
+      <ModalOverlay
+        key="synced"
+        onCancel={() => syncedPrompt.answer(false)}
+        labelledBy="move-synced-title"
+      >
         <div {...uiArea("shell.moveSyncedDialog")}>
           <ModalIcon tone="danger">
             <FolderInput size={20} strokeWidth={1.8} />
@@ -47,7 +51,11 @@ export function MoveExportsDialogHost(): React.JSX.Element | null {
   if (!prompt) return null;
   const many = prompt.selected > 1;
   return (
-    <ModalOverlay onCancel={() => prompt.answer(null)} labelledBy="move-exports-title">
+    <ModalOverlay
+      key="exports"
+      onCancel={() => prompt.answer(null)}
+      labelledBy="move-exports-title"
+    >
       <ModalIcon tone="accent">
         <FolderInput size={20} strokeWidth={1.8} />
       </ModalIcon>

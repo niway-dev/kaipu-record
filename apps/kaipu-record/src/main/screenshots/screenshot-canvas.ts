@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CANVAS_ASSET_ID_PATTERN,
@@ -106,8 +106,8 @@ const toArrayBuffer = (buf: Buffer): ArrayBuffer =>
 
 /**
  * The stored document and its assets, or null for anything missing, oversized or corrupt.
- * Any other read error (permissions, I/O, a cloud placeholder) rejects instead, so the
- * renderer can record it before it falls back to the flat PNG.
+ * Any other read error (permissions, I/O, an offloaded file in a synced workspace) rejects
+ * instead, so the renderer can record it before it falls back to the flat PNG.
  */
 export async function readCanvas(
   vault: LibraryVault,
@@ -119,12 +119,18 @@ export async function readCanvas(
     const paths = vault.companionPaths(id);
     const info = await stat(paths.canvasDoc);
     if (!info.isFile() || info.size > CANVAS_DOC_MAX_BYTES) return null;
-    const docJson = await readFile(paths.canvasDoc, "utf-8");
+    // Whole-file reads of a synced workspace refuse an offloaded companion (`EvictedFileError`,
+    // code "EVICTED"): reading it would download it, and nothing here can be cancelled. Spec
+    // AC13 lets the canvas document and assets download on first use, but only through the
+    // explicit, killable download of layer 4; until then the editor falls back to the flat PNG.
+    const docJson = (await vault.readLocalFile(paths.canvasDoc)).toString("utf-8");
     const ids = imageAssetIds(docJson);
     if (ids === null) return null;
     const assets: Record<string, ArrayBuffer> = {};
     for (const assetId of ids) {
-      assets[assetId] = toArrayBuffer(await readFile(join(paths.assetsDir, `${assetId}.png`)));
+      assets[assetId] = toArrayBuffer(
+        await vault.readLocalFile(join(paths.assetsDir, `${assetId}.png`)),
+      );
     }
     return { docJson, assets };
   } catch (error) {

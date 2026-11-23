@@ -16,6 +16,14 @@ describe("syncProviderOfPath (spec, Synced folders: detection by path)", () => {
     [`${HOME}/Library/CloudStorage/OneDrive-AcmeCorp/Captures`, "onedrive"],
     [`${HOME}/Library/Mobile Documents/com~apple~CloudDocs/Kaipu`, "icloud"],
     [`${HOME}/Library/CloudStorage/Dropbox/Kaipu`, "cloud-provider"],
+    // Another iCloud container is iCloud too, not only iCloud Drive.
+    [`${HOME}/Library/Mobile Documents/iCloud~md~obsidian/Documents/Kaipu`, "icloud"],
+    // The home-folder roots of the clients before File Provider.
+    [`${HOME}/Google Drive/Kaipu`, "google-drive"],
+    [`${HOME}/Dropbox/Kaipu`, "cloud-provider"],
+    [`${HOME}/Dropbox (Personal)/Kaipu`, "cloud-provider"],
+    [`${HOME}/OneDrive/Kaipu`, "onedrive"],
+    [`${HOME}/OneDrive - Acme Corp/Captures`, "onedrive"],
   ])("%s → %s", (path, provider) => {
     expect(syncProviderOfPath(path, HOME)).toBe(provider);
   });
@@ -24,6 +32,15 @@ describe("syncProviderOfPath (spec, Synced folders: detection by path)", () => {
     `${HOME}/Movies/Kaipu Record`,
     "/Volumes/T7/Kaipu",
     `${HOME}/Library/CloudStorageX/GoogleDrive-a/b`,
+    // Omitted on purpose (see `syncProviderOfPath`): the path is the same with iCloud's
+    // "Desktop & Documents" on and off.
+    `${HOME}/Documents/Kaipu`,
+    `${HOME}/Desktop/Kaipu`,
+    // A root is a folder directly under home, named as the provider names it.
+    `${HOME}/Dropboxes/Kaipu`,
+    `${HOME}/OneDriveBackup/Kaipu`,
+    `${HOME}/Movies/Dropbox/Kaipu`,
+    `${HOME}/GoogleDriveBackup/Kaipu`,
   ])("%s is not synced", (path) => {
     expect(syncProviderOfPath(path, HOME)).toBeNull();
   });

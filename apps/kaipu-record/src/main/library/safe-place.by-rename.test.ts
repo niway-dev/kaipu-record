@@ -1,3 +1,4 @@
+import { renameSync, writeFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -18,6 +19,10 @@ const hooks = vi.hoisted(() => ({
   renameFailsTo: null as null | string,
   /** `lstat` answers like a case-insensitive volume: a name matches whatever its case. */
   foldCase: false,
+  /** Runs just before a rename that is not refused: a file that arrives inside the same-device window. */
+  beforeRename: null as null | ((to: string) => Promise<void>),
+  /** Runs when this directory is opened (the flush after a copy): a provider acting after the copy. */
+  atOpenDir: null as null | { path: string; run: () => void },
 }));
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
@@ -31,6 +36,14 @@ vi.mock("node:fs/promises", async (importActual) => {
       if (hooks.unlinkFails && (hooks.unlinkOnly === null || path === hooks.unlinkOnly))
         throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
       return actual.unlink(path);
+    },
+    open: async (path: string, ...rest: unknown[]) => {
+      if (hooks.atOpenDir && path === hooks.atOpenDir.path) {
+        const { run } = hooks.atOpenDir;
+        hooks.atOpenDir = null;
+        run();
+      }
+      return (actual.open as (...args: unknown[]) => Promise<unknown>)(path, ...rest);
     },
     lstat: async (path: string, options?: unknown) => {
       let at = path;
@@ -51,6 +64,7 @@ vi.mock("node:fs/promises", async (importActual) => {
         await hooks.atRename?.(to);
         throw Object.assign(new Error(hooks.renameError), { code: hooks.renameError });
       }
+      await hooks.beforeRename?.(to);
       return actual.rename(from, to);
     },
   };
@@ -70,6 +84,8 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     hooks.renames = [];
     hooks.renameFailsTo = null;
     hooks.foldCase = false;
+    hooks.beforeRename = null;
+    hooks.atOpenDir = null;
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -116,8 +132,35 @@ describe("placeByRename (synced folders: no hard link, ever)", () => {
     expect(names.some((name) => name.endsWith(".placed"))).toBe(true);
   });
 
-  // The same-device window (a file created between the check and `rename`) is the one the doc
-  // comment states: POSIX `rename` replaces, and nothing can be injected there deterministically.
+  // The same-device window: POSIX `rename` replaces, and Node has no rename-without-replace. The
+  // doc comment on `placeByRename` states it; this pins it, so a change to the check, or to the
+  // callers' reservation of the stem, shows up here instead of in a user's folder.
+  it("on one device, a file created between the check and the rename is replaced (the documented window)", async () => {
+    hooks.beforeRename = (to) => writeFile(to, "arrived late");
+    await writeFile(join(dir, "take.part"), "new");
+    const placed = await placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"));
+    expect(placed).not.toBe("taken");
+    expect(await readFile(join(dir, "Take.mp4"), "utf-8")).toBe("new");
+    await expect(stat(join(dir, "take.part"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("across devices, a copy the provider replaces before the source goes keeps the source", async () => {
+    hooks.renameError = "EXDEV";
+    await writeFile(join(dir, "take.part"), "new");
+    // The provider resolves a conflict in the instant after the copy: a different file, renamed
+    // over the copy (made beside it first, so it cannot reuse the copy's inode number).
+    hooks.atOpenDir = {
+      path: dir,
+      run: () => {
+        writeFileSync(join(dir, "theirs.tmp"), "the provider's version");
+        renameSync(join(dir, "theirs.tmp"), join(dir, "Take.mp4"));
+      },
+    };
+    expect(await placeByRename(join(dir, "take.part"), join(dir, "Take.mp4"))).toBe("taken");
+    expect(await readFile(join(dir, "Take.mp4"), "utf-8")).toBe("the provider's version");
+    expect(await readFile(join(dir, "take.part"), "utf-8")).toBe("new");
+  });
+
   it("across devices only, a file that arrives after the check is never replaced and the source stays", async () => {
     hooks.renameError = "EXDEV";
     hooks.atRename = (to) => writeFile(to, "someone else");

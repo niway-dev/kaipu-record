@@ -24,6 +24,9 @@ export class SyncStates {
    */
   private readonly provisional = new Set<string>();
 
+  /** The newest availability check of each workspace (see `beginCheck`). */
+  private readonly checks = new Map<string, number>();
+
   constructor(
     private readonly detect: (path: string) => Promise<SyncProvider | null> = detectSync,
     private readonly home: string = homedir(),
@@ -45,6 +48,21 @@ export class SyncStates {
    */
   needsRecheck(id: string): boolean {
     return this.provisional.has(id);
+  }
+
+  /**
+   * An availability check of `id` starts: its number. Checks run side by side, so one that
+   * finishes late asks `isCurrentCheck` before it changes what a newer one learned.
+   */
+  beginCheck(id: string): number {
+    const next = (this.checks.get(id) ?? 0) + 1;
+    this.checks.set(id, next);
+    return next;
+  }
+
+  /** No newer check of `id` has started since check number `check`. */
+  isCurrentCheck(id: string, check: number): boolean {
+    return this.checks.get(id) === check;
   }
 
   /** The workspace's check did not answer in time (`answered(id)` when a later one does). */
@@ -78,6 +96,7 @@ export class SyncStates {
 
   /** The workspace was removed from the registry. */
   forget(id: string): void {
+    this.checks.delete(id);
     this.known.delete(id);
     this.provisional.delete(id);
     this.unanswered.delete(id);

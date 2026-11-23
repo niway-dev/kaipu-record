@@ -166,7 +166,8 @@ async function retainPlaced(dir: string, name: string, byRename: boolean): Promi
     const moved = byRename
       ? await placeByRename(join(dir, name), join(keep, name), { stuck: "rollback" })
       : await placeNoReplace(join(dir, name), join(keep, name), { stuck: "rollback" });
-    if (moved === "placed") await unlink(join(dir, `${name}${PLACED_MARKER_SUFFIX}`));
+    // `placeByRename` resolves the placed file, `placeNoReplace` "placed": only "taken" keeps the marker.
+    if (moved !== "taken") await unlink(join(dir, `${name}${PLACED_MARKER_SUFFIX}`));
   } catch {
     // Still marked: skipped again on the next launch.
   }

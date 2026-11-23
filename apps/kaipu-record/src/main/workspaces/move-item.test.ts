@@ -454,22 +454,27 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     const item = await seedItem(src.directory);
     const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
     const stagedIn: string[] = [];
-    await moveItem(
+    // Observed inside the hook, asserted outside it: `moveItem` turns an error thrown in a hook
+    // into a refusal, so an `expect` there could never fail this test.
+    let inFolderDuringCopy: string[] | null = null;
+    const outcome = await moveItem(
       { source: src, target, id: item.id },
       deps({
         hooks: {
           after: async (step) => {
             if (step === "media-copied") {
               stagedIn.push(...(await readdir(join(root, "scratch", "dst", "tmp"))));
-              expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual(
-                [],
+              inFolderDuringCopy = await readdir(join(dst.directory, ".kaipu", "tmp")).catch(
+                () => [],
               );
             }
           },
         },
       }),
     );
+    expect(outcome).toMatchObject({ ok: true, id: item.id });
     expect(stagedIn).toHaveLength(1);
+    expect(inFolderDuringCopy).toEqual([]);
     expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual([]);
   });
 
