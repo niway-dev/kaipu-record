@@ -1,0 +1,4 @@
+# Wachiman settings, read from the pull request's base commit.
+# See https://github.com/niway-dev/wachiman/blob/main/docs/configuration.md
+review:
+  comments_point_to_docs: true
