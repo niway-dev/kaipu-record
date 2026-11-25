@@ -235,7 +235,12 @@ The orphans folder is only readable by hand through the manifest; listing and re
 
 A screenshot export (PDF, PNG, JPEG, WebP) is written where the user points the save dialog, and that path can be inside the vault or an existing file the user confirmed replacing. A plain `writeFile` there truncates the existing file first, so a failed write (a full disk, an I/O error) destroyed the file the user only agreed to replace with a complete export.
 
-`writeExportFile` (`main/screenshots/export-write.ts`) writes and flushes the bytes into a private staging folder under the system temp directory, then moves them with `replaceConfirmed` from `main/library/safe-place.ts`, the replacing move described in "Placing a file" of ADR 0036. The existing destination changes only in the final rename, so a failure at any earlier step leaves it as it was. The staging folder is removed on success and on failure. Staging outside the destination folder keeps a crash from leaving a hidden file in a folder the user chose.
+`writeExportFile` (`main/screenshots/export-write.ts`) writes and flushes the bytes into a private staging folder under the system temp directory, then moves them with `replaceConfirmed` from `main/library/safe-place.ts`, the replacing move described in "Placing a file" of ADR 0036. The existing destination changes only in the final rename, so a failure at any earlier step leaves it as it was. The staging folder is removed on success and on failure.
+
+Two costs come with that:
+
+- A crash or power loss during the final placement can still leave `replaceConfirmed`'s hidden `.<name>.replace-<id>` sibling in the user's folder; only a failure the app survives removes it. When the staging folder and the destination are on different volumes, the bytes are written twice: once to stage them, once to copy them beside the destination.
+- The rename puts a new file at the path. A replaced export gets default permissions and loses the old file's extended attributes (Finder tags) and hard links, and a symlink at the chosen path is replaced instead of written through. An export is a new file the user asked for, so keeping the old file's identity is not a goal.
 
 ### Strict sidecar reads
 
