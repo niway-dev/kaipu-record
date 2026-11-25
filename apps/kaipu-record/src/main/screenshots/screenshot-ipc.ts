@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen } from "electron";
 import { createMainTranslator } from "@kaipu/i18n/main";
@@ -21,6 +21,7 @@ import {
   type CaptureWindowHooks,
   type RecordTarget,
 } from "./capture-handler";
+import { writeExportFile } from "./export-write";
 import { createFrameMemory } from "./frame-memory";
 import { CaptureOverlayWindows, type OverlayWarmup } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
@@ -430,7 +431,7 @@ export function registerScreenshotHandlers(
         ? await dialog.showSaveDialog(window, options)
         : await dialog.showSaveDialog(options);
       if (result.canceled || !result.filePath) return null;
-      await writeFile(result.filePath, Buffer.from(bytes));
+      await writeExportFile(result.filePath, Buffer.from(bytes));
       return { path: result.filePath };
     },
   );
