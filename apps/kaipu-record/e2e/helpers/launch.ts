@@ -61,7 +61,7 @@ export async function localIdForAssetId(vaultDir: string, assetId: string): Prom
  *     (what makes a recording editable — see LibraryDetailPage).
  *   - `<screenshot>.png` + a `.kaipu/<id>.json` sidecar. `.png` files classify as
  *     `kind: "screenshot"` in the vault (LibraryVault.describe), so the detail page shows the
- *     "Edit"/"Copy" screenshot actions.
+ *     "Edit image"/"Copy" screenshot actions.
  * Seeding both at launch (rather than after) avoids any list-refresh race: the library reads
  * the vault fresh on mount.
  */
@@ -319,8 +319,10 @@ export async function openEditor(page: Page): Promise<void> {
 /**
  * Enter the screenshot editor for the seeded screenshot. The editor reads its image from
  * react-router `state` (an ImageSource); a bare hash navigation to `/screenshot-editor`
- * arrives stateless and redirects away, so the only reliable entry is the real "Edit" button
- * on the screenshot's detail page (which passes the state). Waits until the editor's Save
+ * arrives stateless and redirects away, so the only reliable entry is the real "Edit image"
+ * button on the screenshot's detail page (which passes the state). The page shows two of them
+ * (the lead action and the one over the preview); both open the editor, so take the first.
+ * Waits until the editor's Save
  * control is present (the toolbar has rendered).
  */
 export async function openScreenshotEditor(page: Page): Promise<void> {
@@ -328,6 +330,6 @@ export async function openScreenshotEditor(page: Page): Promise<void> {
   await page.evaluate((assetId) => {
     location.hash = `#/library/${assetId}`;
   }, SCREENSHOT_ASSET_ID);
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit image", exact: true }).first().click();
   await page.getByRole("button", { name: /^Save/ }).waitFor({ state: "visible" });
 }
