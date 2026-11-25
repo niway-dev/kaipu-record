@@ -16,7 +16,6 @@ import {
   screen,
   Tray,
 } from "electron";
-import { readFile } from "fs/promises";
 import { join } from "path";
 import { captureWhileRecordingEnabled } from "./screenshots/capture-while-recording";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
@@ -51,7 +50,11 @@ import { registerTranscriptionIpc } from "./transcription/transcription-ipc";
 import { registerSaveTextFileIpc } from "./save-text-file-ipc";
 import type { TranscriptionService } from "./transcription/transcription-service";
 import { vaultActivity, type ActivityLease } from "./library/vault-activity";
-import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copies";
+import {
+  cleanupDragCopies,
+  cleanupLegacyDragCopies,
+  cleanupScratchDragCopies,
+} from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
@@ -64,6 +67,8 @@ import {
   attachWindowTitle,
   availableWorkspacePaths,
   initWorkspaces,
+  scratchStagingFor,
+  syncedStagingFor,
   notifyWorkspaceBusyChanged,
   registerWorkspaceHandlers,
 } from "./workspaces";
@@ -847,7 +852,11 @@ async function revealSavedScreenshot(id: string): Promise<void> {
 
 /** The preview card's Copy on a saved shot: its file as it is now. */
 function readSavedScreenshot(id: string): Promise<Buffer> {
-  return vaultActivity.run("library", async () => readFile(await currentVault().filePath(id)));
+  return vaultActivity.run("library", async () => {
+    const vault = currentVault();
+    // An offloaded shot (synced folder) is never read: that would download it (ADR 0069).
+    return vault.readLocalFile(await vault.filePath(id));
+  });
 }
 
 /** PNG bytes onto the clipboard; throws on bytes that are not an image. */
@@ -874,6 +883,8 @@ async function cleanupDragCopiesEverywhere(): Promise<void> {
   for (const path of await availableWorkspacePaths().catch(() => [])) {
     await cleanupDragCopies(path).catch(() => {});
   }
+  // A synced workspace keeps its drag copies in userData (decision 15), connected or not.
+  await cleanupScratchDragCopies(app.getPath("userData")).catch(() => {});
 }
 
 /** Stranded takes of every connected workspace, each into its own folder. */
@@ -882,9 +893,14 @@ async function recoverStrandedEverywhere(): Promise<void> {
   const active = activeWorkspace().path;
   for (const vaultDir of await availableWorkspacePaths().catch(() => [])) {
     try {
+      // A synced workspace stages its takes in its scratch folder; both it and `.kaipu/tmp/`
+      // are swept, whatever this launch's detection says.
+      const scratch = scratchStagingFor(vaultDir);
       const r = await recoverStrandedRecordings({
         vaultDir,
         ...(vaultDir === active ? { fallbackTempDir: app.getPath("temp") } : {}),
+        ...(scratch ? { extraStagingDirs: [scratch] } : {}),
+        placeByRename: syncedStagingFor(vaultDir) !== null,
         title,
       });
       if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);

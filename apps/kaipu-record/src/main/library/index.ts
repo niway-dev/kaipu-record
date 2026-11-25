@@ -1,5 +1,5 @@
 import { lstat } from "node:fs/promises";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import {
   app,
   BrowserWindow,
@@ -30,11 +30,19 @@ import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repo
 import { isTagColor } from "@kaipu/domain/constants";
 import { saveGif } from "./gif-save";
 import { importVideoFiles, type ImportVideoDeps } from "./import-video";
-import { createDragCopy, dragRoot } from "./drag-copies";
+import { DRAG_PLACEHOLDER_ICON_PNG, createDragCopy, dragRoot } from "./drag-copies";
 import { dragLedger } from "./drag-ledger";
 import { withItemLock } from "./item-lock";
 import { friendlyDragName } from "./drag-name";
-import { activeWorkspace, ownsLegacyCloud, workspaceGate } from "../workspaces";
+import {
+  activeEvictionProbe,
+  activeStagingDir,
+  activeScratch,
+  activeWorkspace,
+  ownsLegacyCloud,
+  workspaceGate,
+} from "../workspaces";
+import { scratchDrag } from "../workspaces/sync-state";
 import { registerVideoEditSessionHandlers } from "./video-edit-session";
 import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
 import { skipPaths } from "./vault-reconcile";
@@ -61,7 +69,14 @@ export function broadcastLibraryChanged(): void {
  */
 export function currentVault(): LibraryVault {
   const active = activeWorkspace();
-  return new LibraryVault(active.path, active.id);
+  // A synced workspace asks which files are evicted, so no URL it hands out downloads one.
+  return new LibraryVault(
+    active.path,
+    active.id,
+    undefined,
+    activeEvictionProbe(),
+    activeStagingDir(),
+  );
 }
 
 /** The active workspace's folder. */
@@ -141,6 +156,7 @@ export function registerLibraryVaultHandlers(deps: {
     cache: new CatalogCache(app.getPath("userData")),
     account: deps.auth.getCurrentAccount,
     fetchCatalog: (token) => fetchCloudCatalog({ serverUrl: deps.serverUrl }, token),
+    reveal: (path) => shell.showItemInFolder(path),
   });
 
   ipcMain.handle(
@@ -346,13 +362,15 @@ export function registerLibraryVaultHandlers(deps: {
   handleVault(IPC_CHANNELS.openLocalRecording, async (id: string) => {
     const file = await localRecordingFile(id);
     if (!file) throw new Error("open: no local recording for this id");
+    // An evicted file opens by downloading it; Kaipu never starts that itself (ADR 0069).
+    await currentVault().assertLocal([file]);
     const error = await shell.openPath(file);
     if (error) throw new Error(error);
   });
   handleVault(IPC_CHANNELS.localRecordingPath, (id: string) => localRecordingFile(id));
   // NIW2-217: GIF export. Bytes are validated (GIF89a, ≤ 64 MB) and the path is chosen here.
   handleVault(IPC_CHANNELS.gifSave, async (bytes: ArrayBuffer, meta: GifSaveMeta) => {
-    const recording = await saveGif({ vaultDir: vaultPath }, bytes, meta);
+    const recording = await saveGif({ vaultDir: vaultPath, vault: currentVault }, bytes, meta);
     broadcastLibraryChanged();
     return recording;
   });
@@ -361,23 +379,51 @@ export function registerLibraryVaultHandlers(deps: {
   // NIW2-218: when the renderer sends the item's title, the dragged file carries it instead of
   // the vault id. The vault keeps its id name; the friendly file is a hard link (no extra
   // space) in `<vault>/.kaipu/drag/` (same volume), pruned when older than an hour and wiped
-  // on quit.
+  // on quit. A synced workspace gets a real copy in its scratch folder instead (decision 15).
   ipcMain.on(IPC_CHANNELS.startFileDrag, (event, stamp: unknown, id: string, name?: unknown) => {
     void workspaceGate()
       .run(stamp, async () => {
         if (typeof id !== "string" || /[\\/]|\.\./.test(id)) return;
         const vault = currentVault();
         const file = await vault.filePath(id);
+        // A synced workspace (decision 15): an evicted file cannot be dragged (a copy would
+        // download it), and the drag copy is a real copy in userData, never a hard link.
+        const scratch = activeScratch();
+        const probe = activeEvictionProbe();
+        const poster = vault.thumbnailPath(id);
+        // An offloaded poster is never read for the icon (reading it downloads it): the drag
+        // gets a placeholder icon instead, and still works, because the media is local.
+        let posterOffloaded = false;
+        if (probe) {
+          const offloaded = await probe([file, poster]);
+          if (offloaded.has(file)) return;
+          posterOffloaded = offloaded.has(poster);
+        }
         // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
-        const icon = nativeImage.createFromPath(vault.thumbnailPath(id));
+        const icon = posterOffloaded
+          ? nativeImage.createFromBuffer(DRAG_PLACEHOLDER_ICON_PNG)
+          : nativeImage.createFromPath(poster);
         if (icon.isEmpty()) return;
-        const dragFile =
+        const root = scratch
+          ? scratchDrag(app.getPath("userData"), activeWorkspace().id)
+          : dragRoot(vault.directory);
+        // A synced workspace always drags a copy, named or not: the original never leaves it.
+        const copyName =
           typeof name === "string" && name.length > 0
-            ? await createDragCopy(vault.directory, file, friendlyDragName(name, extname(file)))
+            ? friendlyDragName(name, extname(file))
+            : scratch !== null
+              ? basename(file)
+              : null;
+        const dragFile =
+          copyName !== null
+            ? await createDragCopy(vault.directory, file, copyName, undefined, {
+                root,
+                synced: scratch !== null,
+              })
             : file;
         // A move of this item waits 10 s after a drag, and removes its drag folder (ADR 0033).
         const workspaceId = activeWorkspace().id;
-        const inDragRoot = dragFile.startsWith(dragRoot(vault.directory));
+        const inDragRoot = dragFile.startsWith(root);
         dragLedger.record({ workspaceId, itemId: id, dir: inDragRoot ? dirname(dragFile) : null });
         event.sender.startDrag({ file: dragFile, icon: icon.resize({ width: 96 }) });
       })
@@ -389,6 +435,7 @@ export function registerLibraryVaultHandlers(deps: {
   // runs inside the workspace gate and under one vault lease, like every other vault write.
   const importDeps: ImportVideoDeps = {
     vaultDir: vaultPath,
+    vault: currentVault,
     newId: (now) => importedId(now),
   };
   const importAndBroadcast = async (stamp: unknown, paths: unknown): Promise<ImportVideoResult> =>
@@ -433,7 +480,7 @@ export function registerLibraryVaultHandlers(deps: {
   );
 
   // Video-editor session persistence (save on export, load on editor mount).
-  registerVideoEditSessionHandlers();
+  registerVideoEditSessionHandlers(currentVault);
 }
 
 /** An imported item's id: `imported-2026-10-31-13-51-00`, the stamp of when it came in. */

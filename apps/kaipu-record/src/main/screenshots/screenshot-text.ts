@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   recognizedWordsSchema,
@@ -12,7 +12,7 @@ import type {
   TextRecognitionRequest,
   TextRecognitionResult,
 } from "@shared/types/text-recognition";
-import { atomicWriteFile, withLock } from "../library/atomic-write";
+import { withLock } from "../library/atomic-write";
 import { withItemLock } from "../library/item-lock";
 import { isPlainItemId, type LibraryVault } from "../library/library-vault";
 
@@ -65,13 +65,17 @@ export function bumpTextGeneration(vault: LibraryVault, id: string): void {
 const lockKey = (vault: LibraryVault, id: string): string =>
   `text-cache\u0000${itemKey(vault, id)}`;
 
-/** The cache's valid entries; a missing, oversized, corrupt or off-schema file is `{}`. */
+/**
+ * The cache's valid entries; a missing, oversized, corrupt or off-schema file is `{}`. It is read
+ * through the workspace's vault: in a synced folder an offloaded cache is never downloaded by the
+ * read and a stalled provider cannot hang it (both are `{}`, a cache miss, like any other failure).
+ */
 export async function readTextCache(vault: LibraryVault, id: string): Promise<TextCacheAssets> {
   try {
     const path = vault.companionPaths(id).textCache;
     const info = await stat(path);
     if (!info.isFile() || info.size > TEXT_CACHE_MAX_BYTES) return {};
-    const file = JSON.parse(await readFile(path, "utf-8")) as {
+    const file = JSON.parse(await vault.readTextBounded(path)) as {
       schemaVersion?: unknown;
       assets?: unknown;
     } | null;
@@ -104,7 +108,7 @@ async function writeAssets(
     await rm(path, { force: true });
     return;
   }
-  await atomicWriteFile(path, json);
+  await vault.writeAtomic(path, json);
 }
 
 /**
@@ -183,7 +187,9 @@ async function onDiskSha256(
   const missing = (error: unknown): boolean =>
     ["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException)?.code ?? "");
   try {
-    return sha256Hex(await readFile(join(paths.assetsDir, `${assetId}.png`)));
+    // An offloaded asset is not hashed (that would download it): the catch below treats the
+    // refusal as "unknown", so no cache is judged.
+    return sha256Hex(await vault.readLocalFile(join(paths.assetsDir, `${assetId}.png`)));
   } catch (error) {
     if (!missing(error)) return null;
   }
@@ -195,7 +201,8 @@ async function onDiskSha256(
     if (!missing(error)) return null;
   }
   try {
-    return sha256Hex(await readFile(await vault.filePath(id)));
+    // An offloaded PNG is not hashed (that would download it): no hash, so no cache is judged.
+    return sha256Hex(await vault.readLocalFile(await vault.filePath(id)));
   } catch {
     return null;
   }

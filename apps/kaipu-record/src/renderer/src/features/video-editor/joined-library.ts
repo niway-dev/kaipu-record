@@ -1,6 +1,6 @@
 /**
  * What the editor needs to know about a joined recording (ADR 0058) from the Library, and the
- * best-effort read of its cursor track. Shared by the hook that loads joined recordings when
+ * read of its cursor track (null when it does not exist; any other failure throws). Shared by the hook that loads joined recordings when
  * the editor opens, and by the loader, which needs the webcam metas BEFORE the editor exists.
  */
 import type { CursorTrack } from "@shared/cursor-track";
@@ -38,14 +38,15 @@ export async function readJoinedLibrary(
   return out;
 }
 
-/** The recording's cursor track, or null: a missing or malformed one is just "no pointer data". */
-export async function loadCursorTrackBestEffort(id: string): Promise<CursorTrack | null> {
-  try {
-    const json = await window.electronAPI.loadCursorTrack(id);
-    return json ? parseCursorTrack(json) : null;
-  } catch {
-    return null;
-  }
+/**
+ * The recording's cursor track, or null: a missing or malformed one is just "no pointer data".
+ * A track that exists but cannot be read now (offloaded by a synced folder's provider, or a
+ * provider that does not answer) is not "no pointer data": it REJECTS, so a join or a joined
+ * clip is never built silently without the pointer data the recording has.
+ */
+export async function loadCursorTrackOrNull(id: string): Promise<CursorTrack | null> {
+  const json = await window.electronAPI.loadCursorTrack(id);
+  return json ? parseCursorTrack(json) : null;
 }
 
 /**

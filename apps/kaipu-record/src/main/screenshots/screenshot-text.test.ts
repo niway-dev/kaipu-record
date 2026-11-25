@@ -305,6 +305,70 @@ describe("recognizeScreenshotText", () => {
   });
 });
 
+describe("recognizeScreenshotText in a synced workspace", () => {
+  it("never reads an evicted text cache: it is a miss and the file is left as it was", async () => {
+    const id = await seedItem("Shot", "pixels");
+    const text = cachePath(id);
+    const cached = JSON.stringify({
+      schemaVersion: 1,
+      assets: { base: { sha256: sha(Buffer.from("pixels")), words: [word("cached")] } },
+    });
+    await writeFile(text, cached);
+    // A reader that WOULD deliver a valid cache: if the code read the evicted file it would get
+    // a hit, so an empty answer proves the file was not read (a failing reader would look like a
+    // miss either way and prove nothing).
+    const readText = vi.fn(async () => cached);
+    const synced = new LibraryVault(
+      directory,
+      undefined,
+      { readText },
+      async (paths) => new Set(paths.filter((path) => path === text)),
+    );
+    expect(await readTextCache(synced, id)).toEqual({});
+    expect(readText).not.toHaveBeenCalledWith(text);
+    expect(readText).not.toHaveBeenCalled();
+  });
+
+  it("never reads an evicted PNG to check the cache: the words come back, nothing is cached", async () => {
+    const id = await seedItem("Shot", "pixels");
+    const evicted = new Set([join(directory, `${id}.png`)]);
+    const synced = new LibraryVault(directory, undefined, undefined, async () => evicted);
+    const { recognizer, recognize } = fakeRecognizer();
+
+    const result = await recognizeScreenshotText(
+      { vault: synced, recognizer },
+      { id, assetId: "base", png: bytes("pixels") },
+    );
+
+    expect(result).toEqual({ status: "ready", words: [word("hello")] });
+    expect(recognize).toHaveBeenCalledTimes(1);
+    // The PNG on disk could not be compared without downloading it, so no cache was written.
+    await expect(readFile(cachePath(id), "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("never reads an evicted canvas asset to check the cache either", async () => {
+    const id = await seedItem("Shot", "flat");
+    await seedCanvas(id, { base: "pixels" });
+    const asset = join(vault.companionPaths(id).assetsDir, "base.png");
+    const synced = new LibraryVault(
+      directory,
+      undefined,
+      undefined,
+      async (paths) => new Set(paths.filter((path) => path === asset)),
+    );
+    const { recognizer } = fakeRecognizer();
+
+    const result = await recognizeScreenshotText(
+      { vault: synced, recognizer },
+      { id, assetId: "base", png: bytes("pixels") },
+    );
+
+    expect(result).toEqual({ status: "ready", words: [word("hello")] });
+    // Hashing the asset would have downloaded it; without a hash nothing is cached.
+    await expect(readFile(cachePath(id), "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
 describe("saveTextCache", () => {
   const canvas = (assets: Record<string, string>) => ({
     docJson: "{}",

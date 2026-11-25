@@ -11,12 +11,13 @@ const KEPT_MESSAGE = {
   busy: "renameKeptBusy",
   editing: "renameKeptEditing",
   taken: "renameKeptTaken",
+  evicted: "renameKeptEvicted",
   io: "renameKeptError",
 } as const;
 
 /**
- * NIW2-560: a rename whose file kept its old name (locked, export running, name taken, I/O
- * error) still saved the title, so it is not an error: a non-blocking toast says so and offers
+ * NIW2-560: a rename whose file kept its old name (locked, export running, name taken, a part
+ * not downloaded, I/O error) still saved the title, so it is not an error: a non-blocking toast says so and offers
  * Retry.
  * Nothing is shown when the file moved or did not need to.
  */

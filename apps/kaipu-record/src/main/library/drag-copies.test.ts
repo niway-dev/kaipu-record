@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { constants } from "node:fs";
+import { crc32, inflateSync } from "node:zlib";
 import {
   copyFile,
   mkdir,
@@ -14,8 +16,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   DRAG_COPY_MAX_AGE_MS,
+  DRAG_PLACEHOLDER_ICON_PNG,
+  SyncedDragCopyError,
   cleanupDragCopies,
   cleanupLegacyDragCopies,
+  cleanupScratchDragCopies,
   createDragCopy,
   dragRoot,
   pruneDragCopies,
@@ -108,5 +113,119 @@ describe("drag copies", () => {
     await cleanupLegacyDragCopies(temp);
     await expect(stat(join(temp, "kaipu-drag"))).rejects.toThrow();
     await rm(temp, { recursive: true, force: true });
+  });
+
+  describe("a synced workspace (decision 15; NIW2-577)", () => {
+    let scratch: string;
+    beforeEach(async () => {
+      scratch = await mkdtemp(join(tmpdir(), "kaipu-drag-scratch-"));
+    });
+    afterEach(async () => {
+      await rm(scratch, { recursive: true, force: true });
+    });
+
+    it("copies into the scratch folder, never links, and writes nothing inside the workspace", async () => {
+      const link = vi.fn(async () => {});
+      const result = await createDragCopy(
+        vault,
+        file,
+        "My demo.mp4",
+        { link, copyFile },
+        { root: scratch, synced: true },
+      );
+      expect(link).not.toHaveBeenCalled();
+      expect(result.startsWith(scratch)).toBe(true);
+      expect(await readFile(result, "utf-8")).toBe("video");
+      // The item keeps one name: the provider never sees a second one.
+      expect((await stat(file)).nlink).toBe(1);
+      expect(await readdir(join(vault, ".kaipu")).catch(() => [])).toEqual([]);
+    });
+
+    it("asks for a clone, so a large take does not delay the drag where the volume can", async () => {
+      const copy = vi.fn(copyFile);
+      await createDragCopy(
+        vault,
+        file,
+        "c.mp4",
+        { link: vi.fn(async () => {}), copyFile: copy },
+        {
+          root: scratch,
+          synced: true,
+        },
+      );
+      expect(copy).toHaveBeenCalledWith(file, expect.any(String), constants.COPYFILE_FICLONE);
+    });
+
+    it("refuses instead of handing out the original when the drag folder cannot be made", async () => {
+      const blocked = join(scratch, "blocked");
+      await writeFile(blocked, "a file where the folder must go");
+      await expect(
+        createDragCopy(vault, file, "x.mp4", undefined, {
+          root: join(blocked, "drag"),
+          synced: true,
+        }),
+      ).rejects.toBeInstanceOf(SyncedDragCopyError);
+    });
+
+    it("a workspace that is not synced still drags the original when its folder cannot be made", async () => {
+      const blocked = join(scratch, "blocked");
+      await writeFile(blocked, "a file where the folder must go");
+      expect(
+        await createDragCopy(vault, file, "x.mp4", undefined, { root: join(blocked, "drag") }),
+      ).toBe(file);
+    });
+
+    it("prunes old drag folders in the scratch root, not in the workspace", async () => {
+      await mkdir(join(scratch, "old"), { recursive: true });
+      const past = new Date(Date.now() - DRAG_COPY_MAX_AGE_MS - 60_000);
+      await utimes(join(scratch, "old"), past, past);
+      await createDragCopy(vault, file, "x.mp4", undefined, { root: scratch, synced: true });
+      expect(await readdir(scratch)).not.toContain("old");
+    });
+  });
+
+  it("cleanupScratchDragCopies removes every synced workspace's drag folder, and only that", async () => {
+    const userData = await mkdtemp(join(tmpdir(), "kaipu-drag-ud-"));
+    await mkdir(join(userData, "workspace-scratch", "ws-1", "drag", "x"), { recursive: true });
+    await mkdir(join(userData, "workspace-scratch", "ws-1", "tmp"), { recursive: true });
+    await cleanupScratchDragCopies(userData);
+    expect(await readdir(join(userData, "workspace-scratch", "ws-1"))).toEqual(["tmp"]);
+    await rm(userData, { recursive: true, force: true });
+  });
+});
+
+describe("DRAG_PLACEHOLDER_ICON_PNG", () => {
+  /** The chunks of a PNG, each with its CRC checked: a truncated or hand-edited one throws. */
+  function chunksOf(png: Buffer): Array<{ type: string; data: Buffer }> {
+    expect(png.subarray(0, 8)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+    const chunks: Array<{ type: string; data: Buffer }> = [];
+    let at = 8;
+    while (at < png.length) {
+      const length = png.readUInt32BE(at);
+      const type = png.subarray(at + 4, at + 8).toString("latin1");
+      const data = png.subarray(at + 8, at + 8 + length);
+      const stored = png.readUInt32BE(at + 8 + length);
+      expect(crc32(png.subarray(at + 4, at + 8 + length)), `${type} CRC`).toBe(stored);
+      chunks.push({ type, data });
+      at += 12 + length;
+    }
+    expect(at).toBe(png.length);
+    return chunks;
+  }
+
+  it("is a whole PNG: signature, checksummed chunks, and pixels that inflate to 64 x 64 RGBA", () => {
+    const chunks = chunksOf(DRAG_PLACEHOLDER_ICON_PNG);
+    expect(chunks.map((chunk) => chunk.type)).toEqual(["IHDR", "IDAT", "IEND"]);
+    const header = chunks[0]!.data;
+    expect([header.readUInt32BE(0), header.readUInt32BE(4)]).toEqual([64, 64]);
+    expect([header[8], header[9]]).toEqual([8, 6]); // 8-bit RGBA
+    const pixels = inflateSync(chunks[1]!.data);
+    expect(pixels.length).toBe(64 * (1 + 64 * 4)); // one filter byte per row, then the pixels
+    // Translucent, never opaque and never invisible: macOS would draw nothing for a clear one.
+    const alpha = pixels[1 + 3]!;
+    expect(alpha).toBeGreaterThan(0);
+    expect(alpha).toBeLessThan(255);
   });
 });

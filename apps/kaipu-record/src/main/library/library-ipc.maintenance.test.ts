@@ -27,6 +27,9 @@ vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ lo
 // what is left to refuse a call is maintenance mode.
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
+  activeEvictionProbe: () => null,
+  activeStagingDir: () => null,
+  activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({
     run: (_stamp: unknown, fn: () => unknown) => Promise.resolve().then(fn),

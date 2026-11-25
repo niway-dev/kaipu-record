@@ -7,6 +7,7 @@ import { SESSION_BEFORE_WEBCAM } from "@renderer/features/video-editor/session-b
 import { serializeSession } from "@renderer/features/video-editor/session";
 import { initialScene } from "@renderer/features/video-editor/scene";
 import { resetSettingsStoreForTests } from "@renderer/features/settings/settings-store";
+import { AUTOSAVE_DEBOUNCE_MS } from "@renderer/features/video-editor/use-session-autosave";
 import { TRACK_KEYS } from "@renderer/features/video-editor/tracks";
 import { WEBCAM_DEFAULTS } from "@renderer/features/video-editor/webcam/webcam-model";
 import { setHeaderActionsElement } from "@renderer/features/workspaces/header-slot";
@@ -475,6 +476,222 @@ describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
   });
 });
 
+describe("VideoEditorLoader — a project that cannot be read opens read-only (NIW2-912)", () => {
+  // The tests replace bridge calls; the rest of the file expects the shared fakes back.
+  const originals = {
+    acquire: window.electronAPI.acquireEditorSession,
+    track: window.electronAPI.loadCursorTrack,
+    session: window.electronAPI.loadVideoEditSession,
+    save: window.electronAPI.saveVideoEditSession,
+  };
+  afterEach(() => {
+    window.electronAPI.acquireEditorSession = originals.acquire;
+    window.electronAPI.loadCursorTrack = originals.track;
+    window.electronAPI.loadVideoEditSession = originals.session;
+    window.electronAPI.saveVideoEditSession = originals.save;
+  });
+
+  const BANNER = /this project is read-only/i;
+
+  it("a pointer track that cannot be read opens read-only: banner, disabled tools, nothing saved", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => {
+      throw new Error("Error invoking remote method: EvictedFileError: Not downloaded");
+    });
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => null);
+    const save = vi.fn(async () => {});
+    window.electronAPI.saveVideoEditSession = save;
+
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer in your library/i)).toBeNull();
+    expect(footer).toHaveAttribute("inert");
+    expect(document.querySelector('[role="toolbar"][aria-orientation="vertical"]')).toHaveAttribute(
+      "inert",
+    );
+    // Split is a transport control, not a read-only one: it must change nothing.
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(1);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS + 100));
+    });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("a read-only editor ignores the edit shortcuts: no tool is armed", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => {
+      throw new Error("Error invoking remote method: EvictedFileError: Not downloaded");
+    });
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => null);
+
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByText(BANNER);
+
+    fireEvent.keyDown(window, { key: "r" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.getByRole("button", { name: "Box" }).className).not.toMatch(/toolActive/);
+  });
+
+  it("a saved edit that does not parse says it cannot be loaded, not that files are in the cloud", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: "{ this is not a project",
+      assets: [],
+    }));
+
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(await screen.findByText(/saved edit could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByText(/only in the cloud/i)).toBeNull();
+  });
+
+  it("a project that cannot be read opens read-only on a blank scene, never as a new project", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => {
+      throw new Error("vault-edit-project-unavailable: could not be read");
+    });
+    const save = vi.fn(async () => {});
+    window.electronAPI.saveVideoEditSession = save;
+
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    expect(footer).toHaveAttribute("inert");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS + 100));
+    });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("a project file that does not parse opens read-only, never as a new project (round 11 Z3)", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: "{ this is not a project",
+      assets: [],
+    }));
+    const save = vi.fn(async () => {});
+    window.electronAPI.saveVideoEditSession = save;
+
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    expect(footer).toHaveAttribute("inert");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS + 100));
+    });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("a project whose slide image is missing opens read-only, so the dropped slide is never saved over it (round 11 Z3)", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: serializeSession({
+        ...initialScene(30),
+        items: [
+          { id: "clip-1", kind: "clip" as const, sourceStart: 0, sourceEnd: 30 },
+          {
+            id: "slide-1",
+            kind: "slide" as const,
+            assetId: "slide-asset-gone",
+            duration: 2,
+            naturalWidth: 100,
+            naturalHeight: 100,
+          },
+        ],
+      }),
+      assets: [],
+    }));
+    const save = vi.fn(async () => {});
+    window.electronAPI.saveVideoEditSession = save;
+
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    expect(footer).toHaveAttribute("inert");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS + 100));
+    });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("Capture frame is disabled in a read-only editor and enabled in an editable one (round 11 #24)", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Capture frame" })).toBeEnabled(),
+      );
+      cleanup();
+
+      window.electronAPI.acquireEditorSession = vi.fn(async () => SOURCE.id) as never;
+      window.electronAPI.loadCursorTrack = vi.fn(async () => {
+        throw new Error("Error invoking remote method: EvictedFileError: Not downloaded");
+      });
+      renderEditor();
+      await waitForEditorLoaded();
+      expect(await screen.findByText(BANNER)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("a readable project has no banner and is editable", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    expect(screen.queryByText(BANNER)).toBeNull();
+    expect(footer).not.toHaveAttribute("inert");
+  });
+
+  it("a save the folder refuses turns the editor read-only, keeps the edit on screen and still warns on leaving", async () => {
+    const save = vi.fn(async () => {
+      throw new Error("vault-edit-project-unavailable vault-edit-project-cloud-only: not saved");
+    });
+    window.electronAPI.saveVideoEditSession = save;
+    const router = renderEditor();
+    const footer = await waitForEditorLoaded();
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+    await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2));
+
+    expect(
+      await screen.findByText(/recent changes could not be saved/i, {}, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    expect(footer).toHaveAttribute("inert");
+    // The unsaved edit stays on screen, and no later write is tried.
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS + 100));
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+
+    // Leaving through the app still asks first: the change is not on disk.
+    await act(async () => {
+      await router.navigate("/library/rec-1");
+    });
+    expect(await screen.findByText("Discard the video changes?")).toBeInTheDocument();
+  });
+});
+
 describe("VideoEditorPage — actions in the title bar (NIW2-619)", () => {
   it("renders undo, redo, capture frame, the status and Export into the title bar, not the side column", async () => {
     renderEditor();
@@ -733,6 +950,34 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
     // No navigation: the "Ready to share" card takes over, and the editor stays open.
     expect(screen.queryByText("library-detail")).toBeNull();
     expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
+  });
+
+  it("an export whose stamping save the folder refuses turns the editor read-only and keeps the pending edit pending (round 11 Z4)", async () => {
+    const save = vi
+      .spyOn(window.electronAPI, "saveVideoEditSession")
+      .mockRejectedValue(
+        new Error("vault-edit-project-unavailable vault-edit-project-cloud-only: not saved"),
+      );
+    try {
+      seedCapture(PNG_BYTES);
+      const router = renderEditor();
+      const footer = await waitForEditorLoaded();
+      await makeDirty(footer);
+      // The export finishes inside the autosave debounce: the edit is still only on screen.
+      clickExportVideo();
+
+      expect(await screen.findByText(/recent changes could not be saved/i)).toBeInTheDocument();
+      expect(footer).toHaveAttribute("inert");
+      expect(save.mock.calls.some((call) => call[3] === true)).toBe(true);
+
+      // The refused save did not clear the pending edit: leaving still asks first.
+      await act(async () => {
+        await router.navigate("/library/rec-1");
+      });
+      expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
+    } finally {
+      save.mockRestore();
+    }
   });
 
   it("does not stamp the session when the user kept editing while the export ran", async () => {

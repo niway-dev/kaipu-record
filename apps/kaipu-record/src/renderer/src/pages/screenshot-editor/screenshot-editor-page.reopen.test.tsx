@@ -12,6 +12,12 @@ vi.mock("@renderer/features/analytics/use-flag", () => ({
   useFlag: (name: string) => (name === "image-canvas" ? imageCanvas : false),
 }));
 
+const captureException = vi.hoisted(() => vi.fn());
+vi.mock("@renderer/features/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@renderer/features/analytics")>()),
+  captureException,
+}));
+
 vi.mock("@renderer/features/screenshots/export", () => ({
   exportScene: vi.fn(async () => new ArrayBuffer(1)),
   clearExportCache: vi.fn(),
@@ -63,6 +69,7 @@ beforeEach(() => {
   URL.revokeObjectURL = vi.fn();
   readCanvas.mockReset();
   statCanvas.mockReset();
+  captureException.mockReset();
   window.electronAPI.readScreenshotCanvas = readCanvas as never;
   window.electronAPI.statScreenshotCanvas = statCanvas as never;
   window.electronAPI.readScreenshotBytes = vi.fn(async () => flatBytes);
@@ -147,6 +154,19 @@ describe("ScreenshotEditor — reopen notices (image-canvas)", () => {
     mountLocal();
     await loadImage();
     expect(await screen.findByText(/^Opened as a flat image\./)).toBeInTheDocument();
+  });
+
+  it("an offloaded document opens the flat image, says it is not downloaded, and is neither retried nor reported", async () => {
+    readCanvas.mockRejectedValue(new Error("canvas document read failed: EVICTED"));
+    statCanvas.mockResolvedValue({ savedAt: SAVED_AT });
+    mountLocal();
+    await loadImage();
+    expect(
+      await screen.findByText("Not downloaded: download it in Finder to open it here."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Opened as a flat image\./)).toBeNull();
+    expect(readCanvas).toHaveBeenCalledTimes(1);
+    expect(captureException).not.toHaveBeenCalled();
   });
 
   it("a plain screenshot (no document) shows neither notice", async () => {

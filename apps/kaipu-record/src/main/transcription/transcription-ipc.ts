@@ -17,6 +17,7 @@ import type {
   TranscriptReadResult,
 } from "@shared/types/transcription";
 import { sha256FileBase64 } from "../library/content-hash";
+import { EvictedFileError } from "../library/dataless";
 import { broadcast, broadcastLibraryChanged, currentVault, scopedAdmitted } from "../library";
 import { withItemLock } from "../library/item-lock";
 import { FileChangedWhileHashingError, META_DIR, isPlainItemId } from "../library/library-vault";
@@ -59,7 +60,9 @@ export function openTranscriptionVault(): TranscriptionVault {
   const vault = currentVault();
   const workspaceId = activeWorkspace().id;
   return {
-    tmpDir: join(vault.directory, META_DIR, "tmp"),
+    // A synced workspace stages its decoded audio and partials in its scratch folder, never in
+    // the folder the provider uploads (ADR 0069).
+    tmpDir: vault.stagingDirectory ?? join(vault.directory, META_DIR, "tmp"),
     async resolve({ id, assetId }) {
       if (!isPlainItemId(id)) return null;
       const item = await vault.describe(id);
@@ -94,12 +97,20 @@ export function broadcastJobProgress(progress: TranscriptionJobProgress): void {
 export async function hashMediaThroughCache(
   item: Pick<ResolvedItem, "id" | "mediaPath">,
 ): Promise<string> {
+  // The job decodes the audio right after this: an offloaded file would be downloaded by that
+  // read even when the cache answers the hash without reading anything (size and mtime survive
+  // an eviction). ADR 0069.
+  await currentVault().assertLocal([item.mediaPath]);
   try {
     const hashed = await currentVault().ensureContentHash(item.id);
     if (hashed) return hashed.contentSha256;
-  } catch {
+  } catch (error) {
+    // An offloaded file is never hashed plainly either: that would download it (ADR 0069).
+    if (error instanceof EvictedFileError) throw error;
     // The cache could not answer (the file kept changing, or the sidecar cannot be written on a
     // read-only vault): hash plainly, as before the cache. A file that is gone fails with ENOENT.
+    // The cache may have failed before its own evicted check, so the plain hash asks again.
+    await currentVault().assertLocal([item.mediaPath]);
     return sha256FileBase64(item.mediaPath);
   }
   throw Object.assign(new Error(`transcription: media of "${item.id}" is gone`), {
@@ -224,7 +235,8 @@ async function checkFreshness(id: string): Promise<TranscriptFreshnessResult> {
     if (!hashed) return UNKNOWN;
     contentSha256 = hashed.contentSha256;
   } catch (error) {
-    if (!(error instanceof FileChangedWhileHashingError)) {
+    // An offloaded file is not hashed (it would download): the freshness stays unknown.
+    if (!(error instanceof FileChangedWhileHashingError || error instanceof EvictedFileError)) {
       console.warn(`[transcript-timing] check ${id} could not hash the media`, error);
     }
     return UNKNOWN;

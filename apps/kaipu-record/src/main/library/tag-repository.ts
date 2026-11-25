@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isTagColor,
@@ -13,7 +13,6 @@ import {
   type TagColor,
 } from "@kaipu/domain/constants";
 import type { TagSummary } from "@shared/types";
-import { atomicWriteFile } from "./atomic-write";
 import { SidecarUnavailableError, type LibraryVault, type Sidecar } from "./library-vault";
 
 /**
@@ -57,6 +56,11 @@ export class TagRegistryError extends Error {
 export class VaultTagRepository implements TagRepository {
   private chain: Promise<unknown> = Promise.resolve();
   private readonly quarantined = new Set<string>();
+  /**
+   * The last `read` found no registry in a synced workspace. Operations run one at a time
+   * (`serial`) and each reads before it writes, so this is the answer the next `write` rests on.
+   */
+  private absentAtRead = false;
 
   constructor(
     private readonly vault: () => LibraryVault,
@@ -77,13 +81,25 @@ export class VaultTagRepository implements TagRepository {
 
   private async read(): Promise<Tag[]> {
     const path = this.registryPath();
+    this.absentAtRead = false;
     let raw: string;
     try {
-      raw = await readFile(path, "utf-8");
+      // Bounded in a synced workspace: an offloaded registry is refused (reading it would
+      // download it) and a stalled provider times out, instead of hanging the Library.
+      raw = await this.vault().readTextBounded(path);
     } catch (error) {
       // Only a missing file means "no registry yet". EIO/EACCES on a flaky drive
       // must not look like an empty registry, or the next write would erase it.
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return this.importLegacy();
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        // A synced folder may still be delivering another device's registry: importing here
+        // would write an empty one at its path. The workspace has no tags until it arrives (or
+        // until the user creates one on purpose).
+        if (this.vault().synced) {
+          this.absentAtRead = true;
+          return [];
+        }
+        return this.importLegacy();
+      }
       throw new TagRegistryError("unreadable", `tags: cannot read ${path}: ${String(error)}`);
     }
     let parsed: Partial<RegistryFile> | null;
@@ -104,14 +120,39 @@ export class VaultTagRepository implements TagRepository {
   private async quarantine(path: string): Promise<void> {
     if (this.quarantined.has(path)) return;
     this.quarantined.add(path);
-    await copyFile(path, `${path}.corrupt-${this.now()}`).catch(() => undefined);
+    // Through the vault: a synced workspace stages the copy outside its folder, then renames it.
+    await readFile(path)
+      .then((bytes) => this.vault().writeAtomic(`${path}.corrupt-${this.now()}`, bytes))
+      .catch(() => undefined);
   }
 
   private async write(tags: Tag[]): Promise<void> {
     const target = this.registryPath();
+    // The registry was missing when this operation read it. In a synced workspace it may have been
+    // delivered since: writing now would replace another device's tags with this one alone.
+    // Only a clean "still not there" lets the write go on.
+    if (this.absentAtRead) {
+      this.absentAtRead = false;
+      const arrived = await stat(target).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return false;
+          throw new TagRegistryError(
+            "unreadable",
+            `tags: cannot check ${target}: ${String(error)}`,
+          );
+        },
+      );
+      if (arrived) {
+        throw new TagRegistryError(
+          "unreadable",
+          `tags: ${target} arrived from the sync provider while the change was being made; nothing was written. Try again.`,
+        );
+      }
+    }
     await mkdir(join(this.vault().directory, ".kaipu"), { recursive: true });
     const file: RegistryFile = { version: 1, tags };
-    await atomicWriteFile(target, JSON.stringify(file, null, 2));
+    await this.vault().writeAtomic(target, JSON.stringify(file, null, 2));
   }
 
   /**

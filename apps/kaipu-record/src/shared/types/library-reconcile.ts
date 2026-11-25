@@ -9,6 +9,8 @@ export type FixableFindingKind =
   | "untitled-legacy"
   | "name-mismatch"
   | "missing-sidecar"
+  /** Synced workspaces only: a readable record with no identity, which nothing else mints. */
+  | "missing-identity"
   | "missing-media"
   | "orphan-companion";
 
@@ -38,6 +40,11 @@ export interface ReconcileFinding {
   newName?: string;
   /** missing-media: what happens to the record. */
   action?: "to-orphans" | "cloud-only";
+  /**
+   * Synced workspaces: fixing it would mint an identity for a record that has none. A record can
+   * only look that way because the newer version has not arrived yet, so it starts unticked.
+   */
+  mints?: boolean;
 }
 
 export type ReconcileScanResult =
@@ -55,7 +62,16 @@ export type ReconcileScanResult =
   /** The folder could not be read; nothing counts as missing (F7). */
   | { status: "error"; message: string };
 
-export type ReconcileKeptReason = "locked" | "busy" | "editing" | "taken" | "io" | "shared";
+export type ReconcileKeptReason =
+  | "locked"
+  | "busy"
+  | "editing"
+  | "taken"
+  | "evicted"
+  | "io"
+  | "shared"
+  /** The record changed after the scan (an identity arrived from another device): nothing was written, and the rest of the run leaves it alone. */
+  | "changed";
 
 export interface ReconcileReport {
   /** Findings per kind in the first scan. */

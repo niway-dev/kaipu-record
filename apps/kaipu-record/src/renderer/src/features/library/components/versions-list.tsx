@@ -184,8 +184,13 @@ export function VersionsList({
               assetId={copy.assetId}
               current={viewing(copy.assetId)}
               order={order}
+              // An offloaded copy cannot be dragged: main would refuse it, so the control is not
+              // offered rather than dead (a drag copy would download it). An offloaded poster
+              // alone does not matter: the file is local and main draws a placeholder icon.
               dragSource={
-                copy.id !== null ? { id: copy.id, assetId: copy.assetId, title: copy.title } : null
+                copy.id !== null && copy.evicted !== "media"
+                  ? { id: copy.id, assetId: copy.assetId, title: copy.title }
+                  : null
               }
               dragLabel={t("copyDragLabel", { name })}
               dragText={t("copyDrag")}

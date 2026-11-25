@@ -10,11 +10,14 @@ vi.mock("./vault-location", () => ({
 
 import {
   deleteVideoEditSession,
+  EditProjectUnreadableError,
+  ExportStampUnreadableError,
   loadSession,
   saveSession,
   saveSessionLocked,
 } from "./video-edit-session";
 import { ItemMovedError, withItemLock } from "./item-lock";
+import { LibraryVault } from "./library-vault";
 
 function bytesOf(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer as ArrayBuffer;
@@ -178,6 +181,281 @@ describe("video-edit-session", () => {
       assetIds: ["a1"],
     });
     expect(typeof meta.savedAt).toBe("number");
+  });
+
+  describe("in a synced folder (NIW2-912)", () => {
+    const metaPath = (): string => join(vaultDir, ".kaipu", "rec-1.edit.meta.json");
+    /** The active workspace's vault, as `currentVault` builds it: a probe says what is offloaded. */
+    const syncedVault = (offloaded: (path: string) => boolean) => () =>
+      new LibraryVault(
+        vaultDir,
+        "ws",
+        undefined,
+        async (paths) => new Set(paths.filter(offloaded)),
+        join(vaultDir, "..", "scratch-tmp"),
+      );
+
+    it("an export stamp that cannot be read now refuses the whole save before anything is written", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", {
+        sessionJson: '{"scene":"exported"}',
+        assets: [{ assetId: "kept", bytes: bytesOf("k") }],
+        exported: true,
+      });
+      const before = await readFile(metaPath(), "utf-8");
+      expect(JSON.parse(before).exportedSavedAt).toEqual(expect.any(Number));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      // The provider has offloaded the meta file: reading it would download it (or stall).
+      await expect(
+        saveSession(
+          "rec-1",
+          { sessionJson: '{"edited":true}', assets: [{ assetId: "other", bytes: bytesOf("o") }] },
+          syncedVault((path) => path.endsWith(".edit.meta.json")),
+        ),
+      ).rejects.toBeInstanceOf(ExportStampUnreadableError);
+
+      // Nothing was touched: the session, the assets and the meta still describe the same scene,
+      // so the badge and the dependency probe read the truth.
+      expect(await readFile(metaPath(), "utf-8")).toBe(before);
+      expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
+        '{"scene":"exported"}',
+      );
+      expect(await readdir(join(vaultDir, ".kaipu", "rec-1.assets"))).toEqual(["kept.png"]);
+    });
+
+    it("the refused save goes through once the meta can be read again", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [], exported: true });
+      const stamp = JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt;
+      await expect(
+        saveSession(
+          "rec-1",
+          { sessionJson: '{"edited":true}', assets: [] },
+          syncedVault((path) => path.endsWith(".edit.meta.json")),
+        ),
+      ).rejects.toBeInstanceOf(ExportStampUnreadableError);
+      await saveSession(
+        "rec-1",
+        { sessionJson: '{"edited":true}', assets: [] },
+        syncedVault(() => false),
+      );
+      expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
+        '{"edited":true}',
+      );
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBe(stamp);
+    });
+
+    it("a readable export stamp is carried forward as before", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [], exported: true });
+      const stamp = JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt;
+      await saveSession(
+        "rec-1",
+        { sessionJson: "{}", assets: [] },
+        syncedVault(() => false),
+      );
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBe(stamp);
+    });
+
+    it("a meta that is missing or not JSON still means nothing is known to be exported", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [] });
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBeNull();
+      await writeFile(metaPath(), "{ not json");
+      await saveSession("rec-1", { sessionJson: "{}", assets: [] });
+      expect(JSON.parse(await readFile(metaPath(), "utf-8")).exportedSavedAt).toBeNull();
+    });
+
+    it("the export stamp is read through the workspace's vault: the provider is asked about the meta file", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      const asked: string[] = [];
+      await saveSession(
+        "rec-1",
+        { sessionJson: "{}", assets: [] },
+        () =>
+          new LibraryVault(
+            vaultDir,
+            "ws",
+            undefined,
+            async (paths) => {
+              asked.push(...paths);
+              return new Set();
+            },
+            join(vaultDir, "..", "scratch-tmp"),
+          ),
+      );
+      expect(asked.some((path) => path.endsWith("rec-1.edit.meta.json"))).toBe(true);
+    });
+  });
+
+  describe("a save that stays refused changes nothing in the folder (NIW2-912)", () => {
+    const metaOffloaded = () =>
+      new LibraryVault(
+        vaultDir,
+        "ws",
+        undefined,
+        async (paths) => new Set(paths.filter((path) => path.endsWith(".edit.meta.json"))),
+        join(vaultDir, "..", "scratch-tmp"),
+      );
+
+    beforeEach(async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+      await writeFile(
+        join(vaultDir, ".kaipu", "rec-1.json"),
+        JSON.stringify({ sidecarVersion: 2, assetId: "asset-1" }),
+      );
+      // A project saved earlier, with its export record, which the provider then offloads.
+      await saveSession("rec-1", { sessionJson: '{"scene":"old"}', assets: [], exported: true });
+    });
+
+    const refused = () =>
+      saveSessionLocked(
+        "ws",
+        "rec-1",
+        {
+          sessionJson: '{"scene":"edited"}',
+          assets: [{ assetId: "slide", bytes: bytesOf("png") }],
+        },
+        metaOffloaded,
+      );
+
+    it("leaves the saved project and its assets as they were", async () => {
+      await expect(refused()).rejects.toBeInstanceOf(ExportStampUnreadableError);
+
+      expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
+        '{"scene":"old"}',
+      );
+      expect(await readdir(join(vaultDir, ".kaipu", "rec-1.assets"))).toEqual([]);
+    });
+
+    it("tells an offloaded export record apart from a stalled one in the message", async () => {
+      const evicted = await refused().catch((error: unknown) => error as Error);
+      expect(evicted).toBeInstanceOf(ExportStampUnreadableError);
+      // Nothing is downloading it and retrying never will: say where the files are and what to do.
+      expect((evicted as Error).message).toMatch(/only in the cloud/);
+      expect((evicted as Error).message).not.toMatch(/kept on this computer/);
+      expect((evicted as Error).message).not.toMatch(/try again/i);
+    });
+  });
+
+  describe("an export record that is there but cannot be read (NIW2-912)", () => {
+    it("refuses with the stalled-provider message, not the offloaded one, and writes nothing", async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+      await writeFile(
+        join(vaultDir, ".kaipu", "rec-1.json"),
+        JSON.stringify({ sidecarVersion: 2, assetId: "asset-1" }),
+      );
+      await saveSession("rec-1", { sessionJson: '{"scene":"old"}', assets: [], exported: true });
+      // The record is local (not evicted) but the read fails: a provider that is not answering.
+      const stalled = () =>
+        new LibraryVault(
+          vaultDir,
+          "ws",
+          {
+            readText: (path) =>
+              path.endsWith(".edit.meta.json")
+                ? Promise.reject(Object.assign(new Error("offline"), { code: "EIO" }))
+                : readFile(path, "utf-8"),
+          },
+          async () => new Set(),
+          join(vaultDir, "..", "scratch-tmp"),
+        );
+
+      const failure = await saveSessionLocked(
+        "ws",
+        "rec-1",
+        { sessionJson: '{"scene":"edited"}', assets: [] },
+        stalled,
+      ).catch((error: unknown) => error as ExportStampUnreadableError);
+
+      expect(failure).toBeInstanceOf(ExportStampUnreadableError);
+      expect((failure as ExportStampUnreadableError).reason).toBe("unreadable");
+      expect((failure as Error).message).toMatch(/not answering/);
+      expect((failure as Error).message).not.toMatch(/only in the cloud/);
+      expect(await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8")).toBe(
+        '{"scene":"old"}',
+      );
+    });
+  });
+
+  describe("opening a project that cannot be read (NIW2-912)", () => {
+    const meta = (): string => join(vaultDir, ".kaipu");
+    const syncedVault = () =>
+      new LibraryVault(
+        vaultDir,
+        "ws",
+        undefined,
+        async () => new Set(),
+        join(vaultDir, "..", "scratch-tmp"),
+      );
+
+    beforeEach(async () => {
+      await writeFile(join(vaultDir, "rec-1.mp4"), "source-bytes");
+      await mkdir(meta(), { recursive: true });
+      await writeFile(
+        join(meta(), "rec-1.json"),
+        JSON.stringify({ sidecarVersion: 2, assetId: "asset-1" }),
+      );
+      await saveSession("rec-1", {
+        sessionJson: '{"scene":"saved"}',
+        assets: [{ assetId: "slide", bytes: bytesOf("png") }],
+      });
+    });
+
+    it("opens a readable project in a synced workspace", async () => {
+      const loaded = await loadSession("rec-1", syncedVault);
+      expect(loaded?.sessionJson).toBe('{"scene":"saved"}');
+      expect(loaded?.assets.map((a) => a.assetId)).toEqual(["slide"]);
+    });
+
+    it("rejects when the project file cannot be read: it is not a new project", async () => {
+      // A directory where the file should be: readFile fails with EISDIR, not ENOENT.
+      await rm(join(meta(), "rec-1.edit.json"));
+      await mkdir(join(meta(), "rec-1.edit.json"));
+      await expect(loadSession("rec-1", syncedVault)).rejects.toBeInstanceOf(
+        EditProjectUnreadableError,
+      );
+      await expect(loadSession("rec-1")).rejects.toBeInstanceOf(EditProjectUnreadableError);
+    });
+
+    it("rejects when a slide cannot be read instead of dropping it", async () => {
+      await rm(join(meta(), "rec-1.assets", "slide.png"));
+      await mkdir(join(meta(), "rec-1.assets", "slide.png"));
+      await expect(loadSession("rec-1", syncedVault)).rejects.toBeInstanceOf(
+        EditProjectUnreadableError,
+      );
+    });
+
+    it("rejects, in a synced workspace, when the meta cannot be read", async () => {
+      await rm(join(meta(), "rec-1.edit.meta.json"));
+      await mkdir(join(meta(), "rec-1.edit.meta.json"));
+      await expect(loadSession("rec-1", syncedVault)).rejects.toBeInstanceOf(
+        EditProjectUnreadableError,
+      );
+    });
+
+    it("rejects, in a synced workspace, when the item's record cannot be read", async () => {
+      await writeFile(join(meta(), "rec-1.json"), "{not json");
+      await expect(loadSession("rec-1", syncedVault)).rejects.toBeInstanceOf(
+        EditProjectUnreadableError,
+      );
+    });
+
+    it("rejects, in a synced workspace, when the meta arrived before the project file", async () => {
+      await rm(join(meta(), "rec-1.edit.json"));
+      await expect(loadSession("rec-1", syncedVault)).rejects.toBeInstanceOf(
+        EditProjectUnreadableError,
+      );
+      // A plain workspace has no such wait: no project file is a new project.
+      expect(await loadSession("rec-1")).toBeNull();
+    });
+
+    it("still returns null for an item that never had a project", async () => {
+      expect(await loadSession("never-saved", syncedVault)).toBeNull();
+    });
   });
 
   it("deleteVideoEditSession also removes edit.meta.json", async () => {

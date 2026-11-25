@@ -21,6 +21,12 @@ export type WorkspaceUnavailableReason =
   /** Another workspace's identity is in that folder. */
   | "different";
 
+/**
+ * The cloud provider that syncs a workspace folder (spec, Synced folders). Kaipu does not sync
+ * to it: the folder is detected by path (and Google Drive's xattr) and labelled.
+ */
+export type SyncProvider = "google-drive" | "onedrive" | "icloud" | "cloud-provider";
+
 /** What locks the switcher (and the "Move to" menus). */
 export type WorkspaceBusy = "recording" | "exporting" | "moving";
 
@@ -58,6 +64,8 @@ export interface WorkspaceView {
    * workspaces on the same one is instant, otherwise it copies. Null when not connected.
    */
   device: string | null;
+  /** The provider whose synced folder holds this workspace, or null for a plain folder. */
+  sync: SyncProvider | null;
 }
 
 /** `workspaces:list` (and the `workspaces:changed` broadcast). */
@@ -226,12 +234,25 @@ export type MoveRefusal =
   | "tags-unreadable"
   /** The copy did not match the original byte for byte; the original is untouched. */
   | "checksum-mismatch"
+  /** A synced workspace's provider offloaded the media: copying it would download it. */
+  | "evicted"
   /** "Check and fix files" is running. */
   | "maintenance"
   /** The window's workspace is no longer the active one. */
   | "stale"
   /** A file operation failed; the original is untouched. */
   | "io";
+
+/**
+ * An item that did arrive in the target but whose original (or part of it) was kept: the source
+ * changed after it was copied (its media, its edit project or any small file), or the target copy
+ * could not be confirmed as the one the move placed right before the source would have gone, or
+ * the move failed after its commit and recovery could not yet finish removing the source.
+ * Removing it could have discarded newer data, so it stays. The kept part can be the media, or,
+ * when the source media was already removed, only the record and the companions that changed
+ * after the copy: then the source lists a record with no media. The user should check both.
+ */
+export type MoveKeptOriginal = "source-changed";
 
 /** One item of `workspaces:move-items`. */
 export interface MoveItemRef {
@@ -247,7 +268,8 @@ export interface MoveItemsRequest {
 /** `workspaces:move-items`: a group of single moves, run one after another (ADR 0033, decision 14). */
 export interface MoveItemsResult {
   targetId: string;
-  moved: { id: string; newId: string }[];
+  /** `keptOriginal` is set when the copy arrived but the original, or part of it, stayed (the item is in both workspaces). */
+  moved: { id: string; newId: string; keptOriginal?: MoveKeptOriginal }[];
   failed: { id: string; reason: MoveRefusal }[];
   /**
    * Not started because the user pressed Stop. A group refused as a whole (busy, stale,

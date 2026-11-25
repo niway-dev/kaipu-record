@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   dir: "",
   handle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   sent: [] as string[],
+  staging: null as string | null,
 }));
 
 vi.mock("electron", () => ({
@@ -41,6 +42,9 @@ vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ lo
 // workspace's stamp as its first argument is refused.
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
+  activeEvictionProbe: () => null,
+  activeStagingDir: () => state.staging,
+  activeScratch: () => null,
   ownsLegacyCloud: () => true,
   workspaceGate: () => ({
     run: (stamp: { workspaceId?: string } | null, fn: () => unknown) =>
@@ -51,6 +55,7 @@ vi.mock("../workspaces", () => ({
 }));
 
 import { sha256FileBase64 } from "../library/content-hash";
+import { EvictedFileError } from "../library/dataless";
 import { LibraryVault } from "../library/library-vault";
 import { vaultActivity } from "../library/vault-activity";
 import type { Transcript } from "./transcript-file";
@@ -681,6 +686,59 @@ describe("with a real vault", () => {
       }
     });
 
+    it("refuses an evicted file instead of hashing it plainly: that would download it", async () => {
+      const item = await addMedia("job-evicted", "some recording");
+      const ensure = vi
+        .spyOn(LibraryVault.prototype, "ensureContentHash")
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      try {
+        hashSpy.mockClear();
+        await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "EVICTED" });
+        expect(hashSpy).not.toHaveBeenCalled();
+      } finally {
+        ensure.mockRestore();
+      }
+    });
+
+    it("refuses an evicted file even when its stamp still matches the cache", async () => {
+      const item = await addMedia("job-hit-evicted", "some recording");
+      await hashMediaThroughCache(job(item));
+      expect((await vault.cachedContentHash("job-hit-evicted")).status).toBe("hit");
+      // Size and mtime survive an eviction, so the cache would answer without reading anything
+      // and the job would go on to decode (download) the audio.
+      const assertLocal = vi
+        .spyOn(LibraryVault.prototype, "assertLocal")
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      try {
+        hashSpy.mockClear();
+        await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "EVICTED" });
+        expect(hashSpy).not.toHaveBeenCalled();
+      } finally {
+        assertLocal.mockRestore();
+      }
+    });
+
+    it("refuses an evicted file when the cache failed before its own check (a read-only vault)", async () => {
+      const item = await addMedia("job-ro-evicted", "some recording");
+      const ensure = vi
+        .spyOn(LibraryVault.prototype, "ensureContentHash")
+        .mockRejectedValue(new Error("EROFS: read-only file system"));
+      // The first guard (before the cache) passes; only the one before the plain hash rejects.
+      const assertLocal = vi
+        .spyOn(LibraryVault.prototype, "assertLocal")
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      try {
+        hashSpy.mockClear();
+        await expect(hashMediaThroughCache(job(item))).rejects.toMatchObject({ code: "EVICTED" });
+        expect(assertLocal).toHaveBeenCalledTimes(2);
+        expect(hashSpy).not.toHaveBeenCalled();
+      } finally {
+        ensure.mockRestore();
+        assertLocal.mockRestore();
+      }
+    });
+
     it("fails with ENOENT for a file that is gone, as the job expects", async () => {
       const item = await addMedia("job-gone");
       await rm(item.filePath);
@@ -688,7 +746,43 @@ describe("with a real vault", () => {
     });
   });
 
+  describe("a synced workspace", () => {
+    it("leaves the freshness unknown for an evicted file, without hashing it", async () => {
+      const item = await addMedia("fresh-evicted", "some recording");
+      // A valid transcript: an invalid one returns before the vault is asked, so the
+      // eviction branch would never run.
+      await seedTranscript("fresh-evicted", "h");
+      const ensure = vi
+        .spyOn(LibraryVault.prototype, "ensureContentHash")
+        .mockRejectedValue(new EvictedFileError(item.filePath));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        hashSpy.mockClear();
+        await expect(checkFreshness("fresh-evicted")).resolves.toMatchObject({
+          verdict: "unknown",
+          autoRetranscribe: false,
+        });
+        expect(ensure).toHaveBeenCalledTimes(1);
+        expect(hashSpy).not.toHaveBeenCalled();
+        // Silent only because the Evicted branch skipped the log (any other error warns).
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        ensure.mockRestore();
+        warn.mockRestore();
+      }
+    });
+  });
+
   describe("the vault the job sees", () => {
+    it("stages in the scratch folder, never in the synced folder, in a synced workspace", () => {
+      state.staging = join(state.dir, "scratch", "tmp");
+      try {
+        expect(openTranscriptionVault().tmpDir).toBe(state.staging);
+      } finally {
+        state.staging = null;
+      }
+    });
+
     it("resolves an item only under its own identity, and only a recording", async () => {
       const item = await addMedia("takes");
       const jobVault = openTranscriptionVault();

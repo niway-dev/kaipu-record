@@ -156,9 +156,19 @@ export const UI_MAP = {
       emptyState: { states: ["empty", "noMatch", "error", "loading"] },
       readyCopyCard: { states: ["ready"] },
       videoCard: {
-        states: ["recording", "webcam", "screenshot", "gif", "selected", "cloudOnly"],
+        states: [
+          "recording",
+          "webcam",
+          "screenshot",
+          "gif",
+          "selected",
+          "cloudOnly",
+          "notDownloaded",
+        ],
       },
-      videoRow: { states: ["recording", "screenshot", "selected"] },
+      // notDownloaded (card and row): the provider offloaded the file (synced workspace), so the
+      // poster is the "Not downloaded" cloud icon and label instead of a frame.
+      videoRow: { states: ["recording", "screenshot", "selected", "notDownloaded"] },
       // The Transcribe action on a card and on a row (NIW2-818): an icon button on a local
       // recording, behind the `transcription` flag. needsModel is the same button, whose click
       // opens the download dialog; running shows "Transcribing 3/12" with a Cancel; done is the
@@ -189,8 +199,12 @@ export const UI_MAP = {
       postRecordingCard: { states: ["fresh"], gatedBy: [{ setting: "showRecordingSavedCard" }] },
       savedNotice: { states: ["shown"] },
       // imageHover: the pointer over a screenshot shows the copy button in its corner.
-      preview: { states: ["video", "image", "imageHover", "gif", "unavailable"] },
-      actions: { states: ["recording", "screenshot", "gif", "cloudOnly"] },
+      // notDownloaded: the provider offloaded the file (synced workspace), so nothing plays.
+      preview: {
+        states: ["video", "image", "imageHover", "gif", "unavailable", "notDownloaded"],
+      },
+      // notDownloaded: the provider offloaded the file, so Edit video, Edit image and Open file are disabled.
+      actions: { states: ["recording", "screenshot", "gif", "cloudOnly", "notDownloaded"] },
       // The Transcribe action beside Edit video (NIW2-818), icon and word, behind the
       // `transcription` flag; the states are the same looks as on a Library card.
       transcribe: {
@@ -392,6 +406,11 @@ export const UI_MAP = {
       // The Timeline guide (NIW2-679): a dialog over the editor, one tab per lane.
       trackGuide: { states: ["clips", "zooms", "webcam"] },
       toolbar: { states: ["default", "saving", "saved"] },
+      // The banner over a read-only editor (NIW2-912): a synced project whose files are only in the
+      // cloud or could not be read, or whose save was refused. `shown` is the banner with the
+      // tools, inspector and timeline disabled. `damaged`: the saved edit does not parse or misses an
+      // asset, so the banner says the project is damaged instead of "only in the cloud".
+      readOnlyBanner: { states: ["shown", "damaged"] },
       // The Transcribe action in the top bar (NIW2-818), icon and word, behind the
       // `transcription` flag; the states are the same looks as on a Library card.
       transcribe: {
@@ -612,8 +631,12 @@ export const UI_MAP = {
       // `unavailable` when it cannot run on this computer. Never an error dialog.
       textNotice: { states: ["reading", "unavailable"], gatedBy: [{ flag: "image-text" }] },
       // The pill on the stage when a saved shot is reopened in canvas mode: `editable` says
-      // the document loaded (fades), `flat` that it could not be read (stays until dismissed).
-      reopenNotice: { states: ["editable", "flat"], gatedBy: [{ flag: "image-canvas" }] },
+      // the document loaded (fades), `flat` that it could not be read (stays until dismissed),
+      // `evicted` that a sync provider has not downloaded it (stays until dismissed).
+      reopenNotice: {
+        states: ["editable", "flat", "evicted"],
+        gatedBy: [{ flag: "image-canvas" }],
+      },
       // The redact tool's text targets (NIW2-706, canvas mode): the image while its lines are
       // click targets (a line outlined under the pointer, then hidden), and the Tool tab's hint.
       textHide: {
@@ -904,6 +927,9 @@ export const UI_MAP = {
       exportCard: { states: ["progress", "error", "ready"] },
       reconcileDialog: { states: ["scanning", "list", "fixing", "report"] },
       workspaceDialog: { states: ["new", "edit"] },
+      // Decision 4: what a delete or a move out of a synced workspace says it does.
+      moveSyncedDialog: { states: ["confirm"] },
+      deleteSyncedWarning: { states: ["shown"] },
       notFound: { states: ["default"] },
       routeError: { states: ["default"] },
       settingsNav: { states: ["default"] },

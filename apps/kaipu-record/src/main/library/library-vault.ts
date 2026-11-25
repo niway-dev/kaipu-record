@@ -1,4 +1,4 @@
-import { basename, extname, join } from "node:path";
+import { basename, extname, join, relative } from "node:path";
 import { constants, type Stats } from "node:fs";
 import {
   access,
@@ -10,6 +10,7 @@ import {
   readdir,
   rename,
   rm,
+  rmdir,
   stat,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -29,18 +30,22 @@ import {
   type StoredExportPresetId,
 } from "@shared/types/export-preset";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
-import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
+import { atomicWriteFile, uniqueTempPath, volumeStagingDir, withLock } from "./atomic-write";
 import {
   type PlacedFile,
+  placeByRename,
   placeNew,
   placeNoReplace,
   removeIfSame,
   renameCaseOnly,
+  renameCaseOnlyByRename,
   takenError,
 } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
 import { legacyStampMatches, sameStat, stampFields, stampMatches } from "./hash-stamp";
+import { EvictedFileError, type EvictionProbe } from "./dataless";
 import { webcamTrackState } from "./webcam-track-state";
+import { mapLimit } from "./map-limit";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
 
@@ -182,6 +187,14 @@ export class FileChangedWhileHashingError extends Error {
   }
 }
 
+/** `removeLocalCopy` on a synced workspace's vault: it frees nothing there and never deletes. */
+export class SyncedLocalCopyError extends Error {
+  constructor(readonly id: string) {
+    super(`"${id}" is in a synced folder: its local copy is not deleted from here`);
+    this.name = "SyncedLocalCopyError";
+  }
+}
+
 /** A sidecar write for an id with neither a sidecar nor a media file (it was renamed or removed). */
 export class ItemGoneError extends Error {
   constructor(readonly id: string) {
@@ -219,10 +232,13 @@ function isSidecarShape(value: unknown): value is Sidecar {
  * ENOENT is `missing`; any other read error is `unreadable`; then `corrupt-json` and
  * `invalid-schema`. Never writes.
  */
-export async function readSidecarStrict(path: string): Promise<SidecarRead> {
+export async function readSidecarStrict(
+  path: string,
+  readText: (path: string) => Promise<string> = (at) => readFile(at, "utf-8"),
+): Promise<SidecarRead> {
   let raw: string;
   try {
-    raw = await readFile(path, "utf-8");
+    raw = await readText(path);
   } catch (error) {
     if (errorCode(error) === "ENOENT") return { status: "missing" };
     return { status: "unreadable", error: String(error) };
@@ -404,6 +420,40 @@ export interface VaultReader {
 
 const fsReader: VaultReader = { readText: (path) => readFile(path, "utf-8") };
 
+/**
+ * The longest a synced vault waits for one sidecar. A provider can offload that small file too,
+ * and reading it downloads it: a stalled or offline provider would hang a Library listing, so
+ * the read gives up and the item is listed read-only (spec AC13, ADR 0069 decision 5).
+ */
+export const SYNCED_SIDECAR_READ_TIMEOUT_MS = 5_000;
+
+/** How many items a synced vault describes (reads a sidecar of) at once in `list()`. */
+export const SYNCED_LIST_CONCURRENCY = 8;
+
+/**
+ * Sidecar reads that may time out in one synced listing before the rest of the items are listed
+ * without a read (read-only, "unreadable"). With the concurrency cap, a provider that has
+ * stopped answering would otherwise cost the whole folder `5 s x items / concurrency`.
+ *
+ * The limit counts timeouts, and reads already in flight cannot be recalled: the
+ * `SYNCED_LIST_CONCURRENCY` reads that start together wait their 5 s together, so a provider that
+ * stopped answering costs one 5 s wave (up to `SYNCED_LIST_CONCURRENCY - 1` more timeouts than the
+ * limit). When the stall begins only after the first wave, the listing takes two waves, 10 s.
+ */
+export const SYNCED_LIST_STALL_LIMIT = 4;
+
+/**
+ * The longest one synced listing or reconcile scan keeps starting sidecar reads. The stall limit
+ * above only counts reads that time out; a provider that answers every read just under the 5 s
+ * bound never trips it, and a thousand items would take `5 s x 1000 / concurrency`. Past this
+ * budget no new read starts: the rest of the items are listed read-only ("unreadable"), and a
+ * scan reports their records unreadable (fixable: false), the same placeholders a stall gives.
+ * The budget is checked when an item starts, not between the several bounded reads one item may
+ * chain (a sidecar with no identity reads it more than once), so a provider that answers slowly
+ * can overrun it by a few 5 s bounds; one that stalls trips the limit above instead.
+ */
+export const SYNCED_READS_BUDGET_MS = 30_000;
+
 /** Prefix of the stand-in `assetId` of an item whose sidecar cannot be read; never persisted. */
 export const UNREADABLE_ASSET_PREFIX = "unreadable:";
 
@@ -460,12 +510,122 @@ export class LibraryVault {
    * `workspaceId` goes into the `kaipu-media://` URLs `describe()` hands out, so a URL cached
    * before a switch never shows another workspace's item with the same id (ADR 0032).
    * `reader` is how sidecars are read (a test fails a read on demand).
+   * `evictionProbe` is set for a synced workspace (spec, Synced folders): it says which files
+   * the provider has offloaded, so `describe()` never hands out a URL that would download one.
+   * `stagingDir` is set for a synced workspace too: where this vault stages a file it writes
+   * (a GIF, a screenshot, a sidecar, a poster), so no temp file ever appears inside the folder the provider syncs.
    */
   constructor(
     readonly directory: string,
     readonly workspaceId: string | null = null,
     private readonly reader: VaultReader = fsReader,
+    private readonly evictionProbe: EvictionProbe | null = null,
+    private readonly stagingDir: string | null = null,
   ) {}
+
+  /** Sidecar reads of this vault that gave up (see `readSidecarText`); only ever goes up. */
+  private sidecarTimeouts = 0;
+
+  /**
+   * One sidecar read through the vault's reader. A synced vault bounds it: an offloaded sidecar
+   * is downloaded by the read, and a stalled provider must not hang the Library. A read that
+   * times out fails like any unreadable file (`ETIMEDOUT`).
+   */
+  private async readSidecarText(path: string): Promise<string> {
+    if (!this.synced) return this.reader.readText(path);
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        this.sidecarTimeouts += 1;
+        reject(Object.assign(new Error(`reading "${path}" timed out`), { code: "ETIMEDOUT" }));
+      }, SYNCED_SIDECAR_READ_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([this.reader.readText(path), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * `readSidecarStrict` through this vault's reader: a synced vault bounds the read like every
+   * other sidecar read (a timeout is `unreadable`), so a reconcile scan cannot hang on one
+   * offloaded record.
+   */
+  readRecordStrict(path: string, options: { deadline?: number } = {}): Promise<SidecarRead> {
+    // Past a scan's budget no new read starts in a synced vault (`SYNCED_READS_BUDGET_MS`).
+    if (this.synced && options.deadline !== undefined && Date.now() >= options.deadline) {
+      return Promise.resolve({
+        status: "unreadable",
+        error: `reading "${path}" skipped: the provider was too slow`,
+      });
+    }
+    return readSidecarStrict(path, (at) => this.readSidecarText(at));
+  }
+
+  /**
+   * The workspace folder is synced by a provider (spec, Synced folders). A synced vault stages
+   * outside the folder, places by `rename` (never a hard link) and never reads an evicted file.
+   */
+  get synced(): boolean {
+    return this.evictionProbe !== null || this.stagingDir !== null;
+  }
+
+  /**
+   * Every file this vault keeps beside or under its folder (sidecars, posters, cursor tracks,
+   * tags, canvas documents, text caches): written through a temp file, then renamed over the
+   * target. A synced vault keeps that temp file in its scratch folder, so the provider never
+   * uploads and deletes it. A rename the volumes refuse (EXDEV) is redone through a hidden folder
+   * that is provably outside the provider's root, or fails with EXDEV: it never falls back to a
+   * file beside the target in a synced folder. A vault
+   * built without a staging folder asks `atomicWriteFile`, which looks the folder up from the
+   * path, so one built for a synced workspace by mistake still stages outside it.
+   */
+  writeAtomic(target: string, data: string | Uint8Array): Promise<void> {
+    return atomicWriteFile(target, data, "tmp", this.stagingDir ?? undefined);
+  }
+
+  /** Where a synced vault stages what it writes (its scratch folder), or null for `.kaipu/tmp`. */
+  get stagingDirectory(): string | null {
+    return this.stagingDir;
+  }
+
+  /** Which of `paths` the provider has offloaded; always empty for a vault that is not synced. */
+  async evictedAmong(paths: string[]): Promise<ReadonlySet<string>> {
+    return this.evictionProbe ? this.evictionProbe(paths) : new Set();
+  }
+
+  /**
+   * Throws `EvictedFileError` when any of `paths` is offloaded: the guard in front of every
+   * whole-file read, because reading an evicted file downloads it. A vault that is not synced
+   * never asks.
+   */
+  async assertLocal(paths: string[]): Promise<void> {
+    const offloaded = await this.evictedAmong(paths);
+    const first = paths.find((path) => offloaded.has(path));
+    if (first !== undefined) throw new EvictedFileError(first);
+  }
+
+  /**
+   * The bytes of a file in this vault, read whole (a clipboard copy, a saved screenshot's
+   * bytes). An offloaded file throws `EvictedFileError` instead of being read: the read
+   * would download it.
+   */
+  async readLocalFile(path: string): Promise<Buffer<ArrayBuffer>> {
+    await this.assertLocal([path]);
+    return readFile(path);
+  }
+
+  /**
+   * The text of a small file in this vault (an edit-project meta, a sidecar-like record), read
+   * the way a synced vault reads every sidecar: an offloaded file throws `EvictedFileError`
+   * without being read, and a read that stalls gives up after `SYNCED_SIDECAR_READ_TIMEOUT_MS`
+   * (`ETIMEDOUT`). A vault that is not synced just reads it.
+   */
+  async readTextBounded(path: string): Promise<string> {
+    await this.assertLocal([path]);
+    return this.readSidecarText(path);
+  }
 
   /** The query a media URL this vault hands out carries: the caller's, plus the workspace. */
   private mediaParams(params: Record<string, string>): Record<string, string> {
@@ -602,7 +762,7 @@ export class LibraryVault {
         createdAt: input.createdAt,
         title: input.title,
       };
-      await atomicWriteFile(this.sidecarPath(id), JSON.stringify(stub, null, 2));
+      await this.writeAtomic(this.sidecarPath(id), JSON.stringify(stub, null, 2));
       return { id, assetId };
     });
   }
@@ -619,7 +779,7 @@ export class LibraryVault {
         (await this.stemState(candidate)) === "free" ? { id: candidate, mode: "free" } : null,
       );
       await mkdir(this.metaDirectory(), { recursive: true });
-      await atomicWriteFile(
+      await this.writeAtomic(
         this.sidecarPath(id),
         JSON.stringify({ ...record, sidecarVersion: 2 }, null, 2),
       );
@@ -634,7 +794,7 @@ export class LibraryVault {
   async releaseReservation(reservation: Reservation): Promise<void> {
     const { id, assetId } = reservation;
     await withLock(this.sidecarPath(id), async () => {
-      const read = await readSidecarStrict(this.sidecarPath(id));
+      const read = await this.readRecordStrict(this.sidecarPath(id));
       if (read.status !== "ok" || read.sidecar.assetId !== assetId) return;
       await this.removeCompanions(this.companionPaths(id));
     });
@@ -711,17 +871,59 @@ export class LibraryVault {
    * Give media without a record its first sidecar (reconcile adoption, NIW2-561): a new
    * identity, `title` and `createdAt`, in one atomic write. Does nothing (false) when a
    * record exists by now, of any readability, or the media is gone.
+   *
+   * In a synced workspace the missing sidecar may be on its way down from the provider, and a
+   * second one written here would conflict with it. It is minted only when the user asked for
+   * it (`explicit`: "Check and fix files"); otherwise this returns false.
    */
-  async adoptMedia(id: string, fields: { title: string; createdAt: number }): Promise<boolean> {
+  async adoptMedia(
+    id: string,
+    fields: { title: string; createdAt: number },
+    options: { explicit?: boolean } = {},
+  ): Promise<boolean> {
     if (isVaultOwnedStem(id)) return false;
+    if (this.synced && options.explicit !== true) return false;
     const path = this.sidecarPath(id);
     return withLock(path, async () => {
-      if ((await readSidecarStrict(path)).status !== "missing") return false;
+      if ((await this.readRecordStrict(path)).status !== "missing") return false;
       if (!(await this.hasMedia(id))) return false;
       await mkdir(this.metaDirectory(), { recursive: true });
       const record: Sidecar = { sidecarVersion: 2, assetId: randomUUID(), ...fields };
-      await atomicWriteFile(path, JSON.stringify(record, null, 2));
+      await this.writeAtomic(path, JSON.stringify(record, null, 2));
       return true;
+    });
+  }
+
+  /**
+   * The identity of an item whose record is readable, minting one into that record when it has
+   * none (a sidecar from before identities). Only for an explicit "Check and fix files": a
+   * synced workspace never mints on its own (`ensureIdentity`), and `adoptMedia` serves only a
+   * missing sidecar, so without this a pre-identity record in a synced folder stays read-only.
+   * Every other field is kept. Null when the record is missing or unreadable (nothing is
+   * written: a missing one may still be on its way down) or the media is gone. `minted` is false
+   * when the record already had an identity, at the first read or when the sidecar is read again
+   * just before the write (a newer version may have arrived meanwhile): then nothing was changed.
+   */
+  async mintIdentity(id: string): Promise<{ assetId: string; minted: boolean } | null> {
+    if (isVaultOwnedStem(id) || !isPlainItemId(id)) return null;
+    const path = this.sidecarPath(id);
+    return withLock(path, async () => {
+      const read = await this.readRecordStrict(path);
+      if (read.status !== "ok") return null;
+      if (read.sidecar.assetId) return { assetId: read.sidecar.assetId, minted: false };
+      if (!(await this.hasMedia(id))) return null;
+      // The folder is shared: a version with an identity may have arrived since the read above.
+      // Minting over it would give the item a second identity that conflicts with that one.
+      const again = await this.readRecordStrict(path);
+      if (again.status !== "ok") return null;
+      if (again.sidecar.assetId) return { assetId: again.sidecar.assetId, minted: false };
+      const assetId = readOnlyIdentityMemo.get(path) ?? randomUUID();
+      await this.writeAtomic(
+        path,
+        JSON.stringify({ ...again.sidecar, sidecarVersion: 2, assetId }, null, 2),
+      );
+      readOnlyIdentityMemo.delete(path);
+      return { assetId, minted: true };
     });
   }
 
@@ -782,7 +984,7 @@ export class LibraryVault {
         };
         delete meta.localRemovedAt;
         await mkdir(this.metaDirectory(), { recursive: true });
-        await atomicWriteFile(oldSidecar, JSON.stringify(meta, null, 2));
+        await this.writeAtomic(oldSidecar, JSON.stringify(meta, null, 2));
         const describeOld = async (): Promise<LocalRecording> => {
           const recording = await this.describe(id);
           if (!recording) throw new ItemNotFoundError(id);
@@ -800,7 +1002,9 @@ export class LibraryVault {
             id,
             oldMedia,
             meta.assetId!,
-            options.allowLeftover ?? true,
+            // A synced vault never clears a leftover: it may hold what an earlier rename kept
+            // because another device changed it, and a delete there reaches every device.
+            (options.allowLeftover ?? true) && !this.synced,
           );
         } catch {
           // A candidate that could not be checked (EIO, EACCES): never treated as free.
@@ -826,6 +1030,7 @@ export class LibraryVault {
         const from = this.companionPaths(id);
         const to = this.companionPaths(newId);
         const retry = options.retry ?? DEFAULT_RENAME_RETRY;
+        let keptCompanions: string[] = [];
 
         if (target.mode === "case") {
           const reason = await this.moveInPlace(from, to, oldMedia, newMedia, retry, id);
@@ -834,8 +1039,18 @@ export class LibraryVault {
           // 4. Companions to the new stem. A leftover of this item is cleared first.
           if (target.mode === "leftover") await this.removeCompanions(to);
           const created: string[] = [];
+          const copies: CompanionCopy[] = [];
           try {
-            await atomicWriteFile(to.sidecar, JSON.stringify(meta, null, 2));
+            // The old sidecar was just written (step 1) with the same content: stamped like any
+            // companion, so a later edit of it by another device keeps it.
+            if (this.synced) {
+              copies.push({
+                from: from.sidecar,
+                to: to.sidecar,
+                stamp: await fileStamp(from.sidecar),
+              });
+            }
+            await this.writeAtomic(to.sidecar, JSON.stringify(meta, null, 2));
             created.push(to.sidecar);
             const copied = [
               "thumbnail",
@@ -851,25 +1066,47 @@ export class LibraryVault {
               // Strict: a companion that cannot be checked is not skipped, since the
               // old companions are deleted after the commit.
               if (!(await existsStrict(from[key]))) continue;
+              // A synced folder: copying an offloaded companion would download it, so the
+              // rename stops (the title is saved) rather than start that download.
+              await this.assertLocal([from[key]]);
+              // Stamped before the copy: the old file is deleted only if it is still this one.
+              if (this.synced)
+                copies.push({ from: from[key], to: to[key], stamp: await fileStamp(from[key]) });
               // A clone where the volume has them: the webcam file is as large as a take.
-              await copyFile(
-                from[key],
-                to[key],
-                constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
-              );
+              await this.copyCompanion(from[key], to[key]);
               created.push(to[key]);
             }
             if (await existsStrict(from.assetsDir)) {
+              if (this.synced) {
+                const files = await filesUnder(from.assetsDir);
+                await this.assertLocal(files);
+                for (const file of files) {
+                  copies.push({
+                    from: file,
+                    to: join(to.assetsDir, relative(from.assetsDir, file)),
+                    stamp: await fileStamp(file),
+                  });
+                }
+              }
               created.push(to.assetsDir);
-              await cp(from.assetsDir, to.assetsDir, {
-                recursive: true,
-                force: false,
-                errorOnExist: true,
-              });
+              if (this.synced) {
+                await this.copyCompanionTree(from.assetsDir, to.assetsDir);
+              } else {
+                await cp(from.assetsDir, to.assetsDir, {
+                  recursive: true,
+                  force: false,
+                  errorOnExist: true,
+                });
+              }
             }
-          } catch {
+            // A synced folder: every copy is proven equal to an unchanged source before the
+            // commit, or the rename stops with both kept.
+            await verifyCopies(copies);
+          } catch (error) {
             await this.removePaths(created);
-            return { recording: await describeOld(), file: "kept-old-name", reason: "io" };
+            // An offloaded companion is not an I/O failure: the user can fix it (download it).
+            const reason = error instanceof EvictedFileError ? "evicted" : "io";
+            return { recording: await describeOld(), file: "kept-old-name", reason };
           }
 
           // 5. The commit point.
@@ -880,15 +1117,19 @@ export class LibraryVault {
             return { recording: await describeOld(), file: "kept-old-name", reason: failure };
           }
 
-          // 6. Old companions last, best effort: a leftover is invisible to `list()`.
-          await this.removeCompanions(from);
+          // 6. Old companions last, best effort: a leftover is invisible to `list()`. In a
+          // synced folder one that changed since its stamp (another device edited it) is kept.
+          if (this.synced) keptCompanions = await this.removeUnchangedCompanions(from, copies);
+          else await this.removeCompanions(from);
         }
 
         readOnlyIdentityMemo.delete(oldSidecar);
         if (hashStampBefore) await this.restampAfterRename(newId, newMedia, hashStampBefore);
         const recording = await this.describe(newId);
         if (!recording) throw new ItemNotFoundError(newId);
-        return { recording, file: "renamed" };
+        return keptCompanions.length > 0
+          ? { recording, file: "renamed", keptCompanions }
+          : { recording, file: "renamed" };
       });
     });
   }
@@ -998,9 +1239,13 @@ export class LibraryVault {
     const sleep = retry.sleep ?? sleepFor;
     for (let attempt = 0; ; attempt++) {
       try {
-        const placed = caseOnly
-          ? await renameCaseOnly(from, to)
-          : await placeNoReplace(from, to, { stuck: "rollback" });
+        const placed = this.synced
+          ? caseOnly
+            ? await renameCaseOnlyByRename(from, to)
+            : await placeByRename(from, to, { intoSynced: true })
+          : caseOnly
+            ? await renameCaseOnly(from, to)
+            : await placeNoReplace(from, to, { stuck: "rollback" });
         return placed === "taken" ? "taken" : null;
       } catch (error) {
         const code = errorCode(error);
@@ -1061,12 +1306,107 @@ export class LibraryVault {
     return null;
   }
 
+  /**
+   * Where a synced vault stages a file bound for `target`: its scratch folder, or a hidden folder
+   * on the target's volume, created. Never beside the target: a half-written file there is
+   * uploaded as it stands. Throws EXDEV when there is no folder outside the provider.
+   */
+  private async stagingFolderFor(target: string): Promise<string> {
+    const folder = this.stagingDir ?? (await volumeStagingDir(target, { assumeSynced: true }));
+    if (folder === null) {
+      throw Object.assign(new Error(`no folder outside the provider to stage "${target}"`), {
+        code: "EXDEV",
+      });
+    }
+    await mkdir(folder, { recursive: true });
+    return folder;
+  }
+
+  /**
+   * Copies one companion to `target`, never replacing a file there. In a synced folder the copy
+   * is never written under a name the provider can see: a half-written file there is uploaded
+   * as it stands. It is staged outside the folder (the scratch folder, or a hidden folder on the
+   * destination's volume) and arrives by rename, whole. A clone where the volume has them: the
+   * webcam file is as large as a take.
+   */
+  private async copyCompanion(source: string, target: string): Promise<void> {
+    if (!this.synced) {
+      await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+      return;
+    }
+    const folder = await this.stagingFolderFor(target);
+    const staged = join(folder, basename(uniqueTempPath(target, "part")));
+    try {
+      await copyFile(source, staged, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+      const placed = await placeByRename(staged, target, { intoSynced: true });
+      if (placed === "taken") throw takenError(target);
+    } catch (error) {
+      await rm(staged, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  /** `copyCompanion` for a folder: the folder is made empty, each file arrives whole by rename. */
+  private async copyCompanionTree(source: string, target: string): Promise<void> {
+    await mkdir(target);
+    for (const entry of await readdir(source, { withFileTypes: true })) {
+      const from = join(source, entry.name);
+      const to = join(target, entry.name);
+      if (entry.isDirectory()) await this.copyCompanionTree(from, to);
+      else await this.copyCompanion(from, to);
+    }
+  }
+
   private async removePaths(paths: string[]): Promise<void> {
     await Promise.allSettled(paths.map((path) => rm(path, { recursive: true, force: true })));
   }
 
   private async removeCompanions(paths: CompanionPaths): Promise<void> {
     await this.removePaths(Object.values(paths));
+  }
+
+  /**
+   * Deletes the old name's companions after a synced rename, but only a file that has a stamp
+   * and is still the one that was copied (same size, mtime and inode as when it was stamped).
+   * Everything else is kept and returned (relative to the `.kaipu` folder): a file that changed,
+   * one that appeared after the copy (it has no stamp, and was never copied under the new name),
+   * and the interrupted-write leftover.
+   */
+  private async removeUnchangedCompanions(
+    from: CompanionPaths,
+    copies: CompanionCopy[],
+  ): Promise<string[]> {
+    const kept: string[] = [];
+    const stamps = new Map(copies.map((copy) => [copy.from, copy]));
+    const meta = this.metaDirectory();
+    const removeIfUnchanged = async (path: string): Promise<void> => {
+      const copy = stamps.get(path);
+      try {
+        // The stamp is a cheap first check; the digest the copy was verified against is the
+        // proof, taken again from the file right before it goes (a rewrite in place can keep the
+        // size, mtime and inode).
+        if (
+          copy?.digest !== undefined &&
+          sameStamp(copy.stamp, await fileStamp(path)) &&
+          (await sha256FileBase64(path)) === copy.digest
+        ) {
+          await rm(path);
+        } else kept.push(relative(meta, path));
+      } catch (error) {
+        // Already gone: nothing to keep. Anything else could not be proven unchanged.
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") kept.push(relative(meta, path));
+      }
+    };
+    const { assetsDir, ...others } = from;
+    for (const path of Object.values(others)) {
+      if (stamps.has(path)) await removeIfUnchanged(path);
+      // Never copied: it arrived after the copy, or it is the interrupted-write leftover.
+      else if (await existsStrict(path).catch(() => true)) kept.push(relative(meta, path));
+    }
+    const files = await filesUnder(assetsDir).catch(() => [] as string[]);
+    for (const file of files) await removeIfUnchanged(file);
+    await removeEmptyFolders(assetsDir);
+    return kept;
   }
 
   async list(): Promise<LocalRecording[]> {
@@ -1077,10 +1417,35 @@ export class LibraryVault {
     // "vault is empty" and gets rendered as the first-run empty state, which
     // reads as data loss. The caller surfaces the real error.
     const entries = await readdir(this.directory);
-    const ids = entries
-      .filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext)))
-      .map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
-    const described = await Promise.all(ids.map((id) => this.describe(id)));
+    const media = entries.filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext)));
+    const ids = media.map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
+    // A synced workspace asks the provider once for the whole folder: every media file and
+    // every thumbnail, in one batched `stat` (never a read).
+    // Only posters that exist are asked about (one `readdir`, never a download): a path that is
+    // not there makes `stat` fail, which sends the whole batch to the slow per-path fallback,
+    // and a probe that runs out of time reports every unanswered path evicted (a local file
+    // would then read "Not downloaded"). A screenshot has no poster at all.
+    let evicted: ReadonlySet<string> | undefined;
+    if (this.evictionProbe) {
+      const posters = new Set(await readdir(this.metaDirectory()).catch(() => [] as string[]));
+      evicted = await this.evictionProbe([
+        ...media.map((f) => join(this.directory, f)),
+        ...ids.flatMap((id, index) =>
+          IMAGE_EXTS.some((ext) => media[index]!.endsWith(ext)) || !posters.has(`${id}.jpg`)
+            ? []
+            : [this.thumbnailPath(id)],
+        ),
+      ]);
+    }
+    // Each item reads its sidecar, and in a synced folder a read can download it: at most
+    // `SYNCED_LIST_CONCURRENCY` at a time (a thousand starting at once is a download storm that
+    // also makes every read wait behind the rest and time out). A plain vault reads side by side.
+    const stalls = { since: this.sidecarTimeouts, deadline: Date.now() + SYNCED_READS_BUDGET_MS };
+    const described = await mapLimit(
+      ids,
+      this.synced ? SYNCED_LIST_CONCURRENCY : Math.max(1, ids.length),
+      (id) => this.describe(id, evicted, stalls),
+    );
     return described
       .filter((r): r is LocalRecording => r !== null)
       .sort((a, b) => b.createdAt - a.createdAt);
@@ -1092,7 +1457,15 @@ export class LibraryVault {
     return entries.filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext))).length;
   }
 
-  async describe(id: string): Promise<LocalRecording | null> {
+  /**
+   * The item, or null when its media is gone. `evicted` is the answer of this vault's eviction
+   * probe for a whole listing; a single call asks for this item's two files itself.
+   */
+  async describe(
+    id: string,
+    evicted?: ReadonlySet<string>,
+    stalls?: { since: number; deadline: number },
+  ): Promise<LocalRecording | null> {
     const filePath = await this.filePath(id);
     let info;
     try {
@@ -1103,6 +1476,15 @@ export class LibraryVault {
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
     let meta: Sidecar & { assetId: string };
+    // This listing already saw the provider stall on several sidecars, or spent its whole time
+    // budget on slow ones: stop asking it.
+    if (
+      stalls &&
+      (this.sidecarTimeouts - stalls.since >= SYNCED_LIST_STALL_LIMIT ||
+        (this.synced && Date.now() >= stalls.deadline))
+    ) {
+      return this.describeUnreadable(id, filePath, info, "unreadable", evicted);
+    }
     try {
       meta = await this.ensureIdentity(id);
     } catch (error) {
@@ -1110,10 +1492,13 @@ export class LibraryVault {
       if (error instanceof ItemGoneError) return null;
       // Still listed, so the user sees the file exists; read-only until the sidecar reads again.
       if (error instanceof SidecarUnavailableError) {
-        return this.describeUnreadable(id, filePath, info, error.issue);
+        return this.describeUnreadable(id, filePath, info, error.issue, evicted);
       }
       throw error;
     }
+    // An evicted media file (or a video's evicted poster) gets no image URL: the protocol would
+    // read it, and reading downloads it (decision 15, Things the code contradicted, 18).
+    const { mediaEvicted, thumbEvicted } = await this.evictionOf(id, filePath, isImage, evicted);
     // A legacy stamp (no ctime, no inode) still counts here, as before: describe never hashes,
     // so refusing it would leave cloud-linked items "pending" until something else re-hashes.
     const hashIsFresh =
@@ -1161,18 +1546,26 @@ export class LibraryVault {
       editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
       capture: isImage || isGif ? null : sanitizeRecordingCapture(meta.capture),
       webcam,
-      thumbnailUrl: isImage
-        ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
-          // overwritten in place (same id/URL) — only the changed item, so the
-          // rest stay cacheable.
-          mediaUrl("screenshot", id, this.mediaParams({ v: String(Math.round(info.mtimeMs)) }))
-        : thumbnailMtime === null
+      thumbnailUrl:
+        mediaEvicted || thumbEvicted
           ? null
-          : // Same for a poster: the webcam composite rewrites it in place (NIW2-845).
-            mediaUrl("thumb", id, this.mediaParams({ v: String(Math.round(thumbnailMtime)) })),
+          : isImage
+            ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
+              // overwritten in place (same id/URL) — only the changed item, so the
+              // rest stay cacheable.
+              mediaUrl("screenshot", id, this.mediaParams({ v: String(Math.round(info.mtimeMs)) }))
+            : thumbnailMtime === null
+              ? null
+              : // Same for a poster: the webcam composite rewrites it in place (NIW2-845).
+                mediaUrl("thumb", id, this.mediaParams({ v: String(Math.round(thumbnailMtime)) })),
       // Only a webcam recording (`webcam` is null without its file) whose poster is not yet
       // the composite. Absent for everything else, so older callers see no field.
       ...(webcam ? { thumbnailNeedsWebcam: !hasWebcamThumbnail(meta) } : {}),
+      ...(mediaEvicted
+        ? { evicted: "media" as const }
+        : thumbEvicted
+          ? { evicted: "thumbnail" as const }
+          : {}),
     };
   }
 
@@ -1182,14 +1575,16 @@ export class LibraryVault {
    * still key and list it; `metadataIssue` is what tells every consumer not to trust or
    * write it.
    */
-  private describeUnreadable(
+  private async describeUnreadable(
     id: string,
     filePath: string,
     info: { size: number; birthtimeMs: number },
     issue: MetadataIssue,
-  ): LocalRecording {
+    evicted?: ReadonlySet<string>,
+  ): Promise<LocalRecording> {
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
+    const { mediaEvicted, thumbEvicted } = await this.evictionOf(id, filePath, isImage, evicted);
     return {
       id,
       assetId: `${UNREADABLE_ASSET_PREFIX}${id}`,
@@ -1211,6 +1606,33 @@ export class LibraryVault {
       capture: null,
       thumbnailUrl: null,
       metadataIssue: issue,
+      ...(mediaEvicted
+        ? { evicted: "media" as const }
+        : thumbEvicted
+          ? { evicted: "thumbnail" as const }
+          : {}),
+    };
+  }
+
+  /**
+   * Which of an item's two files the provider has offloaded: its media and, for a video or a
+   * GIF, its poster. A listing passes its one batched answer (`evicted`); a single call asks for
+   * this item. Only a poster that is there is asked about (a missing path makes `stat` slow).
+   */
+  private async evictionOf(
+    id: string,
+    filePath: string,
+    isImage: boolean,
+    evicted?: ReadonlySet<string>,
+  ): Promise<{ mediaEvicted: boolean; thumbEvicted: boolean }> {
+    if (!this.evictionProbe) return { mediaEvicted: false, thumbEvicted: false };
+    const poster = this.thumbnailPath(id);
+    const hasPoster = !isImage && (evicted !== undefined || (await exists(poster)));
+    const offloaded =
+      evicted ?? (await this.evictionProbe(hasPoster ? [filePath, poster] : [filePath]));
+    return {
+      mediaEvicted: offloaded.has(filePath),
+      thumbEvicted: hasPoster && offloaded.has(poster),
     };
   }
 
@@ -1223,7 +1645,7 @@ export class LibraryVault {
     const path = this.sidecarPath(id);
     let raw: string;
     try {
-      raw = await this.reader.readText(path);
+      raw = await this.readSidecarText(path);
     } catch (error) {
       if (errorCode(error) === "ENOENT") return { status: "missing" };
       return { status: "unreadable", error: String(error) };
@@ -1273,7 +1695,7 @@ export class LibraryVault {
     const path = this.sidecarPath(id);
     let raw: string;
     try {
-      raw = await this.reader.readText(path);
+      raw = await this.readSidecarText(path);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
       throw new SidecarUnavailableError("unreadable", path, { cause: error });
@@ -1292,11 +1714,17 @@ export class LibraryVault {
     return parsed as Sidecar;
   }
 
-  /** Keep a copy of a corrupt sidecar, once per path per session. Never touches the original. */
+  /**
+   * Keep a copy of a corrupt sidecar, once per path per session. Never touches the original.
+   * The copy is a file under a final name, so it arrives through `writeAtomic` (staged outside a
+   * synced folder, then renamed): the provider never uploads a half-written copy.
+   */
   private async quarantine(path: string): Promise<void> {
     if (quarantinedSidecars.has(path)) return;
     quarantinedSidecars.add(path);
-    await copyFile(path, `${path}.corrupt-${Date.now()}`).catch(() => undefined);
+    await readFile(path)
+      .then((bytes) => this.writeAtomic(`${path}.corrupt-${Date.now()}`, bytes))
+      .catch(() => undefined);
   }
 
   /**
@@ -1320,7 +1748,21 @@ export class LibraryVault {
     // Module-level lock keyed by path: a second caller (even from another
     // LibraryVault instance) waits, then re-reads and finds the first one's id.
     return withLock(sidecarPath, async () => {
-      const current = await this.writableSidecar(id);
+      let current = await this.writableSidecar(id);
+      // A synced folder can deliver the media before its sidecar, and the sidecar can arrive
+      // between two reads. Minting an identity then would write a second, different sidecar
+      // over the one that arrived: the item loses its title, tags and identity. So a synced
+      // vault never mints here: it reads the sidecar once more and uses the identity it has. A
+      // missing sidecar, or a readable one without an identity, leaves the item read-only for
+      // as long as it takes; the user can mint one on purpose through "Check and fix files"
+      // (`adoptMedia` for a missing sidecar, `mintIdentity` for a readable one without it).
+      if (this.synced && current.assetId === undefined) {
+        const again = await this.readRecord(id);
+        if (again.status !== "ok" || again.sidecar.assetId === undefined) {
+          throw new SidecarUnavailableError("unreadable", sidecarPath);
+        }
+        current = again.sidecar;
+      }
       if (current.assetId && current.localRemovedAt === undefined) {
         return current as Sidecar & { assetId: string };
       }
@@ -1367,9 +1809,16 @@ export class LibraryVault {
     if (read.status !== "ok" && read.status !== "missing") {
       throw new UnreadableRecordError(id, read.status, path);
     }
+    // A synced folder may still be delivering the sidecar: a partial one written here would
+    // conflict with it, and would then read as a record with no identity. Every creator
+    // reserves its stub first (`reserve`, `reserveIncoming`, `adoptMedia`), so nothing legit
+    // gets here without a sidecar.
+    if (read.status === "missing" && this.synced) {
+      throw new UnreadableRecordError(id, "unreadable", path);
+    }
     const current = read.status === "ok" ? read.sidecar : {};
     await mkdir(this.metaDirectory(), { recursive: true });
-    await atomicWriteFile(
+    await this.writeAtomic(
       this.sidecarPath(id),
       JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
     );
@@ -1436,6 +1885,9 @@ export class LibraryVault {
       return { contentSha256: meta.contentSha256, sizeBytes: info.size };
     }
 
+    // Hashing reads every byte: an offloaded file would be downloaded to answer. A cache hit
+    // above read nothing, so it is still served.
+    await this.assertLocal([filePath]);
     for (let attempt = 1; attempt <= 3; attempt++) {
       const contentSha256 = await sha256FileBase64(filePath);
       // Re-stat after hashing: if the file changed underneath, don't cache a lie.
@@ -1459,7 +1911,7 @@ export class LibraryVault {
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
     await withLock(this.sidecarPath(id), async () => {
-      await atomicWriteFile(this.thumbnailPath(id), jpg);
+      await this.writeAtomic(this.thumbnailPath(id), jpg);
       await this.clearWebcamThumbnailMarker(id);
     });
   }
@@ -1494,7 +1946,7 @@ export class LibraryVault {
       const webcam = webcamTrackState(await exists(this.webcamFilePath(id)), sidecar.webcam);
       if (!webcam.meta || !(await this.hasMedia(id))) return false;
       await mkdir(this.metaDirectory(), { recursive: true });
-      await atomicWriteFile(this.thumbnailPath(id), jpg);
+      await this.writeAtomic(this.thumbnailPath(id), jpg);
       await this.writeMetaLocked(id, { thumbnailWebcam: WEBCAM_THUMBNAIL_REVISION });
       return true;
     });
@@ -1504,15 +1956,30 @@ export class LibraryVault {
   /** Atomic (unique temp + rename): a crash mid-write never leaves a truncated track. */
   async writeCursorTrack(id: string, json: string): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
-    await atomicWriteFile(this.cursorTrackPath(id), json);
+    await this.writeAtomic(this.cursorTrackPath(id), json);
   }
 
-  /** The raw track JSON, or null when this recording has none. */
+  /**
+   * The raw track JSON, or null only when this recording has none (`ENOENT`). Read like every
+   * other companion of a synced vault: an offloaded track is never downloaded by the read
+   * (`EvictedFileError`) and a stalled provider gives up after `SYNCED_SIDECAR_READ_TIMEOUT_MS`
+   * (`ETIMEDOUT`). In a synced vault those and every other failure (EIO, EACCES, a folder in
+   * its place) THROW instead of reading as "no track": a track that exists but cannot be read
+   * now is not a recording without one. The thrown error says which: `EvictedFileError` for an
+   * offloaded track, the original error otherwise. A plain vault reads any failure as none.
+   * Nothing is remembered: the next call reads again.
+   */
   async readCursorTrack(id: string): Promise<string | null> {
     try {
-      return await readFile(this.cursorTrackPath(id), "utf-8");
-    } catch {
-      return null;
+      return await this.readTextBounded(this.cursorTrackPath(id));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") return null;
+      // Only a synced workspace has a provider that can hold the track back (offloaded, or a
+      // stalled read), so only there is "cannot read it" not the same as "there is none". A
+      // plain workspace keeps the behaviour from before synced folders: no usable track, no
+      // auto zooms, and the editor stays editable.
+      if (!this.synced) return null;
+      throw error;
     }
   }
 
@@ -1552,7 +2019,10 @@ export class LibraryVault {
    * Resolves the identity of the file placed, for a later undo (`discardCreated`).
    */
   private async placeNewFile(target: string, bytes: Uint8Array): Promise<PlacedFile> {
-    const part = uniqueTempPath(target, "part");
+    // A synced workspace stages outside its folder (no `.part` for the provider to upload) and
+    // places by rename: a hard link inside a synced folder renames the cloud item (ADR 0069).
+    const folder = this.synced ? await this.stagingFolderFor(target) : null;
+    const part = uniqueTempPath(folder ? join(folder, basename(target)) : target, "part");
     try {
       const handle = await open(part, "wx");
       try {
@@ -1561,7 +2031,9 @@ export class LibraryVault {
       } finally {
         await handle.close();
       }
-      const placed = await placeNew(part, target);
+      const placed = this.synced
+        ? await placeByRename(part, target, { intoSynced: true })
+        : await placeNew(part, target);
       if (placed === "taken") throw takenError(target);
       return placed;
     } catch (error) {
@@ -1615,7 +2087,7 @@ export class LibraryVault {
   ): Promise<NewMedia | void> {
     await mkdir(this.directory, { recursive: true });
     const target = join(this.directory, `${id}.png`);
-    if (options.replace) return atomicWriteFile(target, png, "part");
+    if (options.replace) return atomicWriteFile(target, png, "part", this.stagingDir ?? undefined);
     return { path: target, file: await this.placeNewFile(target, png) };
   }
 
@@ -1646,6 +2118,10 @@ export class LibraryVault {
    * the same assetId. Not `remove()`: that one is the destructive delete.
    */
   async removeLocalCopy(id: string): Promise<void> {
+    // A synced workspace never deletes through this (spec decision 4): the file lives in the
+    // provider's folder, and deleting it there deletes it in the cloud and on every device.
+    // The service reveals the file in Finder instead; this is the guard behind it.
+    if (this.synced) throw new SyncedLocalCopyError(id);
     // Before deleting anything: the marker below cannot be written over an unreadable
     // sidecar, and the media must not go without it.
     await this.writableSidecar(id);
@@ -1734,4 +2210,82 @@ export function humanizeId(id: string): string {
  */
 export function isPlainItemId(id: string): boolean {
   return id.length > 0 && !id.startsWith(".") && !/[\\/]/.test(id) && basename(id) === id;
+}
+
+/** What a file looked like when it was stamped; a rewrite in place changes size or mtime. */
+interface FileStamp {
+  size: number;
+  mtimeMs: number;
+  ino: number;
+}
+
+/** A companion about to be copied to its new name, with the source's stamp from before. */
+interface CompanionCopy {
+  from: string;
+  to: string;
+  stamp: FileStamp;
+  /** sha256 the copy was verified against (set by `verifyCopies`): the proof before a delete. */
+  digest?: string;
+}
+
+async function fileStamp(path: string): Promise<FileStamp> {
+  const info = await stat(path);
+  return { size: info.size, mtimeMs: info.mtimeMs, ino: info.ino };
+}
+
+function sameStamp(a: FileStamp, b: FileStamp): boolean {
+  return a.size === b.size && a.mtimeMs === b.mtimeMs && a.ino === b.ino;
+}
+
+/**
+ * Proves each copy equals its source: the source is unchanged since it was stamped (before the
+ * copy and again after hashing it) and both hash the same. Throws EIO otherwise, so the rename
+ * keeps the old name and the old files.
+ *
+ * Cost, on purpose: each companion is read three times in all (source and copy here, the source
+ * again right before it is deleted in `removeUnchangedCompanions`), under the names lock. The
+ * webcam track is as large as a take, so renaming an item that has one takes a while. Each read
+ * is a proof before a delete; a stamp cannot stand in for any of them.
+ */
+async function verifyCopies(copies: CompanionCopy[]): Promise<void> {
+  const mismatch = (path: string): Error =>
+    Object.assign(new Error(`"${path}" changed or did not copy faithfully; both are kept`), {
+      code: "EIO",
+    });
+  for (const copy of copies) {
+    if (!sameStamp(copy.stamp, await fileStamp(copy.from))) throw mismatch(copy.from);
+    const [source, copied] = await Promise.all([
+      sha256FileBase64(copy.from),
+      sha256FileBase64(copy.to),
+    ]);
+    if (source !== copied) throw mismatch(copy.from);
+    copy.digest = source;
+    if (!sameStamp(copy.stamp, await fileStamp(copy.from))) throw mismatch(copy.from);
+  }
+}
+
+/** Removes `folder` and its subfolders that hold nothing; one with a file in it stays. */
+async function removeEmptyFolders(folder: string): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(folder, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) await removeEmptyFolders(join(folder, entry.name));
+  }
+  // `rmdir` refuses a folder that still holds anything, which is what keeps a kept file safe.
+  await rmdir(folder).catch(() => {});
+}
+
+/** Every file below `folder`, at any depth. */
+async function filesUnder(folder: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(folder, { withFileTypes: true })) {
+    const path = join(folder, entry.name);
+    if (entry.isDirectory()) found.push(...(await filesUnder(path)));
+    else found.push(path);
+  }
+  return found;
 }

@@ -9,10 +9,15 @@
  * right after `registerLibraryVaultHandlers()` so all library IPC stays in one module.
  */
 import { ipcMain } from "electron";
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
+import {
+  EDIT_PROJECT_CLOUD_ONLY_MARKER,
+  EDIT_PROJECT_UNAVAILABLE_MARKER,
+} from "@shared/types/library-storage";
 import { atomicWriteFile } from "./atomic-write";
+import { EvictedFileError } from "./dataless";
 import { LibraryVault } from "./library-vault";
 import { vaultActivity } from "./vault-activity";
 import { vaultDirectory } from "./vault-location";
@@ -86,14 +91,32 @@ export interface LoadResult {
   assets: { assetId: string; bytes: ArrayBuffer }[];
 }
 
+/** The vault a session save reads through: the active workspace's (bounded when it is synced). */
+export type SessionVault = () => LibraryVault;
+
+const plainVault: SessionVault = () => new LibraryVault(vaultDirectory().path);
+
 /**
- * The export stamp already on disk, or null when there is no readable meta sidecar.
- * Best effort by design: a missing or corrupt sidecar means "nothing is known to be
- * exported", which is the safe side — the badge then tells the user to export.
+ * The export stamp already on disk: a number, null when nothing is known to be exported (no
+ * meta sidecar, or one that is not valid JSON: the safe side, the badge then tells the user to
+ * export), "evicted" when the provider has offloaded the file (reading it would download it, which
+ * Kaipu never starts), or "unreadable" when it is there but cannot be read now (a provider offline
+ * or stalled, EIO). Neither is "never exported", and neither is "unchanged": a save that cannot
+ * tell refuses before it writes anything (`ExportStampUnreadableError`), so the session, the
+ * assets and the meta never disagree.
  */
-async function readExportedSavedAt(id: string): Promise<number | null> {
+async function readExportedSavedAt(
+  id: string,
+  vault: LibraryVault,
+): Promise<number | null | "evicted" | "unreadable"> {
+  let raw: string;
   try {
-    const raw = await readFile(sessionMetaPath(vaultDirectory().path, id), "utf-8");
+    raw = await vault.readTextBounded(sessionMetaPath(vaultDirectory().path, id));
+  } catch (error) {
+    if (error instanceof EvictedFileError) return "evicted";
+    return (error as NodeJS.ErrnoException | null)?.code === "ENOENT" ? null : "unreadable";
+  }
+  try {
     const meta = JSON.parse(raw) as Partial<SessionMeta>;
     return typeof meta.exportedSavedAt === "number" ? meta.exportedSavedAt : null;
   } catch {
@@ -101,12 +124,53 @@ async function readExportedSavedAt(id: string): Promise<number | null> {
   }
 }
 
+/**
+ * A save was refused before it wrote a byte: the export stamp in the meta file cannot be read now
+ * (offloaded by the provider, stalled, unreadable). Writing the session without carrying the stamp
+ * forward would make the badge say "exported" for a scene that was edited afterwards, or "never
+ * exported" for one that was; leaving the old meta beside a new session would misreport the assets.
+ * The editor keeps its pending state in memory and goes read-only (it never retries into a folder it
+ * cannot read), so nothing is lost until the window closes.
+ *
+ * An offloaded file is not "downloading": retrying never fetches it (Kaipu does not start
+ * downloads), so the message says where the files are and what to do. Only a provider that
+ * does not answer is worth another try.
+ */
+export class ExportStampUnreadableError extends Error {
+  constructor(
+    readonly id: string,
+    readonly reason: "evicted" | "unreadable" = "unreadable",
+  ) {
+    super(
+      reason === "evicted"
+        ? `${EDIT_PROJECT_UNAVAILABLE_MARKER} ${EDIT_PROJECT_CLOUD_ONLY_MARKER}: the edit project of "${id}" was not saved into its folder because the project's files are only in the cloud. Your recent changes are only in the open editor. Open the project again once its files have downloaded.`
+        : `${EDIT_PROJECT_UNAVAILABLE_MARKER}: the edit project of "${id}" was not saved into its folder because its export record cannot be read right now (the synced folder is not answering). Your recent changes are only in the open editor.`,
+    );
+    this.name = "ExportStampUnreadableError";
+  }
+}
+
 // Exported (not just used via the IPC handlers below) so unit tests can exercise the
 // atomic-write/prune/delete behaviour directly against a temp vault dir.
-export async function saveSession(id: string, payload: SavePayload): Promise<void> {
+export async function saveSession(
+  id: string,
+  payload: SavePayload,
+  makeVault: SessionVault = plainVault,
+): Promise<void> {
   const { sessionJson, assets, exported = false } = payload;
-  // Before any write: an item whose record cannot be read is read-only (F9).
-  await new LibraryVault(vaultDirectory().path).assertWritableRecord(id);
+  const vault = makeVault();
+  // Before any write: an item whose record cannot be read is read-only (F9). Through the
+  // workspace's own vault, so a synced folder's read is bounded and never downloads a file.
+  await vault.assertWritableRecord(id);
+
+  // The previous export stamp, read BEFORE anything is written: when it cannot be read the whole
+  // save is refused, so the session, the assets and the meta are never left out of step (a new
+  // session beside an old meta reports the wrong assets, and an old "exported" stamp for a scene
+  // edited since). An export's own save carries no previous stamp.
+  const previous = exported ? null : await readExportedSavedAt(id, vault);
+  if (previous === "unreadable" || previous === "evicted") {
+    throw new ExportStampUnreadableError(id, previous);
+  }
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
@@ -121,7 +185,8 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
   const keptIds = new Set(assets.map((a) => a.assetId));
 
   for (const { assetId, bytes } of assets) {
-    await writeFile(assetPath(id, assetId), Buffer.from(bytes));
+    // Atomic like the JSON: a provider must not upload a half-written image at its final name.
+    await atomicWriteFile(assetPath(id, assetId), Buffer.from(bytes));
   }
 
   // Prune asset files that were in the previous session but are no longer referenced —
@@ -145,7 +210,7 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
   // effort: if the source is missing at save time (should not happen from the
   // editor), write nothing — the probe treats a missing meta file as
   // "missing-dependencies".
-  const sourcePath = await new LibraryVault(vaultDirectory().path).filePath(id);
+  const sourcePath = await vault.filePath(id);
   let source: { size: number; mtimeMs: number } | null = null;
   try {
     source = await stat(sourcePath);
@@ -162,7 +227,7 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
       sourceMtimeMs: source.mtimeMs,
       assetIds: [...keptIds],
       savedAt,
-      exportedSavedAt: exported ? savedAt : await readExportedSavedAt(id),
+      exportedSavedAt: exported ? savedAt : previous,
     };
     const mp = sessionMetaPath(vaultDirectory().path, id);
     await atomicWriteFile(mp, JSON.stringify(meta));
@@ -179,31 +244,87 @@ export function saveSessionLocked(
   workspaceId: string,
   id: string,
   payload: SavePayload,
+  makeVault: SessionVault = plainVault,
 ): Promise<void> {
   return withItemLock(workspaceId, id, async () => {
-    if (!(await new LibraryVault(vaultDirectory().path).hasMedia(id))) {
+    const vault = makeVault();
+    if (!(await vault.hasMedia(id))) {
       throw new ItemMovedError(id);
     }
-    await saveSession(id, payload);
+    await saveSession(id, payload, () => vault);
   });
 }
 
-export async function loadSession(id: string): Promise<LoadResult | null> {
-  const sp = sessionPath(id);
+/**
+ * The edit project could not be read at open: its files are only in the cloud, the provider
+ * stalled, or the disk failed. The editor opens read-only on this error, never as a fresh
+ * project that a save could write over the real one.
+ */
+export class EditProjectUnreadableError extends Error {
+  constructor(
+    readonly id: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `${EDIT_PROJECT_UNAVAILABLE_MARKER}: the edit project of "${id}" could not be read, so it opens read-only.`,
+      options,
+    );
+    this.name = "EditProjectUnreadableError";
+  }
+}
+
+const isMissing = (error: unknown): boolean =>
+  (error as NodeJS.ErrnoException | null)?.code === "ENOENT";
+
+/**
+ * Opening the editor is an explicit request for this item (AC13: its edit project must be local
+ * before the editor opens), so this read may download the project and its assets from a synced
+ * folder, which is what the user asked for. It is not a background read: nothing draws the
+ * Library through it. The download cannot be cancelled from here; the cancellable download with
+ * progress lands in layer 4 of the synced-workspaces stack.
+ *
+ * Returns null only when no project exists (`ENOENT`). Every other failure rejects with
+ * {@link EditProjectUnreadableError}: an unreadable project is not a new one. In a synced
+ * workspace the meta and the item's record are read here too, and a meta or assets folder
+ * without a project beside them (the project is still arriving) rejects the same way.
+ */
+export async function loadSession(
+  id: string,
+  makeVault: SessionVault = plainVault,
+): Promise<LoadResult | null> {
+  const vault = makeVault();
+  const synced = vault.synced;
+  const metaPath = sessionMetaPath(vaultDirectory().path, id);
+  const ad = assetsDir(id);
+
   let sessionJson: string;
   try {
-    sessionJson = await readFile(sp, "utf-8");
-  } catch {
-    // No session exists yet — not an error, just a fresh open.
+    sessionJson = await readFile(sessionPath(id), "utf-8");
+  } catch (error) {
+    if (!isMissing(error)) throw new EditProjectUnreadableError(id, { cause: error });
+    // No project file. In a synced folder its meta or assets can have arrived first.
+    if (synced) {
+      const partlyThere = await Promise.all([
+        stat(metaPath).then(
+          () => true,
+          (statError) => !isMissing(statError),
+        ),
+        readdir(ad).then(
+          (names) => names.length > 0,
+          (readError) => !isMissing(readError),
+        ),
+      ]);
+      if (partlyThere.some(Boolean)) throw new EditProjectUnreadableError(id, { cause: error });
+    }
     return null;
   }
 
-  const ad = assetsDir(id);
   let filenames: string[] = [];
   try {
     filenames = await readdir(ad);
-  } catch {
-    // Assets dir missing is fine — the session might have had no slides.
+  } catch (error) {
+    // A missing assets folder is fine: the project may have had no slides.
+    if (!isMissing(error)) throw new EditProjectUnreadableError(id, { cause: error });
   }
 
   const assets: LoadResult["assets"] = [];
@@ -219,8 +340,23 @@ export async function loadSession(id: string): Promise<LoadResult | null> {
         assetId,
         bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
       });
-    } catch {
-      // Skip unreadable asset files rather than failing the whole load.
+    } catch (error) {
+      // A slide that cannot be read is not skipped: the next save would prune it for good.
+      throw new EditProjectUnreadableError(id, { cause: error });
+    }
+  }
+
+  if (synced) {
+    // The same explicit open reads what a save will need, so a save is not refused halfway
+    // through the session: the meta (it carries the export stamp) and the item's record.
+    try {
+      await readFile(metaPath, "utf-8");
+    } catch (error) {
+      if (!isMissing(error)) throw new EditProjectUnreadableError(id, { cause: error });
+    }
+    const record = await vault.readRecordStrict(vault.sidecarPath(id));
+    if (record.status !== "ok" && record.status !== "missing") {
+      throw new EditProjectUnreadableError(id, { cause: new Error(record.error) });
     }
   }
 
@@ -242,7 +378,7 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 
 // ── IPC registration ──────────────────────────────────────────────────────────
 
-export function registerVideoEditSessionHandlers(): void {
+export function registerVideoEditSessionHandlers(makeVault: SessionVault = plainVault): void {
   // Item-scoped: stamped with the workspace (ADR 0032). A save that reaches main after a
   // switch is refused, so it can never write the session into the other workspace.
   // Entry points (maintenance mode, NIW2-561): a refused save keeps its pending state in
@@ -259,12 +395,12 @@ export function registerVideoEditSessionHandlers(): void {
     ) =>
       workspaceGate().run(stamp, () =>
         vaultActivity.run("editor", () =>
-          saveSessionLocked(activeWorkspace().id, id, { sessionJson, assets, exported }),
+          saveSessionLocked(activeWorkspace().id, id, { sessionJson, assets, exported }, makeVault),
         ),
       ),
   );
 
   ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, stamp: unknown, id: string) =>
-    workspaceGate().run(stamp, () => vaultActivity.run("editor", () => loadSession(id))),
+    workspaceGate().run(stamp, () => vaultActivity.run("editor", () => loadSession(id, makeVault))),
   );
 }

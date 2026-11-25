@@ -14,12 +14,12 @@
  * path in the instant between our identity check and the `unlink` that follows it is not
  * covered; everywhere else, uncertain ownership keeps the bytes.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, type Hash } from "node:crypto";
 import type { BigIntStats } from "node:fs";
 import { link, lstat, open, readFile, rename, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { atomicWriteFile, syncDir } from "./atomic-write";
+import { atomicWriteFile, isSyncedPath, syncDir, volumeStagingDir } from "./atomic-write";
 
 /** "taken": a file already exists at the destination; nothing was replaced or moved. */
 export type Placement = "placed" | "taken";
@@ -40,6 +40,42 @@ export interface FileIdentity {
 /** The file a placement created at its destination, and its size. */
 export interface PlacedFile extends FileIdentity {
   size: bigint;
+}
+
+/**
+ * What a source file looked like when its bytes were read for a copy (inode, size, mtime): the
+ * source may be deleted only while it still looks exactly like this.
+ */
+interface SourceStamp {
+  ino: bigint;
+  size: bigint;
+  mtimeNs: bigint;
+}
+
+function stampOf(stats: BigIntStats): SourceStamp {
+  return { ino: stats.ino, size: stats.size, mtimeNs: stats.mtimeNs };
+}
+
+function sameStamp(a: SourceStamp, b: SourceStamp): boolean {
+  return a.ino === b.ino && a.size === b.size && a.mtimeNs === b.mtimeNs;
+}
+
+/** sha256 of a whole file, read in chunks (never held in memory). */
+async function hashFile(path: string): Promise<string> {
+  const handle = await open(path, "r");
+  try {
+    const hash = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(COPY_CHUNK);
+    for (let position = 0; ; ) {
+      const { bytesRead } = await handle.read(buffer, 0, COPY_CHUNK, position);
+      if (bytesRead === 0) break;
+      hash.update(buffer.subarray(0, bytesRead));
+      position += bytesRead;
+    }
+    return hash.digest("hex");
+  } finally {
+    await handle.close().catch(() => {});
+  }
 }
 
 /** `link` errors that mean "this volume (or pair of volumes) has no hard links": copy instead. */
@@ -63,6 +99,10 @@ export interface PlacementMarker {
 /** An EEXIST error for a caller that reports "taken" as a failure. */
 export function takenError(path: string): NodeJS.ErrnoException {
   return Object.assign(new Error(`"${path}" already exists`), { code: "EEXIST", path });
+}
+
+function vanishedError(path: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`"${path}" vanished right after placing`), { code: "EIO" });
 }
 
 /** A placement found a file at its destination (it never replaces one). */
@@ -101,6 +141,36 @@ export async function removeIfSame(path: string, identity: FileIdentity): Promis
   try {
     const now = await identityAt(path);
     if (!now || !sameFile(now, identity)) return false;
+    await unlink(path);
+    return true;
+  } catch {
+    return false; // left in place: never guess
+  }
+}
+
+/**
+ * Take back a copy this operation placed at `path`, once it is known to hold `digest` (what was
+ * read from the source). By identity first; and when the name now holds another file, by
+ * content: a provider can give the placed file a new inode right after the rename, and the
+ * stale copy must not stay under its final name for the provider to upload. Another file's
+ * bytes (a stranger, or the user) never match the digest, so it is left alone; so is a name
+ * that cannot be read. Best effort, like {@link removeIfSame}.
+ */
+async function takeBackCopy(path: string, copied: FileIdentity, digest: string): Promise<boolean> {
+  if (await removeIfSame(path, copied)) return true;
+  try {
+    const seen = await lstat(path, { bigint: true });
+    if (sameFile(identityOf(seen), copied)) return false;
+    if ((await hashFile(path)) !== digest) return false;
+    // The hash of a large file takes seconds: the provider may have delivered another file under
+    // this name meanwhile. Delete only the very file that was hashed, unchanged.
+    const after = await lstat(path, { bigint: true });
+    if (
+      !sameFile(identityOf(after), identityOf(seen)) ||
+      !sameStamp(stampOf(after), stampOf(seen))
+    ) {
+      return false;
+    }
     await unlink(path);
     return true;
   } catch {
@@ -157,7 +227,11 @@ export async function copyExclusive(from: string, to: string): Promise<PlacedFil
   }
 }
 
-async function copyFromHandle(source: FileHandle, to: string): Promise<PlacedFile | "taken"> {
+async function copyFromHandle(
+  source: FileHandle,
+  to: string,
+  hash?: Hash,
+): Promise<PlacedFile | "taken"> {
   let target: FileHandle;
   try {
     target = await open(to, "wx");
@@ -174,6 +248,7 @@ async function copyFromHandle(source: FileHandle, to: string): Promise<PlacedFil
     for (;;) {
       const { bytesRead } = await source.read(buffer, 0, COPY_CHUNK, position);
       if (bytesRead === 0) break;
+      hash?.update(buffer.subarray(0, bytesRead));
       let written = 0;
       while (written < bytesRead) {
         const { bytesWritten } = await target.write(
@@ -209,10 +284,27 @@ async function copyFromHandle(source: FileHandle, to: string): Promise<PlacedFil
   }
 }
 
+/** What `placeByRename` goes through that a test replaces (a rename the volumes refuse). */
+export interface PlaceDeps {
+  /** The rename that moves a file into place; a test makes it throw EXDEV. */
+  rename?: typeof rename;
+  /** Whether a path is inside a synced folder; defaults to the app's detection. */
+  isSynced?: (path: string) => boolean;
+  /** The provider root that holds a path, or null when unknown; defaults to the app's path rule. */
+  syncRoot?: (path: string) => string | null;
+}
+
 export interface PlaceOptions {
   stuck?: StuckSource;
   /** The file `from` must hold; any other file there fails the placement (ESTALE), untouched. */
   expect?: FileIdentity;
+  deps?: PlaceDeps;
+  /**
+   * The destination is in a synced folder the app's detection does not know (a folder the user
+   * picked in a save dialog, found synced through its xattr): the copy across volumes is staged
+   * like one into a synced workspace, or fails with EXDEV, never written under its final name.
+   */
+  intoSynced?: boolean;
 }
 
 /**
@@ -293,15 +385,212 @@ export async function placeNew(
   return placed;
 }
 
-/** "kept": another file holds the source's name; "unknown": the name could not be read. */
-type SourceRemoval = "removed" | "kept" | "unknown";
+/** Whether anything is at `path`; an unreadable name propagates (never guess it is free). */
+async function isOccupied(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (codeOf(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/**
+ * Synced folders (spec, decision 15): put `from` at `to` with a plain `rename`, never a hard
+ * link. A hard link to a file inside a Google Drive folder renames the cloud item to the other
+ * name, and one between the folder and userData leaves the item unsynced (the 2026-10-30
+ * spike), so a placement into or out of a synced workspace must not create a second name.
+ * `rename` into Drive is atomic and the file uploads (same spike).
+ *
+ * The no-replace check is a `lstat` before the rename, and it is not atomic: Node exposes no
+ * rename-without-replace (Linux `renameat2` and macOS `renamex_np` with `RENAME_EXCL` both need
+ * native code), so a file the provider creates at `to` between the two calls is replaced. The
+ * window is the instant between them, and the caller must have reserved the name first: a
+ * rename writes the new stem's sidecar before it moves the media, a move or an import reserves
+ * the stem (a stub sidecar holds it), and a staged write picks a stem it just found free.
+ * A rename refused across devices falls back to a copy, then removes the source. Into a synced
+ * folder that copy is staged on the destination's volume outside the synced root and renamed in
+ * (`copyAcrossDevices`): the provider never sees a half-written file under any name.
+ */
+export async function placeByRename(
+  from: string,
+  to: string,
+  options: PlaceOptions = {},
+): Promise<PlacedFile | "taken"> {
+  // Read BEFORE the rename: a rename moves what is at `from`, so this is the file placed. Reading
+  // `to` afterwards would turn a name that is gone a moment later (a provider, the user) into a
+  // failure for a rename that happened, and the caller would roll back a finished placement.
+  const before = await identityAt(from);
+  if (options.expect) {
+    // The same check `placeNew` makes on its handle, read at the name: a rename moves what is there.
+    if (!before || !sameFile(before, options.expect)) throw notTheFile(from);
+  }
+  if (await isOccupied(to)) return "taken";
+  try {
+    await (options.deps?.rename ?? rename)(from, to);
+  } catch (error) {
+    if (codeOf(error) !== "EXDEV") throw error;
+    return copyAcrossDevices(from, to, options);
+  }
+  await syncDir(dirname(to)).catch(() => {});
+  // Nothing at `from` means the rename itself would have failed (ENOENT): not reachable here
+  // except through an injected rename, which never lands without a source.
+  return before ?? (await identityAt(to)) ?? Promise.reject(vanishedError(to));
+}
+
+/**
+ * `placeByRename`'s fallback when the volumes differ: a copy, then the source goes the way
+ * `placeNew` sends a staging file: removed only while its name still holds the file that was
+ * copied (identity read from the handle the copy read), else set aside or marked placed, so the
+ * stranded sweep cannot recover the same take a second time.
+ *
+ * Where the destination is in a synced folder the copy is never written under a name the provider
+ * can see: it goes to `volumeStagingDir` (hidden, on the destination's volume, provably outside
+ * the provider's root) and is renamed into place once whole. When no such folder exists, an
+ * unknown provider root included, the placement fails with EXDEV before a byte is written: the
+ * source stays and nothing partial is placed. A destination
+ * the detection does not call synced keeps the exclusive copy straight into it.
+ */
+async function copyAcrossDevices(
+  from: string,
+  to: string,
+  options: PlaceOptions,
+): Promise<PlacedFile | "taken"> {
+  const isSynced = options.deps?.isSynced ?? isSyncedPath;
+  let stageDir: string | null = null;
+  if (options.intoSynced === true || isSynced(to)) {
+    stageDir = await volumeStagingDir(to, {
+      isSynced,
+      syncRoot: options.deps?.syncRoot,
+      assumeSynced: options.intoSynced,
+    });
+    if (stageDir === null) {
+      throw Object.assign(
+        new Error(
+          `"${to}" is in a synced folder on another volume and no folder outside it on that volume can stage the copy; "${from}" is kept`,
+        ),
+        { code: "EXDEV", path: from },
+      );
+    }
+  }
+  const staged =
+    stageDir === null ? null : join(stageDir, `${basename(to)}.${randomUUID().slice(0, 8)}.part`);
+  const source = await open(from, "r");
+  let sourceId: PlacedFile;
+  let copied: PlacedFile | "taken";
+  // The source's content as it was read for the copy, and what the file looked like then.
+  const sourceHash = createHash("sha256");
+  let stampBefore: SourceStamp;
+  let stampAfter: SourceStamp;
+  try {
+    const first = await source.stat({ bigint: true });
+    sourceId = identityOf(first);
+    stampBefore = stampOf(first);
+    if (options.expect && !sameFile(sourceId, options.expect)) throw notTheFile(from);
+    copied = await copyFromHandle(source, staged ?? to, sourceHash);
+    stampAfter = stampOf(await source.stat({ bigint: true }));
+  } finally {
+    await source.close().catch(() => {});
+  }
+  if (copied === "taken") return "taken";
+  if (staged !== null) {
+    // The staged copy is whole: one same-volume rename puts it under its final name.
+    try {
+      if (await isOccupied(to)) {
+        await removeIfSame(staged, copied);
+        return "taken";
+      }
+      await (options.deps?.rename ?? rename)(staged, to);
+    } catch (error) {
+      await removeIfSame(staged, copied);
+      throw error;
+    }
+  }
+  await syncDir(dirname(to)).catch(() => {});
+  // The copy sits under its final name in a folder a provider writes into. The source may go
+  // only if `to` still holds exactly the bytes that were read from it: compared by content, not by
+  // inode, because a provider may give the file a new inode right after the rename and a stranger
+  // (or the user) may rewrite it in place. Anything else keeps the source.
+  const digest = sourceHash.digest("hex");
+  // Cost, on purpose: after the copy this reads `to` once and, in `removeSource`, the source once
+  // more, so a multi-GB take is read about three times in all (the copy's own read included).
+  // Both reads are the proof before a delete; a stamp cannot stand in for either.
+  try {
+    if ((await identityAt(to)) === null) {
+      console.error(`"${to}" vanished right after copying; the source keeps the bytes`);
+      return "taken";
+    }
+    if ((await hashFile(to)) !== digest) {
+      console.error(`"${to}" holds other bytes right after copying; the source keeps the bytes`);
+      return "taken";
+    }
+  } catch (error) {
+    await removeIfSame(to, copied); // a name still unreadable is left alone
+    throw error;
+  }
+  // The source must also be untouched since it was read: an edit in place during or after the
+  // copy is not in `to`, so deleting the source would lose it.
+  const unchangedSince = sameStamp(stampBefore, stampAfter) ? stampBefore : null;
+  let removal: SourceRemoval;
+  try {
+    // The stamp is a cheap first check; the digest of what was copied is the proof, taken again
+    // from the file immediately before it is deleted (an in-place rewrite can keep the size,
+    // mtime and inode).
+    removal = unchangedSince
+      ? await removeSource(from, sourceId, unchangedSince, digest)
+      : "changed";
+  } catch (error) {
+    if (options.stuck !== "rollback") {
+      await setAside(from, sourceId, to, copied.size);
+      return copied;
+    }
+    await takeBackCopy(to, copied, digest); // a rename that must be undone leaves the take in one place
+    throw error;
+  }
+  if (removal === "changed") {
+    // The source is not what was copied: `to` holds a stale copy, and the source holds the newer
+    // bytes under its own name. The copy is taken back (it is ours and was verified) and the
+    // source stays where it was: nothing is reported as placed, and nothing is set aside.
+    await takeBackCopy(to, copied, digest);
+    throw Object.assign(
+      new Error(`"${from}" changed while it was being copied; it is kept where it was`),
+      { code: "EIO", path: from },
+    );
+  }
+  if (removal === "unknown") {
+    if (options.stuck === "rollback") {
+      // The copy is the only sure copy of the bytes while the source cannot be verified: both stay.
+      throw Object.assign(
+        new Error(`Could not verify "${from}" against its copy before removing it; both are kept`),
+        { code: "EIO", path: from },
+      );
+    }
+    await setAside(from, sourceId, to, copied.size);
+  } else if (removal === "removed") await syncDir(dirname(from)).catch(() => {});
+  return copied;
+}
+
+/**
+ * "kept": another file holds the source's name; "unknown": the name could not be read;
+ * "changed": the source is not what was copied (its stamp or its bytes moved).
+ */
+type SourceRemoval = "removed" | "kept" | "unknown" | "changed";
 
 /**
  * Remove the placed source, only while its name still holds `identity` (captured from the
- * source's own handle). A different file there, or a name that cannot be read, is kept and
- * logged. Retries a failed unlink once; a second failure propagates.
+ * source's own handle) and, when `unchangedSince` is given, still looks the way it did when its
+ * bytes were read (size, mtime, inode). When `digest` is given, the current bytes are hashed
+ * right before the delete and must equal it: the stamp is trusted for nothing. A different file
+ * there, a changed one, or a name that cannot be read, is kept and logged. Retries a failed
+ * unlink once; a second failure propagates.
  */
-async function removeSource(path: string, identity: FileIdentity): Promise<SourceRemoval> {
+async function removeSource(
+  path: string,
+  identity: FileIdentity,
+  unchangedSince?: SourceStamp,
+  digest?: string,
+): Promise<SourceRemoval> {
   for (let attempt = 0; ; attempt += 1) {
     let now: FileIdentity | null;
     try {
@@ -314,6 +603,30 @@ async function removeSource(path: string, identity: FileIdentity): Promise<Sourc
     if (!sameFile(now, identity)) {
       console.error(`another file took the placed source's name "${path}"; kept`);
       return "kept";
+    }
+    if (unchangedSince) {
+      // The same inode is not the same content: a write in place keeps it.
+      try {
+        const info = await lstat(path, { bigint: true });
+        if (!sameStamp(stampOf(info), unchangedSince)) {
+          console.error(`the placed source "${path}" changed since it was copied; kept`);
+          return "changed";
+        }
+      } catch (error) {
+        console.error(`could not check the placed source "${path}"; kept`, error);
+        return "unknown";
+      }
+    }
+    if (digest !== undefined) {
+      try {
+        if ((await hashFile(path)) !== digest) {
+          console.error(`the placed source "${path}" holds other bytes than its copy; kept`);
+          return "changed";
+        }
+      } catch (error) {
+        console.error(`could not check the placed source "${path}"; kept`, error);
+        return "unknown";
+      }
     }
     try {
       // Residual window (ADR 0036): a swap between the check above and this call is not seen.
@@ -428,6 +741,51 @@ export async function renameCaseOnly(from: string, to: string): Promise<Placemen
 }
 
 /**
+ * `renameCaseOnly` for a synced folder (spec, decision 15): the same two steps, each a plain
+ * `rename`, never a hard link (a link inside a Google Drive folder renames the cloud item). The
+ * file goes to a unique temporary sibling, then to the new name; a failed second step renames it
+ * back. A different file at `to` → "taken"; where `to` is simply free, one `placeByRename`.
+ */
+export async function renameCaseOnlyByRename(from: string, to: string): Promise<Placement> {
+  const source = await identityAt(from);
+  if (source === null) {
+    throw Object.assign(new Error(`"${from}" does not exist`), { code: "ENOENT", path: from });
+  }
+  const existing = await identityAt(to);
+  if (existing === null) return (await placeByRename(from, to)) === "taken" ? "taken" : "placed";
+  if (!sameFile(existing, source)) return "taken";
+  if (from === to) return "placed";
+
+  const temp = siblingTemp(from, "case");
+  const first = await placeByRename(from, temp, { expect: source });
+  if (first === "taken") return "taken";
+  // A plain `rename` onto `to` would replace a different file that took the name while this one
+  // was set aside. `placeByRename` never does: "taken" puts the file back and is reported.
+  let second: Placement;
+  try {
+    second = (await placeByRename(temp, to)) === "taken" ? "taken" : "placed";
+  } catch (error) {
+    await moveBackByRename(temp, from);
+    throw error;
+  }
+  if (second === "placed") return "placed";
+  await moveBackByRename(temp, from);
+  return "taken";
+}
+
+/** `moveBack` for a synced folder: the same rule (never replace, never remove), by rename. */
+async function moveBackByRename(temp: string, from: string): Promise<void> {
+  const back = await placeByRename(temp, from).catch(() => "failed" as const);
+  if (back === "taken" || back === "failed") {
+    console.error(`case-only rename: the file could not return to its name; it is at "${temp}"`);
+    throw Object.assign(new Error(`The file could not return to its name; it is at "${temp}"`), {
+      code: "EIO",
+      path: temp,
+    });
+  }
+}
+
+/**
  * Second step failed: the file goes back to its old name. If even that fails (on a
  * case-insensitive volume a file that took the new name also holds the old one) it stays at
  * the temporary name, never removed, and the rename fails with an error naming it.
@@ -450,19 +808,63 @@ async function moveBack(temp: string, from: string): Promise<void> {
  * only replacing placement. The bytes go into an exclusively created temporary sibling first
  * (linked, or copied and flushed), which then replaces `to` in one rename. A failure removes
  * only that temporary file: the existing destination and the source are untouched. The source
- * is removed once the destination holds the bytes and its folder is flushed.
+ * is removed once the destination holds the bytes and its folder is flushed. `byRename` (a
+ * synced workspace's scratch file) moves it with a plain rename instead, never a hard link.
+ * `intoSynced` says `to` is in a provider's folder the app's detection does not know: across
+ * volumes the replacement is staged outside it or fails (`volumeStagingDir`).
  */
-export async function replaceConfirmed(from: string, to: string): Promise<void> {
+export async function replaceConfirmed(
+  from: string,
+  to: string,
+  byRename = false,
+  intoSynced = false,
+): Promise<void> {
   // Replacing a file with itself (the dialog pointed at the take's own path) is a no-op: going
   // through a temporary sibling would leave the bytes under that hidden name.
   if (resolve(from) === resolve(to) || (await isSameFile(from, to))) return;
-  const temp = siblingTemp(to, "replace");
+  if (byRename) {
+    // `from` is a synced workspace's scratch file and `to` may sit in a provider folder: a hard
+    // link between the two leaves the cloud item unsynced (ADR 0069), so move it with one
+    // rename, which also replaces `to` atomically. Across volumes the link below fails with
+    // EXDEV too, so the copy that follows never links.
+    try {
+      await rename(from, to);
+      await syncDir(dirname(to)).catch(() => {});
+      await syncDir(dirname(from)).catch(() => {});
+      return;
+    } catch (error) {
+      if (codeOf(error) !== "EXDEV") throw error;
+    }
+  }
+  let temp = siblingTemp(to, "replace");
+  if (byRename && (intoSynced || isSyncedPath(to))) {
+    // Across volumes the temporary file must not sit beside `to`: the provider would upload it
+    // half written. It is staged on the destination's volume provably outside the provider's
+    // root instead, or the replacement fails and keeps the source (a folder found synced only
+    // through its xattr has no known root).
+    const stageDir = await volumeStagingDir(to, { assumeSynced: intoSynced });
+    if (stageDir === null) {
+      throw Object.assign(
+        new Error(
+          `"${to}" is in a synced folder on another volume and no folder outside it on that volume can stage the copy; "${from}" is kept`,
+        ),
+        { code: "EXDEV", path: from },
+      );
+    }
+    temp = join(stageDir, `${basename(to)}.replace-${randomUUID().slice(0, 8)}`);
+  }
   const source = await open(from, "r");
   let sourceId: PlacedFile;
   let placed: PlacedFile | "taken";
+  // What the copy was read as: the source goes only if it still holds these bytes, and the
+  // destination holds them too.
+  const sourceHash = byRename ? createHash("sha256") : null;
   try {
     sourceId = identityOf(await source.stat({ bigint: true }));
-    placed = await duplicateAt(source, sourceId, from, temp);
+    // A synced replacement never takes a hard link (see above): it is always a copy.
+    placed = byRename
+      ? await copyFromHandle(source, temp, sourceHash ?? undefined)
+      : await duplicateAt(source, sourceId, from, temp);
   } finally {
     await source.close().catch(() => {});
   }
@@ -473,13 +875,35 @@ export async function replaceConfirmed(from: string, to: string): Promise<void> 
     await removeIfSame(temp, placed);
     throw error;
   }
+  const digest = sourceHash?.digest("hex");
+  let removal: SourceRemoval;
   try {
     await syncDir(dirname(to));
-    if ((await removeSource(from, sourceId)) === "removed") {
-      await syncDir(dirname(from)).catch(() => {});
+    // A copy is proven by content before the source goes (a hard link is the same file).
+    if (digest !== undefined && (await hashFile(to)) !== digest) removal = "changed";
+    else {
+      removal = await removeSource(from, sourceId, undefined, digest);
+      if (removal === "removed") await syncDir(dirname(from)).catch(() => {});
     }
   } catch {
     await setAside(from, sourceId, to, placed.size);
+    return;
+  }
+  if (removal === "unknown") {
+    // The take is already saved at `to`, and a source that could not be verified keeps a name
+    // the stranded sweep matches: set it aside so a later sweep cannot recover it a second time.
+    await setAside(from, sourceId, to, placed.size);
+    return;
+  }
+  if (removal === "changed") {
+    // The rename above already replaced `to`: it holds the bytes that were copied, which are
+    // older than what `from` holds now. Say so; the old file at `to` is gone.
+    throw Object.assign(
+      new Error(
+        `"${from}" and its copy at "${to}" differ; "${to}" was already replaced by that copy and "${from}" is kept where it was`,
+      ),
+      { code: "EIO", path: from },
+    );
   }
 }
 

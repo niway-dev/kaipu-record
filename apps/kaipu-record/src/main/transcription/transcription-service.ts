@@ -544,6 +544,10 @@ export class TranscriptionService {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           return { status: "refused", reason: "invalid-item" };
         }
+        // Offloaded by a sync provider: the audio could not be read without downloading it.
+        if ((error as { code?: string }).code === "EVICTED") {
+          return { status: "refused", reason: "evicted" };
+        }
         throw error;
       }
       if (!this.sweptDirs.has(vault.tmpDir)) {

@@ -16,7 +16,7 @@ import {
   probeWebcam,
   type EditSessionState,
 } from "./edit-project-probe";
-import type { LibraryVault } from "./library-vault";
+import { SYNCED_READS_BUDGET_MS, type LibraryVault } from "./library-vault";
 import { canRemoveLocalCopy } from "./remove-local-copy-policy";
 import type {
   ReconcileFixResult,
@@ -45,6 +45,11 @@ export interface LibraryServiceDeps {
    * Absent: owns them (one workspace, or a caller that predates workspaces).
    */
   ownsLegacyCloud?: () => boolean;
+  /**
+   * Shows a file in Finder. "Remove local copy" in a synced workspace calls it instead of
+   * deleting (spec decision 4).
+   */
+  reveal?: (path: string) => void;
   now?: () => number;
   /** Maintenance mode; the process' instance unless a test injects one. */
   activity?: VaultActivity;
@@ -115,7 +120,11 @@ export class LibraryService {
     if (busy) return { status: "busy", activity: busy };
     try {
       const { findings } = await this.activity.run("library", async () =>
-        scanVault({ directory: this.deps.vaultDir(), cloud: await this.cloudIds() }),
+        scanVault({
+          directory: this.deps.vaultDir(),
+          vault: this.deps.vault(),
+          cloud: await this.cloudIds(),
+        }),
       );
       const listed = findings
         .filter((f) => !f.fixable)
@@ -148,6 +157,7 @@ export class LibraryService {
     }
     try {
       const report = await fixVault(this.deps.vaultDir(), {
+        vault: this.deps.vault(),
         cloud: await this.cloudIds(),
         isEditing: options.isEditing,
         skip: options.skip,
@@ -181,9 +191,31 @@ export class LibraryService {
     const editing: Record<string, EditingState> = {};
     const editSession: Record<string, EditSessionState> = {};
     const transcribed: Record<string, number> = {};
+    // The edit meta is read through the vault: bounded, and never a download, in a synced one.
+    const vault = this.deps.vault();
+    // One read per meta file serves both probes (the answer, or the failure, is memoized). A synced
+    // listing stops starting reads once it spent the vault's listing budget: a skipped read fails
+    // like a timeout, which both probes already treat as "unknown".
+    const metaReads = new Map<string, Promise<string>>();
+    const deadline = vault.synced ? Date.now() + SYNCED_READS_BUDGET_MS : null;
+    const readMeta = (path: string): Promise<string> => {
+      let read = metaReads.get(path);
+      if (!read) {
+        read =
+          deadline !== null && Date.now() >= deadline
+            ? Promise.reject(
+                Object.assign(new Error(`reading "${path}" skipped: the provider was too slow`), {
+                  code: "ETIMEDOUT",
+                }),
+              )
+            : vault.readTextBounded(path);
+        metaReads.set(path, read);
+      }
+      return read;
+    };
     for (const rec of local ?? []) {
-      editing[rec.id] = await probeEditing(this.deps.vaultDir(), rec);
-      editSession[rec.id] = await probeEditSession(this.deps.vaultDir(), rec.id);
+      editing[rec.id] = await probeEditing(this.deps.vaultDir(), rec, readMeta);
+      editSession[rec.id] = await probeEditSession(this.deps.vaultDir(), rec.id, readMeta);
       const transcribedAt = await probeTranscribedAt(this.deps.vaultDir(), rec.id);
       if (transcribedAt !== null) transcribed[rec.id] = transcribedAt;
     }
@@ -286,7 +318,11 @@ export class LibraryService {
     // are, so the file is not hashed for them (a long recording takes seconds to hash).
     const editSession = cloud ? await hasEditSession(this.deps.vaultDir(), id) : false;
     const webcamTrack =
-      cloud && !editSession ? (await probeWebcam(this.deps.vaultDir(), id)) === "present" : false;
+      cloud && !editSession
+        ? // The sidecar is read through the vault: bounded, and never a download, in a synced one.
+          (await probeWebcam(this.deps.vaultDir(), id, (path) => vault.readTextBounded(path))) ===
+          "present"
+        : false;
     // A file still being written cannot be proven identical to the cloud copy —
     // refuse, do not reject: the policy below turns a null hash into "hash-unknown".
     const hashed =
@@ -303,6 +339,14 @@ export class LibraryService {
       hasWebcamTrack: webcamTrack,
     });
     if (!decision.allowed) return { ok: false, reason: decision.reason };
+    if (vault.synced) {
+      // The upload check above passed, but the file lives in the provider's folder: deleting
+      // it there deletes it in the cloud and on every device, and `localRemovedAt` would claim
+      // a copy is gone that the provider still holds. Show it in Finder so the user frees the
+      // space with the provider's own command (spec decision 4).
+      this.deps.reveal?.(rec.filePath);
+      return { ok: true, revealed: true };
+    }
     await vault.removeLocalCopy(id);
     return { ok: true };
   }

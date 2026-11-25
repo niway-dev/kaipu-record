@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { open, rename, rm } from "node:fs/promises";
-import { dirname } from "node:path";
+import { access, mkdir, open, rename, rm, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
 
 /**
  * Per-key async mutex, module scope: it spans every `LibraryVault` instance
@@ -52,27 +53,182 @@ export async function syncDir(directory: string): Promise<void> {
 }
 
 /**
- * Write to a unique temp file, fsync, rename over `target`, then flush the folder (best effort).
- * A failure removes the temp file.
+ * Where a write to `target` stages its temp file: the scratch folder of the synced workspace
+ * that holds `target`, or null for a path no synced workspace holds (the temp file then sits
+ * beside the target, as it always did). The workspaces module registers it at start-up; until
+ * then every write is plain.
+ */
+export type StagingResolver = (target: string) => string | null;
+
+let resolveStaging: StagingResolver = () => null;
+
+/** Install the resolver `atomicWriteFile` asks when its caller names no staging folder. */
+export function setStagingResolver(resolver: StagingResolver): void {
+  resolveStaging = resolver;
+}
+
+/** Whether the resolver (the app's synced-folder detection) says `path` is in a synced folder. */
+export function isSyncedPath(path: string): boolean {
+  return resolveStaging(path) !== null;
+}
+
+/** Hidden folder that holds a cross-volume placement while it is copied (see below). */
+export const VOLUME_STAGING_DIR = ".kaipu-staging";
+
+/**
+ * The root of the provider folder that holds `path`, when the app KNOWS where that root is (the
+ * path rule names it: `~/Library/CloudStorage/<provider>`, `~/Google Drive`, ...), else null. A
+ * folder detected as synced by anything else (Google Drive's xattr on a custom mount, a detection
+ * that did not answer) has no known root: nothing above it can be told apart from the provider's
+ * own folder. The workspaces module registers it at start-up; until then no root is known.
+ */
+export type SyncRootResolver = (path: string) => string | null;
+
+let resolveSyncRoot: SyncRootResolver = () => null;
+
+/** Install the resolver `volumeStagingDir` asks where a synced path's provider root is. */
+export function setSyncRootResolver(resolver: SyncRootResolver): void {
+  resolveSyncRoot = resolver;
+}
+
+export interface VolumeStagingDeps {
+  /** Whether a folder is inside a synced folder; defaults to the app's detection. */
+  isSynced?: (path: string) => boolean;
+  /** The provider root that holds a path, or null when unknown; defaults to the app's path rule. */
+  syncRoot?: SyncRootResolver;
+  /**
+   * The caller already knows `target` is in a synced folder (a detection `isSynced` does not
+   * share, such as a folder the user picked in a save dialog). Staging still needs a known root.
+   */
+  assumeSynced?: boolean;
+}
+
+/**
+ * Where a copy bound for `target` (a path in a synced folder) is staged when the rename from the
+ * scratch folder is refused because the volumes differ (EXDEV): a hidden folder on the TARGET's
+ * volume that the provider does not upload.
+ *
+ * It is made only where it is PROVABLY outside the provider: the target's provider root must be
+ * known (the path rule named it, `SyncRootResolver`), and the folder is the nearest ancestor of
+ * that root that is not synced, is writable and lives on the same device as the target's folder,
+ * so the final rename is a same-volume rename and nothing partial ever appears under the synced
+ * path. "Not detected as synced" is never taken as "outside": a folder found synced only through
+ * an xattr, or whose detection did not answer, has no known root, and every ancestor of it could
+ * be inside the folder the provider uploads. Null then, and also when there is no such ancestor
+ * (the provider's mount is its own volume, or every ancestor is read-only): the caller fails with
+ * EXDEV and keeps the original, because a partial file in the synced folder is worse than a
+ * failed write.
+ *
+ * Known follow-up (round 11 #0, decided: no sweep in this change): a crash between the copy and
+ * the final rename leaves its unique-named staged file in this folder, possibly a whole take.
+ * Nothing sweeps it. It is harmless to the provider (it never sees the folder, and no name is
+ * ever reused), so the cleanup is deferred to a launch-time sweep of old entries beside the
+ * stranded-take sweep, rather than risk a sweep deleting a copy that is still running.
+ */
+export async function volumeStagingDir(
+  target: string,
+  deps: VolumeStagingDeps = {},
+): Promise<string | null> {
+  return locateVolumeStaging(target, deps);
+}
+
+async function locateVolumeStaging(
+  target: string,
+  deps: VolumeStagingDeps,
+): Promise<string | null> {
+  const isSynced = deps.isSynced ?? isSyncedPath;
+  if (deps.assumeSynced !== true && !isSynced(target)) return null;
+  const root = (deps.syncRoot ?? resolveSyncRoot)(target);
+  if (root === null) return null;
+  const absoluteRoot = resolve(root);
+  const absoluteTarget = resolve(target);
+  // A root that does not hold the target says nothing about where the target's provider is.
+  if (absoluteTarget !== absoluteRoot && !absoluteTarget.startsWith(absoluteRoot + sep)) {
+    return null;
+  }
+  let device: number;
+  try {
+    device = (await stat(dirname(absoluteTarget))).dev;
+  } catch {
+    return null;
+  }
+  // Start ABOVE the root: every candidate is outside the folder the provider uploads by
+  // construction, not by a detection that could miss.
+  for (let at = dirname(absoluteRoot); ; at = dirname(at)) {
+    if (!isSynced(at)) {
+      try {
+        const info = await stat(at);
+        if (info.dev !== device) return null; // the provider's volume starts here: nothing above is on it
+        await access(at, constants.W_OK);
+        const staging = join(at, VOLUME_STAGING_DIR);
+        await mkdir(staging, { recursive: true });
+        return staging;
+      } catch {
+        // Not writable (or not creatable): keep climbing.
+      }
+    }
+    if (dirname(at) === at) return null;
+  }
+}
+
+/**
+ * The one atomic write of everything Kaipu keeps in a workspace folder: a unique temp file,
+ * fsync, rename over `target`, then a folder flush (best effort). A failure removes the temp.
+ *
+ * In a synced workspace (Google Drive, iCloud, OneDrive) no temp file may ever appear inside
+ * the folder: the provider would upload it and could keep a conflict copy. So the temp file
+ * lives in the workspace's scratch folder, outside the folder the provider uploads, and only
+ * the final rename reaches it. `stagingDir` names that folder; left `undefined` it is looked
+ * up from `target` (see `setStagingResolver`), so a writer that holds only a path cannot
+ * forget; `null` means "plain, beside the target".
+ *
+ * A rename the volumes refuse (EXDEV: the scratch folder and the synced folder are on different
+ * volumes) never falls back to a temp file inside the synced folder, which the provider would
+ * upload while it is half written. The write is redone through `volumeStagingDir`, a hidden folder
+ * on the target's own volume provably outside the provider's root. With none (an unknown root
+ * included), the write fails with the EXDEV error: the previous file is untouched and nothing
+ * partial is placed.
  */
 export async function atomicWriteFile(
   target: string,
   data: string | Uint8Array,
   suffix = "tmp",
+  stagingDir: string | null | undefined = undefined,
+  deps: AtomicWriteDeps = {},
 ): Promise<void> {
-  const temp = uniqueTempPath(target, suffix);
-  try {
-    const handle = await open(temp, "w");
+  const staging = stagingDir === undefined ? resolveStaging(target) : stagingDir;
+  const renameFile = deps.rename ?? rename;
+  const writeVia = async (folder: string | null): Promise<void> => {
+    const temp = folder
+      ? join(folder, basename(uniqueTempPath(target, suffix)))
+      : uniqueTempPath(target, suffix);
     try {
-      await handle.writeFile(data);
-      await handle.sync();
-    } finally {
-      await handle.close();
+      if (folder) await mkdir(folder, { recursive: true });
+      const handle = await open(temp, "w");
+      try {
+        await handle.writeFile(data);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await renameFile(temp, target);
+    } catch (error) {
+      await rm(temp, { force: true }).catch(() => {});
+      throw error;
     }
-    await rename(temp, target);
+  };
+  try {
+    await writeVia(staging);
   } catch (error) {
-    await rm(temp, { force: true }).catch(() => {});
-    throw error;
+    if (!staging || (error as NodeJS.ErrnoException | null)?.code !== "EXDEV") throw error;
+    const onVolume = await volumeStagingDir(target, deps);
+    if (onVolume === null) throw error;
+    await writeVia(onVolume);
   }
   await syncDir(dirname(target)).catch(() => {});
+}
+
+export interface AtomicWriteDeps extends VolumeStagingDeps {
+  /** The rename that places the temp file; a test makes it refuse across volumes. */
+  rename?: typeof rename;
 }

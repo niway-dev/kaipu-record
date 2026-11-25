@@ -18,9 +18,10 @@ import type {
   ReconcileReport,
 } from "@shared/types/library-reconcile";
 import { atomicWriteFile } from "./atomic-write";
-import { placeNoReplace, type Placement } from "./safe-place";
+import { placeByRename, placeNoReplace, type Placement } from "./safe-place";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { fsFold, isVaultOwnedStem } from "./file-stem";
+import { mapLimit } from "./map-limit";
 import {
   LEGACY_STEM,
   LibraryVault,
@@ -32,8 +33,8 @@ import {
   isAligned,
   isPlainItemId,
   kindFromExt,
-  readSidecarStrict,
   SharedCompanionError,
+  SYNCED_READS_BUDGET_MS,
   type CompanionPaths,
   type RetryPolicy,
   type Sidecar,
@@ -94,6 +95,7 @@ const FIXABLE: ReadonlySet<ReconcileFindingKind> = new Set<FixableFindingKind>([
   "untitled-legacy",
   "name-mismatch",
   "missing-sidecar",
+  "missing-identity",
   "missing-media",
   "orphan-companion",
 ]);
@@ -117,6 +119,13 @@ export interface ScanFinding extends ReconcileFinding {
 
 export interface ScanInput {
   directory: string;
+  /** The active workspace's vault (a synced one stays out of every hard link). */
+  vault?: LibraryVault;
+  /**
+   * When a synced vault stops starting record reads (epoch ms; default: `SYNCED_READS_BUDGET_MS`
+   * from the start of the scan). The records it did not read are reported unreadable.
+   */
+  readsDeadline?: number;
   /** Identities in the cached cloud catalog, or "unknown" (signed out). */
   cloud: ReadonlySet<string> | "unknown";
 }
@@ -159,24 +168,6 @@ function interpretations(name: string, isDirectory: boolean): Interpretation[] {
     .filter((i) => isPlainItemId(i.stem));
 }
 
-/** Map with a concurrency limit, for slow network drives (F8). */
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const out: R[] = [];
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < items.length) {
-      const index = next++;
-      out[index] = await fn(items[index]!);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
-}
-
 const READ_CONCURRENCY = 32;
 const meta = (name: string): string => `${META_DIR}/${name}`;
 
@@ -199,7 +190,8 @@ interface LiveItem extends Media {
  */
 export async function scanVault(input: ScanInput): Promise<VaultScan> {
   const { directory } = input;
-  const vault = new LibraryVault(directory);
+  const vault = input.vault ?? new LibraryVault(directory);
+  const readsDeadline = input.readsDeadline ?? Date.now() + SYNCED_READS_BUDGET_MS;
   const findings: ScanFinding[] = [];
 
   // 1. The vault root: media candidates, and stems whose companions are protected.
@@ -278,7 +270,9 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   // 3. Each live item's record, read strictly.
   const live: LiveItem[] = await mapLimit(single, READ_CONCURRENCY, async (media) => ({
     ...media,
-    read: await readSidecarStrict(vault.sidecarPath(media.stem)),
+    read: await vault.readRecordStrict(vault.sidecarPath(media.stem), {
+      deadline: readsDeadline,
+    }),
   }));
   const liveFolds = new Set(live.map((item) => fsFold(item.stem)));
 
@@ -353,6 +347,10 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
     const record: Sidecar = read.status === "ok" ? read.sidecar : {};
     const createdAt = captureDate(record, item.stem, item);
     const withDate = { ...base, createdAt, assetId: record.assetId };
+    // A synced workspace never mints an identity on its own, so a record without one stays
+    // read-only until this fix mints it: listed even when nothing else is wrong with the item.
+    const needsIdentity = vault.synced && !record.assetId;
+    const mints = needsIdentity ? { mints: true } : {};
     if (read.status === "missing") {
       // A file with no record becomes a new item under its disk name; a legacy writer
       // stem reads as its default name, as an untitled legacy item does.
@@ -382,6 +380,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
           ...withDate,
           kind: "untitled-legacy",
           fixable: true,
+          ...mints,
           ...rename(humanizeId(item.stem)),
         });
       } else if (!isAligned(item.stem, humanizeId(item.stem), kind, date)) {
@@ -389,8 +388,11 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
           ...withDate,
           kind: "name-mismatch",
           fixable: true,
+          ...mints,
           ...rename(humanizeId(item.stem)),
         });
+      } else if (needsIdentity) {
+        findings.push({ ...withDate, kind: "missing-identity", fixable: true, ...mints });
       }
       continue;
     }
@@ -404,11 +406,21 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
         ...withDate,
         kind: "stale-auto-title",
         fixable: true,
+        ...mints,
         title,
         ...rename(newTitle),
       });
     } else if (!isAligned(item.stem, title, kind, date)) {
-      findings.push({ ...withDate, kind: "name-mismatch", fixable: true, title, ...rename(title) });
+      findings.push({
+        ...withDate,
+        kind: "name-mismatch",
+        fixable: true,
+        ...mints,
+        title,
+        ...rename(title),
+      });
+    } else if (needsIdentity) {
+      findings.push({ ...withDate, kind: "missing-identity", fixable: true, ...mints, title });
     }
   }
 
@@ -444,7 +456,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
     entry.found.length === 1 && entry.found[0]!.role === "sidecar";
   const records = ownerless.filter(isRecordName);
   const reads = await mapLimit(records, READ_CONCURRENCY, (entry) =>
-    readSidecarStrict(join(directory, META_DIR, entry.name)),
+    vault.readRecordStrict(join(directory, META_DIR, entry.name), { deadline: readsDeadline }),
   );
 
   /** Stems whose companions stay where they are (cloud-only, unreadable records). */
@@ -595,6 +607,7 @@ class OrphanRun {
   constructor(
     private readonly directory: string,
     private readonly now: () => number,
+    private readonly byRename = false,
   ) {}
 
   /** Vault-relative path of the run folder, or null when nothing moved. */
@@ -627,7 +640,7 @@ class OrphanRun {
     };
     manifest.entries.push(entry);
     await writeManifest(folder, manifest);
-    const { moved, problems } = await moveFiles(this.directory, folder, entry);
+    const { moved, problems } = await moveFiles(this.directory, folder, entry, this.byRename);
     // A file that did not move keeps the entry pending: the next run finishes this bundle
     // here, instead of classifying the leftover again into another one.
     if (isEntryComplete(entry)) entry.status = "complete";
@@ -655,6 +668,7 @@ async function moveFiles(
   directory: string,
   folder: string,
   entry: ManifestEntry,
+  byRename = false,
 ): Promise<{ moved: number; problems: string[] }> {
   let moved = 0;
   const problems: string[] = [];
@@ -679,7 +693,7 @@ async function moveFiles(
     }
     try {
       await mkdir(dirname(to), { recursive: true });
-      if ((await moveIntoRun(from, to)) === "taken") {
+      if ((await moveIntoRun(from, to, byRename)) === "taken") {
         // Arrived since the check: kept, and the source stays (as for a present destination).
         file.state = "conflict";
         problems.push(file.from);
@@ -701,10 +715,14 @@ async function moveFiles(
  * symlink is renamed as itself (a link or copy would follow it); the destination was checked
  * absent in this run's own folder, which no other process names.
  */
-async function moveIntoRun(from: string, to: string): Promise<Placement> {
+async function moveIntoRun(from: string, to: string, byRename: boolean): Promise<Placement> {
   if (!(await lstat(from)).isFile()) {
     await rename(from, to);
     return "placed";
+  }
+  // A synced workspace: a hard link in the provider's folder renames the cloud item (ADR 0069).
+  if (byRename) {
+    return (await placeByRename(from, to, { intoSynced: true })) === "taken" ? "taken" : "placed";
   }
   return placeNoReplace(from, to, { stuck: "rollback" });
 }
@@ -784,7 +802,10 @@ async function readOrphanRuns(
  * its replay moves them (the caller keeps them out of a fresh classification). When any
  * run's manifest is `unreadable`, nothing is replayed and the caller must not act at all.
  */
-export async function resumeOrphanManifests(directory: string): Promise<{
+export async function resumeOrphanManifests(
+  directory: string,
+  byRename = false,
+): Promise<{
   moved: number;
   conflicts: string[];
   failed: string[];
@@ -801,7 +822,7 @@ export async function resumeOrphanManifests(directory: string): Promise<{
     const pending = manifest.entries.filter((entry) => entry.status === "pending");
     if (pending.length === 0) continue;
     for (const entry of pending) {
-      const result = await moveFiles(directory, folder, entry);
+      const result = await moveFiles(directory, folder, entry, byRename);
       moved += result.moved;
       for (const path of result.problems) {
         const state = entry.files.find((f) => f.from === path)?.state;
@@ -820,6 +841,8 @@ export async function resumeOrphanManifests(directory: string): Promise<{
 
 export interface FixOptions {
   cloud: ReadonlySet<string> | "unknown";
+  /** The active workspace's vault; a synced one places by rename, never a hard link. */
+  vault?: LibraryVault;
   /** The item is open in the video editor: its file keeps its name (C2). */
   isEditing?: (id: string, assetId: string) => boolean;
   /** An export may be streaming a file (never true in maintenance mode; kept for safety). */
@@ -861,8 +884,8 @@ export function skipPaths(value: unknown): ReadonlySet<string> {
 
 export async function fixVault(directory: string, options: FixOptions): Promise<ReconcileReport> {
   const now = options.now ?? Date.now;
-  const vault = new LibraryVault(directory);
-  const orphans = new OrphanRun(directory, now);
+  const vault = options.vault ?? new LibraryVault(directory);
+  const orphans = new OrphanRun(directory, now, vault.synced);
   const report: ReconcileReport = {
     counts: {},
     fixed: 0,
@@ -877,11 +900,11 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
     report.failed.push({ path, error: error instanceof Error ? error.message : String(error) });
   };
 
-  const resumed = await resumeOrphanManifests(directory);
+  const resumed = await resumeOrphanManifests(directory, vault.synced);
   if (resumed.unreadable.length > 0) {
     // Fail closed: that run's files are unknown, so any move, adoption or rename could split
     // its bundle or take one of its files. Listed until someone repairs or removes it.
-    const scan = (await scanVault({ directory, cloud: options.cloud })).findings;
+    const scan = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
     for (const finding of scan) {
       report.counts[finding.kind] = (report.counts[finding.kind] ?? 0) + 1;
     }
@@ -915,9 +938,12 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   };
 
   // 2. The first actions.
-  const first = (await scanVault({ directory, cloud: options.cloud })).findings;
+  const first = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
   for (const finding of first) report.counts[finding.kind] = (report.counts[finding.kind] ?? 0) + 1;
   const skipped = (finding: ScanFinding): boolean => options.skip?.has(finding.path) ?? false;
+  // Paths whose record changed or vanished after the scan: nothing more is done to them in this
+  // run (no rename in step 3); the next scan picks them up fresh.
+  const stopped = new Set<string>();
   const actions = first.filter((f) => f.fixable && f.kind !== "name-mismatch" && !skipped(f));
   let done = 0;
   let total = first.filter((f) => f.fixable && !skipped(f)).length;
@@ -928,6 +954,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
     "missing-media",
     "orphan-companion",
     "missing-sidecar",
+    "missing-identity",
     "stale-auto-title",
     "untitled-legacy",
   ];
@@ -943,21 +970,52 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
       if (finding.kind === "missing-media" && finding.action === "cloud-only") {
         await vault.writeMeta(finding.stem, { localRemovedAt: now() });
         report.fixed += 1;
+      } else if (finding.kind === "missing-identity") {
+        // Counted only when this run wrote the identity: one that arrived meanwhile changed nothing.
+        const minted = await vault.mintIdentity(finding.stem);
+        if (minted?.minted) {
+          report.fixed += 1;
+        } else {
+          // The rename step must not follow a record that changed or is gone.
+          stopped.add(finding.path);
+          // `null`: the item or its record is gone; otherwise an identity arrived meanwhile.
+          if (minted === null) fail(finding.path, "the item is gone or its record is unreadable");
+          else report.kept.push({ path: finding.path, reason: "changed" });
+        }
       } else if (finding.kind === "missing-media" || finding.kind === "orphan-companion") {
         const { moved, problems } = await orphans.move(finding);
         report.movedToOrphans += moved;
         for (const path of problems) fail(path, "could not be moved to the orphans folder");
       } else if (finding.kind === "missing-sidecar") {
         if (
-          await vault.adoptMedia(finding.stem, {
-            title: finding.newTitle!,
-            createdAt: finding.createdAt!,
-          })
+          // The user asked for this fix: in a synced workspace it is the only way an
+          // identity is minted for a file whose sidecar has not arrived.
+          await vault.adoptMedia(
+            finding.stem,
+            { title: finding.newTitle!, createdAt: finding.createdAt! },
+            { explicit: true },
+          )
         ) {
           report.fixed += 1;
         }
       } else {
-        // stale-auto-title, untitled-legacy: the title first; the rename below aligns it.
+        // stale-auto-title, untitled-legacy: the title first; the rename below aligns it. The
+        // user asked for this fix, so a record without an identity gets one now: a synced
+        // workspace mints nowhere else, and the rename needs it.
+        // Only a synced workspace needs it here: a plain one gets its identity from `describe`.
+        if (finding.assetId === undefined && vault.synced) {
+          // An identity that arrived since the scan means the record changed: the title computed
+          // from the scan would overwrite the newer version, so this finding waits for the next scan.
+          const minted = await vault.mintIdentity(finding.stem);
+          if (!minted?.minted) {
+            stopped.add(finding.path);
+            // `null`: the item or its record is gone; otherwise an identity arrived meanwhile.
+            if (minted === null) fail(finding.path, "the item is gone or its record is unreadable");
+            else report.kept.push({ path: finding.path, reason: "changed" });
+            step();
+            continue;
+          }
+        }
         await vault.writeMeta(finding.stem, { title: finding.newTitle! });
         report.fixed += 1;
       }
@@ -969,14 +1027,16 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
 
   // 3. Renames, planned from a fresh inventory: an adopted `Ａ.mp4` is titled `Ａ`, whose
   // stem is `A`; a retitled item now differs from its stem.
-  const second = (await scanVault({ directory, cloud: options.cloud })).findings;
+  const second = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
   // Items already counted in step 2 (retitled or adopted) are not counted again.
   const retitled = new Set(
     actions
       .filter((f) => ["stale-auto-title", "untitled-legacy", "missing-sidecar"].includes(f.kind))
       .map((f) => f.stem),
   );
-  const renames = second.filter((f) => f.kind === "name-mismatch" && !skipped(f));
+  const renames = second.filter(
+    (f) => f.kind === "name-mismatch" && !skipped(f) && !stopped.has(f.path),
+  );
   total = done + renames.length;
   const plan: Planned[] = renames.map((finding) => ({
     finding,
@@ -1000,7 +1060,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   });
 
   // 4. What is left.
-  const third = (await scanVault({ directory, cloud: options.cloud })).findings;
+  const third = (await scanVault({ directory, vault, cloud: options.cloud })).findings;
   report.remaining = third.map(publicFinding);
   const explained = new Set([
     ...report.kept.map((k) => k.path),
@@ -1019,8 +1079,8 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
 
 /** The renderer's view of a finding (no internal fields). */
 export function publicFinding(finding: ScanFinding): ReconcileFinding {
-  const { kind, fixable, path, title, newTitle, newName, action } = finding;
-  return { kind, fixable, path, title, newTitle, newName, action };
+  const { kind, fixable, path, title, newTitle, newName, action, mints } = finding;
+  return { kind, fixable, path, title, newTitle, newName, action, mints };
 }
 
 /**
@@ -1045,8 +1105,22 @@ async function runPlan(
     const { finding } = item;
     let renamed = false;
     try {
-      // Reconcile mints an identity only on items it is fixing (I2).
-      const assetId = finding.assetId ?? (await vault.describe(finding.stem))?.assetId;
+      // Reconcile mints an identity only on items it is fixing (I2). A synced workspace's
+      // `describe` never mints, so a record without one gets it here, on this explicit fix; a
+      // plain workspace keeps its own path (`describe` -> `ensureIdentity`).
+      let assetId = finding.assetId;
+      if (assetId === undefined && vault.synced) {
+        // Not minted by this run: the record changed since the scan, so it is not renamed.
+        const minted = await vault.mintIdentity(finding.stem);
+        if (minted === null) throw new Error("the item is gone or its record is unreadable");
+        if (!minted.minted) {
+          report.kept.push({ path: finding.path, reason: "changed" });
+          onRenamed(finding, false);
+          return;
+        }
+        assetId = minted.assetId;
+      }
+      assetId ??= (await vault.describe(finding.stem))?.assetId;
       if (!assetId) throw new Error("the item is gone");
       const result = await vault.renameItem({ id: finding.stem, assetId }, item.title, {
         allowLeftover: false,

@@ -47,6 +47,16 @@
   color: var(--text-muted);
 }
 
+.posterFallback:has(.evictedLabel) {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.evictedLabel {
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
 .duration {
   position: absolute;
   bottom: 5px;

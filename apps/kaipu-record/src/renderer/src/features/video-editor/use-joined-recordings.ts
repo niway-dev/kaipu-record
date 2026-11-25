@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CursorTrack } from "@shared/cursor-track";
 import type { RecordingCapture } from "@shared/recording-capture";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
-import { loadCursorTrackBestEffort, readJoinedLibrary } from "./joined-library";
+import { loadCursorTrackOrNull, readJoinedLibrary } from "./joined-library";
 import type { SceneSource } from "./scene";
 
 /** A recording joined into the sequence (ADR 0058), with the media data the editor reads. */
@@ -37,6 +37,8 @@ const LOADING: Loaded = {
 
 interface Started {
   cancelled: boolean;
+  /** Set when the source was `missing` only because its cursor track could not be read now. */
+  retry?: boolean;
   /** The id main acknowledged holding for this source, released when it goes away. */
   heldId: string | null;
 }
@@ -47,9 +49,12 @@ interface Started {
  * CURRENT local id and held against renames the way the loader holds the opened recording
  * (`acquireEditorSession`, released with `closeEditorSession` when the source leaves the scene
  * or the editor unmounts); the webcam meta and capture come from the Library item, and the
- * cursor track is a best-effort read. It never throws and never blocks the editor: whatever
- * cannot be resolved is `missing`. A new source loads without reloading the others (keyed by
- * `source.id`).
+ * cursor track is read with them: a recording whose track does not exist joins without pointer
+ * data, one whose track exists but cannot be read now is `missing`, never a recording without
+ * pointer data. It never throws and never blocks the editor: whatever cannot be resolved is
+ * `missing`. A new source loads without reloading the others (keyed by `source.id`). A source
+ * that is `missing` only because its track could not be read now is read again at the next
+ * change to the joined sources (a join, an undo or a redo), like an unreadable library.
  */
 export function useJoinedRecordings(
   sources: readonly SceneSource[] | undefined,
@@ -66,7 +71,7 @@ export function useJoinedRecordings(
     for (const id of gone) {
       const entry = started.current.get(id)!;
       entry.cancelled = true;
-      if (entry.heldId !== null) window.electronAPI.closeEditorSession(entry.heldId);
+      release(entry);
       started.current.delete(id);
     }
     if (gone.length > 0) {
@@ -102,6 +107,11 @@ export function useJoinedRecordings(
         entries.map(async ([source, entry]) => {
           const result = await resolve(source, entry, library);
           if (entry.cancelled) return;
+          // Not final: forget that it was started, so the next change to the joined sources reads
+          // its track again instead of showing it missing for the rest of the session.
+          if (entry.retry && started.current.get(source.id) === entry) {
+            started.current.delete(source.id);
+          }
           setLoaded((prev) => new Map(prev).set(source.id, result));
         }),
       );
@@ -115,7 +125,7 @@ export function useJoinedRecordings(
     return () => {
       for (const entry of map.values()) {
         entry.cancelled = true;
-        if (entry.heldId !== null) window.electronAPI.closeEditorSession(entry.heldId);
+        release(entry);
       }
       map.clear();
     };
@@ -125,6 +135,14 @@ export function useJoinedRecordings(
     () => list.map((source) => ({ source, ...(loaded.get(source.id) ?? LOADING) })),
     [list, loaded],
   );
+}
+
+/** Frees the entry's hold, once: whoever gets there first (a cancel, a failed read) clears it. */
+function release(entry: Started): void {
+  if (entry.heldId === null) return;
+  const heldId = entry.heldId;
+  entry.heldId = null;
+  window.electronAPI.closeEditorSession(heldId);
 }
 
 async function resolve(
@@ -146,6 +164,15 @@ async function resolve(
     return MISSING;
   }
   entry.heldId = heldId;
-  const cursorTrack = await loadCursorTrackBestEffort(heldId);
+  let cursorTrack: CursorTrack | null;
+  try {
+    cursorTrack = await loadCursorTrackOrNull(heldId);
+  } catch {
+    // The track exists but cannot be read now: the clip is shown as not available, never as a
+    // recording without pointer data.
+    release(entry);
+    entry.retry = true;
+    return MISSING;
+  }
   return { status: "ready", id: heldId, cursorTrack, webcam: item.webcam, capture: item.capture };
 }

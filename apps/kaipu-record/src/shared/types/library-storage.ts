@@ -38,6 +38,13 @@ export interface LocalRecording {
   /** 0 when unknown (no sidecar metadata yet). */
   durationSeconds: number;
   thumbnailUrl?: string | null;
+  /**
+   * Synced workspaces only (spec, Synced folders): the provider offloaded this item's media
+   * ("media": "Not downloaded", it cannot be opened, dragged or moved until downloaded) or only
+   * its poster ("thumbnail": the item works, it just draws a placeholder). Absent when local.
+   * Nothing reads an evicted file: that would download it.
+   */
+  evicted?: "media" | "thumbnail";
   /** The asset this file was exported from, when it is an editor export. */
   derivedFromAssetId: string | null;
   /** Frame captures: the video this shot was taken from, and the second on screen. */
@@ -111,9 +118,10 @@ export type RenameFileOutcome = "renamed" | "unchanged" | "kept-old-name";
 /**
  * Why the file kept its old name: another app holds it, an export is reading it, the item
  * is open in the video editor (which holds its id for its lifetime), another file appeared
- * under the new name while the rename ran ("taken": never replaced), or another I/O error.
+ * under the new name while the rename ran ("taken": never replaced), a companion file the
+ * cloud provider has offloaded ("evicted": copying it would download it), or another I/O error.
  */
-export type RenameKeptReason = "locked" | "busy" | "editing" | "taken" | "io";
+export type RenameKeptReason = "locked" | "busy" | "editing" | "taken" | "evicted" | "io";
 
 export interface RenameResult {
   /** The item after the rename; `recording.id` is the id to use from now on. */
@@ -121,6 +129,11 @@ export interface RenameResult {
   file: RenameFileOutcome;
   /** Set only when `file` is "kept-old-name". */
   reason?: RenameKeptReason;
+  /**
+   * Set only in a synced workspace when `file` is "renamed": old companions (paths relative to
+   * the `.kaipu` folder) that changed after they were copied, so they were kept, not deleted.
+   */
+  keptCompanions?: string[];
 }
 
 /**
@@ -153,3 +166,14 @@ export const UNREADABLE_RECORD_MARKER = "vault-unreadable-record";
  * when `library:maintenance-ended` arrives.
  */
 export const VAULT_MAINTENANCE_MARKER = "vault-maintenance";
+
+/**
+ * Marker in the message of the error a video edit save is refused with when the project's export
+ * record cannot be read now (a synced folder: the file is only in the cloud, or the provider does
+ * not answer). Nothing was written into the folder; the edits are kept as a draft on this Mac. The
+ * editor says so once, instead of a failure it cannot fix by retrying.
+ */
+export const EDIT_PROJECT_UNAVAILABLE_MARKER = "vault-edit-project-unavailable";
+
+/** Added to that message when the project's files are offloaded: retrying never downloads them. */
+export const EDIT_PROJECT_CLOUD_ONLY_MARKER = "vault-edit-project-cloud-only";

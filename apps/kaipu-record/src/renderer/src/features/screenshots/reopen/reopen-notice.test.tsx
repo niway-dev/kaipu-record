@@ -64,3 +64,14 @@ describe("ReopenNotice, flat (I2)", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
+
+describe("ReopenNotice, not downloaded", () => {
+  it("says the document is not downloaded and how to get it, and can be dismissed", () => {
+    render(<ReopenNotice kind="evicted" />);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Not downloaded: download it in Finder to open it here.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});

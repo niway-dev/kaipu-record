@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceView } from "@shared/types/workspaces";
 import {
+  evictedExportsOf,
   exportsToSuggest,
   moveCost,
   notMovableReason,
@@ -24,6 +25,12 @@ const cloudExport = item({ assetId: "exp3", derivedFromAssetId: "rec", id: null 
 const other = item({ assetId: "other" });
 
 describe("exportsToSuggest", () => {
+  it("does not count an export whose media or poster the provider offloaded: it cannot move", () => {
+    const offloaded = item({ assetId: "exp4", derivedFromAssetId: "rec", evicted: "media" });
+    const posterOnly = item({ assetId: "exp5", derivedFromAssetId: "rec", evicted: "thumbnail" });
+    expect(exportsToSuggest([rec], [rec, exp1, offloaded, posterOnly])).toEqual([exp1]);
+  });
+
   it("counts the local exports of a selected recording", () => {
     expect(exportsToSuggest([rec], [rec, exp1, exp2, cloudExport, other])).toEqual([exp1, exp2]);
   });
@@ -35,6 +42,23 @@ describe("exportsToSuggest", () => {
   it("suggests nothing for a recording without exports, or for an export moved alone", () => {
     expect(exportsToSuggest([other], [rec, exp1, other])).toEqual([]);
     expect(exportsToSuggest([exp1], [rec, exp1, exp2])).toEqual([]);
+  });
+});
+
+describe("evictedExportsOf", () => {
+  it("lists the exports of a selected recording that stay behind because they are not downloaded", () => {
+    const offloaded = item({ assetId: "exp4", derivedFromAssetId: "rec", evicted: "media" });
+    const posterOnly = item({ assetId: "exp5", derivedFromAssetId: "rec", evicted: "thumbnail" });
+    const otherOffloaded = item({ assetId: "exp6", derivedFromAssetId: "other", evicted: "media" });
+    expect(
+      evictedExportsOf([rec], [rec, exp1, cloudExport, offloaded, posterOnly, otherOffloaded]),
+    ).toEqual([offloaded, posterOnly]);
+  });
+
+  it("is empty when nothing is offloaded, or an offloaded export is itself selected", () => {
+    const offloaded = item({ assetId: "exp4", derivedFromAssetId: "rec", evicted: "media" });
+    expect(evictedExportsOf([rec], [rec, exp1])).toEqual([]);
+    expect(evictedExportsOf([rec, offloaded], [rec, offloaded])).toEqual([]);
   });
 });
 
@@ -56,6 +80,12 @@ describe("notMovableReason", () => {
     expect(notMovableReason(item({ assetId: "x", metadataIssue: "corrupt" }))).toBe("record");
     expect(notMovableReason(rec)).toBeNull();
   });
+
+  it("refuses an item whose media or poster a synced workspace's provider offloaded: download it first", () => {
+    expect(notMovableReason({ ...rec, evicted: "media" })).toBe("evicted");
+    // Only its poster is offloaded, but the move copies it too and main refuses an offloaded one.
+    expect(notMovableReason({ ...rec, evicted: "thumbnail" })).toBe("evicted");
+  });
 });
 
 describe("moveCost", () => {
@@ -69,6 +99,7 @@ describe("moveCost", () => {
     state: "available",
     itemCount: null,
     device: "1",
+    sync: null,
     ...over,
   });
   it("is instant on the same drive, copies on another, and is off when not connected", () => {
@@ -78,6 +109,12 @@ describe("moveCost", () => {
     expect(moveCost(view({ id: "b", state: "unavailable", device: null }), active)).toBe(
       "not-connected",
     );
+  });
+
+  it("a synced side copies, even on the same drive (decision 15)", () => {
+    const active = view({ id: "a" });
+    expect(moveCost(view({ id: "b", sync: "google-drive" }), active)).toBe("synced");
+    expect(moveCost(view({ id: "b" }), view({ id: "a", sync: "onedrive" }))).toBe("synced");
   });
 });
 
@@ -106,6 +143,56 @@ describe("resultMessage", () => {
     expect(message).toContain('"total":2');
     expect(message).toContain("Export");
     expect(message).toContain("reason_no-room");
+  });
+
+  it("says how many exports stayed because they are not downloaded, only when something moved", () => {
+    const moved = {
+      targetId: "p",
+      moved: [{ id: "a", newId: "a" }],
+      failed: [],
+      skipped: [],
+    };
+    const message = resultMessage(moved, { ...context, notDownloaded: 2 }, t);
+    expect(message).toContain('resultExportsNotDownloaded{"count":2,"source":"Work"}');
+    expect(resultMessage(moved, context, t)).not.toContain("resultExportsNotDownloaded");
+    expect(
+      resultMessage({ ...moved, moved: [] }, { ...context, notDownloaded: 2 }, t),
+    ).not.toContain("resultExportsNotDownloaded");
+  });
+
+  it("names an item whose original was kept, and does not count it as moved", () => {
+    const message = resultMessage(
+      {
+        targetId: "p",
+        moved: [
+          { id: "a", newId: "a" },
+          { id: "b", newId: "b", keptOriginal: "source-changed" },
+        ],
+        failed: [],
+        skipped: [],
+      },
+      context,
+      t,
+    );
+    expect(message).toContain('resultAll{"count":1,"target":"Personal"}');
+    expect(message).toContain("resultKeptOriginal");
+    expect(message).toContain('"list":"Export"');
+    expect(message).toContain('"source":"Work"');
+  });
+
+  it("only kept originals: no 'Moved' sentence at all", () => {
+    const message = resultMessage(
+      {
+        targetId: "p",
+        moved: [{ id: "a", newId: "a", keptOriginal: "source-changed" }],
+        failed: [],
+        skipped: [],
+      },
+      context,
+      t,
+    );
+    expect(message).not.toContain("resultAll");
+    expect(message.startsWith("resultKeptOriginal")).toBe(true);
   });
 
   it("a Stop before anything moved says nothing moved, not 'Moved 0 items'", () => {

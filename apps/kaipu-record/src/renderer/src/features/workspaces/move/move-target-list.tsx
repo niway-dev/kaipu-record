@@ -2,6 +2,7 @@ import React from "react";
 import { ChevronRight, Lock, Plus } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { WorkspacesState, WorkspaceView } from "@shared/types/workspaces";
+import { useFlag } from "@renderer/features/analytics/use-flag";
 import { WorkspaceTile } from "../workspace-switcher";
 import { moveCost } from "./move-flow";
 import styles from "./move.module.css";
@@ -37,6 +38,10 @@ export function MoveTargetList({
   onPick(target: string | "new"): void;
 }): React.JSX.Element {
   const t = useTranslations("move");
+  // Behind `synced-workspaces` (decision 13): a move to or from a synced folder says "Synced
+  // folder" only with the flag on. With it off the row reads as any copying move; the move
+  // itself is the same either way.
+  const syncedNamed = useFlag("synced-workspaces");
   const others = state.workspaces.filter((w) => w.id !== active.id);
   return (
     <div className={styles.targets}>
@@ -70,7 +75,11 @@ export function MoveTargetList({
                     ? "costSameDrive"
                     : cost === "other-drive"
                       ? "costOtherDrive"
-                      : "costNotConnected",
+                      : cost === "synced"
+                        ? syncedNamed
+                          ? "costSynced"
+                          : "costOtherDrive"
+                        : "costNotConnected",
                 )}
               </span>
             </span>

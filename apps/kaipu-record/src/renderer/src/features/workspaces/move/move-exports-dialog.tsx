@@ -9,19 +9,53 @@ import {
   ModalText,
   ModalTitle,
 } from "@kaipu/ui";
+import { uiArea } from "@renderer/lib/ui-area";
 import { useMoveUi } from "./move-store";
 
 /**
- * "This recording has 2 exports in Work. Move them too?" (ADR 0033, decision 15): Move all 3
- * (primary) or Move only the recording. Mounted once, beside the workspaces provider.
+ * Owns both prompts of a move and shows one at a time (the synced confirmation first), mounted
+ * once beside the workspaces provider:
+ * - "This recording has 2 exports in Work. Move them too?" (ADR 0033, decision 15): Move all 3
+ *   (primary) or Move only the recording.
+ * - The confirmation before a move out of a synced workspace (decision 15), which says the
+ *   file is deleted from the cloud on every device.
  */
 export function MoveExportsDialogHost(): React.JSX.Element | null {
   const t = useTranslations("move");
-  const { prompt } = useMoveUi();
+  const { prompt, syncedPrompt } = useMoveUi();
+  if (syncedPrompt) {
+    return (
+      <ModalOverlay
+        key="synced"
+        onCancel={() => syncedPrompt.answer(false)}
+        labelledBy="move-synced-title"
+      >
+        <div {...uiArea("shell.moveSyncedDialog")}>
+          <ModalIcon tone="danger">
+            <FolderInput size={20} strokeWidth={1.8} />
+          </ModalIcon>
+          <ModalTitle id="move-synced-title">{t("syncedTitle")}</ModalTitle>
+          <ModalText>{t("syncedBody", { name: syncedPrompt.source })}</ModalText>
+          <ModalActions>
+            <ModalButton variant="ghost" onClick={() => syncedPrompt.answer(false)}>
+              {t("syncedCancel")}
+            </ModalButton>
+            <ModalButton variant="danger" onClick={() => syncedPrompt.answer(true)}>
+              {t("syncedConfirm")}
+            </ModalButton>
+          </ModalActions>
+        </div>
+      </ModalOverlay>
+    );
+  }
   if (!prompt) return null;
   const many = prompt.selected > 1;
   return (
-    <ModalOverlay onCancel={() => prompt.answer(null)} labelledBy="move-exports-title">
+    <ModalOverlay
+      key="exports"
+      onCancel={() => prompt.answer(null)}
+      labelledBy="move-exports-title"
+    >
       <ModalIcon tone="accent">
         <FolderInput size={20} strokeWidth={1.8} />
       </ModalIcon>

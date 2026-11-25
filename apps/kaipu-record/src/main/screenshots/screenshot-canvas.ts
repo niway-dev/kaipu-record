@@ -1,11 +1,10 @@
-import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CANVAS_ASSET_ID_PATTERN,
   type CanvasReadResult,
   type CanvasSavePayload,
 } from "@shared/types/screenshot-canvas";
-import { atomicWriteFile } from "../library/atomic-write";
 import { isPlainItemId, type LibraryVault } from "../library/library-vault";
 
 /** Largest canvas document main stores or returns (5 MB of JSON text). */
@@ -67,13 +66,13 @@ export async function writeCanvas(
     const keep = new Set<string>();
     for (const { assetId, png } of canvas.assets) {
       const file = `${assetId}.png`;
-      await atomicWriteFile(join(paths.assetsDir, file), Buffer.from(png));
+      await vault.writeAtomic(join(paths.assetsDir, file), Buffer.from(png));
       keep.add(file);
     }
     for (const name of await readdir(paths.assetsDir)) {
       if (!keep.has(name)) await rm(join(paths.assetsDir, name), { recursive: true, force: true });
     }
-    await atomicWriteFile(paths.canvasDoc, canvas.docJson);
+    await vault.writeAtomic(paths.canvasDoc, canvas.docJson);
   } catch (error) {
     console.warn(`screenshot canvas: could not store the document for ${id}`, error);
     // Remove the assets too, not only the document: the old ones may hold unredacted pixels
@@ -107,8 +106,8 @@ const toArrayBuffer = (buf: Buffer): ArrayBuffer =>
 
 /**
  * The stored document and its assets, or null for anything missing, oversized or corrupt.
- * Any other read error (permissions, I/O, a cloud placeholder) rejects instead, so the
- * renderer can record it before it falls back to the flat PNG.
+ * Any other read error (permissions, I/O, an offloaded file in a synced workspace) rejects
+ * instead, so the renderer can record it before it falls back to the flat PNG.
  */
 export async function readCanvas(
   vault: LibraryVault,
@@ -120,12 +119,18 @@ export async function readCanvas(
     const paths = vault.companionPaths(id);
     const info = await stat(paths.canvasDoc);
     if (!info.isFile() || info.size > CANVAS_DOC_MAX_BYTES) return null;
-    const docJson = await readFile(paths.canvasDoc, "utf-8");
+    // Whole-file reads of a synced workspace refuse an offloaded companion (`EvictedFileError`,
+    // code "EVICTED"): reading it would download it, and nothing here can be cancelled. Spec
+    // AC13 lets the canvas document and assets download on first use, but only through the
+    // explicit, killable download of layer 4; until then the editor falls back to the flat PNG.
+    const docJson = (await vault.readLocalFile(paths.canvasDoc)).toString("utf-8");
     const ids = imageAssetIds(docJson);
     if (ids === null) return null;
     const assets: Record<string, ArrayBuffer> = {};
     for (const assetId of ids) {
-      assets[assetId] = toArrayBuffer(await readFile(join(paths.assetsDir, `${assetId}.png`)));
+      assets[assetId] = toArrayBuffer(
+        await vault.readLocalFile(join(paths.assetsDir, `${assetId}.png`)),
+      );
     }
     return { docJson, assets };
   } catch (error) {

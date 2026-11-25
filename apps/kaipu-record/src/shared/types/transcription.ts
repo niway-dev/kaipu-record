@@ -103,7 +103,16 @@ export interface TranscriptionJobRequest {
 
 export type TranscriptionBeginResult =
   | { status: "accepted"; jobId: string }
-  | { status: "refused"; reason: "unavailable" | "model-missing" | "busy" | "invalid-item" };
+  | {
+      status: "refused";
+      reason:
+        | "unavailable"
+        | "model-missing"
+        | "busy"
+        | "invalid-item"
+        /** A sync provider offloaded the media: its audio would be downloaded to read it. */
+        | "evicted";
+    };
 
 export type TranscriptionJobPhase =
   | "receiving-audio"

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { generatePath, Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
 import { ROUTES } from "@shared/routes";
-import { AudioLines, Shield, Trash2, TriangleAlert, Webcam, ZoomIn } from "lucide-react";
+import { AudioLines, Lock, Shield, Trash2, TriangleAlert, Webcam, ZoomIn } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
@@ -247,6 +247,10 @@ import {
 } from "@renderer/features/video-editor/filmstrip-lanes";
 import { showToast } from "@renderer/ui/toast-store";
 import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
+import {
+  editProjectRefusal,
+  isUnreadableRecordError,
+} from "@renderer/features/library/vault-errors";
 import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
 import { ItemWorkspaceChip } from "@renderer/features/workspaces/move/item-workspace-chip";
 import { HeaderActions } from "@renderer/features/workspaces/header-slot";
@@ -458,6 +462,19 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     source: VideoEditorSource;
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
+    /**
+     * True when something the editor needs could not be read at open (the project, a slide, its
+     * meta, the item's record or the pointer track: only in the cloud, a provider that does not
+     * answer, a disk error). The editor then opens read-only: nothing it shows is ever written,
+     * so an unreadable project is never overwritten by a fresh one.
+     */
+    readOnly: boolean;
+    /**
+     * Read-only because the saved edit loaded but is not usable (it does not parse, or an image
+     * it needs is gone), not because its files are unreachable. Waiting for a download cannot
+     * fix that, so the banner says something different.
+     */
+    damaged: boolean;
   } | null>(null);
   // The editor counts as opened once its session is read and it can render, not before.
   useEditorOpened("video", resolved !== null);
@@ -496,14 +513,19 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
         return;
       }
       const editorSource: VideoEditorSource = { ...source, id: heldId };
-      // The cursor track is best-effort and independent of the session: a missing or
-      // malformed track just means no auto zooms (the editor behaves as before v2).
+      // A missing or malformed cursor track just means no auto zooms (the editor behaves as
+      // before v2). One that EXISTS but cannot be read now (offloaded by a synced folder's
+      // provider, or a stalled provider) is not a recording without one: opening on that would
+      // show no pointer data, with no sign it exists, and a project saved from it would no
+      // longer match the track. The editor opens read-only instead, so nothing is saved from it.
       let cursorTrack: CursorTrack | null = null;
+      let readOnly = false;
+      let damaged = false;
       try {
         const trackJson = await window.electronAPI.loadCursorTrack(editorSource.id);
         cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
       } catch {
-        cursorTrack = null;
+        readOnly = true;
       }
       if (cancelled) return;
       // Initial detection happens HERE, before useVideoScene exists, so it is part of the
@@ -514,6 +536,8 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
           source: editorSource,
           scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
           cursorTrack,
+          readOnly,
+          damaged,
         });
       };
       try {
@@ -541,6 +565,18 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // the layer is never stripped for want of metas the editor loads later.
             const joinedHasWebcam = await anyJoinedHasWebcam(session.scene.sources);
             if (cancelled) return;
+            // A slide or floating image whose file did not come back is dropped from what is
+            // shown (the worker cannot render a broken reference), but it is still in the
+            // saved project. Saving from this scene would erase it for good, so the editor
+            // opens read-only: the project on disk is never replaced by the trimmed one.
+            const missingAsset =
+              session.scene.items.some(
+                (item) => item.kind === "slide" && !loadedIds.has(item.assetId),
+              ) || (session.scene.media ?? []).some((item) => !loadedIds.has(item.assetId));
+            if (missingAsset) {
+              readOnly = true;
+              damaged = true;
+            }
             const filteredScene: VideoScene = dropMediaWithoutAsset(
               {
                 // The sidecar decides whether the recording has a webcam, not the session.
@@ -559,8 +595,11 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             showToast({ message: t("restored") });
             open(filteredScene, session.hasZoomData);
           } else {
-            // Session file exists but is invalid (schema changed, corruption, etc.).
+            // Session file exists but is invalid (schema changed, corruption, etc.). It is
+            // still the user's project on disk: a blank scene must never be saved over it.
             showToast({ message: t("restoreError") });
+            readOnly = true;
+            damaged = true;
             open(initialScene(source.durationSeconds, source.webcam ?? null), false);
           }
         } else {
@@ -568,7 +607,9 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
           open(initialScene(source.durationSeconds, source.webcam ?? null), false);
         }
       } catch {
-        // IPC failure is non-fatal; open a fresh editor without surfacing the error.
+        // The project (or what it needs) cannot be read: it is not a new project. The editor
+        // opens read-only on a blank scene that is never saved, and the banner says why.
+        readOnly = true;
         open(initialScene(source.durationSeconds, source.webcam ?? null), false);
       }
     })();
@@ -603,6 +644,8 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
         source={resolved.source}
         resolvedScene={resolved.scene}
         cursorTrack={resolved.cursorTrack}
+        readOnlyAtOpen={resolved.readOnly}
+        damagedAtOpen={resolved.damaged}
         assetStoreRef={assetStoreRef}
       />
     </>
@@ -613,17 +656,29 @@ function VideoEditor({
   source,
   resolvedScene,
   cursorTrack,
+  readOnlyAtOpen,
+  damagedAtOpen,
   assetStoreRef,
 }: {
   source: VideoEditorSource;
   resolvedScene: VideoScene;
   /** Parsed `.cursor.json`, or null (no track / window source / pre-v2 recording). */
   cursorTrack: CursorTrack | null;
+  /** The loader could not read the project (or its pointer track): nothing here is saved. */
+  readOnlyAtOpen: boolean;
+  /** The read-only open is because the saved edit is unusable, not because files are missing. */
+  damagedAtOpen: boolean;
   assetStoreRef: React.MutableRefObject<SlideAssetStore>;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const navigate = useNavigate();
-  const controller = useVideoScene(resolvedScene);
+  // A save the synced folder refused (the project's files are only in the cloud or unreadable):
+  // the editor goes read-only and keeps what it shows. Never undone from here; opening the
+  // project again, once it has downloaded, allows editing.
+  const [saveRefused, setSaveRefused] = useState(false);
+  const readOnly = readOnlyAtOpen || saveRefused;
+  const readOnlyRef = useLatest(readOnly);
+  const controller = useVideoScene(resolvedScene, readOnly);
   const { scene } = controller;
   // Recordings joined after the opened one (ADR 0058), loaded once the editor is up. One
   // cursor track on the source axis (each joined track shifted by its offset) feeds everything
@@ -775,7 +830,17 @@ function VideoEditor({
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
   // in-app navigation.
-  const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef, {
+    onRefused: () => setSaveRefused(true),
+  });
+  // The export's own session save meets the same refusals autosave does (the project's files
+  // are only in the cloud, or cannot be read). Same answer: the editor goes read-only and the
+  // pending edit stays pending, so leaving still warns. True when `error` was such a refusal.
+  const preserveOnRefusal = useCallback((error: unknown): boolean => {
+    if (editProjectRefusal(error) === null && !isUnreadableRecordError(error)) return false;
+    setSaveRefused(true);
+    return true;
+  }, []);
   // A workspace switch writes the pending edit first, while this editor is still open and
   // its workspace still active (ADR 0032, decision 7); the leave guard below then sees it saved.
   const flushAutosave = autosave.flush;
@@ -1333,12 +1398,13 @@ function VideoEditor({
         // the edit session as exported — the stamp clears the library's "not exported"
         // badge — but only while the session still holds the edit that was exported.
         onSaved: async () => {
+          // A read-only editor never writes the project, not even the exported stamp: the
+          // project on disk is not the one on screen (or cannot be checked).
+          if (readOnlyRef.current) return;
           if (mountedRef.current) {
             // Still here: edited since the export started → that newer edit is what the
             // autosave writes, and it is rightly not exported.
             if (editFingerprint(sceneRef.current, cursorData !== null) !== fingerprint) return;
-            // This save supersedes whatever the autosave still had queued.
-            autosave.cancel();
           } else {
             // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
             // it). Stamp only if what is on disk is the edit that was exported.
@@ -1363,10 +1429,20 @@ function VideoEditor({
             // `true`: this scene is exactly what was just burned into the file, so the write
             // stamps it as exported.
             await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
-            if (mountedRef.current) controller.markClean();
+            if (mountedRef.current) {
+              // Only a save that landed supersedes what the autosave still had queued, and
+              // only while nothing newer was edited during it: that edit keeps its own write.
+              if (editFingerprint(sceneRef.current, cursorData !== null) === fingerprint) {
+                autosave.cancel();
+              }
+              controller.markClean();
+            }
           } catch (error) {
-            // Session save failure is non-fatal — the export already succeeded.
-            captureException(error, { context: "video-edit-session-save" });
+            // Session save failure is non-fatal — the export already succeeded. A failed save
+            // clears nothing: the pending edit stays pending.
+            if (!preserveOnRefusal(error)) {
+              captureException(error, { context: "video-edit-session-save" });
+            }
           }
         },
       });
@@ -1383,6 +1459,8 @@ function VideoEditor({
       autosave,
       cameraPath,
       cursorData,
+      readOnlyRef,
+      preserveOnRefusal,
     ],
   );
 
@@ -1484,16 +1562,32 @@ function VideoEditor({
         onSaved: async (recording) => {
           // Same session save as the MP4 export (stamped as exported), but the user stays
           // in the editor: GIF users often export several ranges in a row (FR 11).
-          autosave.cancel();
+          if (readOnlyRef.current) {
+            // Read-only: the project is not written, and what is pending stays pending.
+            showToast({
+              message: t("gifSaved", { size: formatSize(recording.sizeBytes) }),
+              action: {
+                label: t("gifOpen"),
+                onClick: () => navigate(`/library/${recording.assetId}`),
+              },
+              durationMs: 8000,
+            });
+            return;
+          }
           try {
             const sessionJson = serializeSession(scene);
             const assets = assetStoreRef.current
               .entries()
               .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
             await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
+            // Only a save that landed supersedes the autosave's queue, and only while nothing
+            // newer was edited during it.
+            if (sceneRef.current === scene) autosave.cancel();
             controller.markClean();
           } catch (error) {
-            captureException(error, { context: "video-edit-session-save" });
+            if (!preserveOnRefusal(error)) {
+              captureException(error, { context: "video-edit-session-save" });
+            }
           }
           showToast({
             message: t("gifSaved", { size: formatSize(recording.sizeBytes) }),
@@ -1507,7 +1601,19 @@ function VideoEditor({
         },
       });
     },
-    [gifJobArgs, gifExport, source, autosave, scene, assetStoreRef, controller, navigate, t],
+    [
+      gifJobArgs,
+      gifExport,
+      source,
+      autosave,
+      scene,
+      assetStoreRef,
+      controller,
+      navigate,
+      t,
+      readOnlyRef,
+      preserveOnRefusal,
+    ],
   );
 
   // Frame captures (NIW2-764): the composed frame at the playhead, saved into the library
@@ -2303,6 +2409,10 @@ function VideoEditor({
         playback.toggle();
         return;
       }
+      // Read-only: nothing below may run. Every edit shortcut would hit the frozen scene, drop
+      // its commit, and still select or arm something that does not exist. Escape (clearing the
+      // selection) and the playback keys above stay.
+      if (readOnlyRef.current && e.key !== "Escape") return;
       const isMod = e.metaKey || e.ctrlKey;
       if (isMod && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -2573,7 +2683,29 @@ function VideoEditor({
   );
 
   return (
-    <div {...uiArea("editorVideo.page")} className={styles.page}>
+    <div
+      {...uiArea("editorVideo.page")}
+      className={styles.page}
+      data-read-only={readOnly ? "" : undefined}
+    >
+      {readOnly && (
+        <div
+          {...uiArea("editorVideo.readOnlyBanner")}
+          className={styles.readOnlyBanner}
+          role="status"
+        >
+          <Lock size={14} strokeWidth={2} aria-hidden="true" />
+          <p>
+            {t(
+              saveRefused
+                ? "readOnlyBannerUnsaved"
+                : damagedAtOpen
+                  ? "readOnlyBannerDamaged"
+                  : "readOnlyBanner",
+            )}
+          </p>
+        </div>
+      )}
       <div className={styles.workspace}>
         <main className={styles.stage} ref={stageRef}>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
@@ -2829,6 +2961,7 @@ function VideoEditor({
         {/* NIW2-611: the video takes the left edge and the tools sit on its right, so the
             picture gets the width and the height the top bar used. */}
         <EditorToolRail
+          inert={readOnly}
           onAddMute={handleAddMute}
           onToggleMuteAll={mutes.toggleAll}
           audioMuted={mutes.audioMuted}
@@ -2853,15 +2986,19 @@ function VideoEditor({
             NIW2-619), mounted and unmounted with this page. */}
         <HeaderActions>
           <EditorToolbar
-            canUndo={controller.canUndo}
-            canRedo={controller.canRedo}
+            canUndo={controller.canUndo && !readOnly}
+            canRedo={controller.canRedo && !readOnly}
             onUndo={controller.undo}
             onRedo={controller.redo}
             onCaptureFrame={() => void handleCaptureFrame()}
             // Until the first captures read lands: the duplicate check needs the real list.
-            captureDisabled={stillCapture.busy || !sourceCaptures.loaded}
+            captureDisabled={stillCapture.busy || !sourceCaptures.loaded || readOnly}
             onExport={handleExport}
-            exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}
+            // Opened read-only, the scene on screen is not the user's project (or lacks its pointer
+            // data): an export of it would be of something they did not edit.
+            exportDisabled={
+              gifExport.status === "exporting" || scene.items.length === 0 || readOnlyAtOpen
+            }
             onOpenGuide={openGuideFirstTab}
           >
             {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
@@ -2888,7 +3025,7 @@ function VideoEditor({
                 hasAudio={sourceProbe?.hasAudio}
               />
             )}
-            {autosave.state !== "idle" && (
+            {autosave.state !== "idle" && !readOnly && (
               <button
                 type="button"
                 className={styles.saveState}
@@ -2905,7 +3042,7 @@ function VideoEditor({
             )}
           </EditorToolbar>
         </HeaderActions>
-        <div className={styles.side}>
+        <div className={styles.side} inert={readOnly}>
           {capturesOpen ? (
             <CapturesPanel
               captures={sourceCaptures.captures}
@@ -3076,7 +3213,7 @@ function VideoEditor({
           )}
         </div>
       </div>
-      <footer {...uiArea("editorVideo.timeline")} className={styles.timeline}>
+      <footer {...uiArea("editorVideo.timeline")} className={styles.timeline} inert={readOnly}>
         <TimelineStrip
           layout={layout}
           playback={playback}

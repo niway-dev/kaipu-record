@@ -5,6 +5,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CloudDownload,
   Film,
   FileX2,
   FolderOpen,
@@ -366,7 +367,11 @@ export function LibraryDetailPage(): React.JSX.Element {
   // and main's remove-local-copy policy is what refuses it with `edit-project`
   // (the page then toasts `removeLocalCopyBlockedEdit`).
   const canRemoveLocalCopy =
-    localId !== null && video.availability === "local-and-cloud" && video.comparison === "same";
+    localId !== null &&
+    video.availability === "local-and-cloud" &&
+    video.comparison === "same" &&
+    // An offloaded file has nothing left to remove: it is already "Not downloaded".
+    video.evicted !== "media";
 
   const doDelete = (): void => {
     if (!localId) return;
@@ -380,6 +385,9 @@ export function LibraryDetailPage(): React.JSX.Element {
     const result = await removeLocalCopy(localId);
     if (!result.ok) {
       showToast({ message: t(removeLocalCopyBlockedKey(result.reason)) });
+    } else if (result.revealed) {
+      // A synced workspace: nothing was deleted, the file was shown in Finder (decision 4).
+      showToast({ message: t("removeLocalCopyRevealed") });
     }
   };
 
@@ -429,9 +437,11 @@ export function LibraryDetailPage(): React.JSX.Element {
     }
   };
 
-  // Re-open a saved screenshot in the editor (its URL is /editor/image/:assetId).
+  // Re-open a saved screenshot in the editor (its URL is /editor/image/:assetId). An offloaded
+  // one cannot open: the editor would read it, which downloads it.
+  const canEditImage = canOpenInEditor(video);
   const editScreenshot = (): void => {
-    if (!localId) return;
+    if (!localId || !canEditImage) return;
     openItem(video);
   };
 
@@ -540,7 +550,13 @@ export function LibraryDetailPage(): React.JSX.Element {
           )}
           <div {...uiArea("libraryDetail.actions")} className={styles.actions}>
             {localId && isScreenshot && (
-              <Button variant="primary" size="sm" onClick={editScreenshot}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={editScreenshot}
+                disabled={!canEditImage}
+                title={canEditImage ? undefined : t("evictedHint")}
+              >
                 <Pencil size={15} strokeWidth={1.8} />
                 {t("editImage")}
               </Button>
@@ -551,7 +567,13 @@ export function LibraryDetailPage(): React.JSX.Element {
                 size="sm"
                 onClick={editVideo}
                 disabled={!canEditVideo}
-                title={canEditVideo ? undefined : t("durationUnreadable")}
+                title={
+                  canEditVideo
+                    ? undefined
+                    : video.evicted === "media"
+                      ? t("evictedHint")
+                      : t("durationUnreadable")
+                }
               >
                 <Scissors size={15} strokeWidth={1.8} />
                 {t("editVideo")}
@@ -580,7 +602,8 @@ export function LibraryDetailPage(): React.JSX.Element {
                   variant="secondary"
                   size="sm"
                   aria-label={t("openFile")}
-                  title={t("openFileHint")}
+                  title={video.evicted === "media" ? t("evictedHint") : t("openFileHint")}
+                  disabled={video.evicted === "media"}
                   onClick={() => void openFile()}
                 >
                   <SquareArrowOutUpRight size={15} strokeWidth={1.8} />
@@ -741,7 +764,16 @@ export function LibraryDetailPage(): React.JSX.Element {
           )}
 
           <div className={styles.stage}>
-            {isScreenshot ? (
+            {video.evicted === "media" ? (
+              // Synced folders (decision 15): the provider offloaded the file, and the media route
+              // refuses it (409) because reading it would download it. Say so, neutrally, instead
+              // of letting the player fail into a generic "unavailable".
+              <div {...uiArea("libraryDetail.preview")} className={styles.notDownloaded}>
+                <CloudDownload size={32} strokeWidth={1.5} aria-hidden />
+                <h2 className={styles.notDownloadedTitle}>{t("evictedLabel")}</h2>
+                <p className={styles.notDownloadedHint}>{t("evictedHint")}</p>
+              </div>
+            ) : isScreenshot ? (
               <ScreenshotViewer
                 key={video.assetId}
                 src={video.thumbnailUrl}
@@ -752,6 +784,7 @@ export function LibraryDetailPage(): React.JSX.Element {
                 }
               />
             ) : isGif ? (
+              // An offloaded GIF shows the not-downloaded panel above, so here the GIF is local.
               localId && <GifViewer key={video.assetId} id={localId} />
             ) : (
               localId && (

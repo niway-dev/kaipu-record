@@ -2,7 +2,15 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialScene, type VideoScene } from "./scene";
 import type { SlideAssetStore } from "./slide-assets";
+import { captureException } from "@renderer/features/analytics";
+import {
+  EDIT_PROJECT_CLOUD_ONLY_MARKER,
+  EDIT_PROJECT_UNAVAILABLE_MARKER,
+  UNREADABLE_RECORD_MARKER,
+} from "@shared/types/library-storage";
 import { AUTOSAVE_DEBOUNCE_MS, useSessionAutosave } from "./use-session-autosave";
+
+vi.mock("@renderer/features/analytics", () => ({ captureException: vi.fn() }));
 
 const assetStoreRef = {
   current: { entries: () => [] } as unknown as SlideAssetStore,
@@ -11,6 +19,7 @@ const assetStoreRef = {
 let saved: { id: string; json: string }[] = [];
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.useFakeTimers();
   saved = [];
   window.electronAPI = {
@@ -26,9 +35,10 @@ afterEach(() => {
 
 const OPENED = initialScene(10);
 
-function render(scene: VideoScene = OPENED, interacting = false) {
+function render(scene: VideoScene = OPENED, interacting = false, onRefused?: () => void) {
   return renderHook(
-    ({ scene: s, interacting: i }) => useSessionAutosave("rec-1", s, i, assetStoreRef),
+    ({ scene: s, interacting: i }) =>
+      useSessionAutosave("rec-1", s, i, assetStoreRef, { onRefused }),
     { initialProps: { scene, interacting } },
   );
 }
@@ -295,5 +305,69 @@ describe("useSessionAutosave", () => {
     expect(saved).toHaveLength(1);
     expect(JSON.parse(saved[0].json).scene.zoomSensitivity).toBe(61);
     expect(result.current.pendingRef.current).toBe(false);
+  });
+
+  describe("a save the synced folder refuses (NIW2-912)", () => {
+    const cloudOnly = new Error(
+      `${EDIT_PROJECT_UNAVAILABLE_MARKER} ${EDIT_PROJECT_CLOUD_ONLY_MARKER}: not saved`,
+    );
+    const folderBusy = new Error(`${EDIT_PROJECT_UNAVAILABLE_MARKER}: not saved`);
+    const unreadableRecord = new Error(`${UNREADABLE_RECORD_MARKER}: record cannot be read`);
+
+    async function edit(rerender: ReturnType<typeof render>["rerender"], value: number) {
+      rerender({ scene: { ...OPENED, zoomSensitivity: value }, interacting: false });
+      await act(async () => {
+        vi.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS);
+        await Promise.resolve();
+      });
+    }
+
+    it("halts: reports the refusal once, tries no later write, and keeps the edit pending", async () => {
+      const save = vi.fn().mockRejectedValue(cloudOnly);
+      window.electronAPI.saveVideoEditSession =
+        save as typeof window.electronAPI.saveVideoEditSession;
+      const refused = vi.fn();
+      const { result, rerender } = render(OPENED, false, refused);
+      await edit(rerender, 61);
+      await edit(rerender, 62);
+      await edit(rerender, 63);
+      await act(async () => {
+        await result.current.retry();
+        await result.current.flush();
+      });
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(refused).toHaveBeenCalledTimes(1);
+      // The discard dialog still warns on the way out: the recent changes are not on disk.
+      expect(result.current.pendingRef.current).toBe(true);
+      expect(captureException).not.toHaveBeenCalled();
+    });
+
+    it("halts for a folder that does not answer and for an unreadable record too", async () => {
+      for (const error of [folderBusy, unreadableRecord]) {
+        const save = vi.fn().mockRejectedValue(error);
+        window.electronAPI.saveVideoEditSession =
+          save as typeof window.electronAPI.saveVideoEditSession;
+        const refused = vi.fn();
+        const { rerender, unmount } = render(OPENED, false, refused);
+        await edit(rerender, 61);
+        await edit(rerender, 62);
+        expect(refused).toHaveBeenCalledTimes(1);
+        expect(save).toHaveBeenCalledTimes(1);
+        unmount();
+      }
+    });
+
+    it("an ordinary failure is still reported and does not halt", async () => {
+      const save = vi.fn().mockRejectedValue(new Error("disk"));
+      window.electronAPI.saveVideoEditSession =
+        save as typeof window.electronAPI.saveVideoEditSession;
+      const refused = vi.fn();
+      const { rerender } = render(OPENED, false, refused);
+      await edit(rerender, 61);
+      await edit(rerender, 62);
+      expect(refused).not.toHaveBeenCalled();
+      expect(captureException).toHaveBeenCalledTimes(2);
+      expect(save).toHaveBeenCalledTimes(2);
+    });
   });
 });

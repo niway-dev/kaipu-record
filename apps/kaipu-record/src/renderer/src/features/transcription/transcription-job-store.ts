@@ -19,7 +19,13 @@ export interface RunningTranscription {
  * Why a job failed or was never accepted. `busy` is main refusing because its engine is already
  * in use. `unknown` is an IPC failure or a progress timeout, not an engine verdict.
  */
-export type StartFailure = TranscriptionFailure | "decode-failed" | "busy" | "unknown";
+export type StartFailure =
+  | TranscriptionFailure
+  | "decode-failed"
+  | "busy"
+  /** The media is offloaded by a sync provider: it has to be downloaded first. */
+  | "evicted"
+  | "unknown";
 
 export type StartOutcome =
   | { status: "done" }
@@ -76,6 +82,7 @@ export function resetTranscriptionJobStore(): void {
 const REFUSAL_FAILURE: Partial<Record<TranscriptionRefusal, StartFailure>> = {
   busy: "busy",
   "invalid-item": "item-changed",
+  evicted: "evicted",
 };
 
 function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
@@ -86,7 +93,7 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
 /**
  * Runs one transcription and mirrors its progress into the store. Resolves with how it ended;
  * never rejects. A job already running answers `refused: busy` without calling main and records
- * nothing: the controls already show that state. Main's `busy` and `invalid-item` refusals are
+ * nothing: the controls already show that state. Main's `busy`, `invalid-item` and `evicted` refusals are
  * recorded as the item's failure, so the click that was refused says why; its `unavailable` and
  * `model-missing` refusals mean the model status is stale, so they refresh it instead. An
  * automatic start that main refuses as `busy` (another window already took this content) records

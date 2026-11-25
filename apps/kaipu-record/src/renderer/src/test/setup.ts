@@ -214,6 +214,7 @@ window.electronAPI = {
           state: "available",
           itemCount: 0,
           device: "1",
+          sync: null,
         },
       ],
     }),

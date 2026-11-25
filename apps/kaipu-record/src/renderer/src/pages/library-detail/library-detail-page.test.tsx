@@ -488,6 +488,83 @@ describe("LibraryDetailPage", () => {
     );
   });
 
+  it("toasts where the file was shown, not a removal, when a synced workspace reveals it", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    window.electronAPI.removeLocalCopy = vi.fn(async () => ({
+      ok: true as const,
+      revealed: true as const,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /remove local download/i }));
+
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("Shown in Finder") }),
+      ),
+    );
+  });
+
+  it("says 'Not downloaded' in place of the player for a file the provider offloaded", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        { ...exportedOnlyItem, local: { ...exportedOnlyItem.local!, evicted: "media" as const } },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByRole("heading", { name: "Not downloaded" })).toBeTruthy();
+    expect(screen.getByText(/download it in Finder to open it here/i)).toBeTruthy();
+    // No <video> is mounted: it would ask for the file and fail into "Video unavailable".
+    expect(document.querySelector("video")).toBeNull();
+    expect(screen.queryByText(/video unavailable/i)).toBeNull();
+  });
+
+  it("an offloaded recording's Edit video is disabled with the not-downloaded hint, not the duration one", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        { ...exportedOnlyItem, local: { ...exportedOnlyItem.local!, evicted: "media" as const } },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    const edit = screen.getByRole("button", { name: "Edit video" }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toMatch(/download it in Finder/i);
+    expect(edit.title).not.toMatch(/duration/i);
+  });
+
+  it("does not offer Remove local download for a file the provider already offloaded", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        { ...exportedOnlyItem, local: { ...exportedOnlyItem.local!, evicted: "media" as const } },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    openMenu();
+    expect(screen.queryByRole("menuitem", { name: /remove local download/i })).toBeNull();
+  });
+
   it("re-lists after removeLocalCopy succeeds", async () => {
     const listMock = vi.fn(async () => ({
       items: [exportedOnlyItem],
@@ -1350,6 +1427,20 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/shot-1"));
   });
 
+  it("an offloaded screenshot's Edit image is disabled with the not-downloaded hint, never a dead click", async () => {
+    list({
+      ...screenshotItem,
+      local: { ...screenshotItem.local!, evicted: "media" as const },
+    });
+    const router = renderWithState("/library/shot-1");
+    await waitForLoaded();
+    const edit = screen.getByRole("button", { name: "Edit image" }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toMatch(/download it in Finder/i);
+    fireEvent.click(edit);
+    expect(router.state.location.pathname).toBe("/library/shot-1");
+  });
+
   it("the Edit image button on the preview opens the image editor too", async () => {
     list(shownShot);
     const router = renderWithState("/library/shot-1");
@@ -1434,6 +1525,18 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     await waitForLoaded();
     expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Reveal in Finder" })).toBeVisible();
+  });
+
+  it("a GIF whose poster alone is offloaded can still be dragged; one whose media is offloaded cannot", async () => {
+    list({ ...gifItem, local: { ...gifItem.local!, evicted: "thumbnail" as const } });
+    renderWithState("/library/gif-1");
+    await waitForLoaded();
+    expect(document.querySelector("img[draggable='true']")).not.toBeNull();
+    cleanup();
+    list({ ...gifItem, local: { ...gifItem.local!, evicted: "media" as const } });
+    renderWithState("/library/gif-1");
+    await waitForLoaded();
+    expect(document.querySelector("img[draggable='true']")).toBeNull();
   });
 
   it("the ••• menu of a recording: Copy path, Remove local download, Delete…; no Copy image", async () => {

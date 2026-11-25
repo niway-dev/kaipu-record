@@ -952,6 +952,7 @@
     "renameKeptBusy": "Nombre guardado. El archivo conserva su nombre anterior mientras se ejecuta una exportación.",
     "renameKeptEditing": "Nombre guardado. El archivo conserva su nombre anterior mientras está abierto en el editor.",
     "renameKeptTaken": "Nombre guardado. El archivo conserva su nombre anterior porque acaba de aparecer otro archivo con el nuevo nombre.",
+    "renameKeptEvicted": "Nombre guardado. El archivo conserva su nombre anterior porque una parte aún no está descargada de la nube.",
     "renameKeptError": "Nombre guardado, pero no se pudo renombrar el archivo.",
     "itemAmbiguous": "Dos archivos de tu carpeta dicen ser este elemento, así que Kaipu no tocó ninguno. Quita el duplicado e inténtalo de nuevo.",
     "errorDelete": "No pudimos eliminar el archivo.",
@@ -980,6 +981,8 @@
     "removeLocalCopyBlockedWebcam": "Esta grabación tiene una pista de webcam que solo existe en este equipo. Conserva el archivo para no perderla.",
     "removeLocalCopyBlockedBytes": "La copia en cloud no es idéntica a este archivo.",
     "removeLocalCopyBlockedNoCloud": "No hay copia en cloud de este archivo.",
+    "removeLocalCopyRevealed": "Se mostró en Finder. Libera el espacio ahí con tu app de sincronización: Kaipu no borra archivos en una carpeta sincronizada.",
+    "deleteSyncedWarning": "Este espacio de trabajo está en una carpeta sincronizada, así que el archivo se borra de la nube en todos tus dispositivos.",
     "kindGif": "GIF",
     "captureScreen": "PANTALLA",
     "captureWindow": "VENTANA",
@@ -1041,7 +1044,7 @@
     "reconcileGroupRenameWhat": "Los nombró una versión anterior de Kaipu, o se renombraron fuera de Kaipu. El archivo y sus archivos de Kaipu toman el título del elemento, así la carpeta se lee igual que tu biblioteca.",
     "reconcileGroupAdoptTitle": "Archivos que Kaipu aún no conoce",
     "reconcileGroupAdoptAction": "Se añaden a la biblioteca",
-    "reconcileGroupAdoptWhat": "Grabaciones e imágenes de esta carpeta sin registro de Kaipu. Entran a la biblioteca con su nombre actual; el archivo no se toca.",
+    "reconcileGroupAdoptWhat": "Grabaciones e imágenes de esta carpeta sin registro de Kaipu. Entran a la biblioteca con su nombre actual; el archivo no se toca. Un registro de una carpeta sincronizada que aún no tiene identidad recibe una, y conserva su título y sus etiquetas.",
     "reconcileGroupGoneTitle": "Sin archivo correspondiente",
     "reconcileGroupGoneAction": "Se apartan en la carpeta de huérfanos, o quedan solo en la nube",
     "reconcileGroupGoneWhat": "Registros cuyo archivo se movió o se borró fuera de Kaipu, y archivos de Kaipu que no pertenecen a ningún elemento. Van a la carpeta de huérfanos dentro de .kaipu. Los elementos guardados en la nube siguen en la biblioteca, solo en la nube.",
@@ -1052,6 +1055,7 @@
     "reconcileSummary": "{fixable, plural, one {# cambio} other {# cambios}} · {listed, plural, one {# se queda como está} other {# se quedan como están}}",
     "reconcileSummarySelected": "{selected} de {fixable} seleccionados · {untouched, plural, one {# archivo se queda como está} other {# archivos se quedan como están}}",
     "reconcileAdopt": "Se añade a la biblioteca",
+    "reconcileMintIdentity": "Recibe una identidad para poder editarse",
     "reconcileToOrphans": "Sin archivo. Su registro va a la carpeta de huérfanos",
     "reconcileCloudOnly": "Sin archivo. Se queda solo en la nube",
     "reconcileOrphanCompanion": "No pertenece a ningún elemento. Va a la carpeta de huérfanos",
@@ -1081,7 +1085,9 @@
     "reconcileTileFailed": "Fallaron",
     "reconcileKept": "{count, plural, one {# elemento conservó su nombre por ahora (abierto en el editor, bloqueado por otra app o con el nuevo nombre recién ocupado). Vuelve a arreglar más tarde.} other {# elementos conservaron su nombre por ahora (abiertos en el editor, bloqueados por otra app o con el nuevo nombre recién ocupado). Vuelve a arreglar más tarde.}}",
     "reconcileFailed": "{count, plural, one {# cambio falló. Los detalles están en .kaipu/reconcile.} other {# cambios fallaron. Los detalles están en .kaipu/reconcile.}}",
-    "reconcileError": "Arreglar todo se detuvo: {message}"
+    "reconcileError": "Arreglar todo se detuvo: {message}",
+    "evictedLabel": "Sin descargar",
+    "evictedHint": "Sin descargar: descárgalo en Finder para abrirlo aquí."
   },
   "prepare": {
     "pageTitle": "¿A dónde va?",
@@ -1671,6 +1677,9 @@
     "saveStateSaving": "Guardando…",
     "saveStateSaved": "Guardado",
     "saveStateFailed": "No se pudo guardar. Haz clic para reintentar.",
+    "readOnlyBanner": "Este proyecto es de solo lectura. Sus archivos están solo en la nube o no se pudieron leer. Abre el proyecto otra vez cuando sus archivos se hayan descargado para editarlo.",
+    "readOnlyBannerDamaged": "Este proyecto es de solo lectura. Una parte de su edición guardada no se pudo cargar y guardar la reemplazaría. Tu grabación no se ve afectada. Abre el proyecto de nuevo para reintentar; si sigue pasando, la edición guardada puede estar dañada.",
+    "readOnlyBannerUnsaved": "Tus cambios recientes no se pudieron guardar y el proyecto ahora es de solo lectura. Sus archivos están solo en la nube o no se pudieron leer. Los cambios existen solo en esta ventana y se pierden si se cierra. Abre el proyecto otra vez cuando sus archivos se hayan descargado para editarlo.",
     "restoreError": "No se pudo restaurar la edición anterior",
     "sourceUnavailable": "Esta grabación ya no está en tu biblioteca, así que no se puede editar.",
     "mute": "Silenciar",
@@ -1792,6 +1801,7 @@
     "transcriptFailure_item-changed": "El video se renombró, se movió o se eliminó mientras se transcribía.",
     "transcriptFailure_decode-failed": "No se pudo leer el audio de este video.",
     "transcriptFailure_busy": "Se está transcribiendo otro video. Solo se puede uno a la vez; inténtalo de nuevo cuando termine.",
+    "transcriptFailure_evicted": "Sin descargar: descárgalo en Finder para transcribirlo.",
     "transcriptFailure_unknown": "Algo salió mal al transcribir.",
     "transcriptNoAudio": "Este video no tiene pista de audio, así que no hay nada que transcribir.",
     "transcriptUnavailable": "La transcripción no puede ejecutarse en este Mac ni en esta instalación. Ajustes → Transcripción explica el motivo.",
@@ -3596,6 +3606,10 @@
     "clearSelection": "Limpiar",
     "moving": "Moviendo {current} de {total}…",
     "stop": "Detener",
+    "syncedTitle": "¿Mover fuera de una carpeta sincronizada?",
+    "syncedBody": "{name} es una carpeta sincronizada. Al mover, el archivo sale de ella y se borra de la nube en todos tus dispositivos.",
+    "syncedCancel": "Cancelar",
+    "syncedConfirm": "Mover igual",
     "exportsTitle": "¿Mover también sus exportaciones?",
     "exportsBody": "Esta grabación tiene {count, plural, one {# exportación} other {# exportaciones}} en {name}. ¿Moverlas también?",
     "exportsBodyMany": "Estas grabaciones tienen {count, plural, one {# exportación} other {# exportaciones}} en {name}. ¿Moverlas también?",
@@ -3606,6 +3620,8 @@
     "resultPartial": "Se movieron {moved} de {total} a {target}. {failed, plural, one {# quedó} other {# quedaron}} en {source}: {list}",
     "resultNone": "No se movió nada a {target}. {list}",
     "resultSkipped": "{count, plural, one {# no se inició} other {# no se iniciaron}}",
+    "resultKeptOriginal": "Copiado a {target}, pero {count, plural, one {el original, o parte de él, se quedó} other {los originales, o partes de ellos, se quedaron}} en {source} porque algo cambió ahí durante el movimiento. Revisa ambos espacios de trabajo: {list}",
+    "resultExportsNotDownloaded": "{count, plural, one {# exportación de estas grabaciones se quedó en {source}: aún no está descargada. Descárgala en Finder y luego muévela.} other {# exportaciones de estas grabaciones se quedaron en {source}: aún no están descargadas. Descárgalas en Finder y luego muévelas.}}",
     "resultItem": "{title} — {reason}",
     "resultUnknown": "No se pudo leer el resultado del movimiento. Revisa ambos espacios de trabajo.",
     "switchAction": "Cambiar",
@@ -3622,7 +3638,10 @@
     "reason_maintenance": "Kaipu está reparando tus archivos",
     "reason_stale": "el espacio de trabajo cambió",
     "reason_io": "no se pudo copiar un archivo; el original no se tocó",
-    "closeRefused": "El editor siguió abierto, así que no se movió nada."
+    "closeRefused": "El editor siguió abierto, así que no se movió nada.",
+    "costSynced": "Carpeta sincronizada · copia",
+    "notMovableEvicted": "Sin descargar: descárgalo primero en Finder",
+    "reason_evicted": "no está descargado: descárgalo primero en Finder"
   },
   "settingsScope": {
     "selectorLabel": "Ajustes de",
@@ -3733,6 +3752,15 @@
     "transcribeFailed_item-changed": "El video cambió mientras se transcribía. Inténtalo de nuevo.",
     "transcribeFailed_decode-failed": "No se pudo leer el audio de este video.",
     "transcribeFailed_busy": "Se está transcribiendo otro video. Inténtalo de nuevo cuando termine.",
+    "transcribeFailed_evicted": "Sin descargar: descárgalo en Finder para transcribirlo.",
     "transcribeFailed_unknown": "La transcripción falló. Inténtalo de nuevo."
+  },
+  "workspaceCloud": {
+    "location_google-drive": "Google Drive",
+    "location_onedrive": "OneDrive",
+    "location_icloud": "iCloud Drive",
+    "location_cloud-provider": "Un proveedor en la nube",
+    "syncedBy": "Sincronizado por {provider}",
+    "syncedFolder": "Carpeta sincronizada"
   }
 }

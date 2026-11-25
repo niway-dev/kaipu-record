@@ -14,8 +14,10 @@ import {
 } from "@shared/webcam-track";
 import { LibraryVault, type Reservation } from "../library/library-vault";
 import {
+  type FileIdentity,
   isFileExists,
   type PlacedFile,
+  placeByRename,
   placeNew,
   placeNoReplace,
   removeIfSame,
@@ -47,6 +49,21 @@ export interface RecordingWriterDeps {
   tempDir?: string;
   /** Used when the vault staging folder cannot be created. Default: os.tmpdir(). */
   fallbackTempDir?: string;
+  /**
+   * The staging folder of a synced workspace (spec, Synced folders): its scratch folder in
+   * userData, so a provider never uploads a take while it is written. Null for any other
+   * folder, which stages in `.kaipu/tmp/`. A take staged there is placed by rename, never by
+   * a hard link (decision 15).
+   */
+  stagingFor?: (vaultDir: string) => string | null;
+  /**
+   * Whether a folder the user picks for a salvaged take is inside a provider's folder (path
+   * rule plus the xattr of the folder and its ancestors, `detectSyncedFolder`). A take staged in
+   * a plain workspace and saved there is placed by rename, not by the hard link and temp sibling
+   * that would land inside the provider folder.
+   * Unset: no folder counts as synced.
+   */
+  isSyncedFolder?: (directory: string) => Promise<boolean>;
 }
 
 interface Session {
@@ -57,6 +74,8 @@ interface Session {
   tempPath: string;
   /** The vault folder bound when the take started; finalize moves the take there only. */
   vaultDir: string;
+  /** The folder is synced: placed by rename, never by a hard link. */
+  byRename?: boolean;
   /** A webcam session: the staging file of the screen session it belongs to. */
   screenTempPath?: string;
   /**
@@ -98,10 +117,36 @@ export class FinalizeMoveError extends Error {
  * when one is, whenever it arrived. A placed staging file that cannot be removed is set aside
  * or marked, so the sweep never recovers it as a second recording.
  */
-export async function placeTake(from: string, to: string): Promise<PlacedFile> {
-  const placed = await placeNew(from, to);
+export async function placeTake(
+  from: string,
+  to: string,
+  byRename = false,
+  intoSynced = false,
+): Promise<PlacedFile> {
+  // A synced folder never gets a second name for a file (decision 15), and across volumes the
+  // copy is staged outside it (`intoSynced`).
+  const placed = byRename
+    ? await placeByRename(from, to, { intoSynced })
+    : await placeNew(from, to);
   if (placed === "taken") throw takenError(to);
   return placed;
+}
+
+/**
+ * Put a placed take back at its staging path without replacing a file there, and only while
+ * `from` still holds `expect`. A synced folder never gets a second name (decision 15): the take
+ * goes back by rename, not by the link `placeNoReplace` makes. Whichever way, a vault copy that
+ * cannot be removed undoes the move, so the take stays in the vault, not in two places.
+ */
+async function moveBack(
+  from: string,
+  to: string,
+  expect: FileIdentity,
+  byRename: boolean,
+): Promise<"placed" | "taken"> {
+  const options = { stuck: "rollback", expect } as const;
+  if (!byRename) return placeNoReplace(from, to, options);
+  return (await placeByRename(from, to, options)) === "taken" ? "taken" : "placed";
 }
 
 /**
@@ -122,14 +167,23 @@ export class RecordingWriter {
     this.now = deps.now ?? (() => Date.now());
   }
 
-  private async stagingDir(vaultDir: string): Promise<string> {
-    if (this.deps.tempDir) return this.deps.tempDir;
+  /**
+   * The folder a take is staged in, and whether the take is then placed by rename. Both come
+   * from ONE `stagingFor` answer: it reads state a refresh can change between two calls, and a
+   * take staged in userData but placed with a hard link is the failure the rename path exists
+   * to avoid.
+   */
+  private async stagingDir(vaultDir: string): Promise<{ dir: string; byRename: boolean }> {
+    const scratch = this.deps.stagingFor?.(vaultDir) ?? null;
+    if (this.deps.tempDir) return { dir: this.deps.tempDir, byRename: scratch !== null };
     try {
-      const dir = join(vaultDir, STAGING_DIR);
+      const dir = scratch ?? join(vaultDir, STAGING_DIR);
       await mkdir(dir, { recursive: true });
-      return dir;
+      return { dir, byRename: scratch !== null };
     } catch {
-      return this.fallbackTempDir; // vault missing/unwritable: record to tmp, finalize reports it
+      // Vault missing/unwritable: record to tmp, finalize reports it. A synced workspace's take
+      // is placed by rename whichever folder it was staged in (a rename is always safe).
+      return { dir: this.fallbackTempDir, byRename: scratch !== null };
     }
   }
 
@@ -152,7 +206,7 @@ export class RecordingWriter {
     // Outside the staging fallback on purpose: a workspace that is not connected refuses
     // the take here, it does not record into the temp folder.
     const vaultDir = await this.deps.vaultDir();
-    const dir = await this.stagingDir(vaultDir);
+    const { dir, byRename } = await this.stagingDir(vaultDir);
     const tempPath = join(dir, `kaipu-rec-${sessionId}-${randomUUID().slice(0, 8)}.mp4.part`);
     const handle = await open(tempPath, "wx+");
     if (this.sessions.has(sessionKey(sessionId, "screen"))) {
@@ -167,6 +221,7 @@ export class RecordingWriter {
       handle,
       tempPath,
       vaultDir,
+      byRename,
       queue: Promise.resolve(),
     });
     return { tempPath };
@@ -195,6 +250,7 @@ export class RecordingWriter {
       handle,
       tempPath,
       vaultDir: screen.vaultDir,
+      byRename: screen.byRename,
       screenTempPath: screen.tempPath,
       queue: Promise.resolve(),
     });
@@ -320,7 +376,13 @@ export class RecordingWriter {
 
     let placed: PlacedFile;
     try {
-      placed = await placeTake(session.tempPath, dest);
+      placed = await placeTake(
+        session.tempPath,
+        dest,
+        session.byRename,
+        // Only a placement by rename can reach a synced folder; a plain one never asks.
+        session.byRename === true && (await this.isSyncedFolder(dirname(dest))),
+      );
     } catch (cause) {
       // Release the reserved stem (its stub sidecar): never the media path, which may hold a
       // file that took it meanwhile.
@@ -404,7 +466,12 @@ export class RecordingWriter {
       await this.closeHandle(webcamSession);
       const dest = vault.webcamFilePath(id);
       await mkdir(dirname(dest), { recursive: true });
-      const file = await placeTake(webcamSession.tempPath, dest);
+      const file = await placeTake(
+        webcamSession.tempPath,
+        dest,
+        webcamSession.byRename,
+        webcamSession.byRename === true && (await this.isSyncedFolder(dirname(dest))),
+      );
       return { meta: webcam, path: dest, file, session: webcamSession };
     } catch (error) {
       console.error("webcam file could not be placed; the recording is saved without it", error);
@@ -472,20 +539,24 @@ export class RecordingWriter {
     try {
       // Back to its own staging name, never a replacing move. A vault copy that cannot be
       // removed undoes it: the take stays in the vault rather than in two places.
-      const back = await placeNoReplace(media.path, session.tempPath, {
-        stuck: "rollback",
-        expect: media.file,
-      });
+      const back = await moveBack(
+        media.path,
+        session.tempPath,
+        media.file,
+        session.byRename ?? false,
+      );
       if (back === "taken") return false;
     } catch {
       return false;
     }
     if (webcam) {
       // Best-effort: a webcam that cannot come back is deleted, the screen alone is salvageable.
-      const moved = await placeNoReplace(webcam.path, webcam.session.tempPath, {
-        stuck: "rollback",
-        expect: webcam.file,
-      }).then(
+      const moved = await moveBack(
+        webcam.path,
+        webcam.session.tempPath,
+        webcam.file,
+        webcam.session.byRename ?? false,
+      ).then(
         (back) => back === "placed",
         () => false,
       );
@@ -515,15 +586,33 @@ export class RecordingWriter {
     const session = this.sessions.get(sessionKey(sessionId, "screen"));
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
     const webcam = this.webcamOf(session);
-    await replaceConfirmed(session.tempPath, destPath); // the save dialog confirmed replacing
+    // The save dialog confirmed replacing. A take staged in a synced workspace's scratch folder
+    // moves by rename, and so does one saved into a provider folder from a plain workspace: a
+    // hard link into that folder misbehaves, and a temp sibling there would be uploaded.
+    const intoSynced = await this.isSyncedFolder(dirname(destPath));
+    await replaceConfirmed(
+      session.tempPath,
+      destPath,
+      (session.byRename ?? false) || intoSynced,
+      intoSynced,
+    );
     this.forget(session);
     if (webcam?.stranded) {
       this.forget(webcam);
       // The save dialog only confirmed replacing the screen file: never a webcam file there.
-      await placeWebcamBeside(webcam.tempPath, destPath).catch((error) =>
-        console.error("webcam salvage failed", error),
-      );
+      await placeWebcamBeside(
+        webcam.tempPath,
+        destPath,
+        (webcam.byRename ?? false) || intoSynced,
+        intoSynced,
+      ).catch((error) => console.error("webcam salvage failed", error));
     }
+  }
+
+  /** Never throws: a folder that cannot be asked about is treated as synced (rename is always safe). */
+  private async isSyncedFolder(directory: string): Promise<boolean> {
+    if (!this.deps.isSyncedFolder) return false;
+    return this.deps.isSyncedFolder(directory).catch(() => true);
   }
 
   /** Ids of the takes still open (a stranded take included), e.g. to end them all on a reset. */
@@ -622,13 +711,24 @@ interface PlacedWebcam {
 /**
  * Place a salvaged webcam part beside its screen file as `<name>.webcam.mp4`, or
  * `<name>.webcam-<n>.mp4` from 2 up when that is taken: never replacing a file there
- * (`safe-place`), so an existing webcam file beside it is kept.
+ * (`safe-place`), so an existing webcam file beside it is kept. A take staged in a synced
+ * workspace's scratch folder moves by rename, never a hard link.
  */
-async function placeWebcamBeside(from: string, screenPath: string): Promise<string> {
+async function placeWebcamBeside(
+  from: string,
+  screenPath: string,
+  byRename: boolean,
+  intoSynced = false,
+): Promise<string> {
   const first = webcamSiblingPath(screenPath);
   for (let n = 1; n < 1000; n++) {
     const candidate = n === 1 ? first : first.replace(/\.webcam\.mp4$/, `.webcam-${n}.mp4`);
-    if ((await placeNoReplace(from, candidate)) === "placed") return candidate;
+    const placed = byRename
+      ? (await placeByRename(from, candidate, { intoSynced })) === "taken"
+        ? "taken"
+        : "placed"
+      : await placeNoReplace(from, candidate);
+    if (placed === "placed") return candidate;
   }
   throw new Error(`No free webcam file name beside "${screenPath}"`);
 }

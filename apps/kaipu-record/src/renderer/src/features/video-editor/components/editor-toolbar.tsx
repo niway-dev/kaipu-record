@@ -310,6 +310,8 @@ export interface EditorToolbarProps {
  * flag, the Transcript (NIW2-818) come last, below their own rule.
  */
 export interface EditorToolRailProps {
+  /** Read-only editor: no tool can be picked or armed (the browser skips and ignores the rail). */
+  inert?: boolean;
   /** Silence a stretch of audio at the playhead. */
   onAddMute(): void;
   /** Silence the whole recording; the export then drops the audio track. */
@@ -373,6 +375,7 @@ const HIDE_WEBCAM_BLOCK_REASON: Record<
 };
 
 export function EditorToolRail({
+  inert,
   tool,
   onToolChange,
   onAddZoom,
@@ -550,6 +553,7 @@ export function EditorToolRail({
       className={styles.rail}
       role="toolbar"
       aria-orientation="vertical"
+      inert={inert}
     >
       <button
         type="button"

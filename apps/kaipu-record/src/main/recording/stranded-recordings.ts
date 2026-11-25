@@ -2,7 +2,12 @@ import { mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LibraryVault } from "../library/library-vault";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { PLACED_MARKER_SUFFIX, placeNoReplace, readPlacementMarker } from "../library/safe-place";
+import {
+  PLACED_MARKER_SUFFIX,
+  placeByRename,
+  placeNoReplace,
+  readPlacementMarker,
+} from "../library/safe-place";
 import { STAGING_DIR, placeTake, webcamPartFor } from "./recording-writer";
 
 const PART_RE = /^kaipu-rec-.+\.mp4\.part$/;
@@ -22,6 +27,17 @@ export interface SweepDeps {
    * Swept once, with the active workspace; the other workspaces sweep only their own staging.
    */
   fallbackTempDir?: string;
+  /**
+   * The workspace's scratch staging folder in userData (where a synced workspace stages its
+   * takes), swept **as well as** `.kaipu/tmp/`: a folder moved into a provider still has its old
+   * parts there, and a launch whose detection did not answer must still find the scratch ones.
+   */
+  extraStagingDirs?: string[];
+  /**
+   * The workspace is synced: every recovered take is placed by rename, never by a hard link.
+   * Takes from `extraStagingDirs` are always placed by rename.
+   */
+  placeByRename?: boolean;
   /** Title written to each recovered take's sidecar (localized by the caller). */
   title: string;
   now?: () => number;
@@ -52,9 +68,13 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
   const result: SweepResult = { recovered: [], discarded: 0, failed: [] };
   const dirs = [
     join(deps.vaultDir, STAGING_DIR),
+    ...(deps.extraStagingDirs ?? []),
     ...(deps.fallbackTempDir ? [deps.fallbackTempDir] : []),
   ];
   for (const dir of dirs) {
+    // A part in a scratch folder exists only because its workspace was synced when it was
+    // recorded: it is always placed by rename, even on a launch whose detection missed.
+    const byRename = deps.placeByRename === true || (deps.extraStagingDirs ?? []).includes(dir);
     let names: string[];
     try {
       names = await readdir(dir);
@@ -72,7 +92,7 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
         // marker only stops a second recovery: the destination may hold another file by now,
         // so the part is kept, never deleted.
         if (await placedElsewhere(path, info.size)) {
-          if (dir !== deps.fallbackTempDir) await retainPlaced(dir, name);
+          if (dir !== deps.fallbackTempDir) await retainPlaced(dir, name, byRename);
           continue;
         }
         if (info.size === 0) {
@@ -97,7 +117,10 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
         });
         const { id } = reservation;
         try {
-          await placeTake(path, await vault.filePath(id));
+          // A take placed by rename exists because its workspace was synced when it was recorded,
+          // so across volumes the copy is staged outside the folder even when this launch's
+          // detection missed it (this sweep's own vault has no probe, so it cannot say).
+          await placeTake(path, await vault.filePath(id), byRename, byRename);
         } catch (error) {
           // Release the reserved stem (its stub sidecar), never the media path: a file that
           // took it meanwhile is not this take's.
@@ -111,7 +134,7 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
           const webcamDest = vault.webcamFilePath(id);
           await mkdir(dirname(webcamDest), { recursive: true });
           // Best-effort: the screen file is the take. A webcam left behind is lone next time.
-          await placeTake(webcamPath, webcamDest).catch((error) =>
+          await placeTake(webcamPath, webcamDest, byRename, byRename).catch((error) =>
             console.error("recovering a webcam part failed", error),
           );
         }
@@ -138,12 +161,16 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
 }
 
 /** Move a placed part into `placed-parts/` (never replacing); left where it is on failure. */
-async function retainPlaced(dir: string, name: string): Promise<void> {
+async function retainPlaced(dir: string, name: string, byRename: boolean): Promise<void> {
   const keep = join(dir, PLACED_PARTS_DIR);
   try {
     await mkdir(keep, { recursive: true });
-    const moved = await placeNoReplace(join(dir, name), join(keep, name), { stuck: "rollback" });
-    if (moved === "placed") await unlink(join(dir, `${name}${PLACED_MARKER_SUFFIX}`));
+    // A scratch folder or synced workspace never gets a second name for a file: rename there.
+    const moved = byRename
+      ? await placeByRename(join(dir, name), join(keep, name), { stuck: "rollback" })
+      : await placeNoReplace(join(dir, name), join(keep, name), { stuck: "rollback" });
+    // `placeByRename` resolves the placed file, `placeNoReplace` "placed": only "taken" keeps the marker.
+    if (moved !== "taken") await unlink(join(dir, `${name}${PLACED_MARKER_SUFFIX}`));
   } catch {
     // Still marked: skipped again on the next launch.
   }

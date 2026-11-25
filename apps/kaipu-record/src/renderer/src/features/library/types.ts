@@ -57,4 +57,6 @@ export interface LibraryVideo {
   thumbnailNeedsWebcam?: LocalRecording["thumbnailNeedsWebcam"];
   /** Set when the local sidecar could not be read: the item is listed but read-only (NIW2-568). */
   metadataIssue?: LocalRecording["metadataIssue"];
+  /** A synced workspace's provider offloaded the media or its poster (spec, Synced folders). */
+  evicted?: LocalRecording["evicted"];
 }

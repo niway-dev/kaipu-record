@@ -219,6 +219,7 @@ describe("finding groups", () => {
       "untitled-legacy",
       "name-mismatch",
       "missing-sidecar",
+      "missing-identity",
       "missing-media",
       "orphan-companion",
       "stem-conflict",
@@ -231,7 +232,7 @@ describe("finding groups", () => {
     scanResult = ok(
       kinds.map((kind, i) => ({
         kind,
-        fixable: i < 6,
+        fixable: i < 7,
         path: `item-${i}.mp4`,
         newName: `Item ${i}.mp4`,
       })),
@@ -254,10 +255,13 @@ describe("finding groups", () => {
       return [...g.querySelectorAll("li")].map((li) => li.textContent);
     };
     expect(rowText(groups[0]!)).toEqual(["item-0Item 0", "item-1Item 1", "item-2Item 2"]);
-    expect(rowText(groups[1]!)).toEqual(["item-3Added to the library"]);
+    expect(rowText(groups[1]!)).toEqual([
+      "item-3Added to the library",
+      "item-4Gets an identity, so it can be edited",
+    ]);
     expect(rowText(groups[2]!)).toEqual([
-      "item-4.mp4No file. Its record moves to the orphans folder",
-      "item-5.mp4Belongs to no item. Moves to the orphans folder",
+      "item-5.mp4No file. Its record moves to the orphans folder",
+      "item-6.mp4Belongs to no item. Moves to the orphans folder",
     ]);
     expect(rowText(groups[3]!).every((text) => (text ?? "").length > "item-0.mp4".length)).toBe(
       true,
@@ -375,6 +379,46 @@ describe("choosing what to fix", () => {
     // The box itself still toggles once, not twice.
     fireEvent.click(box);
     expect(box).not.toBeChecked();
+  });
+
+  it("a missing identity starts unticked: Fix all skips it until the user ticks it (NIW2-912)", async () => {
+    const identity: ReconcileFinding = {
+      kind: "missing-identity",
+      fixable: true,
+      path: "Demo.mp4",
+      title: "Demo",
+    };
+    scanResult = ok([rename, identity]);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
+    expect(getReconcileState().skipped).toEqual(new Set(["Demo.mp4"]));
+    fireEvent.click(await screen.findByRole("button", { name: "Fix 1 file" }));
+    expect(window.electronAPI.reconcileFix).toHaveBeenLastCalledWith(["Demo.mp4"]);
+    await act(async () => finishFix({ status: "cancelled" }));
+
+    // Ticking it sends it to be fixed; a new scan puts it back to unticked.
+    fireEvent.click(await screen.findByText("Files Kaipu doesn't know yet"));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Fix Demo" }));
+    expect(getReconcileState().skipped.size).toBe(0);
+    await act(() => rescan());
+    expect(getReconcileState().skipped).toEqual(new Set(["Demo.mp4"]));
+  });
+
+  it("a synced finding whose fix mints starts unticked; the same kind with an identity starts ticked (NIW2-912)", async () => {
+    const minting: ReconcileFinding = {
+      kind: "stale-auto-title",
+      fixable: true,
+      path: "Minting.mp4",
+      title: "Kaipu Recording",
+      newTitle: "Demo",
+      newName: "Demo.mp4",
+      mints: true,
+    };
+    const identified: ReconcileFinding = { ...minting, path: "Identified.mp4", mints: undefined };
+    scanResult = ok([minting, identified]);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
+    expect(getReconcileState().skipped).toEqual(new Set(["Minting.mp4"]));
   });
 
   it("a new scan forgets what was unticked", async () => {

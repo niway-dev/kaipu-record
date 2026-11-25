@@ -44,6 +44,19 @@ vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcr
 const realElectronApi = window.electronAPI;
 
 describe("VideoRow", () => {
+  it("shows the neutral Not downloaded poster in the list for an offloaded file, like the grid card", () => {
+    renderRow({ video: makeVideo({ evicted: "media" }) });
+    expect(screen.getByText("Not downloaded")).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Not downloaded: download it in Finder to open it here."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the plain film icon for a row without a poster that is not offloaded", () => {
+    renderRow({ video: makeVideo() });
+    expect(screen.queryByText("Not downloaded")).not.toBeInTheDocument();
+  });
+
   it("says an imported video was imported in its specs line (NIW2-579)", () => {
     renderRow({
       video: makeVideo({ capture: { mode: "import", width: 1920, height: 1080, ratio: null } }),

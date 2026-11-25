@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { humanizeId } from "./library-vault";
+import {
+  humanizeId,
+  LibraryVault,
+  SYNCED_SIDECAR_READ_TIMEOUT_MS,
+  type VaultReader,
+} from "./library-vault";
 import { isStaleAutoTitle, scanVault, type ScanFinding } from "./vault-reconcile";
 import { makeVault, sidecar, snapshot } from "./vault-reconcile.test-helpers";
 
@@ -406,5 +411,139 @@ describe("scanVault — only reads", () => {
     const before = await snapshot(directory);
     await scanVault({ directory, cloud: new Set(["g"]) });
     expect(await snapshot(directory)).toEqual(before);
+  });
+});
+
+describe("scanVault on a synced workspace (AC13)", () => {
+  it("gives up on a record the provider never delivers and lists it as unreadable, instead of hanging", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      directory = await makeVault({
+        "Clip.mp4": "video",
+        ".kaipu/Clip.json": sidecar({ assetId: "a-1", title: "Clip", createdAt: CREATED }),
+      });
+      let reading: () => void = () => {};
+      const started = new Promise<void>((resolve) => (reading = resolve));
+      const never: VaultReader = {
+        readText: () => {
+          reading();
+          return new Promise<string>(() => {});
+        },
+      };
+      // A synced vault: the eviction probe is set, so every sidecar read has a deadline.
+      const vault = new LibraryVault(directory, "ws-1", never, async () => new Set<string>());
+      const scanning = scanVault({ directory, vault, cloud: "unknown" });
+      await started;
+      await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
+      const { findings } = await scanning;
+      expect(findings.find((f) => f.path === ".kaipu/Clip.json")).toMatchObject({
+        kind: "unreadable-record",
+        fixable: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("scanVault: a record without an identity (NIW2-912)", () => {
+  const syncedVault = (dir: string) =>
+    new LibraryVault(dir, "ws-1", undefined, async () => new Set<string>());
+  const noIdentity = (title?: string) =>
+    sidecar({ createdAt: CREATED, ...(title ? { title } : {}) });
+
+  it("a synced workspace lists a titled, aligned record with no identity as a fixable missing-identity", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video",
+      ".kaipu/Demo.json": noIdentity("Demo"),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: "missing-identity",
+      fixable: true,
+      path: "Demo.mp4",
+      title: "Demo",
+      // The dialog leaves exactly the findings that mint an identity unticked by default.
+      mints: true,
+    });
+  });
+
+  const misaligned = {
+    "Old name.mp4": "video",
+    ".kaipu/Old name.json": noIdentity("Sprint: part 1/2"),
+    "recording-2026-10-30-00-57-30.mp4": "video",
+    ".kaipu/recording-2026-10-30-00-57-30.json": noIdentity("Recording — 10/29/2026, 7:57:30 PM"),
+    "screenshot-2026-10-15T21-37-10-853Z.png": "png",
+    ".kaipu/screenshot-2026-10-15T21-37-10-853Z.json": noIdentity(),
+  };
+
+  it("a synced workspace marks every finding on a record without an identity as minting one", async () => {
+    directory = await makeVault(misaligned);
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings.map((f) => f.kind).sort()).toEqual([
+      "name-mismatch",
+      "stale-auto-title",
+      "untitled-legacy",
+    ]);
+    expect(findings.map((f) => f.mints)).toEqual([true, true, true]);
+  });
+
+  it("a plain workspace never marks them: its own read mints later, not the fix", async () => {
+    directory = await makeVault(misaligned);
+    const { findings } = await scanVault({
+      directory,
+      vault: new LibraryVault(directory, "ws-1"),
+      cloud: "unknown",
+    });
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.map((f) => f.mints)).toEqual(findings.map(() => undefined));
+  });
+
+  it("a synced workspace lists an untitled, aligned record the same way", async () => {
+    directory = await makeVault({
+      "Plain Name.mp4": "video",
+      ".kaipu/Plain Name.json": noIdentity(),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings.map((f) => [f.kind, f.fixable])).toEqual([["missing-identity", true]]);
+  });
+
+  it("a plain workspace lists no missing-identity: its own read mints one later, the scan never does", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video",
+      ".kaipu/Demo.json": noIdentity("Demo"),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: new LibraryVault(directory, "ws-1"),
+      cloud: "unknown",
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("a record that has an identity is no finding in a synced workspace", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video",
+      ".kaipu/Demo.json": sidecar({ assetId: "a-1", title: "Demo", createdAt: CREATED }),
+    });
+    const { findings } = await scanVault({
+      directory,
+      vault: syncedVault(directory),
+      cloud: "unknown",
+    });
+    expect(findings).toEqual([]);
   });
 });

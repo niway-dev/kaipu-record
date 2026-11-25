@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readWithRetry, savedAtOf, whyNoDocument } from "./canvas-load";
+import { isEvictedReadError, readWithRetry, savedAtOf, whyNoDocument } from "./canvas-load";
 
 const original = window.electronAPI.statScreenshotCanvas;
 afterEach(() => {
@@ -56,6 +56,12 @@ describe("readWithRetry", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
+  it("does not retry an offloaded document: asking again cannot make the provider download it", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("canvas document read failed: EVICTED"));
+    await expect(readWithRetry(read)).rejects.toThrow("EVICTED");
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   it("still retries an unknown code, since it may be transient", async () => {
     const read = vi.fn().mockRejectedValue(new Error("canvas document read failed: unknown"));
     await expect(readWithRetry(read)).rejects.toThrow("unknown");
@@ -66,5 +72,13 @@ describe("readWithRetry", () => {
     const read = vi.fn().mockResolvedValue(null);
     expect(await readWithRetry(read)).toBeNull();
     expect(read).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("isEvictedReadError", () => {
+  it("recognises the code that crosses the IPC boundary in the message", () => {
+    expect(isEvictedReadError(new Error("canvas document read failed: EVICTED"))).toBe(true);
+    expect(isEvictedReadError(new Error("canvas document read failed: EACCES"))).toBe(false);
+    expect(isEvictedReadError("EVICTED")).toBe(false);
   });
 });

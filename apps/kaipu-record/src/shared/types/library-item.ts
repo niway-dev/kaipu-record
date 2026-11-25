@@ -159,7 +159,11 @@ export type CatalogRefreshResult =
   | { ok: false; reason: "signed-out" | "unauthorized" | "network" };
 
 export type RemoveLocalCopyResult =
-  | { ok: true }
+  /**
+   * `revealed`: the workspace is synced, so nothing was deleted; the file was shown in Finder
+   * and the user frees the space with the provider's own command.
+   */
+  | { ok: true; revealed?: true }
   | {
       ok: false;
       reason:

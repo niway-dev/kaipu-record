@@ -132,6 +132,26 @@ describe("useWebcamThumbnail", () => {
     );
   });
 
+  it("never composes an offloaded recording: its poster must not be written over, and the media is not decoded", async () => {
+    // evicted "media": the file is not here (the media route answers 409). evicted "thumbnail":
+    // the file is, but writing a new poster would replace the offloaded one in the synced folder.
+    const onUpdated = vi.fn();
+    renderHook(() =>
+      useWebcamThumbnail(
+        [
+          video({ id: "off-media", evicted: "media", thumbnailUrl: null }),
+          video({ id: "off-thumb", evicted: "thumbnail", thumbnailUrl: null }),
+          video({ id: "plain" }),
+        ],
+        onUpdated,
+      ),
+    );
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledOnce());
+    expect(composeMock).toHaveBeenCalledTimes(1);
+    expect(composeMock).toHaveBeenCalledWith(expect.objectContaining({ id: "plain" }));
+  });
+
   it("composes a recording once across every page that lists it, and tells each of them", async () => {
     const library = vi.fn();
     const detail = vi.fn();

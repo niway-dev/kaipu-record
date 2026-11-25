@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { LibraryVault } from "./library-vault";
+import { LibraryVault, SYNCED_SIDECAR_READ_TIMEOUT_MS, type VaultReader } from "./library-vault";
 import { fixVault, resumeOrphanManifests, scanVault, skipPaths } from "./vault-reconcile";
 import { listFiles, makeVault, sidecar, snapshot } from "./vault-reconcile.test-helpers";
 
@@ -26,6 +27,10 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 const T0 = new Date(2026, 9, 29, 19, 57, 30).getTime();
+
+/** The vault's files without the run log a fix writes. */
+const itemFiles = async (directory: string): Promise<string[]> =>
+  (await listFiles(directory)).filter((path) => !path.startsWith(".kaipu/reconcile/"));
 const noWait = { delaysMs: [], sleep: async () => {} };
 
 let directory = "";
@@ -636,4 +641,354 @@ describe("fixVault — an orphan bundle with a file that did not move", () => {
       });
     },
   );
+});
+
+describe("fixVault on a synced workspace: every scan reads through the workspace's vault (AC13)", () => {
+  it("mints an identity into a readable record that has none, so the fix can retitle and rename it", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+      "Plain Name.mp4": "video-b",
+      ".kaipu/Plain Name.json": sidecar({ createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const before = await vault.list();
+    // A synced workspace mints nowhere on its own: both are read-only until the user asks.
+    expect(before.every((item) => item.metadataIssue === "unreadable")).toBe(true);
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.failed).toEqual([]);
+    const after = await vault.list();
+    expect(after).toHaveLength(2);
+    for (const item of after) {
+      expect(item.metadataIssue).toBeUndefined();
+      expect(item.assetId).toEqual(expect.any(String));
+      expect(item.assetId.startsWith("unreadable:")).toBe(false);
+    }
+  });
+
+  it("counts missing-identity findings and fixes, and writes nothing for one the user unticked", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video-a",
+      ".kaipu/Demo.json": sidecar({ title: "Demo", createdAt: T0 }),
+      "Other.mp4": "video-b",
+      ".kaipu/Other.json": sidecar({ title: "Other", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const untouched = await readFile(join(directory, ".kaipu/Other.json"), "utf8");
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+      skip: new Set(["Other.mp4"]),
+    });
+
+    expect(report.failed).toEqual([]);
+    expect(report.counts["missing-identity"]).toBe(2);
+    expect(report.fixed).toBe(1);
+    expect(JSON.parse(await readFile(join(directory, ".kaipu/Demo.json"), "utf8"))).toMatchObject({
+      sidecarVersion: 2,
+      assetId: expect.any(String),
+      title: "Demo",
+    });
+    expect(await readFile(join(directory, ".kaipu/Other.json"), "utf8")).toBe(untouched);
+  });
+
+  it("does not count a fix when an identity arrived between the scan and the write", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video-a",
+      ".kaipu/Demo.json": sidecar({ title: "Demo", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const arrived = sidecar({ assetId: "from-other-device", title: "Demo", createdAt: T0 });
+    const mint = vault.mintIdentity.bind(vault);
+    vi.spyOn(vault, "mintIdentity").mockImplementation(async (id) => {
+      await writeFile(join(directory, ".kaipu/Demo.json"), arrived);
+      return mint(id);
+    });
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.counts["missing-identity"]).toBe(1);
+    expect(report.fixed).toBe(0);
+    expect(await readFile(join(directory, ".kaipu/Demo.json"), "utf8")).toBe(arrived);
+  });
+
+  it("keeps a missing-identity item as changed when the mint finds an identity that arrived since the scan", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video-a",
+      ".kaipu/Demo.json": sidecar({ title: "Demo", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    vi.spyOn(vault, "mintIdentity").mockResolvedValue({
+      assetId: "from-other-device",
+      minted: false,
+    });
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toContainEqual({ path: "Demo.mp4", reason: "changed" });
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toEqual([]);
+  });
+
+  it("reports a failure when the mint finds a missing-identity item gone", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "video-a",
+      ".kaipu/Demo.json": sidecar({ title: "Demo", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    vi.spyOn(vault, "mintIdentity").mockResolvedValue(null);
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toEqual([]);
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toContainEqual({
+      path: "Demo.mp4",
+      error: expect.stringContaining("gone"),
+    });
+  });
+
+  it("does not write the title or count the fix when the mint finds an identity that arrived since the scan", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const arrived = sidecar({ assetId: "from-other-device", title: "Mine", createdAt: T0 });
+    const mint = vault.mintIdentity.bind(vault);
+    vi.spyOn(vault, "mintIdentity").mockImplementation(async (id) => {
+      await writeFile(join(directory, ".kaipu/recording-2026-10-30-00-57-30.json"), arrived);
+      return mint(id);
+    });
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.counts["untitled-legacy"]).toBe(1);
+    expect(report.kept).toContainEqual({
+      path: "recording-2026-10-30-00-57-30.mp4",
+      reason: "changed",
+    });
+    // The newer version kept its title, and nothing more was done to it in this run: the
+    // rename step does not follow the newer record either; the next scan picks it up fresh.
+    const [item] = await vault.list();
+    expect(item).toMatchObject({ assetId: "from-other-device", title: "Mine" });
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toEqual([]);
+    expect(await itemFiles(directory)).toEqual([
+      ".kaipu/recording-2026-10-30-00-57-30.json",
+      "recording-2026-10-30-00-57-30.mp4",
+    ]);
+  });
+
+  it("does not rename or count an item whose identity arrived between the scan and the rename-step mint", async () => {
+    directory = await makeVault({
+      "Old.mp4": "video-a",
+      ".kaipu/Old.json": sidecar({ title: "New", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    const arrived = sidecar({ assetId: "from-other-device", title: "Newer", createdAt: T0 });
+    const mint = vault.mintIdentity.bind(vault);
+    vi.spyOn(vault, "mintIdentity").mockImplementation(async (id) => {
+      await writeFile(join(directory, ".kaipu/Old.json"), arrived);
+      return mint(id);
+    });
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toContainEqual({ path: "Old.mp4", reason: "changed" });
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toEqual([]);
+    expect(await itemFiles(directory)).toEqual([".kaipu/Old.json", "Old.mp4"]);
+  });
+
+  it("reports a failure, not a kept item, when the mint finds the item gone (title step)", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    vi.spyOn(vault, "mintIdentity").mockResolvedValue(null);
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toEqual([]);
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toContainEqual({
+      path: "recording-2026-10-30-00-57-30.mp4",
+      error: expect.stringContaining("gone"),
+    });
+  });
+
+  it("reports a failure, not a kept item, when the mint finds the item gone (rename step)", async () => {
+    directory = await makeVault({
+      "Old.mp4": "video-a",
+      ".kaipu/Old.json": sidecar({ title: "New", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1", undefined, async () => new Set<string>());
+    vi.spyOn(vault, "mintIdentity").mockResolvedValue(null);
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.kept).toEqual([]);
+    expect(report.fixed).toBe(0);
+    expect(report.failed).toContainEqual({
+      path: "Old.mp4",
+      error: expect.stringContaining("gone"),
+    });
+    expect(await itemFiles(directory)).toEqual([".kaipu/Old.json", "Old.mp4"]);
+  });
+
+  it("gives up on a record the provider never delivers in each scan that reads records, instead of reading it plainly", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      directory = await makeVault({
+        "Clip.mp4": "video",
+        ".kaipu/Clip.json": sidecar({ assetId: "a-1", title: "Clip", createdAt: T0 }),
+        "Gone.mp4": "video",
+        ".kaipu/Dead.json": sidecar({ assetId: "a-2", title: "Dead", createdAt: T0 }),
+      });
+      const asked: string[] = [];
+      // The provider never delivers Clip.json; every other record reads normally. Those reads
+      // settle in a microtask, so the fake clock below can never time one of them out while real
+      // I/O is still pending (that made this test flaky under load).
+      const reader: VaultReader = {
+        readText: (path) => {
+          asked.push(path);
+          return path.endsWith("Clip.json")
+            ? new Promise<string>(() => {})
+            : Promise.resolve().then(() => readFileSync(path, "utf-8"));
+        },
+      };
+      const vault = new LibraryVault(directory, "ws-1", reader, async () => new Set<string>());
+      const fixing = fixVault(directory, {
+        cloud: "unknown",
+        vault,
+        retry: noWait,
+        now: () => T0 + 60_000,
+      });
+      // Each scan that reads Clip.json waits its bound; real I/O runs between them, so advance the
+      // clock past the bound again and again until the fix settles.
+      let settled = false;
+      void fixing.finally(() => (settled = true));
+      while (!settled) {
+        await new Promise((resolve) => setImmediate(resolve));
+        await vi.advanceTimersByTimeAsync(SYNCED_SIDECAR_READ_TIMEOUT_MS + 1);
+      }
+      const report = await fixing;
+      // Only the record the provider never delivers is unreadable; the others read normally.
+      expect(report.counts["unreadable-record"]).toBe(1);
+      expect(report.remaining.filter((r) => r.kind === "unreadable-record")).toEqual([
+        expect.objectContaining({ path: ".kaipu/Clip.json" }),
+      ]);
+      // A plain read would have delivered it: the record was never read except through the vault.
+      // Exactly the three scans that read records ask for it, once each.
+      expect(asked.filter((path) => path.endsWith("Clip.json"))).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a scan past its reads deadline reports the records it did not read unreadable, and asks the provider for none", async () => {
+    directory = await makeVault({
+      "Clip.mp4": "video",
+      ".kaipu/Clip.json": sidecar({ assetId: "a-1", title: "Clip", createdAt: T0 }),
+      ".kaipu/Dead.json": sidecar({ assetId: "a-2", title: "Dead", createdAt: T0 }),
+    });
+    const asked: string[] = [];
+    const reader: VaultReader = {
+      readText: (path) => {
+        asked.push(path);
+        return readFile(path, "utf-8");
+      },
+    };
+    const vault = new LibraryVault(directory, "ws-1", reader, async () => new Set<string>());
+
+    const late = await scanVault({
+      directory,
+      vault,
+      cloud: "unknown",
+      readsDeadline: Date.now() - 1,
+    });
+
+    expect(asked).toEqual([]);
+    expect(
+      late.findings
+        .filter((f) => f.kind === "unreadable-record")
+        .map((f) => f.path)
+        .sort(),
+    ).toEqual([".kaipu/Clip.json", ".kaipu/Dead.json"]);
+    expect(late.findings.every((f) => !f.fixable)).toBe(true);
+  });
+});
+
+describe("fixVault on a plain workspace keeps its own path to an identity (NIW2-912)", () => {
+  it("retitling and renaming an identity-less record never calls mintIdentity: describe gives the identity", async () => {
+    directory = await makeVault({
+      "recording-2026-10-30-00-57-30.mp4": "video-a",
+      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({ createdAt: T0 }),
+      "Wrong Name.mp4": "video-b",
+      ".kaipu/Wrong Name.json": sidecar({ title: "Right Name", createdAt: T0 }),
+    });
+    const vault = new LibraryVault(directory, "ws-1");
+    const mint = vi.spyOn(vault, "mintIdentity");
+
+    const report = await fixVault(directory, {
+      cloud: "unknown",
+      vault,
+      retry: noWait,
+      now: () => T0 + 60_000,
+    });
+
+    expect(report.failed).toEqual([]);
+    expect(report.fixed).toBe(2);
+    expect(mint).not.toHaveBeenCalled();
+    const files = await listFiles(directory);
+    expect(files).toContain("Right Name.mp4");
+    for (const item of await vault.list()) expect(item.assetId).toEqual(expect.any(String));
+  });
 });

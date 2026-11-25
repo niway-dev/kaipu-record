@@ -9,38 +9,69 @@ export interface MovableItem {
   kind: "recording" | "screenshot" | "gif";
   derivedFromAssetId: string | null;
   metadataIssue?: unknown;
+  /**
+   * A synced workspace's provider offloaded the media ("media") or its poster ("thumbnail"):
+   * the move copies both, so either one stops it until downloaded.
+   */
+  evicted?: "media" | "thumbnail";
 }
 
 /** Why an item cannot be offered for a move, or null when it can. */
-export function notMovableReason(item: MovableItem): "cloud" | "record" | null {
+export function notMovableReason(item: MovableItem): "cloud" | "record" | "evicted" | null {
   if (item.id === null) return "cloud";
   if (item.metadataIssue) return "record";
+  // Copying an evicted file would download it (decision 15): "Download it first". The move
+  // copies the poster too, so an offloaded poster refuses it just like the media does.
+  if (item.evicted) return "evicted";
   return null;
 }
 
 /** What a move to `target` costs, from where the active workspace is (design: section 2). */
-export type MoveCost = "same-drive" | "other-drive" | "not-connected";
+export type MoveCost = "same-drive" | "other-drive" | "synced" | "not-connected";
 
 export function moveCost(target: WorkspaceView, active: WorkspaceView): MoveCost {
   if (target.state !== "available") return "not-connected";
+  // A synced side always copies and verifies, even on one drive (decision 15).
+  if (target.sync !== null || active.sync !== null) return "synced";
   return target.device !== null && target.device === active.device ? "same-drive" : "other-drive";
 }
 
 /**
  * The exports a move should suggest (ADR 0033, decision 15): local exports in the loaded list
  * whose source is one of the selected recordings, counted once, and not already selected.
- * Cloud-only exports are not counted, and moving an export never suggests its source.
+ * Exports that cannot move (cloud-only, a broken record, media the provider offloaded) are not
+ * counted, so "Move all N" promises only what the move can do. Moving an export never suggests
+ * its source.
  */
 export function exportsToSuggest(
   selected: readonly MovableItem[],
   library: readonly MovableItem[],
+): MovableItem[] {
+  return exportsOf(selected, library, (item) => notMovableReason(item) === null);
+}
+
+/**
+ * The exports of the selected recordings that a move leaves behind only because the provider
+ * offloaded their media or poster. They are not in "Move all N", so the result says so.
+ */
+export function evictedExportsOf(
+  selected: readonly MovableItem[],
+  library: readonly MovableItem[],
+): MovableItem[] {
+  return exportsOf(selected, library, (item) => notMovableReason(item) === "evicted");
+}
+
+function exportsOf(
+  selected: readonly MovableItem[],
+  library: readonly MovableItem[],
+  include: (item: MovableItem) => boolean,
 ): MovableItem[] {
   const sources = new Set(selected.filter((i) => i.kind === "recording").map((i) => i.assetId));
   if (sources.size === 0) return [];
   const chosen = new Set(selected.map((i) => i.assetId));
   const seen = new Set<string>();
   return library.filter((item) => {
-    if (item.id === null || item.metadataIssue) return false;
+    if (!include(item)) return false;
     if (!item.derivedFromAssetId || !sources.has(item.derivedFromAssetId)) return false;
     if (chosen.has(item.assetId) || seen.has(item.assetId)) return false;
     seen.add(item.assetId);
@@ -74,10 +105,19 @@ type Translate = (key: string, values?: Record<string, string | number>) => stri
  */
 export function resultMessage(
   result: MoveItemsResult,
-  context: { titles: ReadonlyMap<string, string>; target: string; source: string },
+  context: {
+    titles: ReadonlyMap<string, string>;
+    target: string;
+    source: string;
+    /** Exports of the moved recordings that stayed because the provider offloaded them. */
+    notDownloaded?: number;
+  },
   t: Translate,
 ): string {
   const total = result.moved.length + result.failed.length + result.skipped.length;
+  // An item whose original was kept did arrive, but it was not moved: it is in both workspaces.
+  const kept = result.moved.filter((item) => item.keptOriginal);
+  const movedCount = result.moved.length - kept.length;
   const list = result.failed
     .map(({ id, reason }) =>
       t("resultItem", { title: context.titles.get(id) ?? id, reason: reasonText(reason, t) }),
@@ -85,13 +125,13 @@ export function resultMessage(
     .join("; ");
   let message: string;
   if (result.failed.length === 0 && result.skipped.length === 0) {
-    message = t("resultAll", { count: result.moved.length, target: context.target });
-  } else if (result.moved.length === 0) {
+    message = movedCount > 0 ? t("resultAll", { count: movedCount, target: context.target }) : "";
+  } else if (movedCount === 0) {
     // Everything failed, or Stop came before the first move finished.
     message = t("resultNone", { target: context.target, list }).trim().replace(/\.$/, "");
   } else if (result.failed.length > 0) {
     message = t("resultPartial", {
-      moved: result.moved.length,
+      moved: movedCount,
       total,
       target: context.target,
       failed: result.failed.length,
@@ -99,10 +139,26 @@ export function resultMessage(
       list,
     });
   } else {
-    message = t("resultAll", { count: result.moved.length, target: context.target });
+    message = t("resultAll", { count: movedCount, target: context.target });
   }
   if (result.skipped.length > 0) {
     message = `${message}. ${t("resultSkipped", { count: result.skipped.length })}`;
+  }
+  if (kept.length > 0) {
+    const keptText = t("resultKeptOriginal", {
+      count: kept.length,
+      target: context.target,
+      source: context.source,
+      list: kept.map(({ id }) => context.titles.get(id) ?? id).join("; "),
+    });
+    message = message ? `${message}. ${keptText}` : keptText;
+  }
+  if (context.notDownloaded && movedCount > 0) {
+    const stayedText = t("resultExportsNotDownloaded", {
+      count: context.notDownloaded,
+      source: context.source,
+    });
+    message = message ? `${message}. ${stayedText}` : stayedText;
   }
   return message;
 }

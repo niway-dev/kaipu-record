@@ -331,6 +331,14 @@ export const libraryCatalog = catalog(
         "needsApi",
         "needs a cloud-only item; the catalog runs offline",
       ),
+      "library.videoCard:notDownloaded": nc(
+        "needsSetup",
+        "needs a file a sync provider offloaded (SF_DATALESS); the seeded vault is not synced",
+      ),
+      "library.videoRow:notDownloaded": nc(
+        "needsSetup",
+        "needs a file a sync provider offloaded (SF_DATALESS); the seeded vault is not synced",
+      ),
       "library.readyCopyCard:ready": nc(
         "needsSetup",
         "shown only right after an export makes a copy",

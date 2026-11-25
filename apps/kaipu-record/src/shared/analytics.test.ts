@@ -318,6 +318,7 @@ describe("RELEASE_FLAGS", () => {
         "image-canvas",
         "image-inspect",
         "image-text",
+        "synced-workspaces",
         "timeline-levels",
         "transcription",
         "zoom-filmstrip",

@@ -952,6 +952,7 @@
     "renameKeptBusy": "Name saved. The file keeps its old name while an export is running.",
     "renameKeptEditing": "Name saved. The file keeps its old name while it is open in the editor.",
     "renameKeptTaken": "Name saved. The file keeps its old name because another file just appeared under the new one.",
+    "renameKeptEvicted": "Name saved. The file keeps its old name because part of it is not downloaded from the cloud yet.",
     "renameKeptError": "Name saved, but the file could not be renamed.",
     "itemAmbiguous": "Two files in your folder claim to be this item, so Kaipu left both alone. Remove the duplicate and try again.",
     "errorDelete": "We couldn't delete the file.",
@@ -980,6 +981,8 @@
     "removeLocalCopyBlockedWebcam": "This recording has a webcam track that exists only on this computer. Keep the file so the track is not lost.",
     "removeLocalCopyBlockedBytes": "The cloud copy is not identical to this file.",
     "removeLocalCopyBlockedNoCloud": "There is no cloud copy of this file.",
+    "removeLocalCopyRevealed": "Shown in Finder. Free up the space there with your sync app: Kaipu does not delete files in a synced folder.",
+    "deleteSyncedWarning": "This workspace is in a synced folder, so the file is deleted from the cloud on every device.",
     "kindGif": "GIF",
     "captureScreen": "SCREEN",
     "captureWindow": "WINDOW",
@@ -1041,7 +1044,7 @@
     "reconcileGroupRenameWhat": "Named by an older version of Kaipu, or renamed outside it. The file and its Kaipu files take the item's title, so the folder reads the same as your library.",
     "reconcileGroupAdoptTitle": "Files Kaipu doesn't know yet",
     "reconcileGroupAdoptAction": "Added to the library",
-    "reconcileGroupAdoptWhat": "Recordings and images in this folder with no Kaipu record. They join the library under their current name; the file itself isn't touched.",
+    "reconcileGroupAdoptWhat": "Recordings and images in this folder with no Kaipu record. They join the library under their current name; the file itself isn't touched. A record in a synced folder with no identity yet gets one, and keeps its title and tags.",
     "reconcileGroupGoneTitle": "Without a matching file",
     "reconcileGroupGoneAction": "Set aside in the orphans folder, or kept as cloud only",
     "reconcileGroupGoneWhat": "Records whose file was moved or deleted outside Kaipu, and Kaipu files that belong to no item. They move to the orphans folder inside .kaipu. Items saved in the cloud stay in the library as cloud only.",
@@ -1052,6 +1055,7 @@
     "reconcileSummary": "{fixable, plural, one {# change} other {# changes}} · {listed, plural, one {# left as it is} other {# left as they are}}",
     "reconcileSummarySelected": "{selected} of {fixable} selected · {untouched, plural, one {# file left as it is} other {# files left as they are}}",
     "reconcileAdopt": "Added to the library",
+    "reconcileMintIdentity": "Gets an identity, so it can be edited",
     "reconcileToOrphans": "No file. Its record moves to the orphans folder",
     "reconcileCloudOnly": "No file. Kept as cloud only",
     "reconcileOrphanCompanion": "Belongs to no item. Moves to the orphans folder",
@@ -1081,7 +1085,9 @@
     "reconcileTileFailed": "Failed",
     "reconcileKept": "{count, plural, one {# item kept its name for now (open in the editor, locked by another app, or its new name just taken). Fix all again later.} other {# items kept their names for now (open in the editor, locked by another app, or their new name just taken). Fix all again later.}}",
     "reconcileFailed": "{count, plural, one {# change failed. Details are in .kaipu/reconcile.} other {# changes failed. Details are in .kaipu/reconcile.}}",
-    "reconcileError": "Fix all stopped: {message}"
+    "reconcileError": "Fix all stopped: {message}",
+    "evictedLabel": "Not downloaded",
+    "evictedHint": "Not downloaded: download it in Finder to open it here."
   },
   "prepare": {
     "pageTitle": "Where is it going?",
@@ -1671,6 +1677,9 @@
     "saveStateSaving": "Saving…",
     "saveStateSaved": "Saved",
     "saveStateFailed": "Couldn't save. Click to retry.",
+    "readOnlyBanner": "This project is read-only. Its files are only in the cloud or could not be read. Open the project again once its files have downloaded to edit it.",
+    "readOnlyBannerDamaged": "This project is read-only. Part of its saved edit could not be loaded, and saving would replace it. Your recording is not affected. Open the project again to retry; if it keeps happening, the saved edit may be damaged.",
+    "readOnlyBannerUnsaved": "Your recent changes could not be saved, and the project is now read-only. Its files are only in the cloud or could not be read. The changes exist only in this window and are lost if it closes. Open the project again once its files have downloaded to edit it.",
     "restoreError": "Couldn't restore the previous edit",
     "sourceUnavailable": "This recording is no longer in your library, so it cannot be edited.",
     "mute": "Mute",
@@ -1792,6 +1801,7 @@
     "transcriptFailure_item-changed": "The video was renamed, moved or removed while it was being transcribed.",
     "transcriptFailure_decode-failed": "The audio of this video could not be read.",
     "transcriptFailure_busy": "Another video is being transcribed. Only one runs at a time; try again when it finishes.",
+    "transcriptFailure_evicted": "Not downloaded: download it in Finder to transcribe it.",
     "transcriptFailure_unknown": "Something went wrong while transcribing.",
     "transcriptNoAudio": "This video has no audio track, so there is nothing to transcribe.",
     "transcriptUnavailable": "Transcription cannot run on this Mac or in this installation. Settings → Transcription says why.",
@@ -3596,6 +3606,10 @@
     "clearSelection": "Clear",
     "moving": "Moving {current} of {total}…",
     "stop": "Stop",
+    "syncedTitle": "Move out of a synced folder?",
+    "syncedBody": "{name} is a synced folder. Moving removes the file from it, so it is deleted from the cloud on every device.",
+    "syncedCancel": "Cancel",
+    "syncedConfirm": "Move anyway",
     "exportsTitle": "Move its exports too?",
     "exportsBody": "This recording has {count, plural, one {# export} other {# exports}} in {name}. Move them too?",
     "exportsBodyMany": "These recordings have {count, plural, one {# export} other {# exports}} in {name}. Move them too?",
@@ -3606,6 +3620,8 @@
     "resultPartial": "Moved {moved} of {total} to {target}. {failed, plural, one {# stayed} other {# stayed}} in {source}: {list}",
     "resultNone": "Nothing moved to {target}. {list}",
     "resultSkipped": "{count, plural, one {# wasn't started} other {# weren't started}}",
+    "resultKeptOriginal": "Copied to {target}, but {count, plural, one {the original, or part of it, stayed} other {the originals, or parts of them, stayed}} in {source} because something there changed during the move. Check both workspaces: {list}",
+    "resultExportsNotDownloaded": "{count, plural, one {# export of these recordings stayed in {source}: it is not downloaded yet. Download it in Finder, then move it.} other {# exports of these recordings stayed in {source}: they are not downloaded yet. Download them in Finder, then move them.}}",
     "resultItem": "{title} — {reason}",
     "resultUnknown": "The result of the move could not be read. Check both workspaces.",
     "switchAction": "Switch",
@@ -3622,7 +3638,10 @@
     "reason_maintenance": "Kaipu is fixing your files",
     "reason_stale": "the workspace changed",
     "reason_io": "a file couldn't be copied; the original is untouched",
-    "closeRefused": "The editor stayed open, so nothing moved."
+    "closeRefused": "The editor stayed open, so nothing moved.",
+    "costSynced": "Synced folder · copies",
+    "notMovableEvicted": "Not downloaded: download it in Finder first",
+    "reason_evicted": "it is not downloaded: download it in Finder first"
   },
   "settingsScope": {
     "selectorLabel": "Settings for",
@@ -3733,6 +3752,15 @@
     "transcribeFailed_item-changed": "The video changed while it was transcribed. Try again.",
     "transcribeFailed_decode-failed": "The audio of this video could not be read.",
     "transcribeFailed_busy": "Another video is being transcribed. Try again when it finishes.",
+    "transcribeFailed_evicted": "Not downloaded: download it in Finder to transcribe it.",
     "transcribeFailed_unknown": "Transcription failed. Try again."
+  },
+  "workspaceCloud": {
+    "location_google-drive": "Google Drive",
+    "location_onedrive": "OneDrive",
+    "location_icloud": "iCloud Drive",
+    "location_cloud-provider": "A cloud provider",
+    "syncedBy": "Synced by {provider}",
+    "syncedFolder": "Synced folder"
   }
 }

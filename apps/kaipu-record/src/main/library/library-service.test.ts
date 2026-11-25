@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { CloudCatalogEntry } from "@shared/types/library-item";
 import { CatalogCache } from "../cloud/catalog-cache";
 import { LibraryService } from "./library-service";
-import { LibraryVault } from "./library-vault";
+import { LibraryVault, SYNCED_READS_BUDGET_MS } from "./library-vault";
 
 /** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
 async function renameById(
@@ -193,6 +193,124 @@ describe("LibraryService", () => {
     const after = await service.list();
     expect(after.items.map((i) => i.availability)).toEqual(["cloud"]);
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  it("removeLocalCopy in a synced workspace reveals the file and deletes nothing (decision 4)", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId, { sizeBytes: 0 })];
+    const reveal = vi.fn();
+    const synced = new LibraryService({
+      vault: () => new LibraryVault(vaultDir, "ws", undefined, async () => new Set()),
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      now: () => clock,
+      reveal,
+    });
+    await synced.refreshCatalog();
+
+    expect(await synced.removeLocalCopy("a")).toEqual({ ok: true, revealed: true });
+
+    expect(reveal).toHaveBeenCalledWith(join(vaultDir, "a.mp4"));
+    await access(join(vaultDir, "a.mp4"));
+    // Still local: the sidecar does not claim a removal that did not happen.
+    expect((await synced.list()).items.map((i) => i.availability)).toEqual(["local-and-cloud"]);
+  });
+
+  it("list() in a synced workspace reads each edit meta through the bounded reader, and an offloaded one is not downloaded", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+    await writeFile(join(vaultDir, ".kaipu", "a.edit.json"), "{}");
+    const metaPath = join(vaultDir, ".kaipu", "a.edit.meta.json");
+    await writeFile(metaPath, JSON.stringify({ savedAt: 123 }));
+    // The provider has offloaded the meta file: only the bounded reader knows that.
+    const vault = new LibraryVault(
+      vaultDir,
+      "ws",
+      undefined,
+      async (paths) => new Set(paths.filter((p) => p === metaPath)),
+    );
+    const readTextBounded = vi.spyOn(vault, "readTextBounded");
+    const synced = new LibraryService({
+      vault: () => vault,
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      now: () => clock,
+    });
+
+    const { items } = await synced.list();
+
+    // Both probes (editing and edit-session) share one read through the vault's bounded reader.
+    expect(readTextBounded.mock.calls.filter(([p]) => p === metaPath)).toHaveLength(1);
+    // Unknown, not damaged: an offloaded meta is neither "missing-dependencies" nor a bare read.
+    expect(items[0]?.editing).toBe("project-available");
+    expect(items[0]?.editExportedSavedAt ?? null).toBeNull();
+    expect(items[0]?.editSavedAt ?? null).toBeNull();
+  });
+
+  it("list() in a synced workspace stops starting meta reads once the listing budget is spent", async () => {
+    for (const id of ["a", "b", "c"]) {
+      await writeFile(join(vaultDir, `${id}.mp4`), "");
+      await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+      await writeFile(join(vaultDir, ".kaipu", `${id}.edit.json`), "{}");
+      await writeFile(
+        join(vaultDir, ".kaipu", `${id}.edit.meta.json`),
+        JSON.stringify({ savedAt: 123 }),
+      );
+    }
+    const vault = new LibraryVault(vaultDir, "ws", undefined, async () => new Set());
+    const real = vault.readTextBounded.bind(vault);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // The first read answers, but only after the whole budget has gone by.
+      const readTextBounded = vi.spyOn(vault, "readTextBounded").mockImplementation(async (p) => {
+        vi.setSystemTime(Date.now() + SYNCED_READS_BUDGET_MS);
+        return real(p);
+      });
+      const synced = new LibraryService({
+        vault: () => vault,
+        vaultDir: () => vaultDir,
+        cache,
+        account: () => account,
+        fetchCatalog,
+        now: () => clock,
+      });
+
+      const { items } = await synced.list();
+
+      expect(readTextBounded).toHaveBeenCalledTimes(1);
+      expect(items).toHaveLength(3);
+      // The rest come back unknown, as a timeout would: available, no stamps.
+      const skipped = items.filter((i) => i.editSavedAt !== 123);
+      expect(skipped).toHaveLength(2);
+      expect(skipped.every((i) => i.editing === "project-available")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("removeLocalCopy in a synced workspace keeps the upload check: a different file is refused", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "different bytes");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId, { sizeBytes: 0 })];
+    const reveal = vi.fn();
+    const synced = new LibraryService({
+      vault: () => new LibraryVault(vaultDir, "ws", undefined, async () => new Set()),
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      now: () => clock,
+      reveal,
+    });
+    await synced.refreshCatalog();
+
+    expect(await synced.removeLocalCopy("a")).toEqual({ ok: false, reason: "different-bytes" });
+    expect(reveal).not.toHaveBeenCalled();
   });
 
   it("removeLocalCopy refuses an edit project or a webcam track before hashing the file", async () => {

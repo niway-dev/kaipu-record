@@ -229,6 +229,19 @@ describe("VersionsList", () => {
     expect(unseenCopyIds(getReadyCopies()).has("yt")).toBe(false);
   });
 
+  it("offers no drag for an offloaded copy: main would refuse it, so the control is not dead", () => {
+    const offloaded = { ...yt, evicted: "media" as const };
+    const region = renderList(master, [master, offloaded]);
+    expect(within(region).queryByRole("button", { name: /^Drag YouTube 1440p/ })).toBeNull();
+  });
+
+  it("still offers the drag when only the copy's poster is offloaded: the file itself is local", () => {
+    const posterOffloaded = { ...yt, evicted: "thumbnail" as const };
+    const region = renderList(master, [master, posterOffloaded]);
+    const drag = within(region).getByRole("button", { name: /^Drag YouTube 1440p/ });
+    expect(drag).toHaveAttribute("draggable", "true");
+  });
+
   it("names an Email copy by its stored destination, not by its Balanced preset", () => {
     const email = video({
       id: "em",

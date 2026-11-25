@@ -6,6 +6,11 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 import { WorkspaceNotConnectedNotice } from "./not-connected-notice";
 import { useWorkspaces, WorkspacesProvider } from "./workspaces-context";
 
+const syncedFlag = vi.hoisted(() => ({ on: false }));
+vi.mock("@renderer/features/analytics/use-flag", () => ({
+  useFlag: (name: string) => name === "synced-workspaces" && syncedFlag.on,
+}));
+
 const DEFAULT: WorkspaceView = {
   id: "ws-default",
   name: "Default workspace",
@@ -16,6 +21,7 @@ const DEFAULT: WorkspaceView = {
   state: "available",
   itemCount: 128,
   device: "1",
+  sync: null,
 };
 const PERSONAL: WorkspaceView = {
   ...DEFAULT,
@@ -26,6 +32,7 @@ const PERSONAL: WorkspaceView = {
   path: "/Users/me/Movies/Personal",
   itemCount: 17,
   device: "1",
+  sync: null,
 };
 const ARCHIVE: WorkspaceView = {
   ...DEFAULT,
@@ -39,6 +46,7 @@ const ARCHIVE: WorkspaceView = {
   reason: "missing",
   itemCount: null,
   device: "1",
+  sync: null,
 };
 
 function state(overrides: Partial<WorkspacesState> = {}): WorkspacesState {
@@ -90,13 +98,51 @@ function renderSwitcher(): void {
   );
 }
 
+/**
+ * The hint's "Got it" button, once the Escape listener behind it is attached. The provider sets
+ * its state from a resolved promise, outside `act`, so React runs the effect that adds the
+ * listener on a later task; `findBy` can resolve first and an Escape pressed straight away
+ * reaches no listener (seen as "expected 2 calls, got 1", about 1 run in 100). Flushing the
+ * pending effects makes the order the one a user sees.
+ */
+const hintReady = async (): Promise<HTMLElement> => {
+  const button = await screen.findByRole("button", { name: "Got it" });
+  await act(async () => {});
+  return button;
+};
+
 const openMenu = async (): Promise<void> => {
   fireEvent.click(await screen.findByRole("button", { name: /^Workspace:/ }));
 };
 
-beforeEach(() => setup(state()));
+beforeEach(() => {
+  syncedFlag.on = false;
+  setup(state());
+});
 afterEach(() => {
   window.electronAPI = realApi;
+});
+
+describe("WorkspaceSwitcher location of a synced folder (spec decision 13)", () => {
+  const syncedState = (): WorkspacesState =>
+    state({ workspaces: [{ ...DEFAULT, sync: "google-drive" }] });
+
+  it("names the provider only with synced-workspaces on", async () => {
+    syncedFlag.on = true;
+    setup(syncedState());
+    renderSwitcher();
+    expect(await screen.findByRole("button", { name: /^Workspace:/ })).toHaveTextContent(
+      "Google Drive",
+    );
+  });
+
+  it("with synced-workspaces off, reads as any folder and names no provider", async () => {
+    setup(syncedState());
+    renderSwitcher();
+    const bar = await screen.findByRole("button", { name: /^Workspace:/ });
+    expect(bar).toHaveTextContent("This Mac");
+    expect(bar).not.toHaveTextContent(/Google Drive|OneDrive|iCloud/);
+  });
 });
 
 describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
@@ -132,6 +178,7 @@ describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
     expect(
       await screen.findByText("New: workspaces — keep work and personal captures apart"),
     ).toBeInTheDocument();
+    await hintReady();
     fireEvent.click(screen.getByRole("button", { name: "Got it" }));
     expect(bridge.dismissHint).toHaveBeenCalledOnce();
     fireEvent.keyDown(screen.getByRole("button", { name: "Got it" }), { key: "Escape" });
@@ -141,7 +188,7 @@ describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
   it("Escape pressed elsewhere does not dismiss the hint for good", async () => {
     setup(state({ hintDismissed: false }));
     renderSwitcher();
-    await screen.findByText(/New: workspaces/);
+    await hintReady();
     const elsewhere = document.createElement("input");
     document.body.append(elsewhere);
 
@@ -155,7 +202,7 @@ describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
   it("an Escape something else already handled does not dismiss the hint either", async () => {
     setup(state({ hintDismissed: false }));
     renderSwitcher();
-    const gotIt = await screen.findByRole("button", { name: "Got it" });
+    const gotIt = await hintReady();
 
     const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     event.preventDefault();

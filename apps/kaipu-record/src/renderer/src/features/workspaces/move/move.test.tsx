@@ -14,7 +14,8 @@ import { registerItemPageCloser } from "../prepare-switch";
 import { WorkspacesProvider } from "../workspaces-context";
 import { ItemMoveMenu } from "./item-move-menu";
 import { ItemWorkspaceChip } from "./item-workspace-chip";
-import { resetMoveUi } from "./move-store";
+import { MoveExportsDialogHost } from "./move-exports-dialog";
+import { askAboutExports, askAboutSyncedMove, resetMoveUi } from "./move-store";
 
 const DEFAULT: WorkspaceView = {
   id: "ws-work",
@@ -26,6 +27,7 @@ const DEFAULT: WorkspaceView = {
   state: "available",
   itemCount: 3,
   device: "1",
+  sync: null,
 };
 const PERSONAL: WorkspaceView = { ...DEFAULT, id: "ws-personal", name: "Personal", device: "1" };
 const USB: WorkspaceView = {
@@ -35,6 +37,7 @@ const USB: WorkspaceView = {
   path: "/Volumes/USB/Client",
   volume: "USB",
   device: "2",
+  sync: null,
 };
 const ARCHIVE: WorkspaceView = {
   ...DEFAULT,
@@ -43,6 +46,7 @@ const ARCHIVE: WorkspaceView = {
   state: "unavailable",
   reason: "missing",
   device: null,
+  sync: null,
 };
 
 function state(overrides: Partial<WorkspacesState> = {}): WorkspacesState {
@@ -209,6 +213,19 @@ describe("moving a recording that has exports", () => {
     );
   });
 
+  it("a move whose original was kept says it was copied and the original stayed, not that it moved", async () => {
+    setup(state(), { moved: [{ id: "Demo", newId: "Demo", keptOriginal: "source-changed" }] });
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Personal/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move only the recording" }));
+    await waitFor(() =>
+      expect(getToasts().at(-1)?.message).toBe(
+        "Copied to Personal, but the original, or part of it, stayed in Work because something there changed during the move. Check both workspaces: Demo",
+      ),
+    );
+  });
+
   it("a lost IPC reply says the result is unknown, never 'changed workspace' or 'untouched'", async () => {
     setup(state());
     moveItems.mockRejectedValue(new Error("ipc went away"));
@@ -236,6 +253,93 @@ describe("moving a recording that has exports", () => {
     });
     await waitFor(() => expect(close).toHaveBeenCalled());
     expect(moveItems).not.toHaveBeenCalled();
+  });
+});
+
+describe("moving out of a synced workspace (decision 4, always on)", () => {
+  const SYNCED_WORK: WorkspaceView = { ...DEFAULT, sync: "google-drive" };
+
+  async function startMove(): Promise<void> {
+    setup(state({ workspaces: [SYNCED_WORK, PERSONAL] }));
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Personal/ }));
+  }
+
+  it("says the move deletes the file from the cloud on every device, and moves nothing on Cancel", async () => {
+    await startMove();
+    const body = await screen.findByText(/deleted from the cloud on every device/i);
+    expect(body.textContent).toContain("Work");
+    expect(body.textContent).not.toMatch(/google|onedrive|icloud/i);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText(/deleted from the cloud/i)).toBeNull());
+    expect(moveItems).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("Move anyway goes on to the usual questions and the move", async () => {
+    await startMove();
+    fireEvent.click(await screen.findByRole("button", { name: "Move anyway" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move only the recording" }));
+    await waitFor(() => expect(moveItems).toHaveBeenCalled());
+  });
+
+  it("asks before the New workspace dialog opens, so Cancel registers nothing", async () => {
+    // "New workspace…" is offered when no other workspace exists.
+    setup(state({ workspaces: [SYNCED_WORK] }));
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /New workspace/ }));
+    await screen.findByText(/deleted from the cloud on every device/i);
+    // The question comes first: nothing is created (the dialog is not open) until it is answered.
+    expect(screen.queryByText("New workspace")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText(/deleted from the cloud/i)).toBeNull());
+    expect(screen.queryByText("New workspace")).toBeNull();
+    expect(moveItems).not.toHaveBeenCalled();
+  });
+
+  it("opens the New workspace dialog once Move anyway is chosen", async () => {
+    // "New workspace…" is offered when no other workspace exists.
+    setup(state({ workspaces: [SYNCED_WORK] }));
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /New workspace/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move anyway" }));
+    expect(await screen.findByText("New workspace")).toBeInTheDocument();
+  });
+
+  it("a plain workspace asks nothing extra", async () => {
+    setup(state());
+    renderChip();
+    fireEvent.click(await screen.findByRole("button", { name: /In Work/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Personal/ }));
+    await screen.findByRole("button", { name: "Move only the recording" });
+    expect(screen.queryByRole("button", { name: "Move anyway" })).toBeNull();
+  });
+});
+
+describe("the prompts that follow one another (synced confirmation, then exports)", () => {
+  it("the second prompt is a new overlay that takes focus, so Escape cancels it", async () => {
+    render(<MoveExportsDialogHost />);
+    let synced!: Promise<boolean>;
+    act(() => {
+      synced = askAboutSyncedMove({ source: "Work" });
+    });
+    const confirm = await screen.findByRole("button", { name: "Move anyway" });
+    confirm.focus(); // a real click focuses the button
+    // The answer and the next question land in one render (nothing renders between them): the
+    // overlay focuses itself only on mount, so the exports prompt must not reuse the first one.
+    let exportsAnswer!: Promise<unknown>;
+    act(() => {
+      fireEvent.click(confirm);
+      exportsAnswer = askAboutExports({ count: 2, source: "Work", selected: 1 });
+    });
+    expect(await synced).toBe(true);
+    await screen.findByRole("button", { name: "Move only the recording" });
+    expect(screen.getByRole("alertdialog")).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+    expect(await exportsAnswer).toBeNull();
   });
 });
 

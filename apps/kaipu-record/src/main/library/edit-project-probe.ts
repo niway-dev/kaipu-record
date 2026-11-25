@@ -10,6 +10,20 @@ import type { EditingState } from "@shared/types/library-item";
 import { webcamTrackState, type WebcamState } from "./webcam-track-state";
 import { sessionMetaPath, type SessionMeta } from "./video-edit-session";
 
+/** How a session meta file is read; a synced workspace passes its bounded reader. */
+type ReadText = (path: string) => Promise<string>;
+
+const readUtf8: ReadText = (path) => readFile(path, "utf-8");
+
+/**
+ * The provider could not hand the file over right now: it is offloaded (`EVICTED`) or the
+ * bounded read gave up (`ETIMEDOUT`). The answer is unknown, which is not a damaged file.
+ */
+function isUnavailableNow(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "EVICTED" || code === "ETIMEDOUT";
+}
+
 async function exists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -32,6 +46,8 @@ export function hasEditSession(vaultDir: string, id: string): Promise<boolean> {
 export async function probeEditing(
   vaultDir: string,
   local: { id: string; filePath: string; derivedFromAssetId: string | null } | null,
+  /** How `.edit.meta.json` is read: a synced workspace passes its bounded reader (never a bare read). */
+  readText: ReadText = readUtf8,
 ): Promise<EditingState> {
   if (!local) return "needs-source";
   if (!(await hasEditSession(vaultDir, local.id))) {
@@ -46,8 +62,12 @@ export async function probeEditing(
   }
   let meta: SessionMeta;
   try {
-    meta = JSON.parse(await readFile(metaPath, "utf-8")) as SessionMeta;
-  } catch {
+    meta = JSON.parse(await readText(metaPath)) as SessionMeta;
+  } catch (error) {
+    // Offloaded or stalled: nothing to compare the source against, so trust the session, as
+    // for a meta that was never written. Unknown counts as fine; only a file that was read
+    // and is damaged is a problem.
+    if (isUnavailableNow(error)) return "project-available";
     // Present but unreadable/corrupt: unlike the absent case above, this is a real
     // problem with a file that should exist and be trustworthy.
     return "missing-dependencies";
@@ -76,13 +96,18 @@ export type { WebcamState } from "./webcam-track-state";
  * sidecar recorded a webcam but the file is gone, "none" for a recording that never had one.
  * Read-only; never touches the video.
  */
-export async function probeWebcam(vaultDir: string, id: string): Promise<WebcamState> {
+export async function probeWebcam(
+  vaultDir: string,
+  id: string,
+  /** How the sidecar is read: a synced workspace passes its bounded reader (never a bare read). */
+  readText: ReadText = readUtf8,
+): Promise<WebcamState> {
   const fileExists = await exists(join(vaultDir, ".kaipu", `${id}.webcam.mp4`));
   // The file alone makes it "present": the sidecar is only read when it is not there.
   if (fileExists) return webcamTrackState(true, undefined).state;
   let sidecarWebcam: unknown;
   try {
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", `${id}.json`), "utf-8"));
+    const sidecar = JSON.parse(await readText(join(vaultDir, ".kaipu", `${id}.json`)));
     sidecarWebcam = sidecar?.webcam;
   } catch {
     sidecarWebcam = undefined;
@@ -109,10 +134,15 @@ const NO_SESSION: EditSessionState = { savedAt: null, exportedSavedAt: null };
  * `savedAt` against the exports' `createdAt`: see `SessionMeta.exportedSavedAt` for
  * why that comparison could never be right.
  */
-export async function probeEditSession(vaultDir: string, id: string): Promise<EditSessionState> {
+export async function probeEditSession(
+  vaultDir: string,
+  id: string,
+  /** How `.edit.meta.json` is read: a synced workspace passes its bounded reader (never a bare read). */
+  readText: ReadText = readUtf8,
+): Promise<EditSessionState> {
   if (!(await hasEditSession(vaultDir, id))) return NO_SESSION;
   try {
-    const meta = JSON.parse(await readFile(sessionMetaPath(vaultDir, id), "utf-8")) as SessionMeta;
+    const meta = JSON.parse(await readText(sessionMetaPath(vaultDir, id))) as SessionMeta;
     return {
       savedAt: typeof meta.savedAt === "number" ? meta.savedAt : null,
       // Sessions written before the stamp existed have no field here. Reading that as

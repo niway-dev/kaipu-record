@@ -61,7 +61,12 @@ import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
 import { createMicLevelRelay } from "./mic-level-relay";
 import { onPageGone, type RendererContents } from "../renderer-lifetime";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
-import { notifyWorkspaceBusyChanged, requireCaptureWorkspace } from "../workspaces";
+import {
+  notifyWorkspaceBusyChanged,
+  requireCaptureWorkspace,
+  syncedStagingFor,
+} from "../workspaces";
+import { detectSyncedFolder } from "../workspaces/synced-folder";
 import { endRecordTiming, markRecordTiming, receiveRecordTiming } from "./record-timing";
 import {
   applyDockPolicy,
@@ -268,6 +273,10 @@ export function registerRecordingHub(
     // The active workspace, checked to be connected: a take in a workspace that is not
     // connected is refused, never recorded somewhere else (ADR 0032, decision 8).
     vaultDir: async () => (await requireCaptureWorkspace()).path,
+    // A synced workspace stages its takes in userData, never inside the folder (decision 15).
+    stagingFor: syncedStagingFor,
+    // A take saved elsewhere (the save dialog) may land in a provider's folder: place it by rename.
+    isSyncedFolder: async (directory) => (await detectSyncedFolder(directory)) !== null,
   });
 
   // Cursor tracks, keyed by writer session id (see plans/video-editor-v2/02).

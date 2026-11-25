@@ -8,7 +8,23 @@ import { LibraryVault } from "./library/library-vault";
 const state = vi.hoisted(() => ({
   handler: null as null | ((request: Request) => Promise<Response>),
   directory: "",
+  /** Files the (mocked) provider has evicted; null: the active workspace is not synced. */
+  evicted: null as null | Set<string>,
+  /** The (mocked) probe itself fails. */
+  probeFails: false,
+  streams: [] as string[],
 }));
+
+vi.mock("node:fs", async (importActual) => {
+  const actual = await importActual<typeof import("node:fs")>();
+  return {
+    ...actual,
+    createReadStream: (path: string, options?: unknown) => {
+      state.streams.push(path);
+      return actual.createReadStream(path, options as never);
+    },
+  };
+});
 
 vi.mock("electron", () => ({
   protocol: {
@@ -26,7 +42,16 @@ vi.mock("./library", () => ({
   webcamFilePath: (id: string) => new LibraryVault(state.directory).webcamFilePath(id),
 }));
 
-vi.mock("./workspaces", () => ({ activeWorkspace: () => ({ id: "ws-a" }) }));
+vi.mock("./workspaces", () => ({
+  activeWorkspace: () => ({ id: "ws-a" }),
+  activeEvictionProbe: () =>
+    state.evicted
+      ? async (paths: string[]) => {
+          if (state.probeFails) throw new Error("probe failed");
+          return new Set(paths.filter((p) => state.evicted!.has(p)));
+        }
+      : null,
+}));
 
 import { registerMediaProtocol } from "./media-protocol";
 
@@ -74,6 +99,50 @@ describe("kaipu-media:// handler (NIW2-560: ids are file names derived from titl
     await expect(get("kaipu-media://recording/..%2F..%2Fsecret")).resolves.toMatchObject({
       status: 400,
     });
+  });
+});
+
+describe("kaipu-media:// refuses an evicted file (synced folders, decision 15)", () => {
+  beforeEach(async () => {
+    state.directory = await mkdtemp(join(tmpdir(), "kaipu-media-evicted-"));
+    state.streams = [];
+    registerMediaProtocol();
+  });
+  afterEach(async () => {
+    state.evicted = null;
+    state.probeFails = false;
+    await rm(state.directory, { recursive: true, force: true });
+  });
+
+  it.each([
+    ["screenshot", "Shot", "Shot.png"],
+    ["thumb", "Clip", join(".kaipu", "Clip.jpg")],
+    ["recording", "Clip", "Clip.mp4"],
+    ["webcam", "Clip", join(".kaipu", "Clip.webcam.mp4")],
+  ] as const)("answers 409 for an evicted %s and opens no read stream", async (kind, id, file) => {
+    await mkdir(join(state.directory, ".kaipu"), { recursive: true });
+    await writeFile(join(state.directory, file), "placeholder");
+    state.evicted = new Set([join(state.directory, file)]);
+    const response = await get(mediaUrl(kind, id, { w: "ws-a" }));
+    expect(response.status).toBe(409);
+    expect(state.streams).toEqual([]);
+  });
+
+  it("answers 409 and opens no read stream when the probe itself fails", async () => {
+    await writeFile(join(state.directory, "Clip.mp4"), "placeholder");
+    state.evicted = new Set();
+    state.probeFails = true;
+    const response = await get(mediaUrl("recording", "Clip", { w: "ws-a" }));
+    expect(response.status).toBe(409);
+    expect(state.streams).toEqual([]);
+  });
+
+  it("serves a local file of a synced workspace", async () => {
+    await writeFile(join(state.directory, "Shot.png"), "bytes");
+    state.evicted = new Set();
+    const response = await get(mediaUrl("screenshot", "Shot", { w: "ws-a" }));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("bytes");
   });
 });
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useLocalLibrary } from "./use-local-library";
+import { FOCUS_RELIST_MIN_INTERVAL_MS, useLocalLibrary } from "./use-local-library";
 import { reportError } from "@renderer/features/analytics";
 import type { LibraryItem } from "@shared/types/library-item";
 import {
@@ -523,6 +523,129 @@ describe("useLocalLibrary", () => {
     await act(async () => notify?.());
 
     await waitFor(() => expect(result.current.videos).toHaveLength(0));
+  });
+
+  describe("an item the provider has not downloaded (synced workspace)", () => {
+    const evictedItems: LibraryItem[] = [
+      { ...items[0]!, local: { ...items[0]!.local!, evicted: "media" } },
+      items[1]!,
+    ];
+
+    it("re-lists when the window regains focus, so a file downloaded in Finder opens without leaving the page", async () => {
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: null })
+        .mockResolvedValue({ items, vaultError: null, catalogVerifiedAt: null });
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+      expect(list).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBeUndefined());
+      expect(list).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not start a re-list while one is running, nor within the throttle of the last one", async () => {
+      let release: (() => void) | null = null;
+      const evicted = { items: evictedItems, vaultError: null, catalogVerifiedAt: null };
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce(evicted)
+        // The focus re-list stays open until the test lets it finish.
+        .mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve(evicted))))
+        .mockResolvedValue(evicted);
+      window.electronAPI.listLibraryItems = list;
+      const now = vi.spyOn(Date, "now");
+      now.mockReturnValue(1_000_000);
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+      expect(list).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+        window.dispatchEvent(new Event("focus")); // while the first is still running
+      });
+      expect(list).toHaveBeenCalledTimes(2);
+
+      await act(async () => release?.());
+      await waitFor(() => expect(result.current.isRefreshing).toBe(false));
+      now.mockReturnValue(1_000_000 + FOCUS_RELIST_MIN_INTERVAL_MS - 1);
+      act(() => {
+        window.dispatchEvent(new Event("focus")); // too soon after the last one
+      });
+      expect(list).toHaveBeenCalledTimes(2);
+
+      now.mockReturnValue(1_000_000 + FOCUS_RELIST_MIN_INTERVAL_MS);
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+      now.mockRestore();
+    });
+
+    it("keeps quiet when a re-list started by focus fails: no error toast and no page error per focus", async () => {
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: null })
+        .mockRejectedValue(new Error("provider offline"));
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.isRefreshing).toBe(false));
+
+      expect(reportError).not.toHaveBeenCalled();
+      // The page keeps showing the list it has: a failed unasked re-list is not "the library
+      // cannot be read".
+      expect(result.current.hasError).toBe(false);
+      // The list on screen is kept, not blanked.
+      expect(result.current.videos).toHaveLength(2);
+    });
+
+    it("keeps the list on screen when a re-list started by focus reports a vault error", async () => {
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce({ items: evictedItems, vaultError: null, catalogVerifiedAt: 5 })
+        .mockResolvedValue({ items: [], vaultError: "provider stalled", catalogVerifiedAt: null });
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos[0]?.evicted).toBe("media"));
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.isRefreshing).toBe(false));
+
+      expect(result.current.videos).toHaveLength(2);
+      expect(result.current.videos[0]?.evicted).toBe("media");
+      expect(result.current.catalogVerifiedAt).toBe(5);
+      expect(result.current.hasError).toBe(false);
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
+    it("listens to focus only while something is not downloaded", async () => {
+      const list = vi.fn(async () => ({ items, vaultError: null, catalogVerifiedAt: null }));
+      window.electronAPI.listLibraryItems = list;
+      const { result } = renderHook(() => useLocalLibrary());
+      await waitFor(() => expect(result.current.videos).toHaveLength(2));
+      list.mockClear();
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(list).not.toHaveBeenCalled();
+    });
   });
 
   it("removeLocalCopy re-lists on success and reports a blocked reason", async () => {

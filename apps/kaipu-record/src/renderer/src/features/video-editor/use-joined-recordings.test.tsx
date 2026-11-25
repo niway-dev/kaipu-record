@@ -100,7 +100,7 @@ describe("useJoinedRecordings", () => {
     expect(window.electronAPI.loadCursorTrack).toHaveBeenCalledWith("b-renamed");
   });
 
-  it("a malformed or unreadable cursor track is null, and the recording is still ready", async () => {
+  it("a malformed cursor track is null and the recording is still ready; an unreadable one is not available", async () => {
     items = [item("b"), item("c")];
     holds = { b: "b-file", c: "c-file" };
     cursorJson = { "b-file": "{not json" };
@@ -110,8 +110,34 @@ describe("useJoinedRecordings", () => {
     }) as never;
     const sources = [source("s1", "b"), source("s2", "c")];
     const { result } = renderHook(() => useJoinedRecordings(sources));
-    await waitFor(() => expect(result.current.every((r) => r.status === "ready")).toBe(true));
-    expect(result.current.map((r) => r.cursorTrack)).toEqual([null, null]);
+    await waitFor(() => expect(result.current.every((r) => r.status !== "loading")).toBe(true));
+    // A track that exists but cannot be read now is never "a recording without pointer data".
+    expect(result.current.map((r) => r.status)).toEqual(["ready", "missing"]);
+    expect(result.current[0]!.cursorTrack).toBeNull();
+    // Its hold is released: nothing keeps the clip open.
+    expect(window.electronAPI.closeEditorSession).toHaveBeenCalledWith("c-file");
+  });
+
+  it("a track that could not be read is read again at the next change to the joined sources", async () => {
+    items = [item("c")];
+    holds = { c: "c-file" };
+    cursorJson = { "c-file": JSON.stringify(TRACK) };
+    let failing = true;
+    window.electronAPI.loadCursorTrack = vi.fn(async (id: string) => {
+      if (failing) throw new Error("offloaded");
+      return cursorJson[id] ?? null;
+    }) as never;
+    const first = [source("s1", "c")];
+    const { result, rerender } = renderHook(({ list }) => useJoinedRecordings(list), {
+      initialProps: { list: first },
+    });
+    await waitFor(() => expect(result.current[0]!.status).toBe("missing"));
+
+    // The track is readable now; the next change to the joined sources reads it again.
+    failing = false;
+    rerender({ list: [...first] });
+    await waitFor(() => expect(result.current[0]!.status).toBe("ready"));
+    expect(result.current[0]).toMatchObject({ id: "c-file", cursorTrack: TRACK });
   });
 
   it("is missing, without throwing, for a gone asset, a cloud-only one and a refused hold", async () => {
@@ -240,5 +266,26 @@ describe("useJoinedRecordings", () => {
     rerender();
     grant("b-file");
     await waitFor(() => expect(close).toHaveBeenCalledWith("b-file"));
+  });
+
+  it("a hold is released once when the source leaves while its cursor track read is failing (round 11 #21)", async () => {
+    items = [item("b")];
+    holds = { b: "b-file" };
+    let fail: (error: Error) => void = () => {};
+    window.electronAPI.loadCursorTrack = vi.fn(
+      () => new Promise<string | null>((_resolve, reject) => (fail = reject)),
+    ) as never;
+    let sources = [source("s1", "b")];
+    const { rerender } = renderHook(() => useJoinedRecordings(sources));
+    await waitFor(() => expect(window.electronAPI.loadCursorTrack).toHaveBeenCalled());
+
+    // The join is undone while the track is being read: the hold is released now...
+    sources = [];
+    rerender();
+    expect(close).toHaveBeenCalledTimes(1);
+    // ...and the read that then fails must not release it a second time.
+    fail(new Error("EvictedFileError"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
