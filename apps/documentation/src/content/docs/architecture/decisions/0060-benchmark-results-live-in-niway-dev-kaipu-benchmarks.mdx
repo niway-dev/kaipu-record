@@ -1,0 +1,81 @@
+---
+title: "ADR 0060: Benchmark results live in niway-dev/kaipu-benchmarks"
+description: "Every benchmark run, from the Mac mini, the hosted runner or the owner's field sampler, is published to a separate public repository, one folder per run with its manifest and raw per-process samples, plus generated results and per-series history. The benchmark code stays in the monorepo."
+---
+
+# ADR 0060: Benchmark results live in niway-dev/kaipu-benchmarks
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — owner decisions 2026-11-15, design in a draft pull request. [NIW2-808](https://linear.app/niway/issue/NIW2-808/kaipu-benchmarks-measure-ram-cpu-and-bundle-weight-per-scenario-and). Spec: [Kaipu benchmarks — design](/specs/2026-11-15-kaipu-benchmarks-design/) |
+| Date          | 2026-11-15                                                                                                                                                                                                                                                                    |
+| Supersedes    | —                                                                                                                                                                                                                                                                             |
+| Amends        | —                                                                                                                                                                                                                                                                             |
+| Superseded by | —                                                                                                                                                                                                                                                                             |
+
+Same pattern as [0045](/architecture/decisions/0045-ui-catalog-images-live-in-a-separate-repository/)
+(the UI catalog's images in their own repository). Companions:
+[0059](/architecture/decisions/0059-benchmarks-run-on-the-mac-mini-and-on-demand-on-a-hosted-runner/)
+and [0061](/architecture/decisions/0061-benchmarks-measure-every-process-and-collect-data-before-budgets/).
+
+## Context
+
+The value of a benchmark is its history: how memory at export or idle CPU changed between two
+releases, or after a library was added. Each run produces a manifest, per-process samples every
+second (a 60-minute scenario is thousands of rows per process) and a memory breakdown at the peak.
+Runs come from three places: the mini, the hosted runner and the owner's field sampler.
+
+Options read on 2026-11-14 (spec, "What the state of the art does"): Actions artifacts expire
+(90 days by default); [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark)
+keeps data on a `gh-pages` branch and compares with the previous point only;
+[Bencher](https://bencher.dev/docs/how-to/track-benchmarks) is a hosted service with statistical
+thresholds, free for public projects. The owner already keeps Wachiman's evidence in
+`niway-dev/wachiman-benchmarks`, one dated folder per run with a generated `results.md`, and wants
+one benchmarks repository per product.
+
+## Decision
+
+1. **Results go to `niway-dev/kaipu-benchmarks`**, public by default (the spec's open question 2).
+   Layout: generated `README.md` and `results.md`, `history/<series>.jsonl`, and
+   `runs/<YYYY-MM-DD>T<HHMM>-<sha7>-<host>/` with `run.json`, `weight.json` and, per scenario,
+   compressed samples, peaks and the VM-tag breakdown.
+2. **One commit per run**, made by the publisher, never by hand.
+3. **A series is keyed by host, build type, encoder configuration, fixture hash, schema and
+   scenario versions, Electron major version and macOS major version.** Runs are compared only inside a series.
+4. **The benchmark code stays in the monorepo** (`apps/kaipu-record/bench/`), so scenarios change
+   with the app in the same pull request. The results repository holds data and the scripts that
+   render it, nothing else.
+5. **Large raw samples also go to the run's Actions artifact** (hosted runs) with an explicit
+   `retention-days`.
+
+## Alternatives rejected
+
+- **Actions artifacts only.** They expire, and the history is the point.
+- **github-action-benchmark on `gh-pages`.** Free charts, but no noise model and the data lives in
+  the product repository, cloned by every worktree and CI run.
+- **Bencher now.** Interesting to the owner and the reopen path below; today it would put the data
+  in an external service and a token on the mini, before we know which statistics we need.
+- **Committing results into the monorepo.** Grows every clone with data nobody needs to build the
+  app; the same reason ADR 0045 moved catalog images out.
+
+## Consequences
+
+- Creating the repository is an owner step, and the publisher needs a token scoped to it.
+- We write the comparison and the `results.md` renderer ourselves (small scripts).
+- A public repository means fixtures and run metadata must never contain personal data; the field
+  sampler records no file names or titles.
+
+## Non-goals
+
+- A dashboard or charts site in the first phase.
+- Storing recordings, exports or fixtures. Only their hashes are stored.
+
+## What would reopen this
+
+- Choosing thresholds needs statistics we would otherwise build ourselves (change-point detection,
+  per-series t-tests), and Bencher's importer can read `history/*.jsonl`: move the history there,
+  keep the raw runs here.
+- The repository grows past what a clone tolerates (on the order of 1 GB): move raw samples to
+  release assets or object storage and keep the manifests.

@@ -1,0 +1,95 @@
+---
+title: "ADR 0061: Benchmarks measure every process, and collect data before budgets"
+description: "Memory is phys_footprint of every app process, sampled each second, plus the lifetime peak and the VM-tag breakdown; RSS is never judged. The first phase records every metric with only four invariants, among them that an export's output file grows while exporting; budgets are set from a baseline of ten nightly runs. The desktop release pull request gets a per-SHA benchmark status."
+---
+
+# ADR 0061: Benchmarks measure every process, and collect data before budgets
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — owner decisions 2026-11-15, design in a draft pull request. [NIW2-808](https://linear.app/niway/issue/NIW2-808/kaipu-benchmarks-measure-ram-cpu-and-bundle-weight-per-scenario-and). Spec: [Kaipu benchmarks — design](/specs/2026-11-15-kaipu-benchmarks-design/) |
+| Date          | 2026-11-15                                                                                                                                                                                                                                                                    |
+| Supersedes    | —                                                                                                                                                                                                                                                                             |
+| Amends        | —                                                                                                                                                                                                                                                                             |
+| Superseded by | —                                                                                                                                                                                                                                                                             |
+
+Companions: [0059](/architecture/decisions/0059-benchmarks-run-on-the-mac-mini-and-on-demand-on-a-hosted-runner/)
+(where it runs) and [0060](/architecture/decisions/0060-benchmark-results-live-in-niway-dev-kaipu-benchmarks/)
+(where results live).
+
+## Context
+
+During the 2026-11-14 export (the owner's sampling CSV, see the spec's sources) the renderer showed
+256 MB of RSS against a 3.1 GB `phys_footprint`, and most of its memory sat under the V8 VM tag.
+RSS hides compressed memory; Activity Monitor and Firefox use `phys_footprint`
+([bug 1786860](https://bugzilla.mozilla.org/show_bug.cgi?id=1786860)). Electron's `getAppMetrics()`
+memory is RSS-like on macOS. The app is several processes: main, a renderer per window (some
+prewarmed and hidden), GPU, utility processes and native helpers; export chunks cross IPC from the
+renderer to main.
+
+A first recommendation judged export memory by the ratio of two peaks (a 4-minute input against a
+1-minute one, under 30%). An independent attack
+([weak points](/specs/2026-11-15-kaipu-benchmarks-design/3-weak-points-gpt-sol/)) showed it passes
+while the whole output is buffered when fixed memory dominates, and that a nightly result is not
+tied to the release candidate. A status on the candidate's exact SHA ties it and makes a stale or
+missing result visible; it does not stop a release until a later ADR amends 0052.
+
+The owner wants as many metrics as possible and asked for data before thresholds. Published
+regression systems (Mozilla Perfherder, VS Code) show that thresholds without a noise model produce
+false alarms (spec, "What the state of the art does").
+
+## Decision
+
+1. **Memory is `phys_footprint` of every process of the app**, each with its role, sampled every
+   second from outside the app; the lifetime peak of each live process is read before teardown;
+   the `footprint` VM-tag breakdown is kept at the end of the heaviest phase. RSS and
+   `getAppMetrics()` memory are recorded for comparison and never judged. Peaks of different
+   processes are never summed as if they were simultaneous.
+2. **Every metric of the spec's catalogue is recorded from the first run**: per-process CPU, I/O,
+   wakeups, threads and descriptors; system memory pressure, swap, thermal state and GPU
+   statistics; renderer heap, DOM and frame metrics; scenario outcomes; weight.
+3. **Phase 1 has four invariants and no budgets:** an export's output file grows while it exports
+   (at 50% progress at least 30% of the final bytes are on disk, tuned on the first runs); summed
+   idle CPU stays under 1% over 60 s after a 20 s settle; no process exits unexpectedly (an exit the driver did not cause, a signal or a non-zero code;
+   a closed window, a replaced prewarm and teardown are expected and recorded); every
+   scenario ends with a verified output or fails.
+4. **The detector is proven against the real regression:** the suite must fail on the last commit
+   before the [NIW2-806](https://linear.app/niway/issue/NIW2-806) fix and pass on the fix.
+5. **Phase 2 budgets** come after ten valid nightly runs on the mini: absolute budgets for memory
+   and weight per scenario and process role in `apps/kaipu-record/bench/budgets.json`; time and CPU
+   compared with the last release in the same series, three repeats, as a report until a
+   statistical test has enough runs.
+6. **The desktop release pull request gets a `benchmarks/mini` commit status for its exact head
+   SHA.** A result for another SHA, or none, shows as missing. It informs and does not block until
+   the owner decides otherwise (spec, open question 1); blocking would amend ADR 0052.
+
+## Alternatives rejected
+
+- **RSS or `getAppMetrics()` memory as the judged number.** Hid 2.8 GB in the incident.
+- **Only the renderer.** Memory that moves to main or GPU would pass unseen.
+- **A ratio of two export peaks.** Shown to pass while the whole output is buffered.
+- **Statistical thresholds from the first day.** No baseline to model the noise yet.
+- **Nightly failure as the only alarm.** Does not tie a result to the release candidate.
+
+## Consequences
+
+- The sampler is a separate process that starts before launch and survives a crash.
+- Fixtures are chosen by encoded output volume, not only by duration.
+- The first weeks produce numbers and invariant verdicts, not regression verdicts.
+- Changing a budget is a visible line in a pull request's diff.
+
+## Non-goals
+
+- Blocking ordinary pull requests (ADR 0027 stands).
+- Instrumenting the app in phase 1; a test-only IPC that reports bytes in flight is a later option.
+- Measuring users' machines.
+
+## What would reopen this
+
+- Apple changes what `phys_footprint` counts, or `footprint` stops reporting the peak.
+- Ten nightly runs show memory noise so large that absolute budgets would alarm on most runs: move
+  memory to the statistical comparison as well.
+- A regression ships that every invariant and budget passed: the catalogue or the invariants missed
+  something, and this ADR is revised from that case.
