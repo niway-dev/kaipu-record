@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.20.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.19.0...desktop-v0.20.0) (2026-11-22)
+
+
+### Features
+
+* **capture:** recording setup opens small popovers that never push the page, shared with the capture widget (NIW2-892) ([#707](https://github.com/niway-dev/kaipu-record/issues/707)) ([07f765b](https://github.com/niway-dev/kaipu-record/commit/07f765bb1dd9bc5ffd7c9f0f659fe4c1cfec756c))
+* **desktop:** Admin mode core: stored permission, launch-time mode, release flags, restart (NIW2-900) ([#718](https://github.com/niway-dev/kaipu-record/issues/718)) ([aaeeb5b](https://github.com/niway-dev/kaipu-record/commit/aaeeb5b3045ae5be9cdf246f267590b28c0b2dd3))
+* **desktop:** Admin mode UI: 👑 Admin badge, Settings switch with Restart now, tray line (NIW2-900) ([#719](https://github.com/niway-dev/kaipu-record/issues/719)) ([3bf2499](https://github.com/niway-dev/kaipu-record/commit/3bf249939d153e13c72826065817abc384b6577e))
+* **export:** see what you are exporting — Pick from Library opens a modal with a live preview ([#714](https://github.com/niway-dev/kaipu-record/issues/714)) ([79e0bde](https://github.com/niway-dev/kaipu-record/commit/79e0bdea2d4ae69962a5067f1c05ac1ae76b7cf4))
+* **library:** Copies tab only when there are copies, and "Where is it going?" becomes Export (NIW2-894) ([#709](https://github.com/niway-dev/kaipu-record/issues/709)) ([3a33f04](https://github.com/niway-dev/kaipu-record/commit/3a33f04a5a12ca0536f7d7d3c6835ec961f90615))
+* **onboarding:** add an "Open the app" way out on the You're set step ([#710](https://github.com/niway-dev/kaipu-record/issues/710)) ([83c28ef](https://github.com/niway-dev/kaipu-record/commit/83c28ef1f96ff16e46499bb04e81498e9bb1ea00))
+* **screenshots:** Inspect picks a color into a box with recents, and the Colors panel lists every group of 1% (NIW2-911) ([#721](https://github.com/niway-dev/kaipu-record/issues/721)) ([5023a22](https://github.com/niway-dev/kaipu-record/commit/5023a228db2a1cbbb97aacf95ebba9bd11acc750))
+
+
+### Bug Fixes
+
+* **library:** readable Master tag, Edit and Copy on the image, no lone Viewing row (NIW2-895) ([#706](https://github.com/niway-dev/kaipu-record/issues/706)) ([f8d92f2](https://github.com/niway-dev/kaipu-record/commit/f8d92f2548be91cf32f108c911fa3151fe6a74a7))
+
 ## [0.19.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.18.0...desktop-v0.19.0) (2026-11-20)
 
 
